@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Image, Platform, Pressable } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
@@ -9,6 +9,7 @@ import { LEAGUES } from "@/src/constants/football";
 import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
 import { estimateFixturePricing } from "@/src/features/discover/discoverPrice";
+import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
 
 import {
   LeagueFlag,
@@ -73,22 +74,48 @@ function cityVenueLine(city: string, venue: string) {
   return parts.join(" • ");
 }
 
-function bookingSummaryLine(
-  difficulty: TicketDifficulty | "unknown",
-  followed: boolean,
-  tripLabel: string | null,
-  ticketLabel: string | null
-) {
-  const ticketLine =
-    ticketLabel ||
-    (difficulty === "unknown"
-      ? "Tickets live"
-      : `Tickets: ${ticketDifficultyLabel(difficulty)}`);
+function kickoffIsoDateOnly(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
+  return raw.slice(0, 10) || null;
+}
 
-  const tripLine = tripLabel ? `${tripLabel} trip` : "Flights/hotels prefilled";
-  const followLine = followed ? "Following" : "Build trip now";
+function estimatedLabel(value: string | null, suffix?: string) {
+  if (!value) return null;
+  return suffix ? `Est. ${value.slice(5)} ${suffix}` : `Est. ${value.slice(5)}`;
+}
 
-  return `${ticketLine} • ${tripLine} • ${followLine}`;
+function bookingSummaryLine(params: {
+  difficulty: TicketDifficulty | "unknown";
+  followed: boolean;
+  tripEstimate: string | null;
+  ticketEstimate: string | null;
+  hasTicketPartner: boolean;
+  hasFlightPartner: boolean;
+  hasHotelPartner: boolean;
+}) {
+  const ticketPart = params.ticketEstimate
+    ? params.ticketEstimate
+    : params.hasTicketPartner
+      ? "Ticket options available"
+      : params.difficulty === "unknown"
+        ? "Ticket route unclear"
+        : `Tickets ${ticketDifficultyLabel(params.difficulty)}`;
+
+  const travelParts = [
+    params.hasFlightPartner ? "Flights linked" : null,
+    params.hasHotelPartner ? "Hotels linked" : null,
+  ].filter(Boolean);
+
+  const travelPart = params.tripEstimate
+    ? params.tripEstimate
+    : travelParts.length > 0
+      ? travelParts.join(" • ")
+      : "Travel links vary";
+
+  const followPart = params.followed ? "Following" : "Build trip now";
+
+  return `${ticketPart} • ${travelPart} • ${followPart}`;
 }
 
 export default function FixtureRowCard({
@@ -145,12 +172,46 @@ export default function FixtureRowCard({
       ? (item as any).breakdown.combinedScore
       : null;
 
-  const pricing = estimateFixturePricing(item);
-  const tripLabel = pricing.tripLabel;
-  const ticketLabel = pricing.ticketLabel;
+  const pricing = useMemo(() => estimateFixturePricing(item), [item]);
+  const tripEstimate = estimatedLabel(pricing.tripLabel, "trip");
+  const ticketEstimate = estimatedLabel(pricing.ticketLabel, "ticket");
+
+  const startDate = kickoffIsoDateOnly(item?.fixture?.date);
+  const endDate = kickoffIsoDateOnly(item?.fixture?.date);
+
+  const flightsUrl = resolveAffiliateUrl("aviasales", {
+    city,
+    startDate,
+    endDate,
+  });
+
+  const hotelsUrl = resolveAffiliateUrl("expedia", {
+    city,
+    startDate,
+    endDate,
+  });
+
+  const ticketsUrl = resolveAffiliateUrl("sportsevents365", {
+    city,
+    startDate,
+    endDate,
+  });
+
+  const hasFlightPartner = Boolean(flightsUrl);
+  const hasHotelPartner = Boolean(hotelsUrl);
+  const hasTicketPartner = Boolean(ticketsUrl);
 
   const tripAngle = tripAngleLabel(item, difficulty);
-  const bookingLine = bookingSummaryLine(difficulty, isFollowed, tripLabel, ticketLabel);
+  const bookingLine = bookingSummaryLine({
+    difficulty,
+    followed: isFollowed,
+    tripEstimate,
+    ticketEstimate,
+    hasTicketPartner,
+    hasFlightPartner,
+    hasHotelPartner,
+  });
+
   const placeLine = cityVenueLine(city, venue);
 
   const routeCtx: FixtureRouteCtx = {
@@ -232,17 +293,17 @@ export default function FixtureRowCard({
               ) : null}
             </View>
 
-            {(tripLabel || ticketLabel) ? (
+            {tripEstimate || ticketEstimate ? (
               <View style={styles.priceRow}>
-                {tripLabel ? (
+                {tripEstimate ? (
                   <View style={styles.pricePillStrong}>
-                    <Text style={styles.pricePillStrongText}>{tripLabel} trip</Text>
+                    <Text style={styles.pricePillStrongText}>{tripEstimate}</Text>
                   </View>
                 ) : null}
 
-                {ticketLabel ? (
+                {ticketEstimate ? (
                   <View style={styles.pricePill}>
-                    <Text style={styles.pricePillText}>{ticketLabel} ticket</Text>
+                    <Text style={styles.pricePillText}>{ticketEstimate}</Text>
                   </View>
                 ) : null}
               </View>
@@ -252,20 +313,32 @@ export default function FixtureRowCard({
               <View style={[styles.signalPill, difficultyTone(difficulty)]}>
                 <Text style={[styles.signalText, difficultyTextTone(difficulty)]}>
                   {difficulty === "unknown"
-                    ? "Tickets live"
+                    ? hasTicketPartner
+                      ? "Ticket options"
+                      : "Ticket route unclear"
                     : `Tickets ${ticketDifficultyLabel(difficulty)}`}
                 </Text>
               </View>
 
-              <View style={[styles.signalPill, styles.signalNeutral]}>
-                <Text style={[styles.signalText, styles.signalTextNeutral]}>
-                  Flights prefilled
+              <View style={[styles.signalPill, hasFlightPartner ? styles.signalEasy : styles.signalNeutral]}>
+                <Text
+                  style={[
+                    styles.signalText,
+                    hasFlightPartner ? styles.signalTextEasy : styles.signalTextNeutral,
+                  ]}
+                >
+                  {hasFlightPartner ? "Flights linked" : "Flights vary"}
                 </Text>
               </View>
 
-              <View style={[styles.signalPill, styles.signalNeutral]}>
-                <Text style={[styles.signalText, styles.signalTextNeutral]}>
-                  Hotels prefilled
+              <View style={[styles.signalPill, hasHotelPartner ? styles.signalEasy : styles.signalNeutral]}>
+                <Text
+                  style={[
+                    styles.signalText,
+                    hasHotelPartner ? styles.signalTextEasy : styles.signalTextNeutral,
+                  ]}
+                >
+                  {hasHotelPartner ? "Hotels linked" : "Hotels vary"}
                 </Text>
               </View>
             </View>
@@ -327,14 +400,18 @@ export default function FixtureRowCard({
                 <View style={styles.expandCard}>
                   <Text style={styles.expandKicker}>Ticket route</Text>
                   <Text style={styles.expandValueSmall}>
-                    {difficulty === "unknown" ? "Live search" : ticketDifficultyLabel(difficulty)}
+                    {difficulty === "unknown"
+                      ? hasTicketPartner
+                        ? "Partner options available"
+                        : "Needs live checking"
+                      : ticketDifficultyLabel(difficulty)}
                   </Text>
                 </View>
 
                 <View style={styles.expandCard}>
                   <Text style={styles.expandKicker}>Price guide</Text>
                   <Text style={styles.expandValueSmall}>
-                    {tripLabel || ticketLabel || "Live prices"}
+                    {tripEstimate || ticketEstimate || "Estimated at open"}
                   </Text>
                 </View>
               </View>
@@ -350,8 +427,8 @@ export default function FixtureRowCard({
 
               <View style={styles.expandHintBox}>
                 <Text style={styles.expandHintText}>
-                  Build Trip opens the match-led booking flow with prefilled travel and stay links,
-                  then lets the user save confirmations and proof into Wallet.
+                  Build Trip opens the match-led booking flow with linked partner options where
+                  available, plus estimated pricing guidance and Wallet saving after booking.
                 </Text>
               </View>
             </View>
