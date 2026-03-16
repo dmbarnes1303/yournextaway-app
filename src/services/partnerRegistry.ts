@@ -1,14 +1,18 @@
 // src/services/partnerRegistry.ts
 import type { PartnerLink, Provider, ISODate } from "@/src/core/tripTypes";
+import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
-function enc(v: string) {
-  return encodeURIComponent(String(v ?? "").trim());
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
 export type PartnerContext = {
   city: string;
   startDate?: ISODate;
   endDate?: ISODate;
+  originIata?: string | null;
+  passengers?: number | null;
+  cabinClass?: "economy" | "premium" | "business" | "first" | null;
 };
 
 export function makePartnerLink(input: {
@@ -16,38 +20,121 @@ export function makePartnerLink(input: {
   title: string;
   url: string;
   campaign?: string;
+  openMode?: PartnerLink["openMode"];
 }): PartnerLink {
   return {
-    id: `${input.provider}-${Date.now()}`,
+    id: `${input.provider}-${input.title}-${Date.now()}`,
     provider: input.provider,
     title: input.title,
     url: input.url,
-    openMode: "in_app_browser",
+    openMode: input.openMode ?? "in_app_browser",
     campaign: input.campaign,
     createdAt: Date.now(),
   };
 }
 
-/**
- * Phase 1: keep this dumb + reliable.
- * Phase 2: swap URLs to real affiliate templates.
- */
 export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
-  const city = String(ctx.city ?? "").trim();
+  const city = clean(ctx.city);
   if (!city) return [];
 
-  // NOTE: Replace these with your true affiliate URLs as you wire providers.
-  const hotels = `https://www.google.com/search?q=${enc(`${city} hotels`)}`;
-  const flights = `https://www.google.com/search?q=${enc(`flights to ${city}`)}`;
-  const trains = `https://www.google.com/search?q=${enc(`${city} train tickets`)}`;
-  const experiences = `https://www.getyourguide.com/s/?q=${enc(city)}`;
-  const maps = `https://www.google.com/maps/search/?api=1&query=${enc(city)}`;
+  const links = buildAffiliateLinks({
+    city,
+    startDate: ctx.startDate ?? null,
+    endDate: ctx.endDate ?? null,
+    originIata: ctx.originIata ?? null,
+    passengers: ctx.passengers ?? null,
+    cabinClass: ctx.cabinClass ?? null,
+  });
 
-  return [
-    makePartnerLink({ provider: "google", title: "Hotels", url: hotels, campaign: "trip_hotels" }),
-    makePartnerLink({ provider: "google", title: "Flights", url: flights, campaign: "trip_flights" }),
-    makePartnerLink({ provider: "google", title: "Trains", url: trains, campaign: "trip_trains" }),
-    makePartnerLink({ provider: "getyourguide", title: "GetYourGuide", url: experiences, campaign: "trip_gyg" }),
-    makePartnerLink({ provider: "google", title: "Maps", url: maps, campaign: "trip_maps" }),
-  ];
+  const output: PartnerLink[] = [];
+
+  if (links.hotelsUrl) {
+    output.push(
+      makePartnerLink({
+        provider: "expedia",
+        title: "Hotels",
+        url: links.hotelsUrl,
+        campaign: "trip_hotels",
+      })
+    );
+  }
+
+  if (links.flightsUrl) {
+    output.push(
+      makePartnerLink({
+        provider: "aviasales",
+        title: "Flights",
+        url: links.flightsUrl,
+        campaign: "trip_flights",
+      })
+    );
+  }
+
+  if (links.transfersUrl) {
+    output.push(
+      makePartnerLink({
+        provider: "kiwitaxi",
+        title: "Transfers",
+        url: links.transfersUrl,
+        campaign: "trip_transfers",
+      })
+    );
+  }
+
+  if (links.ticketsUrl) {
+    output.push(
+      makePartnerLink({
+        provider: "sportsevents365",
+        title: "Tickets",
+        url: links.ticketsUrl,
+        campaign: "trip_tickets",
+      })
+    );
+  }
+
+  if (links.experiencesUrl) {
+    output.push(
+      makePartnerLink({
+        provider: "getyourguide",
+        title: "Things to do",
+        url: links.experiencesUrl,
+        campaign: "trip_experiences",
+      })
+    );
+  }
+
+  if (links.transportUrl) {
+    output.push(
+      makePartnerLink({
+        provider: "omio",
+        title: "Train & coach",
+        url: links.transportUrl,
+        campaign: "trip_transport",
+      })
+    );
+  }
+
+  if (links.insuranceUrl) {
+    output.push(
+      makePartnerLink({
+        provider: "safetywing",
+        title: "Travel insurance",
+        url: links.insuranceUrl,
+        campaign: "trip_insurance",
+      })
+    );
+  }
+
+  if (links.mapsUrl) {
+    output.push(
+      makePartnerLink({
+        provider: "google",
+        title: "Maps",
+        url: links.mapsUrl,
+        campaign: "trip_maps",
+      })
+    );
+  }
+
+  return output;
 }
