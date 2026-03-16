@@ -4,13 +4,24 @@ import { formatIsoToYmd } from "@/src/utils/dates";
 
 export type CabinClass = "economy" | "premium" | "business" | "first";
 
-type BuildAffiliateLinksArgs = {
+export type BuildAffiliateLinksArgs = {
   city: string;
   startDate?: string | null;
   endDate?: string | null;
   originIata?: string | null;
   passengers?: number | null;
   cabinClass?: CabinClass | null;
+};
+
+export type BuiltAffiliateLinks = {
+  flightsUrl: string | null;
+  hotelsUrl: string | null;
+  transfersUrl: string | null;
+  ticketsUrl: string | null;
+  experiencesUrl: string | null;
+  transportUrl: string | null;
+  insuranceUrl: string | null;
+  mapsUrl: string | null;
 };
 
 function clean(value: unknown): string {
@@ -53,7 +64,6 @@ function slugCity(city: string): string {
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
-
   const i = Math.floor(n);
   return Math.max(min, Math.min(max, i));
 }
@@ -82,12 +92,21 @@ function appendQuery(
   return `${safeBase}${joiner}${qs}`;
 }
 
-function googleSearchUrl(query: string): string {
-  return `https://www.google.com/search?q=${enc(query)}`;
+function safeTrackedUrl(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return null;
+  }
 }
 
-function googleMapsSearchUrl(query: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${enc(query)}`;
+function googleMapsSearchUrl(query: string): string | null {
+  const q = clean(query);
+  if (!q) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
 }
 
 function buildAviasalesUrl(args: {
@@ -97,9 +116,9 @@ function buildAviasalesUrl(args: {
   endDate: string | null;
   passengers: number;
   cabinClass: CabinClass;
-}): string {
+}): string | null {
   const marker = clean(AffiliateConfig.aviasalesMarker);
-  const trackedFallback = clean(AffiliateConfig.aviasalesFallback);
+  const trackedFallback = safeTrackedUrl(AffiliateConfig.aviasalesFallback);
 
   const cityName = clean(args.city);
   const origin = clean(args.originIata) || "LON";
@@ -118,11 +137,7 @@ function buildAviasalesUrl(args: {
     });
   }
 
-  if (trackedFallback) {
-    return trackedFallback;
-  }
-
-  return googleSearchUrl(`${cityName} flights`);
+  return trackedFallback;
 }
 
 function buildExpediaUrl(args: {
@@ -130,17 +145,11 @@ function buildExpediaUrl(args: {
   startDate: string | null;
   endDate: string | null;
   passengers: number;
-}): string {
+}): string | null {
   const cityName = clean(args.city);
   const token = clean(AffiliateConfig.expediaToken);
 
-  if (!cityName) {
-    return googleSearchUrl("hotels");
-  }
-
-  if (!token) {
-    return googleSearchUrl(`${cityName} hotels`);
-  }
+  if (!cityName || !token) return null;
 
   const slug = slugCity(cityName);
   const base = `https://expedia.com/affiliates/hotel-search-${slug}.${token}`;
@@ -152,71 +161,133 @@ function buildExpediaUrl(args: {
   });
 }
 
-function buildKiwitaxiUrl(city: string): string {
-  const tracked = clean(AffiliateConfig.kiwitaxiTracked);
-  if (tracked) return tracked;
+function buildKiwitaxiUrl(args: {
+  city: string;
+  startDate: string | null;
+}): string | null {
+  const tracked = safeTrackedUrl(AffiliateConfig.kiwitaxiTracked);
+  if (!tracked) return null;
 
-  return googleSearchUrl(`${clean(city)} airport transfer`);
+  const cityName = clean(args.city);
+  if (!cityName) return tracked;
+
+  return appendQuery(tracked, {
+    to: cityName,
+    destination: cityName,
+    date: args.startDate,
+  });
 }
 
-function buildTicketsUrl(city: string): string {
-  const tracked = clean(AffiliateConfig.sportsevents365Tracked);
-  if (tracked) return tracked;
+function buildSportsEvents365Url(args: {
+  city: string;
+  startDate: string | null;
+  endDate: string | null;
+}): string | null {
+  const tracked = safeTrackedUrl(AffiliateConfig.sportsevents365Tracked);
+  if (!tracked) return null;
 
-  return googleSearchUrl(`${clean(city)} football tickets`);
+  const cityName = clean(args.city);
+
+  return appendQuery(tracked, {
+    q: cityName || null,
+    city: cityName || null,
+    from: args.startDate,
+    to: args.endDate,
+  });
 }
 
-function buildGetYourGuideUrl(city: string): string {
+function buildGetYourGuideUrl(city: string): string | null {
   const cityName = clean(city);
   const partnerId = clean(AffiliateConfig.getyourguidePartnerId);
 
-  if (partnerId && cityName) {
-    return `https://www.getyourguide.com/s/?q=${enc(cityName)}&partner_id=${enc(partnerId)}`;
-  }
+  if (!cityName || !partnerId) return null;
 
-  return googleSearchUrl(`${cityName} things to do`);
+  return `https://www.getyourguide.com/s/?q=${enc(cityName)}&partner_id=${enc(partnerId)}`;
+}
+
+function buildOmioUrl(args: {
+  city: string;
+  startDate: string | null;
+  endDate: string | null;
+}): string | null {
+  const base =
+    safeTrackedUrl((AffiliateConfig as any).omioTracked) ??
+    safeTrackedUrl("https://omio.sjv.io/KBjDon");
+
+  if (!base) return null;
+
+  const city = clean(args.city);
+
+  return appendQuery(base, {
+    destination: city || null,
+    destination_name: city || null,
+    outboundDate: args.startDate,
+    departureDate: args.startDate,
+    inboundDate: args.endDate,
+    returnDate: args.endDate,
+  });
+}
+
+function buildSafetyWingUrl(args: {
+  startDate: string | null;
+  endDate: string | null;
+}): string | null {
+  const base = safeTrackedUrl((AffiliateConfig as any).safetywingTracked);
+  if (!base) return null;
+
+  return appendQuery(base, {
+    startDate: args.startDate,
+    endDate: args.endDate,
+  });
 }
 
 /**
- * Builds partner links with best-effort prefill + tracking.
- * Must never throw.
+ * Canonical affiliate builder.
+ * Returns only real partner URLs that are actually configured.
+ * No fake Google commercial fallbacks.
  */
-export function buildAffiliateLinks(args: BuildAffiliateLinksArgs) {
+export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffiliateLinks {
   const cityName = clean(args.city);
   const startDate = ymdOrNull(args.startDate);
   const endDate = ymdOrNull(args.endDate);
-
   const originIata = clean(args.originIata) || "LON";
   const passengers = clampInt(args.passengers, 1, 9, 1);
   const cabinClass = normalizeCabinClass(args.cabinClass);
 
-  const flightsUrl = buildAviasalesUrl({
-    city: cityName,
-    originIata,
-    startDate,
-    endDate,
-    passengers,
-    cabinClass,
-  });
-
-  const hotelsUrl = buildExpediaUrl({
-    city: cityName,
-    startDate,
-    endDate,
-    passengers,
-  });
-
-  const transfersUrl = buildKiwitaxiUrl(cityName);
-  const ticketsUrl = buildTicketsUrl(cityName);
-  const experiencesUrl = buildGetYourGuideUrl(cityName);
-  const mapsUrl = googleMapsSearchUrl(cityName);
-
   return {
-    flightsUrl,
-    hotelsUrl,
-    transfersUrl,
-    ticketsUrl,
-    experiencesUrl,
-    mapsUrl,
+    flightsUrl: buildAviasalesUrl({
+      city: cityName,
+      originIata,
+      startDate,
+      endDate,
+      passengers,
+      cabinClass,
+    }),
+    hotelsUrl: buildExpediaUrl({
+      city: cityName,
+      startDate,
+      endDate,
+      passengers,
+    }),
+    transfersUrl: buildKiwitaxiUrl({
+      city: cityName,
+      startDate,
+    }),
+    ticketsUrl: buildSportsEvents365Url({
+      city: cityName,
+      startDate,
+      endDate,
+    }),
+    experiencesUrl: buildGetYourGuideUrl(cityName),
+    transportUrl: buildOmioUrl({
+      city: cityName,
+      startDate,
+      endDate,
+    }),
+    insuranceUrl: buildSafetyWingUrl({
+      startDate,
+      endDate,
+    }),
+    mapsUrl: googleMapsSearchUrl(cityName),
   };
 }
