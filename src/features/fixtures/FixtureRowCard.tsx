@@ -19,16 +19,16 @@ import {
 } from "./helpers";
 import type { RankedFixtureRow, FixtureRouteCtx } from "./types";
 
-const UEFA_COMPETITION_IDS = new Set([2, 3, 848]);
+const UEFA_COMPETITION_IDS = new Set([2, 3, 848, 244, 286, 357]);
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
 
 function displayLeagueName(leagueId: number | null, leagueName: string) {
-  if (leagueId === 2) return "UEFA Champions League";
-  if (leagueId === 3) return "UEFA Europa League";
-  if (leagueId === 848) return "UEFA Conference League";
+  if (leagueId === 2 || leagueId === 286) return "UEFA Champions League";
+  if (leagueId === 3 || leagueId === 244) return "UEFA Europa League";
+  if (leagueId === 848 || leagueId === 357) return "UEFA Conference League";
   return leagueName;
 }
 
@@ -153,15 +153,11 @@ export default function FixtureRowCard({
   const ctxSeason =
     (item as any)?.league?.season != null ? Number((item as any).league.season) : null;
 
-  const rawDifficulty = home ? getTicketDifficultyBadge(home) : null;
+  const rawDifficulty = home ? getTicketDifficultyBadge(home, ctxLeagueId) : null;
   const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
 
   const leagueMeta = LEAGUES.find((l) => l.leagueId === ctxLeagueId) ?? null;
-  const leagueCode =
-    leagueMeta?.countryCode ||
-    clean((item?.league as any)?.country) ||
-    "";
-
+  const leagueCode = leagueMeta?.countryCode || clean((item?.league as any)?.country) || "";
   const leagueLogo = leagueMeta?.logo ?? null;
   const leagueName = displayLeagueName(ctxLeagueId, clean(item?.league?.name) || "League");
   const european = isEuropeanCompetition(ctxLeagueId);
@@ -320,7 +316,12 @@ export default function FixtureRowCard({
                 </Text>
               </View>
 
-              <View style={[styles.signalPill, hasFlightPartner ? styles.signalEasy : styles.signalNeutral]}>
+              <View
+                style={[
+                  styles.signalPill,
+                  hasFlightPartner ? styles.signalEasy : styles.signalNeutral,
+                ]}
+              >
                 <Text
                   style={[
                     styles.signalText,
@@ -331,7 +332,12 @@ export default function FixtureRowCard({
                 </Text>
               </View>
 
-              <View style={[styles.signalPill, hasHotelPartner ? styles.signalEasy : styles.signalNeutral]}>
+              <View
+                style={[
+                  styles.signalPill,
+                  hasHotelPartner ? styles.signalEasy : styles.signalNeutral,
+                ]}
+              >
                 <Text
                   style={[
                     styles.signalText,
