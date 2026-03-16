@@ -1,57 +1,174 @@
+import { getLeagueById } from "@/src/constants/football";
+import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
+import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
+import { getTeam } from "@/src/data/teams";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 
-type TicketDifficulty = "easy" | "medium" | "hard" | "very_hard" | "unknown";
+export type DiscoverPriceConfidence = "low" | "medium" | "high";
 
 export type DiscoverPriceEstimate = {
   ticketFromGbp: number | null;
   tripFromGbp: number | null;
   hotelNightFromGbp: number | null;
   flightFromGbp: number | null;
-  confidence: "low" | "medium" | "high";
+  confidence: DiscoverPriceConfidence;
   ticketLabel: string | null;
   tripLabel: string | null;
 };
 
-const EUROPEAN_LEAGUE_TIERS = new Map<number, number>([
-  [2, 6],   // UEFA Champions League
-  [3, 5],   // UEFA Europa League
-  [848, 4], // UEFA Europa Conference League
+type LeaguePricingProfile = {
+  ticketBase: number;
+  hotelBase: number;
+  flightBase: number;
+  prestige: number; // 1-5
+  value: number; // 1-5 (higher = better value / cheaper relative trip)
+};
 
-  [286, 6], // UEFA Champions League (alt/provider mapping)
-  [244, 5], // UEFA Europa League (alt/provider mapping)
-  [357, 4], // UEFA Europa Conference League (alt/provider mapping)
+type CityCostProfile = {
+  hotelDelta: number;
+  flightDelta: number;
+};
 
-  [39, 5],  // Premier League
-  [140, 5], // La Liga
-  [135, 5], // Serie A
-  [78, 5],  // Bundesliga
+const DEFAULT_LEAGUE_PROFILE: LeaguePricingProfile = {
+  ticketBase: 28,
+  hotelBase: 68,
+  flightBase: 78,
+  prestige: 2,
+  value: 3,
+};
 
-  [61, 4],  // Ligue 1
-  [88, 4],  // Eredivisie
-  [94, 4],  // Primeira Liga
-  [203, 4], // Super Lig
+const LEAGUE_PRICING: Record<number, LeaguePricingProfile> = {
+  // UEFA
+  2: { ticketBase: 105, hotelBase: 92, flightBase: 84, prestige: 5, value: 1 },
+  3: { ticketBase: 72, hotelBase: 84, flightBase: 78, prestige: 4, value: 2 },
+  848: { ticketBase: 48, hotelBase: 76, flightBase: 72, prestige: 3, value: 4 },
 
-  [179, 3], // Scotland
-  [144, 3], // Belgium
-  [218, 3], // Austria
-  [210, 3], // Switzerland
-  [119, 3], // Denmark
-  [113, 3], // Sweden
-  [103, 3], // Norway
-  [197, 3], // Greece
-  [106, 3], // Poland
-  [345, 3], // Czech Republic
-  [207, 3], // Serbia
-  [164, 3], // Iceland
+  // Big 5
+  39: { ticketBase: 82, hotelBase: 96, flightBase: 58, prestige: 5, value: 1 },
+  140: { ticketBase: 66, hotelBase: 86, flightBase: 74, prestige: 5, value: 2 },
+  135: { ticketBase: 62, hotelBase: 88, flightBase: 76, prestige: 5, value: 2 },
+  78: { ticketBase: 54, hotelBase: 84, flightBase: 68, prestige: 4, value: 4 },
+  61: { ticketBase: 52, hotelBase: 86, flightBase: 70, prestige: 4, value: 2 },
 
-  [271, 2], // Hungary
-  [283, 2], // Romania
-  [332, 2], // Slovakia
-  [373, 2], // Slovenia
-  [318, 2], // Cyprus
-  [172, 2], // Bulgaria
-  [315, 2], // Bosnia
-]);
+  // Strong second tier
+  88: { ticketBase: 42, hotelBase: 82, flightBase: 62, prestige: 4, value: 3 },
+  94: { ticketBase: 38, hotelBase: 74, flightBase: 70, prestige: 4, value: 4 },
+  203: { ticketBase: 40, hotelBase: 70, flightBase: 82, prestige: 4, value: 4 },
+  179: { ticketBase: 34, hotelBase: 82, flightBase: 52, prestige: 4, value: 3 },
+  144: { ticketBase: 32, hotelBase: 78, flightBase: 58, prestige: 3, value: 4 },
+  218: { ticketBase: 28, hotelBase: 76, flightBase: 64, prestige: 3, value: 4 },
+  197: { ticketBase: 30, hotelBase: 70, flightBase: 84, prestige: 3, value: 4 },
+  119: { ticketBase: 28, hotelBase: 78, flightBase: 64, prestige: 3, value: 4 },
+  345: { ticketBase: 26, hotelBase: 68, flightBase: 66, prestige: 3, value: 4 },
+  106: { ticketBase: 26, hotelBase: 64, flightBase: 68, prestige: 3, value: 4 },
+  210: { ticketBase: 25, hotelBase: 66, flightBase: 74, prestige: 3, value: 4 },
+  286: { ticketBase: 24, hotelBase: 62, flightBase: 78, prestige: 3, value: 4 },
+  207: { ticketBase: 24, hotelBase: 82, flightBase: 68, prestige: 3, value: 3 },
+
+  // Value depth
+  271: { ticketBase: 22, hotelBase: 58, flightBase: 72, prestige: 2, value: 4 },
+  283: { ticketBase: 22, hotelBase: 56, flightBase: 76, prestige: 2, value: 4 },
+  332: { ticketBase: 21, hotelBase: 58, flightBase: 72, prestige: 2, value: 4 },
+  373: { ticketBase: 21, hotelBase: 60, flightBase: 72, prestige: 2, value: 4 },
+  172: { ticketBase: 20, hotelBase: 54, flightBase: 76, prestige: 2, value: 4 },
+  318: { ticketBase: 22, hotelBase: 62, flightBase: 88, prestige: 2, value: 4 },
+  315: { ticketBase: 20, hotelBase: 52, flightBase: 78, prestige: 2, value: 4 },
+
+  // Calendar / Nordics / Ireland
+  357: { ticketBase: 22, hotelBase: 74, flightBase: 50, prestige: 2, value: 4 },
+  113: { ticketBase: 24, hotelBase: 82, flightBase: 72, prestige: 2, value: 4 },
+  103: { ticketBase: 24, hotelBase: 88, flightBase: 78, prestige: 2, value: 4 },
+  244: { ticketBase: 24, hotelBase: 84, flightBase: 82, prestige: 2, value: 4 },
+  164: { ticketBase: 24, hotelBase: 96, flightBase: 110, prestige: 2, value: 3 },
+};
+
+const CITY_COSTS: Record<string, CityCostProfile> = {
+  london: { hotelDelta: 30, flightDelta: -20 },
+  manchester: { hotelDelta: 14, flightDelta: -18 },
+  liverpool: { hotelDelta: 10, flightDelta: -18 },
+  glasgow: { hotelDelta: 12, flightDelta: -15 },
+
+  paris: { hotelDelta: 28, flightDelta: -8 },
+  amsterdam: { hotelDelta: 26, flightDelta: -8 },
+  munich: { hotelDelta: 24, flightDelta: -4 },
+  milan: { hotelDelta: 18, flightDelta: 0 },
+  rome: { hotelDelta: 18, flightDelta: 2 },
+
+  madrid: { hotelDelta: 14, flightDelta: 4 },
+  barcelona: { hotelDelta: 18, flightDelta: 6 },
+  lisbon: { hotelDelta: 10, flightDelta: 6 },
+  porto: { hotelDelta: 4, flightDelta: 8 },
+
+  istanbul: { hotelDelta: 8, flightDelta: 18 },
+  athens: { hotelDelta: 4, flightDelta: 18 },
+  naples: { hotelDelta: 4, flightDelta: 10 },
+  seville: { hotelDelta: 2, flightDelta: 10 },
+  valencia: { hotelDelta: 0, flightDelta: 10 },
+  marseille: { hotelDelta: 4, flightDelta: 8 },
+  prague: { hotelDelta: -4, flightDelta: 8 },
+  vienna: { hotelDelta: 8, flightDelta: 6 },
+  budapest: { hotelDelta: -8, flightDelta: 10 },
+  zagreb: { hotelDelta: -6, flightDelta: 12 },
+  split: { hotelDelta: 2, flightDelta: 18 },
+  reykjavik: { hotelDelta: 28, flightDelta: 34 },
+  nicosia: { hotelDelta: 8, flightDelta: 26 },
+};
+
+const BIG_CLUB_TOKENS = [
+  "real madrid",
+  "barcelona",
+  "atletico madrid",
+  "arsenal",
+  "chelsea",
+  "liverpool",
+  "manchester city",
+  "manchester united",
+  "tottenham",
+  "newcastle",
+  "inter",
+  "milan",
+  "ac milan",
+  "juventus",
+  "napoli",
+  "roma",
+  "lazio",
+  "bayern",
+  "borussia dortmund",
+  "paris saint-germain",
+  "psg",
+  "marseille",
+  "ajax",
+  "feyenoord",
+  "psv",
+  "benfica",
+  "porto",
+  "sporting",
+  "celtic",
+  "rangers",
+  "galatasaray",
+  "fenerbahce",
+  "besiktas",
+];
+
+const DERBY_PAIRS: Array<[string[], string[], number]> = [
+  [["arsenal"], ["tottenham", "spurs"], 4],
+  [["barcelona", "barca"], ["real madrid"], 5],
+  [["manchester united", "man united"], ["manchester city", "man city"], 4],
+  [["liverpool"], ["everton"], 4],
+  [["celtic"], ["rangers"], 5],
+  [["inter"], ["milan", "ac milan"], 5],
+  [["roma"], ["lazio"], 4],
+  [["fenerbahce"], ["galatasaray"], 5],
+  [["real betis", "betis"], ["sevilla"], 4],
+  [["atletico madrid"], ["real madrid"], 4],
+  [["ajax"], ["feyenoord"], 5],
+  [["olympiacos"], ["panathinaikos"], 5],
+  [["red star", "crvena zvezda"], ["partizan"], 5],
+  [["dinamo zagreb"], ["hajduk split"], 5],
+  [["sparta prague"], ["slavia prague"], 5],
+  [["benfica"], ["sporting"], 5],
+  [["porto"], ["benfica"], 4],
+];
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -61,13 +178,13 @@ function lower(value: unknown): string {
   return clean(value).toLowerCase();
 }
 
-function roundToNearest5(value: number): number {
-  return Math.max(0, Math.round(value / 5) * 5);
-}
-
 function safeNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function roundToNearest5(value: number): number {
+  return Math.max(0, Math.round(value / 5) * 5);
 }
 
 function getLeagueId(row: FixtureListRow): number | null {
@@ -80,11 +197,21 @@ function getLeagueName(row: FixtureListRow): string {
 }
 
 function getLeagueCountry(row: FixtureListRow): string {
-  return clean((row?.league as any)?.country);
+  const fromFixture = clean((row?.league as any)?.country);
+  if (fromFixture) return fromFixture;
+
+  const leagueId = getLeagueId(row);
+  if (!leagueId) return "";
+
+  return clean(getLeagueById(leagueId)?.country);
 }
 
 function getCity(row: FixtureListRow): string {
   return clean(row?.fixture?.venue?.city);
+}
+
+function getVenue(row: FixtureListRow): string {
+  return clean(row?.fixture?.venue?.name);
 }
 
 function getHomeName(row: FixtureListRow): string {
@@ -112,120 +239,56 @@ function isWeekend(row: FixtureListRow): boolean {
 function isEvening(row: FixtureListRow): boolean {
   const dt = kickoffDate(row);
   if (!dt) return false;
-  const h = dt.getUTCHours();
-  return h >= 18 && h <= 21;
+  const hour = dt.getUTCHours();
+  return hour >= 18 && hour <= 21;
 }
 
-function leagueTier(row: FixtureListRow): number {
-  const id = getLeagueId(row);
-  if (id != null && EUROPEAN_LEAGUE_TIERS.has(id)) {
-    return EUROPEAN_LEAGUE_TIERS.get(id) ?? 2;
-  }
+function isEuropeanCompetition(row: FixtureListRow): boolean {
+  const leagueId = getLeagueId(row);
+  if (leagueId === 2 || leagueId === 3 || leagueId === 848) return true;
+
+  const league = lower(getLeagueName(row));
+  return (
+    league.includes("champions league") ||
+    league.includes("europa league") ||
+    league.includes("conference league")
+  );
+}
+
+function leagueProfile(row: FixtureListRow): LeaguePricingProfile {
+  const leagueId = getLeagueId(row);
+  if (leagueId && LEAGUE_PRICING[leagueId]) return LEAGUE_PRICING[leagueId];
 
   const league = lower(getLeagueName(row));
   const country = lower(getLeagueCountry(row));
   const combined = `${league} ${country}`;
 
-  if (combined.includes("champions league") || combined.includes("uefa champions")) return 6;
-  if (combined.includes("europa league")) return 5;
-  if (combined.includes("conference league")) return 4;
+  if (combined.includes("champions league")) return LEAGUE_PRICING[2];
+  if (combined.includes("europa league")) return LEAGUE_PRICING[3];
+  if (combined.includes("conference league")) return LEAGUE_PRICING[848];
+  if (combined.includes("premier league")) return LEAGUE_PRICING[39];
+  if (combined.includes("la liga")) return LEAGUE_PRICING[140];
+  if (combined.includes("serie a")) return LEAGUE_PRICING[135];
+  if (combined.includes("bundesliga")) return LEAGUE_PRICING[78];
+  if (combined.includes("ligue 1")) return LEAGUE_PRICING[61];
+  if (combined.includes("eredivisie")) return LEAGUE_PRICING[88];
+  if (combined.includes("primeira liga")) return LEAGUE_PRICING[94];
+  if (combined.includes("super lig")) return LEAGUE_PRICING[203];
 
-  if (
-    combined.includes("premier league") ||
-    combined.includes("la liga") ||
-    combined.includes("serie a") ||
-    combined.includes("bundesliga")
-  ) {
-    return 5;
-  }
-
-  if (
-    combined.includes("ligue 1") ||
-    combined.includes("eredivisie") ||
-    combined.includes("primeira liga") ||
-    combined.includes("super lig")
-  ) {
-    return 4;
-  }
-
-  if (
-    combined.includes("scotland") ||
-    combined.includes("belgium") ||
-    combined.includes("austria") ||
-    combined.includes("switzerland") ||
-    combined.includes("denmark") ||
-    combined.includes("sweden") ||
-    combined.includes("norway") ||
-    combined.includes("greece") ||
-    combined.includes("poland") ||
-    combined.includes("czech") ||
-    combined.includes("serbia") ||
-    combined.includes("iceland")
-  ) {
-    return 3;
-  }
-
-  return 2;
+  return DEFAULT_LEAGUE_PROFILE;
 }
 
 function isBigClub(name: string): boolean {
   const key = lower(name);
   if (!key) return false;
-
-  return [
-    "real madrid",
-    "barcelona",
-    "atletico madrid",
-    "arsenal",
-    "chelsea",
-    "liverpool",
-    "manchester city",
-    "manchester united",
-    "tottenham",
-    "newcastle",
-    "milan",
-    "inter",
-    "juventus",
-    "napoli",
-    "roma",
-    "lazio",
-    "bayern",
-    "borussia dortmund",
-    "psg",
-    "paris saint-germain",
-    "marseille",
-    "ajax",
-    "feyenoord",
-    "psv",
-    "benfica",
-    "porto",
-    "sporting",
-    "celtic",
-    "rangers",
-    "galatasaray",
-    "fenerbahce",
-    "besiktas",
-  ].some((club) => key.includes(club));
+  return BIG_CLUB_TOKENS.some((club) => key.includes(club));
 }
 
 function derbyIntensity(row: FixtureListRow): number {
   const home = lower(getHomeName(row));
   const away = lower(getAwayName(row));
 
-  const pairs: Array<[string[], string[], number]> = [
-    [["arsenal"], ["tottenham", "spurs"], 4],
-    [["barcelona", "barca"], ["real madrid"], 5],
-    [["manchester united", "man united"], ["manchester city", "man city"], 4],
-    [["liverpool"], ["everton"], 4],
-    [["celtic"], ["rangers"], 5],
-    [["inter"], ["milan", "ac milan"], 5],
-    [["roma"], ["lazio"], 4],
-    [["fenerbahce"], ["galatasaray"], 5],
-    [["real betis", "betis"], ["sevilla"], 4],
-    [["atletico madrid"], ["real madrid"], 4],
-  ];
-
-  for (const [a, b, score] of pairs) {
+  for (const [a, b, score] of DERBY_PAIRS) {
     const forward = a.some((x) => home.includes(x)) && b.some((x) => away.includes(x));
     const reverse = a.some((x) => away.includes(x)) && b.some((x) => home.includes(x));
     if (forward || reverse) return score;
@@ -235,137 +298,199 @@ function derbyIntensity(row: FixtureListRow): number {
 }
 
 function ticketDifficulty(row: FixtureListRow): TicketDifficulty {
-  const home = lower(getHomeName(row));
-  const away = lower(getAwayName(row));
-  const tier = leagueTier(row);
+  const home = getHomeName(row);
+  const away = getAwayName(row);
+
+  const guideDifficulty =
+    getTicketDifficultyBadge(home, getLeagueId(row)) ??
+    getTicketDifficultyBadge(away, getLeagueId(row)) ??
+    null;
+
+  if (guideDifficulty) return guideDifficulty;
+
+  const profile = leagueProfile(row);
   const derby = derbyIntensity(row);
   const bigCount = Number(isBigClub(home)) + Number(isBigClub(away));
 
   if (derby >= 5) return "very_hard";
-  if (tier >= 6 && bigCount >= 1) return "very_hard";
-  if (tier >= 5 && bigCount >= 2) return "hard";
-  if (tier >= 5 && derby >= 3) return "hard";
-  if (tier >= 4 && bigCount >= 1) return "medium";
-  if (tier <= 2) return "easy";
+  if (isEuropeanCompetition(row) && bigCount >= 1) return "very_hard";
+  if (profile.prestige >= 5 && bigCount >= 2) return "hard";
+  if (profile.prestige >= 4 && derby >= 3) return "hard";
+  if (profile.prestige >= 4 && bigCount >= 1) return "medium";
+  if (profile.value >= 4 && profile.prestige <= 2) return "easy";
+
   return "medium";
 }
 
-function cityHotelFloor(city: string, country: string, tier: number): number {
-  const c = lower(city);
-  const k = lower(country);
-
-  if (["london", "paris", "amsterdam", "munich", "milan"].includes(c)) return 110;
-
-  if (
-    ["madrid", "barcelona", "rome", "lisbon", "istanbul", "liverpool", "manchester"].includes(c)
-  ) {
-    return 95;
-  }
-
-  if (
-    [
-      "porto",
-      "seville",
-      "valencia",
-      "naples",
-      "turin",
-      "dortmund",
-      "glasgow",
-      "marseille",
-    ].includes(c)
-  ) {
-    return 80;
-  }
-
-  if (
-    [
-      "spain",
-      "portugal",
-      "italy",
-      "greece",
-      "turkey",
-      "croatia",
-      "poland",
-      "czech republic",
-      "hungary",
-      "romania",
-      "serbia",
-      "bulgaria",
-      "bosnia",
-      "slovakia",
-      "slovenia",
-      "cyprus",
-      "iceland",
-    ].some((x) => k.includes(x))
-  ) {
-    return tier >= 4 ? 75 : 60;
-  }
-
-  return tier >= 4 ? 85 : 65;
+function cityCostProfile(city: string): CityCostProfile {
+  return CITY_COSTS[lower(city)] ?? { hotelDelta: 0, flightDelta: 0 };
 }
 
-function flightFloor(country: string, city: string, tier: number): number {
-  const c = lower(city);
-  const k = lower(country);
-
-  if (["london", "manchester", "liverpool", "glasgow"].includes(c)) return 35;
-  if (["paris", "amsterdam", "brussels", "dortmund", "munich"].includes(c)) return 55;
-  if (["madrid", "barcelona", "rome", "milan", "lisbon", "porto"].includes(c)) return 70;
-  if (["istanbul", "athens", "split", "reykjavik"].includes(c)) return 95;
+function countryHotelAdjustment(country: string): number {
+  const key = lower(country);
 
   if (
-    ["spain", "portugal", "italy", "germany", "france", "netherlands", "belgium"].some((x) =>
-      k.includes(x)
+    ["spain", "portugal", "italy", "greece", "turkey", "croatia"].some((x) =>
+      key.includes(x)
     )
   ) {
-    return tier >= 4 ? 70 : 60;
+    return -6;
   }
 
-  return 80;
+  if (
+    ["france", "germany", "netherlands", "belgium", "switzerland", "austria"].some((x) =>
+      key.includes(x)
+    )
+  ) {
+    return 4;
+  }
+
+  if (
+    ["poland", "czech", "hungary", "romania", "slovakia", "slovenia", "serbia", "bulgaria", "bosnia"].some(
+      (x) => key.includes(x)
+    )
+  ) {
+    return -10;
+  }
+
+  if (["iceland", "norway", "sweden", "finland", "denmark"].some((x) => key.includes(x))) {
+    return 14;
+  }
+
+  return 0;
+}
+
+function countryFlightAdjustment(country: string): number {
+  const key = lower(country);
+
+  if (["england", "scotland", "ireland"].some((x) => key.includes(x))) return -14;
+  if (
+    ["france", "germany", "netherlands", "belgium"].some((x) => key.includes(x))
+  ) {
+    return -4;
+  }
+  if (
+    ["spain", "portugal", "italy", "austria", "switzerland", "czech republic"].some((x) =>
+      key.includes(x)
+    )
+  ) {
+    return 6;
+  }
+  if (
+    ["greece", "turkey", "croatia", "cyprus", "iceland"].some((x) => key.includes(x))
+  ) {
+    return 18;
+  }
+
+  return 10;
+}
+
+function hotelNightFloor(row: FixtureListRow): number {
+  const profile = leagueProfile(row);
+  const city = getCity(row);
+  const country = getLeagueCountry(row);
+  const cityAdj = cityCostProfile(city);
+
+  let value =
+    profile.hotelBase +
+    cityAdj.hotelDelta +
+    countryHotelAdjustment(country);
+
+  if (isWeekend(row)) value += 8;
+  if (isEuropeanCompetition(row)) value += 6;
+
+  return roundToNearest5(value);
+}
+
+function flightFloor(row: FixtureListRow): number {
+  const profile = leagueProfile(row);
+  const city = getCity(row);
+  const country = getLeagueCountry(row);
+  const cityAdj = cityCostProfile(city);
+
+  let value =
+    profile.flightBase +
+    cityAdj.flightDelta +
+    countryFlightAdjustment(country);
+
+  if (isWeekend(row)) value += 6;
+  if (isEuropeanCompetition(row)) value += 4;
+
+  return roundToNearest5(value);
 }
 
 function ticketFloor(row: FixtureListRow): number {
-  const tier = leagueTier(row);
-  const derby = derbyIntensity(row);
-  const home = lower(getHomeName(row));
-  const away = lower(getAwayName(row));
+  const profile = leagueProfile(row);
+  const home = getHomeName(row);
+  const away = getAwayName(row);
   const difficulty = ticketDifficulty(row);
+  const derby = derbyIntensity(row);
 
-  let base = tier >= 6 ? 95 : tier >= 5 ? 70 : tier >= 4 ? 45 : tier >= 3 ? 30 : 20;
+  let value = profile.ticketBase;
 
-  if (isBigClub(home)) base += 12;
-  if (isBigClub(away)) base += 12;
-  if (derby >= 4) base += 35;
-  else if (derby >= 3) base += 20;
+  if (isBigClub(home)) value += 10;
+  if (isBigClub(away)) value += 10;
 
-  if (isWeekend(row)) base += 8;
-  if (isEvening(row)) base += 5;
+  if (derby >= 5) value += 35;
+  else if (derby >= 4) value += 24;
+  else if (derby >= 3) value += 14;
 
-  if (difficulty === "easy") base -= 8;
-  if (difficulty === "hard") base += 15;
-  if (difficulty === "very_hard") base += 35;
+  if (isWeekend(row)) value += 8;
+  if (isEvening(row)) value += 5;
+  if (isEuropeanCompetition(row)) value += 10;
 
-  return roundToNearest5(base);
+  if (difficulty === "easy") value -= 10;
+  if (difficulty === "medium") value += 0;
+  if (difficulty === "hard") value += 14;
+  if (difficulty === "very_hard") value += 30;
+
+  return roundToNearest5(value);
 }
 
-function tripFloor(row: FixtureListRow, hotelNightFromGbp: number, flightFromGbp: number): number {
-  const ticket = ticketFloor(row);
-  const weekendBump = isWeekend(row) ? 15 : 0;
-  const eveningBump = isEvening(row) ? 5 : 0;
-  const trip = ticket + hotelNightFromGbp + flightFromGbp + weekendBump + eveningBump;
-  return roundToNearest5(trip);
+function tripFloor(
+  row: FixtureListRow,
+  hotelNightFromGbp: number,
+  flightFromGbp: number,
+  ticketFromGbp: number
+): number {
+  let value = hotelNightFromGbp + flightFromGbp + ticketFromGbp;
+
+  if (isWeekend(row)) value += 12;
+  if (isEvening(row)) value += 4;
+
+  return roundToNearest5(value);
 }
 
-function confidenceFor(row: FixtureListRow): "low" | "medium" | "high" {
-  const venue = clean(row?.fixture?.venue?.name);
-  const city = clean(row?.fixture?.venue?.city);
-  const league = clean(row?.league?.name);
-  const home = clean(row?.teams?.home?.name);
-  const away = clean(row?.teams?.away?.name);
+function confidenceFor(row: FixtureListRow): DiscoverPriceConfidence {
+  const venue = getVenue(row);
+  const city = getCity(row);
+  const league = getLeagueName(row);
+  const country = getLeagueCountry(row);
+  const home = getHomeName(row);
+  const away = getAwayName(row);
+  const leagueId = getLeagueId(row);
+  const kickoff = kickoffDate(row);
 
-  const filled = [venue, city, league, home, away].filter(Boolean).length;
-  if (filled >= 5) return "high";
-  if (filled >= 3) return "medium";
+  let score = 0;
+
+  if (venue) score += 1;
+  if (city) score += 1;
+  if (league) score += 1;
+  if (country) score += 1;
+  if (home) score += 1;
+  if (away) score += 1;
+  if (leagueId != null) score += 1;
+  if (kickoff) score += 1;
+
+  if (getTeam(home)?.teamKey) score += 1;
+  if (getTeam(away)?.teamKey) score += 1;
+
+  if (getTicketDifficultyBadge(home, leagueId) || getTicketDifficultyBadge(away, leagueId)) {
+    score += 2;
+  }
+
+  if (score >= 10) return "high";
+  if (score >= 7) return "medium";
   return "low";
 }
 
@@ -375,21 +500,18 @@ export function formatFromPrice(value: number | null, prefix = "From"): string |
 }
 
 export function estimateFixturePricing(row: FixtureListRow): DiscoverPriceEstimate {
-  const country = getLeagueCountry(row);
-  const city = getCity(row);
-  const tier = leagueTier(row);
-
-  const hotelNightFromGbp = cityHotelFloor(city, country, tier);
-  const flightFromGbp = flightFloor(country, city, tier);
+  const hotelNightFromGbp = hotelNightFloor(row);
+  const flightFromGbp = flightFloor(row);
   const ticketFromGbp = ticketFloor(row);
-  const tripFromGbp = tripFloor(row, hotelNightFromGbp, flightFromGbp);
+  const tripFromGbp = tripFloor(row, hotelNightFromGbp, flightFromGbp, ticketFromGbp);
+  const confidence = confidenceFor(row);
 
   return {
     ticketFromGbp,
     tripFromGbp,
     hotelNightFromGbp,
     flightFromGbp,
-    confidence: confidenceFor(row),
+    confidence,
     ticketLabel: formatFromPrice(ticketFromGbp),
     tripLabel: formatFromPrice(tripFromGbp),
   };
