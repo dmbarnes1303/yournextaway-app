@@ -389,4 +389,4 @@ export function estimateFixturePricing(row: FixtureListRow): DiscoverPriceEstima
     ticketLabel: formatFromPrice(ticketFromGbp),
     tripLabel: formatFromPrice(tripFromGbp),
   };
-      }
+}
