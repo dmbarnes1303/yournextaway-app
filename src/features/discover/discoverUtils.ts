@@ -1,7 +1,10 @@
+// src/features/discover/discoverUtils.ts
+
 import {
   LEAGUES,
   nextWeekendWindowIso,
   windowFromTomorrowIso,
+  type LeagueOption,
 } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
@@ -14,7 +17,81 @@ import type {
   ShortcutWindow,
 } from "./types";
 
+/* -------------------------------------------------------------------------- */
+/* Constants                                                                  */
+/* -------------------------------------------------------------------------- */
+
 const EUROPEAN_COMPETITION_IDS = new Set([2, 3, 848]);
+const ELITE_LEAGUE_IDS = new Set([39, 140, 135, 78, 61]);
+const STRONG_SECOND_TIER_LEAGUE_IDS = new Set([88, 94, 203, 179, 144, 218, 207, 197]);
+const VALUE_DEPTH_LEAGUE_IDS = new Set([
+  119, 345, 106, 210, 286, 271, 283, 332, 373, 172, 318, 315, 357, 113, 103, 244, 164,
+]);
+
+const KNOWN_DERBY_LABELS: Record<string, string> = {
+  "ajax|feyenoord": "De Klassieker",
+  "arsenal|tottenham": "North London Derby",
+  "atletico-madrid|real-madrid": "Madrid Derby",
+  "celtic|rangers": "Old Firm",
+  "fenerbahce|galatasaray": "Intercontinental Derby",
+  "inter|milan": "Derby della Madonnina",
+  "lazio|roma": "Rome Derby",
+  "manchester-city|manchester-united": "Manchester Derby",
+  "marseille|paris-saint-germain": "Le Classique",
+  "olympiacos|panathinaikos": "Derby of the Eternal Enemies",
+  "real-betis|sevilla": "Seville Derby",
+};
+
+const STACKABLE_CITIES = new Set([
+  "london",
+  "istanbul",
+  "madrid",
+  "milan",
+  "rome",
+  "manchester",
+  "liverpool",
+  "glasgow",
+  "lisbon",
+  "porto",
+  "athens",
+  "prague",
+  "vienna",
+  "amsterdam",
+  "barcelona",
+  "seville",
+  "belgrade",
+]);
+
+const HIGH_PULL_CITIES = new Set([
+  "london",
+  "madrid",
+  "barcelona",
+  "milan",
+  "rome",
+  "munich",
+  "amsterdam",
+  "lisbon",
+  "paris",
+  "glasgow",
+  "istanbul",
+  "liverpool",
+  "manchester",
+  "naples",
+  "porto",
+  "seville",
+  "marseille",
+  "berlin",
+  "vienna",
+  "prague",
+  "athens",
+  "budapest",
+  "split",
+  "zagreb",
+]);
+
+/* -------------------------------------------------------------------------- */
+/* Labels / UI helpers                                                        */
+/* -------------------------------------------------------------------------- */
 
 export function labelForKey(key: DiscoverWindowKey) {
   if (key === "wknd") return "This Weekend";
@@ -78,6 +155,32 @@ export function pickRandom<T>(arr: T[]): T | null {
   return arr[Math.floor(Math.random() * arr.length)] ?? null;
 }
 
+export function clampVibes(next: DiscoverVibe[]) {
+  if (next.length <= 3) return next;
+  return next.slice(next.length - 3);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Primitive helpers                                                          */
+/* -------------------------------------------------------------------------- */
+
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function norm(value: unknown): string {
+  return clean(value).toLowerCase();
+}
+
+function toSlug(value: string) {
+  return String(value ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
 function createStableSeed(input: string) {
   let h = 0;
   for (let i = 0; i < input.length; i += 1) {
@@ -92,19 +195,80 @@ function rotateStable<T>(arr: T[], seed: number) {
   return [...arr.slice(offset), ...arr.slice(0, offset)];
 }
 
-export function clampVibes(next: DiscoverVibe[]) {
-  if (next.length <= 3) return next;
-  return next.slice(next.length - 3);
+function parseSafeDate(value?: string | null) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function toSlug(value: string) {
-  return String(value ?? "")
-    .toLowerCase()
-    .trim()
-    .replace(/[’']/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-");
+function fixtureDate(row: FixtureListRow): Date | null {
+  return parseSafeDate(row?.fixture?.date);
 }
+
+function fixtureIsoDateOnlyInternal(row: FixtureListRow) {
+  const raw = clean(row?.fixture?.date);
+  return raw ? raw.slice(0, 10) : "";
+}
+
+function daysBetweenIso(a: string, b: string) {
+  const da = parseSafeDate(`${a}T00:00:00.000Z`);
+  const db = parseSafeDate(`${b}T00:00:00.000Z`);
+  if (!da || !db) return 0;
+  return Math.round((db.getTime() - da.getTime()) / 86400000);
+}
+
+function getLeagueId(row: FixtureListRow): number | null {
+  return row?.league?.id != null ? Number(row.league.id) : null;
+}
+
+function getLeagueCountry(row: FixtureListRow): string {
+  return clean((row?.league as any)?.country);
+}
+
+function getCity(row: FixtureListRow): string {
+  return clean(row?.fixture?.venue?.city);
+}
+
+function getVenue(row: FixtureListRow): string {
+  return clean(row?.fixture?.venue?.name);
+}
+
+function getFixtureId(row: FixtureListRow): string {
+  return row?.fixture?.id != null ? String(row.fixture.id) : "";
+}
+
+function homeName(row: FixtureListRow): string {
+  return clean(row?.teams?.home?.name) || "Home";
+}
+
+function awayName(row: FixtureListRow): string {
+  return clean(row?.teams?.away?.name) || "Away";
+}
+
+function cityKeyFromRow(row: FixtureListRow) {
+  return toSlug(getCity(row));
+}
+
+function cityLabelFromRow(row: FixtureListRow) {
+  return getCity(row);
+}
+
+function countryLabelFromRow(row: FixtureListRow) {
+  return getLeagueCountry(row);
+}
+
+function leagueStrengthBucket(leagueId: number | null): number {
+  if (leagueId == null) return 1;
+  if (EUROPEAN_COMPETITION_IDS.has(leagueId)) return 5;
+  if (ELITE_LEAGUE_IDS.has(leagueId)) return 4;
+  if (STRONG_SECOND_TIER_LEAGUE_IDS.has(leagueId)) return 3;
+  if (VALUE_DEPTH_LEAGUE_IDS.has(leagueId)) return 2;
+  return 1;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Category seed / ordering helpers                                           */
+/* -------------------------------------------------------------------------- */
 
 export function categorySeedFromFilters(params: {
   vibes: DiscoverVibe[];
@@ -153,34 +317,135 @@ function buildDiscoverSeedKey(params: {
   ].join("|");
 }
 
-function buildPreferredLeagueOrder(seed: number, category: DiscoverCategory) {
-  const europeanLeagues = LEAGUES.filter((league) =>
-    EUROPEAN_COMPETITION_IDS.has(league.leagueId)
-  );
-  const domesticLeagues = LEAGUES.filter(
-    (league) => !EUROPEAN_COMPETITION_IDS.has(league.leagueId)
-  );
+function categoryLeagueBias(category: DiscoverCategory, league: LeagueOption): number {
+  const leagueId = league.leagueId;
+  const isEuro = EUROPEAN_COMPETITION_IDS.has(leagueId);
+  const strength = leagueStrengthBucket(leagueId);
 
-  const rotatedEuropean = rotateStable(europeanLeagues, seed);
-  const rotatedDomestic = rotateStable(domesticLeagues, seed);
+  switch (category) {
+    case "europeanNights":
+      if (isEuro) return 120;
+      return strength * 2;
 
-  if (category === "europeanNights") {
-    return [...rotatedEuropean, ...rotatedDomestic];
+    case "bigMatches":
+    case "bucketList":
+      return isEuro ? 50 : strength * 20;
+
+    case "derbies":
+    case "atmospheres":
+    case "matchdayCulture":
+      return isEuro ? 18 : strength >= 3 ? 28 : 16;
+
+    case "valueTrips":
+    case "easyTickets":
+    case "underratedTrips":
+      if (isEuro) return -10;
+      if (strength === 4) return 12;
+      if (strength === 3) return 18;
+      if (strength === 2) return 22;
+      return 14;
+
+    case "multiMatchTrips":
+    case "weekendTrips":
+      return isEuro ? 10 : strength >= 3 ? 22 : 18;
+
+    case "legendaryStadiums":
+      return isEuro ? 34 : strength * 18;
+
+    case "iconicCities":
+    case "nightMatches":
+    case "titleDrama":
+    case "perfectTrips":
+    default:
+      return isEuro ? 20 : strength * 14;
   }
-
-  return [...rotatedDomestic, ...rotatedEuropean];
 }
+
+function buildPreferredLeagueOrder(seed: number, category: DiscoverCategory) {
+  const decorated = LEAGUES.map((league, index) => ({
+    league,
+    score:
+      categoryLeagueBias(category, league) +
+      (league.homeVisible ? 8 : 0) +
+      (league.featured ? 6 : 0) +
+      (HIGH_PULL_CITIES.has(norm(league.country)) ? 1 : 0),
+    index,
+  }));
+
+  const stableRotated = rotateStable(decorated, seed);
+
+  return stableRotated
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((item) => item.league);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fetch / pool building                                                      */
+/* -------------------------------------------------------------------------- */
 
 function dedupeFixtures(rows: FixtureListRow[]) {
   const deduped = new Map<string, FixtureListRow>();
 
   for (const row of rows) {
-    const id = row?.fixture?.id != null ? String(row.fixture.id) : "";
+    const id = getFixtureId(row);
     if (!id) continue;
     if (!deduped.has(id)) deduped.set(id, row);
   }
 
   return Array.from(deduped.values());
+}
+
+function hasMinimumFixtureShape(row: FixtureListRow): boolean {
+  return Boolean(
+    getFixtureId(row) &&
+      homeName(row) &&
+      awayName(row) &&
+      getVenue(row) &&
+      getCity(row) &&
+      clean(row?.fixture?.date)
+  );
+}
+
+function fixturePoolPriority(row: FixtureListRow, category: DiscoverCategory): number {
+  const leagueId = getLeagueId(row);
+  const isEuro = leagueId != null && EUROPEAN_COMPETITION_IDS.has(leagueId);
+  const isWeekend = isWeekendFixture(row);
+  const isMidweek = isMidweekFixture(row);
+  const isLate = isLateKickoff(row);
+  const city = norm(getCity(row));
+
+  let score = leagueStrengthBucket(leagueId) * 20;
+
+  if (isEuro) score += 25;
+  if (HIGH_PULL_CITIES.has(city)) score += 10;
+  if (isLate) score += 8;
+  if (isWeekend) score += 8;
+  if (isMidweek) score += 4;
+
+  switch (category) {
+    case "europeanNights":
+      if (isEuro) score += 80;
+      if (isMidweek) score += 18;
+      break;
+    case "weekendTrips":
+      if (isWeekend) score += 60;
+      break;
+    case "nightMatches":
+      if (isLate) score += 50;
+      break;
+    case "multiMatchTrips":
+      if (STACKABLE_CITIES.has(city)) score += 40;
+      break;
+    case "valueTrips":
+    case "easyTickets":
+    case "underratedTrips":
+      if (!isEuro && leagueStrengthBucket(leagueId) <= 3) score += 24;
+      break;
+    default:
+      break;
+  }
+
+  return score;
 }
 
 export async function fetchDiscoverPool(params: {
@@ -201,7 +466,7 @@ export async function fetchDiscoverPool(params: {
     tripLength,
     vibes,
     category,
-    minFixtures = 52,
+    minFixtures = 72,
     maxLeagueFetches,
     batchSize = 6,
   } = params;
@@ -216,13 +481,13 @@ export async function fetchDiscoverPool(params: {
   });
 
   const seed = createStableSeed(seedKey);
-  const preferred = buildPreferredLeagueOrder(seed, category);
+  const preferredLeagues = buildPreferredLeagueOrder(seed, category);
   const effectiveMaxLeagueFetches = Math.min(
-    Math.max(1, maxLeagueFetches ?? preferred.length),
-    preferred.length
+    Math.max(1, maxLeagueFetches ?? preferredLeagues.length),
+    preferredLeagues.length
   );
 
-  const leaguesToFetch = preferred.slice(0, effectiveMaxLeagueFetches);
+  const leaguesToFetch = preferredLeagues.slice(0, effectiveMaxLeagueFetches);
   const collected: FixtureListRow[] = [];
 
   for (let i = 0; i < leaguesToFetch.length; i += batchSize) {
@@ -231,106 +496,91 @@ export async function fetchDiscoverPool(params: {
     const results = await Promise.all(
       batch.map(async (league) => {
         try {
-          const res = await getFixtures({
+          const rows = await getFixtures({
             league: league.leagueId,
             season: league.season,
             from: window.from,
             to: window.to,
           });
 
-          return Array.isArray(res) ? res : [];
+          return Array.isArray(rows) ? rows : [];
         } catch {
           return [];
         }
       })
     );
 
-    collected.push(...results.flat().filter((row) => row?.fixture?.id != null));
+    collected.push(...results.flat());
 
-    if (collected.length >= minFixtures && i + batchSize >= leaguesToFetch.length) {
+    const usable = dedupeFixtures(collected).filter(hasMinimumFixtureShape);
+    if (usable.length >= minFixtures && i + batchSize >= batchSize * 2) {
       break;
     }
   }
 
-  return dedupeFixtures(collected).filter((row) => {
-    const venue = String(row?.fixture?.venue?.name ?? "").trim();
-    return Boolean(venue);
-  });
+  return dedupeFixtures(collected)
+    .filter(hasMinimumFixtureShape)
+    .sort(
+      (a, b) =>
+        fixturePoolPriority(b, category) - fixturePoolPriority(a, category) ||
+        clean(a?.fixture?.date).localeCompare(clean(b?.fixture?.date))
+    );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Fixture presentation helpers                                               */
+/* -------------------------------------------------------------------------- */
+
 export function fixtureTitle(row: FixtureListRow) {
-  const home = row?.teams?.home?.name ?? "Home";
-  const away = row?.teams?.away?.name ?? "Away";
-  return `${home} vs ${away}`;
+  return `${homeName(row)} vs ${awayName(row)}`;
 }
 
 export function fixtureMeta(row: FixtureListRow) {
   const kickoff = formatUkDateTimeMaybe(row?.fixture?.date);
-  const city = String(row?.fixture?.venue?.city ?? "").trim();
-  const venue = String(row?.fixture?.venue?.name ?? "").trim();
+  const city = getCity(row);
+  const venue = getVenue(row);
   const tail = [venue, city].filter(Boolean).join(" • ");
   return tail ? `${kickoff} • ${tail}` : kickoff;
 }
 
 export function isMidweekFixture(row: FixtureListRow) {
-  const raw = row?.fixture?.date;
-  if (!raw) return false;
-  const dt = new Date(raw);
-  if (Number.isNaN(dt.getTime())) return false;
+  const dt = fixtureDate(row);
+  if (!dt) return false;
   const day = dt.getDay();
   return day >= 1 && day <= 4;
 }
 
 export function isLateKickoff(row: FixtureListRow) {
-  const raw = row?.fixture?.date;
-  if (!raw) return false;
-  const dt = new Date(raw);
-  if (Number.isNaN(dt.getTime())) return false;
+  const dt = fixtureDate(row);
+  if (!dt) return false;
   const h = dt.getHours();
   return h >= 19 && h <= 22;
 }
 
 export function isWeekendFixture(row: FixtureListRow) {
-  const raw = row?.fixture?.date;
-  if (!raw) return false;
-  const dt = new Date(raw);
-  if (Number.isNaN(dt.getTime())) return false;
+  const dt = fixtureDate(row);
+  if (!dt) return false;
   const day = dt.getDay();
   return day === 5 || day === 6 || day === 0;
 }
 
 export function isEuropeanCompetition(row: FixtureListRow) {
-  const leagueId = row?.league?.id != null ? Number(row.league.id) : null;
-  if (leagueId == null) return false;
-  return EUROPEAN_COMPETITION_IDS.has(leagueId);
+  const leagueId = getLeagueId(row);
+  return leagueId != null && EUROPEAN_COMPETITION_IDS.has(leagueId);
 }
 
 function getFixturePairKey(row: FixtureListRow) {
-  const a = toSlug(row?.teams?.home?.name ?? "");
-  const b = toSlug(row?.teams?.away?.name ?? "");
+  const a = toSlug(homeName(row));
+  const b = toSlug(awayName(row));
   if (!a || !b) return "";
   return [a, b].sort().join("|");
 }
 
 export function trendingLabelForFixture(row: FixtureListRow) {
   const pair = getFixturePairKey(row);
-  const city = String(row?.fixture?.venue?.city ?? "").trim();
+  const city = getCity(row);
 
-  const labels: Record<string, string> = {
-    "ajax|feyenoord": "De Klassieker",
-    "arsenal|tottenham": "North London Derby",
-    "atletico-madrid|real-madrid": "Madrid Derby",
-    "celtic|rangers": "Old Firm",
-    "fenerbahce|galatasaray": "Intercontinental Derby",
-    "inter|milan": "Derby della Madonnina",
-    "lazio|roma": "Rome Derby",
-    "manchester-city|manchester-united": "Manchester Derby",
-    "marseille|paris-saint-germain": "Le Classique",
-    "olympiacos|panathinaikos": "Derby of the Eternal Enemies",
-    "real-betis|sevilla": "Seville Derby",
-  };
-
-  if (labels[pair]) return labels[pair];
+  if (KNOWN_DERBY_LABELS[pair]) return KNOWN_DERBY_LABELS[pair];
   if (isEuropeanCompetition(row)) return "European night";
   if (city) return `${city} football trip`;
   return "Trending football trip";
@@ -342,34 +592,37 @@ export function whyThisFits(
   vibes: DiscoverVibe[],
   tripLength: DiscoverTripLength
 ) {
-  if (category === "easyTickets") return "Cleaner route for a simpler football trip";
-  if (category === "bigMatches") return "Stronger occasion feel with more travel pull";
-  if (category === "derbies") return "History, edge and real rivalry tension";
-  if (category === "atmospheres") return "Higher-upside crowd and matchday energy";
-  if (category === "valueTrips") return "Better experience-per-pound potential";
+  if (category === "easyTickets") return "Cleaner route for a simpler football trip.";
+  if (category === "bigMatches") return "Stronger occasion feel with more travel pull.";
+  if (category === "derbies") return "History, hostility and genuine rivalry tension.";
+  if (category === "atmospheres") return "Higher-upside crowd energy and matchday force.";
+  if (category === "valueTrips") return "Better experience-per-pound potential.";
   if (category === "europeanNights") {
     return isEuropeanCompetition(row)
-      ? "Continental night with stronger occasion value"
-      : "Still strong enough to survive European-night ranking";
+      ? "Continental occasion with stronger night-game pull."
+      : "Still strong enough to survive a Europe-first ranking.";
   }
-  if (category === "multiMatchTrips") return "Good anchor fixture for stacking a bigger trip";
+  if (category === "multiMatchTrips") {
+    return "Good anchor fixture for stacking a bigger football trip.";
+  }
   if (category === "weekendTrips") {
     return isWeekendFixture(row)
-      ? "Weekend-timed fixture that suits a cleaner football break"
-      : "Still workable for a football weekend with the right second match";
+      ? "Weekend-timed fixture that fits a cleaner football break."
+      : "Still workable for a weekend if paired correctly.";
   }
   if (category === "nightMatches") {
-    if (isLateKickoff(row)) return "Later kick-off gives it bigger lights-on energy";
-    return "Good fit for a later, occasion-led football trip";
+    return isLateKickoff(row)
+      ? "Later kick-off gives it better lights-on energy."
+      : "Good fit for an occasion-led evening trip.";
   }
-  if (category === "matchdayCulture") return "Better city + match balance for a fuller trip";
-  if (category === "iconicCities") return "The city itself adds real pull beyond the fixture";
-  if (category === "legendaryStadiums") return "Ground and club pull are doing the heavy lifting";
-  if (tripLength === "2" || tripLength === "3") return "Strong shape for a football city break";
-  if (isMidweekFixture(row)) return "Midweek-worthy fixture with travel pull";
-  if (vibes.includes("easy")) return "Lower-friction option from your current setup";
-  if (vibes.includes("big")) return "Leans more towards atmosphere and fixture weight";
-  return "One of the stronger live options from your current setup";
+  if (category === "matchdayCulture") return "Better city + football balance beyond the 90 minutes.";
+  if (category === "iconicCities") return "The city itself adds real pull beyond the fixture.";
+  if (category === "legendaryStadiums") return "Ground and club pull are doing the heavy lifting.";
+  if (tripLength === "2" || tripLength === "3") return "Strong shape for a football city break.";
+  if (isMidweekFixture(row)) return "Midweek-worthy fixture with enough travel pull.";
+  if (vibes.includes("easy")) return "Lower-friction option from your current setup.";
+  if (vibes.includes("big")) return "Leans more toward atmosphere, weight and occasion.";
+  return "One of the stronger live options from your current setup.";
 }
 
 export function rankLabel(index: number) {
@@ -383,26 +636,12 @@ export function trendingScore(row: FixtureListRow, baseScore: number) {
   let score = baseScore;
 
   const pair = getFixturePairKey(row);
-  const knownBigPairs = new Set([
-    "ajax|feyenoord",
-    "arsenal|tottenham",
-    "atletico-madrid|real-madrid",
-    "celtic|rangers",
-    "fenerbahce|galatasaray",
-    "inter|milan",
-    "lazio|roma",
-    "manchester-city|manchester-united",
-    "marseille|paris-saint-germain",
-    "olympiacos|panathinaikos",
-    "real-betis|sevilla",
-  ]);
-
-  if (knownBigPairs.has(pair)) score += 80;
-  if (isEuropeanCompetition(row)) score += 50;
+  if (KNOWN_DERBY_LABELS[pair]) score += 80;
+  if (isEuropeanCompetition(row)) score += 48;
   if (isLateKickoff(row)) score += 14;
   if (isMidweekFixture(row)) score += 10;
 
-  const leagueId = row?.league?.id;
+  const leagueId = getLeagueId(row);
   if (leagueId === 39) score += 14;
   if (leagueId === 140) score += 14;
   if (leagueId === 135) score += 14;
@@ -412,46 +651,185 @@ export function trendingScore(row: FixtureListRow, baseScore: number) {
   return score;
 }
 
-function fixtureIsoDateOnlyInternal(row: FixtureListRow) {
-  const raw = String(row?.fixture?.date ?? "").trim();
-  if (!raw) return "";
-  return raw.slice(0, 10);
-}
-
 export function fixtureIsoDateOnly(row: FixtureListRow) {
   return fixtureIsoDateOnlyInternal(row);
 }
 
-function parseSafeDate(value?: string | null) {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function daysBetweenIso(a: string, b: string) {
-  const da = parseSafeDate(`${a}T00:00:00.000Z`);
-  const db = parseSafeDate(`${b}T00:00:00.000Z`);
-  if (!da || !db) return 0;
-  return Math.round((db.getTime() - da.getTime()) / 86400000);
-}
-
-function cityKeyFromRow(row: FixtureListRow) {
-  const city = String(row?.fixture?.venue?.city ?? "").trim();
-  return toSlug(city);
-}
-
-function cityLabelFromRow(row: FixtureListRow) {
-  return String(row?.fixture?.venue?.city ?? "").trim();
-}
-
-function countryLabelFromRow(row: FixtureListRow) {
-  return String((row?.league as any)?.country ?? "").trim();
-}
+/* -------------------------------------------------------------------------- */
+/* Multi-match trip builder                                                   */
+/* -------------------------------------------------------------------------- */
 
 function styleLabel(style: MultiMatchTrip["style"]) {
   if (style === "same-city") return "Same-city";
   if (style === "nearby-cities") return "Nearby cities";
   return "Country run";
+}
+
+function tripWindowPenalty(daysSpan: number): number {
+  if (daysSpan <= 2) return 0;
+  if (daysSpan === 3) return 4;
+  if (daysSpan === 4) return 10;
+  if (daysSpan === 5) return 18;
+  if (daysSpan === 6) return 28;
+  return 999;
+}
+
+function tripBaseStyleBonus(style: MultiMatchTrip["style"]): number {
+  if (style === "same-city") return 36;
+  if (style === "nearby-cities") return 20;
+  return 10;
+}
+
+function tripRowsHaveDerby(rows: FixtureListRow[]): boolean {
+  return rows.some((row) => trendingLabelForFixture(row).toLowerCase().includes("derby"));
+}
+
+function tripRowsHaveEuropeanNight(rows: FixtureListRow[]): boolean {
+  return rows.some((row) => isEuropeanCompetition(row));
+}
+
+function tripRowsHaveLateKickoff(rows: FixtureListRow[]): boolean {
+  return rows.some((row) => isLateKickoff(row));
+}
+
+function tripCities(rows: FixtureListRow[]): string[] {
+  return Array.from(new Set(rows.map((row) => cityLabelFromRow(row)).filter(Boolean)));
+}
+
+function tripCountries(rows: FixtureListRow[]): string[] {
+  return Array.from(new Set(rows.map((row) => countryLabelFromRow(row)).filter(Boolean)));
+}
+
+function makeTripId(style: MultiMatchTrip["style"], fixtureIds: string[], title: string) {
+  return `${style}-${toSlug(title)}-${fixtureIds.join("-")}`;
+}
+
+function scoreTripBundle(params: {
+  rows: FixtureListRow[];
+  scoreBase: number;
+  style: MultiMatchTrip["style"];
+  windowKey: DiscoverWindowKey;
+  tripLength: DiscoverTripLength;
+  vibes: DiscoverVibe[];
+}): number {
+  const { rows, scoreBase, style, windowKey, tripLength, vibes } = params;
+
+  const sorted = [...rows].sort((a, b) =>
+    clean(a?.fixture?.date).localeCompare(clean(b?.fixture?.date))
+  );
+
+  const from = fixtureIsoDateOnlyInternal(sorted[0]);
+  const to = fixtureIsoDateOnlyInternal(sorted[sorted.length - 1]);
+  const daysSpan = Math.max(1, daysBetweenIso(from, to) + 1);
+
+  let score = scoreBase;
+
+  score += rows.length * 44;
+  score += tripBaseStyleBonus(style);
+  score -= tripWindowPenalty(daysSpan);
+
+  const cities = tripCities(rows);
+  const highPullCityCount = cities.filter((city) => HIGH_PULL_CITIES.has(norm(city))).length;
+  score += highPullCityCount * 10;
+
+  if (tripRowsHaveDerby(rows)) score += 18;
+  if (tripRowsHaveEuropeanNight(rows)) score += 14;
+  if (tripRowsHaveLateKickoff(rows)) score += 8;
+
+  if (windowKey === "wknd" && daysSpan <= 3) score += 28;
+  if (tripLength === "2" && daysSpan <= 4) score += 16;
+  if (tripLength === "3" && daysSpan <= 5) score += 12;
+
+  if (vibes.includes("easy") && style === "same-city") score += 18;
+  if (vibes.includes("culture") && cities.length > 0) score += 8;
+  if (vibes.includes("big")) {
+    if (tripRowsHaveDerby(rows)) score += 18;
+    if (tripRowsHaveEuropeanNight(rows)) score += 12;
+  }
+  if (vibes.includes("nightlife") && tripRowsHaveLateKickoff(rows)) score += 10;
+
+  return score;
+}
+
+function canBundleRows(rows: FixtureListRow[]): boolean {
+  if (rows.length < 2) return false;
+
+  const sorted = [...rows].sort((a, b) =>
+    clean(a?.fixture?.date).localeCompare(clean(b?.fixture?.date))
+  );
+
+  const from = fixtureIsoDateOnlyInternal(sorted[0]);
+  const to = fixtureIsoDateOnlyInternal(sorted[sorted.length - 1]);
+  if (!from || !to) return false;
+
+  const daysSpan = Math.max(1, daysBetweenIso(from, to) + 1);
+  if (daysSpan > 6) return false;
+
+  const fixtureIds = sorted.map((row) => getFixtureId(row)).filter(Boolean);
+  return fixtureIds.length >= 2;
+}
+
+function buildTrip(
+  rows: FixtureListRow[],
+  scoreBase: number,
+  style: MultiMatchTrip["style"],
+  title: string,
+  subtitle: string,
+  cityLabel: string,
+  countryLabel: string,
+  bonusLabels: string[],
+  params: {
+    vibes: DiscoverVibe[];
+    tripLength: DiscoverTripLength;
+    windowKey: DiscoverWindowKey;
+  }
+): MultiMatchTrip | null {
+  if (!canBundleRows(rows)) return null;
+
+  const sorted = [...rows].sort((a, b) =>
+    clean(a?.fixture?.date).localeCompare(clean(b?.fixture?.date))
+  );
+
+  const from = fixtureIsoDateOnlyInternal(sorted[0]);
+  const to = fixtureIsoDateOnlyInternal(sorted[sorted.length - 1]);
+  if (!from || !to) return null;
+
+  const daysSpan = Math.max(1, daysBetweenIso(from, to) + 1);
+  const fixtureIds = sorted.map((row) => getFixtureId(row)).filter(Boolean);
+  if (fixtureIds.length < 2) return null;
+
+  const score = scoreTripBundle({
+    rows: sorted,
+    scoreBase,
+    style,
+    windowKey: params.windowKey,
+    tripLength: params.tripLength,
+    vibes: params.vibes,
+  });
+
+  const labels = [
+    `${sorted.length} matches`,
+    `${daysSpan} days`,
+    styleLabel(style),
+    ...bonusLabels,
+  ].filter(Boolean);
+
+  return {
+    id: makeTripId(style, fixtureIds, title),
+    title,
+    subtitle,
+    score,
+    matchCount: sorted.length,
+    daysSpan,
+    from,
+    to,
+    cityLabel,
+    countryLabel,
+    style,
+    fixtureIds,
+    rows: sorted,
+    labels,
+  };
 }
 
 export function buildMultiMatchTrips(
@@ -491,97 +869,24 @@ export function buildMultiMatchTrips(
 
   const trips: MultiMatchTrip[] = [];
 
-  const makeTrip = (
-    rows: FixtureListRow[],
-    scoreBase: number,
-    title: string,
-    subtitle: string,
-    style: MultiMatchTrip["style"],
-    cityLabel: string,
-    countryLabel: string,
-    bonusLabels: string[]
-  ): MultiMatchTrip | null => {
-    if (rows.length < 2) return null;
-
-    const sorted = [...rows].sort((a, b) =>
-      String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""))
-    );
-
-    const from = fixtureIsoDateOnlyInternal(sorted[0]);
-    const to = fixtureIsoDateOnlyInternal(sorted[sorted.length - 1]);
-    if (!from || !to) return null;
-
-    const daysSpan = Math.max(1, daysBetweenIso(from, to) + 1);
-    if (daysSpan > 6) return null;
-
-    const fixtureIds = sorted
-      .map((row) => (row?.fixture?.id != null ? String(row.fixture.id) : ""))
-      .filter(Boolean);
-
-    if (fixtureIds.length < 2) return null;
-
-    let score = scoreBase;
-    score += rows.length * 50;
-    score += Math.max(0, 28 - daysSpan * 3);
-
-    if (style === "same-city") score += 35;
-    if (style === "nearby-cities") score += 20;
-    if (params.windowKey === "wknd" && daysSpan <= 3) score += 28;
-
-    if (params.tripLength === "2" && daysSpan <= 4) score += 16;
-    if (params.tripLength === "3" && daysSpan <= 5) score += 12;
-    if (params.vibes.includes("easy") && style === "same-city") score += 18;
-    if (params.vibes.includes("culture") && cityLabel) score += 8;
-    if (params.vibes.includes("big")) {
-      const derbyish = sorted.some((row) =>
-        trendingLabelForFixture(row).toLowerCase().includes("derby")
-      );
-      const euroish = sorted.some((row) => isEuropeanCompetition(row));
-      if (derbyish) score += 18;
-      if (euroish) score += 12;
-    }
-
-    const labels = [
-      `${rows.length} matches`,
-      `${daysSpan} days`,
-      styleLabel(style),
-      ...bonusLabels,
-    ].filter(Boolean);
-
-    return {
-      id: `${style}-${toSlug(title)}-${fixtureIds.join("-")}`,
-      title,
-      subtitle,
-      score,
-      matchCount: rows.length,
-      daysSpan,
-      from,
-      to,
-      cityLabel,
-      countryLabel,
-      style,
-      fixtureIds,
-      rows: sorted,
-      labels,
-    };
-  };
-
   for (const [, bucket] of byCity.entries()) {
-    const sorted = [...bucket.items].sort((a, b) => b.baseScore - a.baseScore).slice(0, 5);
+    const sorted = [...bucket.items].sort((a, b) => b.baseScore - a.baseScore).slice(0, 6);
 
     for (let size = Math.min(3, sorted.length); size >= 2; size -= 1) {
-      const rows = sorted.slice(0, size).map((item) => item.row);
-      const scoreBase = sorted.slice(0, size).reduce((sum, item) => sum + item.baseScore, 0);
+      const slice = sorted.slice(0, size);
+      const rows = slice.map((item) => item.row);
+      const scoreBase = slice.reduce((sum, item) => sum + item.baseScore, 0);
 
-      const trip = makeTrip(
+      const trip = buildTrip(
         rows,
         scoreBase,
+        "same-city",
         `${size} matches in ${bucket.city}`,
         `${bucket.city} football trip`,
-        "same-city",
         bucket.city,
         bucket.country,
-        bucket.country ? [bucket.country] : []
+        bucket.country ? [bucket.country] : [],
+        params
       );
 
       if (trip) trips.push(trip);
@@ -591,7 +896,7 @@ export function buildMultiMatchTrips(
   for (const [, bucket] of byCountry.entries()) {
     const sameCountryRows = [...bucket.items]
       .sort((a, b) => b.baseScore - a.baseScore)
-      .slice(0, 8);
+      .slice(0, 10);
 
     const uniqueCityRows: typeof sameCountryRows = [];
     const seenCities = new Set<string>();
@@ -604,25 +909,24 @@ export function buildMultiMatchTrips(
     }
 
     for (let size = Math.min(3, uniqueCityRows.length); size >= 2; size -= 1) {
-      const rows = uniqueCityRows.slice(0, size).map((item) => item.row);
-      const scoreBase = uniqueCityRows
-        .slice(0, size)
-        .reduce((sum, item) => sum + item.baseScore, 0);
+      const slice = uniqueCityRows.slice(0, size);
+      const rows = slice.map((item) => item.row);
+      const scoreBase = slice.reduce((sum, item) => sum + item.baseScore, 0);
 
-      const cityNames = rows
-        .map((row) => cityLabelFromRow(row))
-        .filter(Boolean)
-        .slice(0, 3);
+      const cityNames = rows.map((row) => cityLabelFromRow(row)).filter(Boolean).slice(0, 3);
+      const style: MultiMatchTrip["style"] =
+        cityNames.length <= 2 ? "nearby-cities" : "country-run";
 
-      const trip = makeTrip(
+      const trip = buildTrip(
         rows,
         scoreBase,
+        style,
         `${size} matches across ${bucket.country}`,
         cityNames.length ? cityNames.join(" • ") : `${bucket.country} multi-match trip`,
-        cityNames.length <= 2 ? "nearby-cities" : "country-run",
         cityNames[0] ?? "",
         bucket.country,
-        cityNames
+        cityNames,
+        params
       );
 
       if (trip) trips.push(trip);
@@ -630,6 +934,7 @@ export function buildMultiMatchTrips(
   }
 
   const deduped = new Map<string, MultiMatchTrip>();
+
   for (const trip of trips) {
     const key = [...trip.fixtureIds].sort().join("|");
     const existing = deduped.get(key);
@@ -647,4 +952,4 @@ export function comboWhy(trip: MultiMatchTrip) {
     return "Multiple fixtures without stretching the travel too far.";
   }
   return "A denser football run with more than one genuine reason to travel.";
-}
+  }
