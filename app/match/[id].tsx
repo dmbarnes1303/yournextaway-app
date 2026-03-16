@@ -253,18 +253,36 @@ function providerBadgeStyle(provider?: string | null) {
   };
 }
 
-function confidenceLabel(score?: number | null): string {
-  const value = typeof score === "number" ? score : 0;
-  if (value >= 90) return "High confidence";
-  if (value >= 75) return "Strong match";
-  if (value >= 60) return "Good match";
-  return "Fallback";
+function formatPriceText(priceText?: string | null): string {
+  const value = clean(priceText);
+  if (!value) return "Live prices";
+  if (/^(from\s+)/i.test(value)) return value;
+  if (/^[£$€]/.test(value)) return `From ${value}`;
+  return `From ${value}`;
 }
 
-function optionReasonLabel(reason?: TicketResolutionOption["reason"] | string | null) {
-  if (reason === "exact_event") return "Direct match";
-  if (reason === "partial_match") return "Close match";
-  return "Search result";
+function availabilityLabel(option: TicketResolutionOption): string {
+  if (clean(option.priceText)) {
+    if (option.exact) return "Tickets available";
+    return "Live availability";
+  }
+
+  if (option.exact) return "Tickets available";
+  return "More ticket options";
+}
+
+function bestOptionSupportText(option: TicketResolutionOption): string {
+  if (clean(option.priceText)) return availabilityLabel(option);
+  if (option.exact) return "Live prices available";
+  return "Open provider to check latest prices";
+}
+
+function providerSummaryLabel(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+  if (raw === "footballticketsnet") return "Secondary marketplace";
+  if (raw === "sportsevents365") return "Ticket marketplace";
+  if (raw === "gigsberg") return "Ticket marketplace";
+  return "Ticket provider";
 }
 
 function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionOption[] {
@@ -274,58 +292,39 @@ function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionO
   const cleaned = input.filter((x) => clean(x?.provider) && clean(x?.url) && clean(x?.title));
 
   const map = new Map<string, TicketResolutionOption>();
+
   for (const option of cleaned) {
     const key = `${clean(option.provider).toLowerCase()}|${clean(option.url)}`;
     const existing = map.get(key);
 
+    const normalized: TicketResolutionOption = {
+      provider: clean(option.provider),
+      exact: Boolean(option.exact),
+      score: typeof option.score === "number" ? option.score : 0,
+      url: clean(option.url),
+      title: clean(option.title),
+      priceText: clean(option.priceText) || null,
+      reason:
+        option.reason === "exact_event" || option.reason === "partial_match"
+          ? option.reason
+          : "search_fallback",
+    };
+
     if (!existing) {
-      map.set(key, {
-        provider: clean(option.provider),
-        exact: Boolean(option.exact),
-        score: typeof option.score === "number" ? option.score : 0,
-        url: clean(option.url),
-        title: clean(option.title),
-        priceText: clean(option.priceText) || null,
-        reason:
-          option.reason === "exact_event" || option.reason === "partial_match"
-            ? option.reason
-            : "search_fallback",
-      });
+      map.set(key, normalized);
       continue;
     }
 
-    const nextScore = typeof option.score === "number" ? option.score : 0;
+    const nextScore = normalized.score;
     const existingScore = typeof existing.score === "number" ? existing.score : 0;
 
-    if (Boolean(option.exact) && !existing.exact) {
-      map.set(key, {
-        provider: clean(option.provider),
-        exact: true,
-        score: nextScore,
-        url: clean(option.url),
-        title: clean(option.title),
-        priceText: clean(option.priceText) || null,
-        reason:
-          option.reason === "exact_event" || option.reason === "partial_match"
-            ? option.reason
-            : "search_fallback",
-      });
+    if (normalized.exact && !existing.exact) {
+      map.set(key, normalized);
       continue;
     }
 
     if (nextScore > existingScore) {
-      map.set(key, {
-        provider: clean(option.provider),
-        exact: Boolean(option.exact),
-        score: nextScore,
-        url: clean(option.url),
-        title: clean(option.title),
-        priceText: clean(option.priceText) || null,
-        reason:
-          option.reason === "exact_event" || option.reason === "partial_match"
-            ? option.reason
-            : "search_fallback",
-      });
+      map.set(key, normalized);
     }
   }
 
@@ -353,12 +352,7 @@ function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionO
         url: clean(result.url),
         title: clean(result.title),
         priceText: clean(result.priceText) || null,
-        reason:
-          result.reason === "exact_event"
-            ? "exact_event"
-            : result.reason === "partial_match"
-              ? "partial_match"
-              : "search_fallback",
+        reason: "search_fallback",
       },
     ];
   }
@@ -367,37 +361,25 @@ function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionO
 }
 
 function openFailureMessage(result: TicketResolutionResult | null): string {
-  if (!result) return "Ticket options could not be loaded.";
-
-  const providers = Array.isArray(result.checkedProviders)
-    ? result.checkedProviders.filter(Boolean).join(", ")
-    : "";
+  if (!result) return "Ticket options could not be loaded right now.";
 
   if ((result as any).error === "missing_backend_url") {
-    return "App backend URL is missing.";
+    return "Tickets are not set up properly yet.";
   }
 
   if ((result as any).error === "network_error") {
-    return "Couldn’t reach the ticket service.";
+    return "Couldn’t reach the ticket service right now.";
   }
 
   if ((result as any).error === "timeout") {
-    return "Ticket service timed out.";
+    return "Ticket service timed out. Please try again.";
   }
 
   if ((result as any).error === "invalid_backend_json") {
     return "Ticket service returned invalid data.";
   }
 
-  if ((result as any).error && String((result as any).error).startsWith("http_")) {
-    return providers
-      ? `No suitable ticket option found. Checked: ${providers}.`
-      : "No suitable ticket option found.";
-  }
-
-  return providers
-    ? `No suitable ticket option found. Checked: ${providers}.`
-    : "No suitable ticket option found.";
+  return "No ticket options found right now.";
 }
 
 function isBestOption(index: number) {
@@ -641,12 +623,9 @@ export default function MatchScreen() {
             kickoffIso,
             homeName,
             awayName,
-            priceMode: "live",
+            priceMode: clean(option.priceText) ? "from_price" : "live",
             ticketProvider: clean(option.provider) || null,
             resolvedPriceText: clean(option.priceText) || null,
-            resolutionReason: option.reason ?? null,
-            exactMatch: Boolean(option.exact),
-            score: option.score,
             checkedProviders: checkedProviders.length > 0 ? checkedProviders : undefined,
             optionCount: ticketOptions.length,
           },
@@ -688,39 +667,6 @@ export default function MatchScreen() {
 
       const options = dedupeOptions(resolved);
 
-      const backendUrl =
-        clean(process.env.EXPO_PUBLIC_BACKEND_URL) ||
-        clean((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL) ||
-        null;
-
-      console.log("[MATCH SCREEN] resolved =", JSON.stringify(resolved, null, 2));
-      console.log("[MATCH SCREEN] options =", JSON.stringify(options, null, 2));
-      console.log("[MATCH SCREEN] backendUrl =", backendUrl);
-
-      Alert.alert(
-        "Ticket debug",
-        JSON.stringify(
-          {
-            fixtureId: fixtureId || null,
-            homeName: homeName || null,
-            awayName: awayName || null,
-            kickoffIso: kickoffIso || null,
-            leagueName: leagueName || null,
-            leagueId: leagueId ?? null,
-            backendUrl,
-            ok: resolved?.ok ?? null,
-            error: (resolved as any)?.error ?? null,
-            reason: resolved?.reason ?? null,
-            provider: resolved?.provider ?? null,
-            optionsCount: options.length,
-            checkedProviders:
-              Array.isArray(resolved?.checkedProviders) ? resolved?.checkedProviders : [],
-          },
-          null,
-          2
-        )
-      );
-
       if (!resolved?.ok || options.length === 0) {
         Alert.alert("No ticket options found", openFailureMessage(resolved));
         return;
@@ -728,13 +674,9 @@ export default function MatchScreen() {
 
       if (options.length === 1) {
         await openTicketOption(options[0]);
-        return;
       }
-    } catch (e: any) {
-      Alert.alert(
-        "Couldn’t load ticket options",
-        String(e?.message ?? e ?? "unknown_error")
-      );
+    } catch {
+      Alert.alert("Couldn’t load ticket options");
     } finally {
       setOpeningTickets(false);
     }
@@ -826,8 +768,8 @@ export default function MatchScreen() {
                   <Chip
                     label={
                       ticketOptions.length === 1
-                        ? "1 ticket option found"
-                        : `${ticketOptions.length} ticket options found`
+                        ? "1 ticket option available"
+                        : `${ticketOptions.length} ticket options available`
                     }
                     variant="default"
                   />
@@ -839,7 +781,7 @@ export default function MatchScreen() {
                   label={
                     openingTickets
                       ? "Finding tickets…"
-                      : ticketOptions.length > 1
+                      : ticketOptions.length > 0
                         ? "Refresh ticket options"
                         : "View ticket options"
                   }
@@ -858,7 +800,7 @@ export default function MatchScreen() {
               {!tripId ? (
                 <View style={styles.helperBox}>
                   <Text style={styles.helperText}>
-                    You can check ticket options now. Build a trip if you want to save bookings and
+                    Check ticket providers now, then build a trip if you want to save bookings and
                     keep everything in Wallet.
                   </Text>
                 </View>
@@ -869,7 +811,7 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Tickets</Text>
             <Text style={styles.sectionSub}>
-              See the best available ticket routes for this match, then open the one you want.
+              Compare ticket providers for this match and open the option you want.
             </Text>
 
             {bestOption ? (
@@ -878,23 +820,20 @@ export default function MatchScreen() {
                   <View style={styles.bestOptionPriceBlock}>
                     <Text style={styles.bestOptionLabel}>Best option right now</Text>
                     <Text style={styles.bestOptionPrice}>
-                      {clean(bestOption.priceText) || "Live price"}
+                      {formatPriceText(bestOption.priceText)}
                     </Text>
                   </View>
 
                   <ProviderBadge provider={bestOption.provider} showLabel />
                 </View>
 
-                <Text style={styles.bestOptionSub}>
-                  {confidenceLabel(bestOption.score)}
-                  {bestOption.exact ? " • Exact event match" : " • Best available result"}
-                </Text>
+                <Text style={styles.bestOptionSub}>{bestOptionSupportText(bestOption)}</Text>
               </View>
             ) : (
               <View style={styles.emptyInfoCard}>
                 <Text style={styles.emptyInfoLabel}>No ticket options loaded yet</Text>
                 <Text style={styles.emptyInfoText}>
-                  Tap “View ticket options” to load live ticket routes for this fixture.
+                  Tap “View ticket options” to check current ticket providers for this fixture.
                 </Text>
               </View>
             )}
@@ -923,37 +862,29 @@ export default function MatchScreen() {
                     >
                       <View style={styles.optionTopRow}>
                         <View style={styles.optionPriceHero}>
-                          <Text style={styles.optionPrice}>
-                            {clean(option.priceText) || "Live price"}
-                          </Text>
-                          <Text style={styles.optionConfidence}>
-                            {confidenceLabel(option.score)}
-                            {option.exact ? " • Exact match" : ""}
+                          <Text style={styles.optionPrice}>{formatPriceText(option.priceText)}</Text>
+                          <Text style={styles.optionAvailability}>
+                            {availabilityLabel(option)}
                           </Text>
                         </View>
 
                         <View style={styles.optionRightStack}>
                           <ProviderBadge provider={option.provider} showLabel />
-                          <View style={styles.optionTagRow}>
-                            {isBestOption(index) ? (
-                              <View style={styles.bestBadge}>
-                                <Text style={styles.bestBadgeText}>Best</Text>
-                              </View>
-                            ) : null}
-                            {option.exact ? (
-                              <View style={styles.exactBadge}>
-                                <Text style={styles.exactBadgeText}>Exact</Text>
-                              </View>
-                            ) : null}
-                          </View>
+                          {isBestOption(index) ? (
+                            <View style={styles.bestBadge}>
+                              <Text style={styles.bestBadgeText}>Best option</Text>
+                            </View>
+                          ) : null}
                         </View>
                       </View>
 
-                      <Text style={styles.optionReason}>{optionReasonLabel(option.reason)}</Text>
+                      <Text style={styles.optionProviderSummary}>
+                        {providerSummaryLabel(option.provider)}
+                      </Text>
 
                       <View style={styles.optionActionRow}>
                         <Text style={styles.optionActionText}>
-                          {isOpening ? "Opening…" : "Open ticket option"}
+                          {isOpening ? "Opening provider…" : "View tickets"}
                         </Text>
                       </View>
                     </Pressable>
@@ -1068,7 +999,12 @@ export default function MatchScreen() {
             </View>
 
             <View style={styles.primaryActionWrap}>
-              <Button label="Build trip around this match" tone="primary" onPress={goBuildTrip} glow />
+              <Button
+                label="Build trip around this match"
+                tone="primary"
+                onPress={goBuildTrip}
+                glow
+              />
             </View>
           </GlassCard>
 
@@ -1382,22 +1318,7 @@ const styles = StyleSheet.create({
   optionRightStack: {
     alignItems: "flex-end",
     gap: 8,
-    maxWidth: "45%",
-  },
-
-  optionTagRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "flex-end",
-  },
-
-  optionConfidence: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: theme.fontWeight.medium,
+    maxWidth: "48%",
   },
 
   optionPrice: {
@@ -1407,7 +1328,15 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  optionReason: {
+  optionAvailability: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  optionProviderSummary: {
     color: theme.colors.textMuted,
     fontSize: 12,
     lineHeight: 16,
@@ -1420,7 +1349,7 @@ const styles = StyleSheet.create({
 
   optionActionText: {
     color: theme.colors.primary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -1435,21 +1364,6 @@ const styles = StyleSheet.create({
 
   bestBadgeText: {
     color: theme.colors.primary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  exactBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: "rgba(120,170,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(120,170,255,0.28)",
-  },
-
-  exactBadgeText: {
-    color: "rgba(190,215,255,1)",
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
   },
