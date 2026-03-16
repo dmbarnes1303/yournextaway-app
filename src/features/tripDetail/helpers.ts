@@ -271,24 +271,24 @@ export function providerBadgeStyle(provider?: string | null): PartnerUiBadgeStyl
 
 export function ticketConfidenceLabel(score?: number | null): string | null {
   if (typeof score !== "number" || !Number.isFinite(score)) return null;
-  if (score >= 90) return "High confidence match";
-  if (score >= 75) return "Strong ticket match";
-  if (score >= 60) return "Good ticket match";
-  return "Fallback ticket match";
+  if (score >= 90) return "Best match";
+  if (score >= 75) return "Strong option";
+  if (score >= 60) return "Good option";
+  return "Other option";
 }
 
 export function confidenceLabel(score?: number | null): string {
-  if (typeof score !== "number" || !Number.isFinite(score)) return "Fallback";
-  if (score >= 90) return "High confidence";
-  if (score >= 75) return "Strong match";
-  if (score >= 60) return "Good match";
-  return "Fallback";
+  if (typeof score !== "number" || !Number.isFinite(score)) return "Available";
+  if (score >= 90) return "Best match";
+  if (score >= 75) return "Strong option";
+  if (score >= 60) return "Good option";
+  return "Available";
 }
 
 export function optionReasonLabel(reason?: TicketResolutionOption["reason"] | string | null) {
-  if (reason === "exact_event") return "Direct event match";
-  if (reason === "partial_match") return "Partial match";
-  return "Search fallback";
+  if (reason === "exact_event") return "Best match for this fixture";
+  if (reason === "partial_match") return "Similar fixture listing";
+  return "Search result";
 }
 
 export function livePriceLine(item: SavedItem): string | null {
@@ -299,14 +299,22 @@ export function livePriceLine(item: SavedItem): string | null {
 
   if (item.status === "booked") {
     const bookedPrice = clean(item.priceText) || resolvedPrice;
-    return bookedPrice || null;
+    return bookedPrice ? `Booked • ${bookedPrice}` : "Booked";
+  }
+
+  if (resolvedPrice && provider) {
+    return `From ${resolvedPrice} • ${provider}`;
   }
 
   if (resolvedPrice) {
-    return provider ? `From ${resolvedPrice} on ${provider}` : `From ${resolvedPrice}`;
+    return `From ${resolvedPrice}`;
   }
 
-  return provider ? `Live price on ${provider}` : "Live price on partner";
+  if (provider) {
+    return `View on ${provider}`;
+  }
+
+  return "View offer";
 }
 
 export function parseIsoToDate(iso?: string | null): Date | null {
@@ -432,21 +440,27 @@ export function mapTicketProviderToPartnerId(provider?: string | null): PartnerI
 }
 
 export function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): string {
-  if (!resolved) return "Ticket resolver didn’t respond. Check backend URL/server.";
-
-  const checkedProviders = Array.isArray(resolved.checkedProviders)
-    ? resolved.checkedProviders.filter(Boolean).join(", ")
-    : "";
+  if (!resolved) return "Ticket options are unavailable right now.";
 
   const error = clean((resolved as any)?.error);
 
-  if (error === "network_error") return "Ticket backend couldn’t be reached. Check backend URL/server.";
-  if (error === "timeout") return "Ticket backend timed out. Try again.";
-  if (error === "invalid_backend_json") return "Ticket backend returned invalid JSON.";
+  if (error === "network_error") {
+    return "We couldn’t reach ticket providers right now. Please try again.";
+  }
 
-  return checkedProviders
-    ? `No suitable ticket listing found. Checked: ${checkedProviders}.`
-    : "No suitable ticket listing found.";
+  if (error === "timeout") {
+    return "Ticket providers took too long to respond. Please try again.";
+  }
+
+  if (error === "invalid_backend_json") {
+    return "Ticket options are temporarily unavailable. Please try again.";
+  }
+
+  if (error === "missing_backend_url") {
+    return "Ticket options are not set up correctly yet.";
+  }
+
+  return "No ticket options found for this fixture right now.";
 }
 
 export function smartButtonSubtitle(item: SavedItem | null, fallback: string) {
@@ -550,4 +564,4 @@ export function getIsoDateOnly(raw?: string | null) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
+      }
