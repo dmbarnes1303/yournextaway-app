@@ -161,9 +161,13 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
   const leagueId =
     typeof selectedFixture?.league?.id === "number" ? selectedFixture.league.id : undefined;
   const homeTeamId =
-    typeof selectedFixture?.teams?.home?.id === "number" ? selectedFixture.teams.home.id : undefined;
+    typeof selectedFixture?.teams?.home?.id === "number"
+      ? selectedFixture.teams.home.id
+      : undefined;
   const awayTeamId =
-    typeof selectedFixture?.teams?.away?.id === "number" ? selectedFixture.teams.away.id : undefined;
+    typeof selectedFixture?.teams?.away?.id === "number"
+      ? selectedFixture.teams.away.id
+      : undefined;
 
   return {
     cityId,
@@ -192,7 +196,9 @@ async function computePlaceholderIdsForFixture(
   const leagueId = fx?.league?.id ?? null;
   const season =
     seasonOverride ??
-    (typeof (fx as any)?.league?.season === "number" ? (fx as any).league.season : DEFAULT_SEASON);
+    (typeof (fx as any)?.league?.season === "number"
+      ? (fx as any).league.season
+      : DEFAULT_SEASON);
 
   const round = cleanText(fx?.league?.round);
 
@@ -234,28 +240,28 @@ function difficultyLabel(v?: TravelDifficulty | null) {
 }
 
 function prefWindowLabel(v?: string | null) {
-  if (v === "wknd") return "This Weekend";
-  if (v === "d7") return "Next 7 Days";
-  if (v === "d14") return "Next 14 Days";
-  if (v === "d30") return "Next 30 Days";
+  if (v === "wknd") return "This weekend";
+  if (v === "d7") return "Next 7 days";
+  if (v === "d14") return "Next 14 days";
+  if (v === "d30") return "Next 30 days";
   return null;
 }
 
 function prefLengthLabel(v?: string | null) {
-  if (v === "day") return "Day Trip";
-  if (v === "1") return "1 Night";
-  if (v === "2") return "2 Nights";
-  if (v === "3") return "3 Nights";
+  if (v === "day") return "Day trip";
+  if (v === "1") return "1 night";
+  if (v === "2") return "2 nights";
+  if (v === "3") return "3 nights";
   return null;
 }
 
 function prefVibeLabel(v: string) {
-  if (v === "easy") return "Easy Travel";
-  if (v === "big") return "Big Match";
+  if (v === "easy") return "Easy travel";
+  if (v === "big") return "Big match";
   if (v === "hidden") return "Different";
   if (v === "nightlife") return "Nightlife";
   if (v === "culture") return "Culture";
-  if (v === "warm") return "Warm-ish";
+  if (v === "warm") return "Warm";
   return v;
 }
 
@@ -267,19 +273,26 @@ function scoreTone(score?: number | null) {
 }
 
 function bookingReadinessLabel(row: RankedTrip | null) {
-  if (!row) return "Trip planning ready";
+  if (!row) return "Good starting point for a trip";
   const difficulty = difficultyLabel(row.breakdown.travelDifficulty);
-  return `${difficulty} travel • Trip planning ready`;
+  return `${difficulty} travel route`;
 }
 
 function selectedFlowSummary(isEditing: boolean, setAsPrimaryOnSave: boolean) {
   if (isEditing) {
     return setAsPrimaryOnSave
-      ? "Save this match as the trip anchor, then continue into tickets, flights, hotels and extras."
-      : "Add this match into the trip, then continue planning around the saved workspace.";
+      ? "This match will become the main match for this trip."
+      : "This match will be added to the trip.";
   }
 
-  return "Save this trip, then move straight into ticket search, prefilled flights/hotels, extras and Wallet.";
+  return "Save this match as a trip, then sort tickets, flights, hotel and extras around it.";
+}
+
+function buildPageSubtitle(isEditing: boolean, matchCount: number) {
+  if (isEditing) {
+    return `Update trip dates or add another match. Current matches: ${matchCount}.`;
+  }
+  return "Choose the match you want to build the trip around.";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -651,7 +664,9 @@ export default function TripBuildScreen() {
 
   const visibleRankMap = useMemo(() => {
     const ranked = rankTrips(visibleRows as any);
-    return new Map<string, RankedTrip>(ranked.map((trip) => [fixtureIdStr((trip as any).fixture), trip]));
+    return new Map<string, RankedTrip>(
+      ranked.map((trip) => [fixtureIdStr((trip as any).fixture), trip])
+    );
   }, [visibleRows]);
 
   const discoverSummary = useMemo(() => {
@@ -679,7 +694,7 @@ export default function TripBuildScreen() {
     const a = parseIsoToDate(startIso);
     const b = parseIsoToDate(endIso);
     if (!a || !b) return "Invalid trip dates.";
-    if (b.getTime() < a.getTime()) return "End date must be on/after start date.";
+    if (b.getTime() < a.getTime()) return "End date must be on or after start date.";
     return null;
   }, [startIso, endIso]);
 
@@ -762,7 +777,7 @@ export default function TripBuildScreen() {
       if (tripCount >= FREE_TRIP_CAP) {
         Alert.alert(
           "Free plan limit reached",
-          `You can save up to ${FREE_TRIP_CAP} trips on the free plan.\n\nDelete an old trip or upgrade to Pro (coming next).`
+          `You can save up to ${FREE_TRIP_CAP} trips on the free plan.\n\nDelete an old trip or upgrade to Pro later.`
         );
         return;
       }
@@ -820,19 +835,19 @@ export default function TripBuildScreen() {
   }, [selectedFixture]);
 
   const selectedKickLine = useMemo(() => {
-    if (!selectedFixture) return "Kickoff: TBC";
+    if (!selectedFixture) return "Kickoff time TBC";
     const tbc = isKickoffTbc(selectedFixture, placeholderTbcIds);
-    if (tbc) return "Kickoff: TBC";
+    if (tbc) return "Kickoff time TBC";
     const f = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
-    return f ? `Kickoff: ${f}` : "Kickoff: TBC";
+    return f ? f : "Kickoff time TBC";
   }, [selectedFixture, placeholderTbcIds]);
 
   const selectedVenueLine = useMemo(() => {
-    if (!selectedFixture) return "Venue: —";
+    if (!selectedFixture) return "Venue TBC";
     const v = cleanText(selectedFixture?.fixture?.venue?.name);
     const c = cleanText(selectedFixture?.fixture?.venue?.city);
     const parts = [v, c].filter(Boolean);
-    return parts.length ? parts.join(" • ") : "Venue: —";
+    return parts.length ? parts.join(" • ") : "Venue TBC";
   }, [selectedFixture]);
 
   const tripLength = useMemo(() => {
@@ -844,14 +859,6 @@ export default function TripBuildScreen() {
 
   const headerTitle = useMemo(() => (isEditing ? "Edit trip" : "Plan trip"), [isEditing]);
 
-  const intentSub = useMemo(() => {
-    if (isEditing) {
-      const n = existingMatchIds.length;
-      return `Update dates/notes and add more matches to this trip. (${n} match${n === 1 ? "" : "es"})`;
-    }
-    return "Lock the fixture first, then use the saved trip as the booking workspace for tickets, travel, stays, extras and Wallet.";
-  }, [isEditing, existingMatchIds.length]);
-
   const selectedLeagueLabel = useMemo(() => {
     if (selectedLeague.leagueId === 0) return "All leagues";
     return selectedLeague.label;
@@ -862,8 +869,14 @@ export default function TripBuildScreen() {
     return `${startIso} → ${endIso}${nights}`;
   }, [startIso, endIso, tripLength]);
 
-  const selectedHomeLogo = useMemo(() => safeUri(selectedFixture?.teams?.home?.logo), [selectedFixture]);
-  const selectedAwayLogo = useMemo(() => safeUri(selectedFixture?.teams?.away?.logo), [selectedFixture]);
+  const selectedHomeLogo = useMemo(
+    () => safeUri(selectedFixture?.teams?.home?.logo),
+    [selectedFixture]
+  );
+  const selectedAwayLogo = useMemo(
+    () => safeUri(selectedFixture?.teams?.away?.logo),
+    [selectedFixture]
+  );
 
   const selectedFixtureId = useMemo(() => fixtureIdStr(selectedFixture), [selectedFixture]);
 
@@ -899,17 +912,19 @@ export default function TripBuildScreen() {
           showsVerticalScrollIndicator={false}
         >
           <GlassCard style={styles.headerCard} level="subtle">
-            <Text style={styles.bigTitle}>{isEditing ? "Edit your trip" : "Plan your trip"}</Text>
-            <Text style={styles.bigSub}>{intentSub}</Text>
+            <Text style={styles.bigTitle}>{isEditing ? "Edit trip" : "Build a trip"}</Text>
+            <Text style={styles.bigSub}>
+              {buildPageSubtitle(isEditing, existingMatchIds.length)}
+            </Text>
 
             <View style={styles.chipRow}>
               <View style={styles.chip}>
-                <Text style={styles.chipKicker}>Dates</Text>
+                <Text style={styles.chipKicker}>Trip dates</Text>
                 <Text style={styles.chipValue}>{dateWindowLabel}</Text>
               </View>
 
               <View style={styles.chip}>
-                <Text style={styles.chipKicker}>League</Text>
+                <Text style={styles.chipKicker}>League filter</Text>
                 <Text style={styles.chipValue} numberOfLines={1}>
                   {selectedLeagueLabel}
                 </Text>
@@ -918,7 +933,7 @@ export default function TripBuildScreen() {
 
             {discoverSummary.length > 0 ? (
               <View style={styles.prefBar}>
-                <Text style={styles.prefBarLabel}>Discover brief</Text>
+                <Text style={styles.prefBarLabel}>Starting from your discover setup</Text>
                 <Text style={styles.prefBarText}>{discoverSummary.join(" • ")}</Text>
               </View>
             ) : null}
@@ -926,7 +941,7 @@ export default function TripBuildScreen() {
             <View style={styles.flowStrip}>
               <View style={styles.flowStep}>
                 <Text style={styles.flowStepNumber}>1</Text>
-                <Text style={styles.flowStepText}>Pick fixture</Text>
+                <Text style={styles.flowStepText}>Pick match</Text>
               </View>
               <View style={styles.flowDivider} />
               <View style={styles.flowStep}>
@@ -936,13 +951,13 @@ export default function TripBuildScreen() {
               <View style={styles.flowDivider} />
               <View style={styles.flowStep}>
                 <Text style={styles.flowStepNumber}>3</Text>
-                <Text style={styles.flowStepText}>Book + save proof</Text>
+                <Text style={styles.flowStepText}>Book around it</Text>
               </View>
             </View>
 
             {!isEditing ? (
               <View style={styles.capBar}>
-                <Text style={styles.capText}>Free plan: up to {FREE_TRIP_CAP} saved trips.</Text>
+                <Text style={styles.capText}>Free plan: save up to {FREE_TRIP_CAP} trips.</Text>
               </View>
             ) : null}
           </GlassCard>
@@ -1008,13 +1023,15 @@ export default function TripBuildScreen() {
 
                 {isEditing ? (
                   <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{isAlreadyInTrip ? "Already in trip" : "Will be added"}</Text>
+                    <Text style={styles.badgeText}>
+                      {isAlreadyInTrip ? "Already in this trip" : "Ready to add"}
+                    </Text>
                   </View>
                 ) : null}
 
                 {editTrip && existingPrimaryId && selectedFixtureId === existingPrimaryId ? (
                   <View style={styles.badge}>
-                    <Text style={styles.badgeText}>Current primary</Text>
+                    <Text style={styles.badgeText}>Main match</Text>
                   </View>
                 ) : null}
               </View>
@@ -1022,18 +1039,25 @@ export default function TripBuildScreen() {
               {selectedRankedTrip ? (
                 <View style={styles.intelCard}>
                   <View style={styles.intelTopRow}>
-                    <View style={[styles.intelScoreBox, scoreTone(selectedRankedTrip.breakdown.combinedScore)]}>
-                      <Text style={styles.intelScoreValue}>{selectedRankedTrip.breakdown.combinedScore}</Text>
+                    <View
+                      style={[
+                        styles.intelScoreBox,
+                        scoreTone(selectedRankedTrip.breakdown.combinedScore),
+                      ]}
+                    >
+                      <Text style={styles.intelScoreValue}>
+                        {selectedRankedTrip.breakdown.combinedScore}
+                      </Text>
                       <Text style={styles.intelScoreLabel}>Trip score</Text>
                     </View>
 
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.intelTitle}>Trip intelligence</Text>
+                      <Text style={styles.intelTitle}>How this looks as a trip</Text>
                       <Text style={styles.intelSub}>
                         {difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)} travel •{" "}
                         {selectedRankedTrip.city ||
                           cleanText(selectedFixture?.fixture?.venue?.city) ||
-                          "City pending"}
+                          "City"}
                       </Text>
                       <Text style={styles.intelSubAlt}>
                         {bookingReadinessLabel(selectedRankedTrip)}
@@ -1044,15 +1068,21 @@ export default function TripBuildScreen() {
                   <View style={styles.intelPillRow}>
                     <View style={styles.intelPill}>
                       <Text style={styles.intelPillKicker}>Atmosphere</Text>
-                      <Text style={styles.intelPillValue}>{selectedRankedTrip.breakdown.atmosphereScore}</Text>
+                      <Text style={styles.intelPillValue}>
+                        {selectedRankedTrip.breakdown.atmosphereScore}
+                      </Text>
                     </View>
                     <View style={styles.intelPill}>
                       <Text style={styles.intelPillKicker}>Match</Text>
-                      <Text style={styles.intelPillValue}>{selectedRankedTrip.breakdown.matchInterestScore}</Text>
+                      <Text style={styles.intelPillValue}>
+                        {selectedRankedTrip.breakdown.matchInterestScore}
+                      </Text>
                     </View>
                     <View style={styles.intelPill}>
                       <Text style={styles.intelPillKicker}>Travel</Text>
-                      <Text style={styles.intelPillValue}>{selectedRankedTrip.breakdown.travelScore}</Text>
+                      <Text style={styles.intelPillValue}>
+                        {selectedRankedTrip.breakdown.travelScore}
+                      </Text>
                     </View>
                     <View style={styles.intelPill}>
                       <Text style={styles.intelPillKicker}>Difficulty</Text>
@@ -1064,7 +1094,7 @@ export default function TripBuildScreen() {
 
                   {selectedRankedTrip.breakdown.reasonLines?.length ? (
                     <View style={styles.reasonBox}>
-                      <Text style={styles.reasonTitle}>Why this trip ranks like this</Text>
+                      <Text style={styles.reasonTitle}>Why it scores well</Text>
                       {selectedRankedTrip.breakdown.reasonLines.slice(0, 4).map((line, idx) => (
                         <Text key={`${line}-${idx}`} style={styles.reasonText}>
                           • {line}
@@ -1076,7 +1106,7 @@ export default function TripBuildScreen() {
               ) : null}
 
               <View style={styles.nextStageBox}>
-                <Text style={styles.nextStageTitle}>What happens after save</Text>
+                <Text style={styles.nextStageTitle}>After you save</Text>
                 <Text style={styles.nextStageText}>{selectedFlowLine}</Text>
 
                 <View style={styles.nextStageRow}>
@@ -1098,9 +1128,9 @@ export default function TripBuildScreen() {
               {isEditing ? (
                 <View style={styles.primaryRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.primaryTitle}>Set as primary match</Text>
+                    <Text style={styles.primaryTitle}>Make this the main match</Text>
                     <Text style={styles.primarySub}>
-                      Primary match drives kickoff banner, stay guidance, ticket flow and booking defaults.
+                      The main match controls the key trip details shown later.
                     </Text>
                   </View>
                   <Switch value={setAsPrimaryOnSave} onValueChange={setSetAsPrimaryOnSave} />
@@ -1111,7 +1141,9 @@ export default function TripBuildScreen() {
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
                     Prefilled stay area:{" "}
-                    <Text style={{ fontWeight: "900", color: theme.colors.text }}>{routeCityArea}</Text>
+                    <Text style={{ fontWeight: "900", color: theme.colors.text }}>
+                      {routeCityArea}
+                    </Text>
                   </Text>
                 </View>
               ) : null}
@@ -1120,7 +1152,7 @@ export default function TripBuildScreen() {
               <TextInput
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Stay area, ticket thoughts, reminders, anything worth keeping with the trip…"
+                placeholder="Add anything worth keeping with this trip..."
                 placeholderTextColor={theme.colors.textSecondary}
                 style={styles.notes}
                 multiline
@@ -1130,14 +1162,18 @@ export default function TripBuildScreen() {
 
           {showPickerMode && !prefillLoading && !error ? (
             <GlassCard level="default">
-              <Text style={styles.h1}>{isEditing ? "Add a match" : "Pick a match"}</Text>
+              <Text style={styles.h1}>{isEditing ? "Choose another match" : "Choose your match"}</Text>
               <Text style={styles.hint}>
                 {isEditing
-                  ? "Select another match to add it to this trip."
-                  : "Choose the fixture you want to build the whole trip around."}
+                  ? "Pick another match to add to this trip."
+                  : "Pick the match you want the whole trip built around."}
               </Text>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 12 }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 12 }}
+              >
                 {leagueOptions.map((l) => {
                   const active = l.leagueId === selectedLeague.leagueId;
                   return (
@@ -1163,7 +1199,7 @@ export default function TripBuildScreen() {
                   setSearch(t);
                   setVisibleCount(14);
                 }}
-                placeholder="Search team / city / venue / league"
+                placeholder="Search team, city, venue or league"
                 placeholderTextColor={theme.colors.textSecondary}
                 style={styles.search}
               />
@@ -1179,8 +1215,8 @@ export default function TripBuildScreen() {
 
                   const tbc = isKickoffTbc(r, placeholderTbcIds);
                   const kick = tbc
-                    ? "Kickoff: TBC"
-                    : `Kickoff: ${formatUkDateTimeMaybe(r?.fixture?.date) || "TBC"}`;
+                    ? "Kickoff TBC"
+                    : formatUkDateTimeMaybe(r?.fixture?.date) || "Kickoff TBC";
 
                   const v = cleanText(r?.fixture?.venue?.name);
                   const c = cleanText(r?.fixture?.venue?.city);
@@ -1216,7 +1252,10 @@ export default function TripBuildScreen() {
                               <View style={styles.crestFallback} />
                             )}
                             {awayLogo ? (
-                              <Image source={{ uri: awayLogo }} style={[styles.crest, { marginLeft: -10 }]} />
+                              <Image
+                                source={{ uri: awayLogo }}
+                                style={[styles.crest, { marginLeft: -10 }]}
+                              />
                             ) : (
                               <View style={[styles.crestFallback, { marginLeft: -10 }]} />
                             )}
@@ -1238,15 +1277,22 @@ export default function TripBuildScreen() {
                             ) : null}
 
                             <Text style={styles.fxFlowMeta} numberOfLines={1}>
-                              Save trip → tickets → flights/hotels → extras
+                              Save trip, then book around it
                             </Text>
                           </View>
                         </View>
 
                         <View style={styles.fxRight}>
                           {ranked ? (
-                            <View style={[styles.rowScoreBox, scoreTone(ranked.breakdown.combinedScore)]}>
-                              <Text style={styles.rowScoreValue}>{ranked.breakdown.combinedScore}</Text>
+                            <View
+                              style={[
+                                styles.rowScoreBox,
+                                scoreTone(ranked.breakdown.combinedScore),
+                              ]}
+                            >
+                              <Text style={styles.rowScoreValue}>
+                                {ranked.breakdown.combinedScore}
+                              </Text>
                             </View>
                           ) : null}
                           {leagueFlag ? <Image source={{ uri: leagueFlag }} style={styles.flag} /> : null}
@@ -1263,7 +1309,9 @@ export default function TripBuildScreen() {
                           </View>
                         ) : (
                           <View style={[styles.badge, styles.badgeConfirmed]}>
-                            <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>Kickoff confirmed</Text>
+                            <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>
+                              Kickoff confirmed
+                            </Text>
                           </View>
                         )}
 
@@ -1299,7 +1347,12 @@ export default function TripBuildScreen() {
                       <View style={styles.fxSelectRow}>
                         <View style={{ flex: 1 }} />
                         <View style={[styles.selectPill, selected && styles.selectPillActive]}>
-                          <Text style={[styles.selectPillText, selected && styles.selectPillTextActive]}>
+                          <Text
+                            style={[
+                              styles.selectPillText,
+                              selected && styles.selectPillTextActive,
+                            ]}
+                          >
                             {selected ? "Selected" : "Select"}
                           </Text>
                         </View>
@@ -1320,17 +1373,22 @@ export default function TripBuildScreen() {
           <Pressable
             onPress={onSave}
             disabled={saving || prefillLoading || !selectedFixture}
-            style={[styles.saveBtn, (!selectedFixture || saving || prefillLoading) && { opacity: 0.55 }]}
+            style={[
+              styles.saveBtn,
+              (!selectedFixture || saving || prefillLoading) && { opacity: 0.55 },
+            ]}
           >
-            <Text style={styles.saveText}>{saving ? "Saving…" : isEditing ? "Update trip" : "Save trip"}</Text>
+            <Text style={styles.saveText}>
+              {saving ? "Saving…" : isEditing ? "Update trip" : "Save trip"}
+            </Text>
             <Text style={styles.saveSub}>
               {selectedFixture
                 ? isEditing
                   ? setAsPrimaryOnSave
-                    ? "This match becomes the trip anchor."
+                    ? "This match will become the main match for this trip."
                     : "This match will be added to the trip."
-                  : "Create the booking workspace for tickets, travel, extras and Wallet."
-                : "Select a match to continue"}
+                  : "This saves the trip so you can sort tickets, travel and hotel next."
+                : "Select a match first"}
             </Text>
           </Pressable>
 
@@ -1348,7 +1406,13 @@ export default function TripBuildScreen() {
 const styles = StyleSheet.create({
   headerCard: { padding: theme.spacing.lg },
 
-  bigTitle: { fontSize: 22, fontWeight: "900", color: theme.colors.text, letterSpacing: 0.2 },
+  bigTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: theme.colors.text,
+    letterSpacing: 0.2,
+  },
+
   bigSub: {
     marginTop: 8,
     color: theme.colors.textSecondary,
@@ -1358,6 +1422,7 @@ const styles = StyleSheet.create({
   },
 
   chipRow: { marginTop: 14, flexDirection: "row", gap: 10 },
+
   chip: {
     flex: 1,
     borderRadius: 14,
@@ -1367,8 +1432,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  chipKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
-  chipValue: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  chipKicker: {
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  chipValue: {
+    marginTop: 4,
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
 
   prefBar: {
     marginTop: 12,
@@ -1379,7 +1455,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  prefBarLabel: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+
+  prefBarLabel: {
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
   prefBarText: {
     marginTop: 4,
     color: theme.colors.textSecondary,
@@ -1400,22 +1482,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+
   flowStep: {
     flex: 1,
     alignItems: "center",
     gap: 4,
   },
+
   flowStepNumber: {
     color: theme.colors.primary,
     fontWeight: "900",
     fontSize: 12,
   },
+
   flowStepText: {
     color: theme.colors.text,
     fontWeight: "800",
     fontSize: 11,
     textAlign: "center",
   },
+
   flowDivider: {
     width: 10,
     height: 1,
@@ -1431,17 +1517,45 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  capText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
 
-  h1: { fontSize: theme.fontSize.lg, fontWeight: "900", color: theme.colors.text, marginBottom: 8 },
-  hint: { color: theme.colors.textSecondary, fontWeight: "700", fontSize: 13, lineHeight: 18 },
+  capText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  h1: {
+    fontSize: theme.fontSize.lg,
+    fontWeight: "900",
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+
+  hint: {
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    fontSize: 13,
+    lineHeight: 18,
+  },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontWeight: "800" },
 
-  teamRow: { flexDirection: "row", gap: 12, alignItems: "center" },
+  muted: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+  },
 
-  crestStack: { flexDirection: "row", alignItems: "center" },
+  teamRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+
+  crestStack: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
   crest: {
     width: 30,
     height: 30,
@@ -1450,6 +1564,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
   },
+
   crestFallback: {
     width: 30,
     height: 30,
@@ -1459,10 +1574,26 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
   },
 
-  selectedTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 16 },
-  selectedMeta: { color: theme.colors.textSecondary, marginTop: 6, fontWeight: "700", fontSize: 13 },
+  selectedTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 16,
+  },
 
-  badgeRow: { marginTop: 10, flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  selectedMeta: {
+    color: theme.colors.textSecondary,
+    marginTop: 6,
+    fontWeight: "700",
+    fontSize: 13,
+  },
+
+  badgeRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
   badge: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -1471,15 +1602,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 999,
   },
-  badgeText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 11 },
 
-  badgeTbc: { borderColor: "rgba(255,200,0,0.22)", backgroundColor: "rgba(255,200,0,0.06)" },
+  badgeText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  badgeTbc: {
+    borderColor: "rgba(255,200,0,0.22)",
+    backgroundColor: "rgba(255,200,0,0.06)",
+  },
+
   badgeTextTbc: { color: "rgba(255,220,140,0.92)" },
 
   badgeConfirmed: {
     borderColor: "rgba(75,158,57,0.35)",
     backgroundColor: "rgba(75,158,57,0.10)",
   },
+
   badgeTextConfirmed: { color: "rgba(140,255,190,0.92)" },
 
   intelCard: {
@@ -1490,11 +1631,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
     padding: 12,
   },
+
   intelTopRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
+
   intelScoreBox: {
     width: 72,
     height: 72,
@@ -1503,33 +1646,55 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   scoreStrong: {
     borderColor: "rgba(75,158,57,0.35)",
     backgroundColor: "rgba(75,158,57,0.10)",
   },
+
   scoreOkay: {
     borderColor: "rgba(242,201,76,0.28)",
     backgroundColor: "rgba(242,201,76,0.10)",
   },
+
   scoreWeak: {
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(255,255,255,0.04)",
   },
+
   intelScoreValue: {
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 24,
     lineHeight: 28,
   },
+
   intelScoreLabel: {
     marginTop: 2,
     color: theme.colors.textSecondary,
     fontWeight: "900",
     fontSize: 10,
   },
-  intelTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
-  intelSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12 },
-  intelSubAlt: { marginTop: 4, color: theme.colors.textTertiary, fontWeight: "900", fontSize: 11 },
+
+  intelTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  intelSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  intelSubAlt: {
+    marginTop: 4,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
 
   intelPillRow: {
     marginTop: 12,
@@ -1537,6 +1702,7 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+
   intelPill: {
     minWidth: 88,
     borderRadius: 12,
@@ -1546,8 +1712,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
   },
-  intelPillKicker: { color: theme.colors.textTertiary, fontWeight: "900", fontSize: 10 },
-  intelPillValue: { marginTop: 4, color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  intelPillKicker: {
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  intelPillValue: {
+    marginTop: 4,
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
 
   reasonBox: {
     marginTop: 12,
@@ -1559,8 +1736,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     gap: 6,
   },
-  reasonTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
-  reasonText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
+
+  reasonTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  reasonText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 
   nextStageBox: {
     marginTop: 12,
@@ -1572,22 +1760,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 8,
   },
+
   nextStageTitle: {
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 12,
   },
+
   nextStageText: {
     color: theme.colors.textSecondary,
     fontWeight: "800",
     fontSize: 12,
     lineHeight: 16,
   },
+
   nextStageRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
+
   nextStagePill: {
     borderRadius: 999,
     borderWidth: 1,
@@ -1596,6 +1788,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
+
   nextStagePillText: {
     color: theme.colors.text,
     fontWeight: "900",
@@ -1614,7 +1807,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  primaryTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  primaryTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
   primarySub: {
     marginTop: 4,
     color: theme.colors.textSecondary,
@@ -1632,9 +1831,19 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
-  infoText: { color: theme.colors.textSecondary, fontWeight: "800", fontSize: 12, lineHeight: 16 },
 
-  label: { marginTop: 14, color: theme.colors.textSecondary, fontWeight: "800" },
+  infoText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  label: {
+    marginTop: 14,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+  },
 
   notes: {
     marginTop: 8,
@@ -1658,9 +1867,20 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.25)",
   },
-  leaguePillActive: { borderColor: theme.colors.primary, backgroundColor: "rgba(0,0,0,0.45)" },
-  leaguePillText: { color: theme.colors.textSecondary, fontWeight: "900" },
-  leaguePillTextActive: { color: theme.colors.text },
+
+  leaguePillActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+
+  leaguePillText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+  },
+
+  leaguePillTextActive: {
+    color: theme.colors.text,
+  },
 
   search: {
     marginTop: 12,
@@ -1680,14 +1900,29 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.20)",
   },
+
   fxCardSelected: {
     borderColor: "rgba(75,158,57,0.55)",
     backgroundColor: "rgba(0,0,0,0.35)",
   },
 
-  fxTop: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  fxLeft: { flex: 1, flexDirection: "row", gap: 12, alignItems: "center" },
-  fxRight: { width: 96, alignItems: "flex-end" },
+  fxTop: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+
+  fxLeft: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+
+  fxRight: {
+    width: 96,
+    alignItems: "flex-end",
+  },
 
   flag: {
     width: 22,
@@ -1698,6 +1933,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
     marginTop: 6,
   },
+
   fxLeague: {
     marginTop: 6,
     color: theme.colors.textSecondary,
@@ -1714,11 +1950,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  rowScoreValue: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
 
-  fxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
-  fxMeta: { color: theme.colors.textSecondary, marginTop: 5, fontWeight: "800", fontSize: 12 },
-  fxMeta2: { color: theme.colors.textTertiary, marginTop: 4, fontWeight: "800", fontSize: 12 },
+  rowScoreValue: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  fxTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  fxMeta: {
+    color: theme.colors.textSecondary,
+    marginTop: 5,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  fxMeta2: {
+    color: theme.colors.textTertiary,
+    marginTop: 4,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
   fxFlowMeta: {
     color: theme.colors.textTertiary,
     marginTop: 6,
@@ -1735,6 +1993,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
   },
+
   rowReasonText: {
     color: theme.colors.textSecondary,
     fontWeight: "800",
@@ -1742,7 +2001,12 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
 
-  fxSelectRow: { marginTop: 10, flexDirection: "row", alignItems: "center" },
+  fxSelectRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
   selectPill: {
     borderRadius: 999,
     borderWidth: 1,
@@ -1751,12 +2015,23 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 12,
   },
+
   selectPillActive: {
     borderColor: "rgba(75,158,57,0.55)",
     backgroundColor: "rgba(75,158,57,0.10)",
   },
-  selectPillText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
-  selectPillTextActive: { color: theme.colors.text, fontWeight: "900", fontSize: 12 },
+
+  selectPillText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  selectPillTextActive: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
 
   moreBtn: {
     marginTop: 12,
@@ -1766,7 +2041,11 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     alignItems: "center",
   },
-  moreText: { color: theme.colors.text, fontWeight: "900" },
+
+  moreText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
 
   saveBtn: {
     marginTop: 2,
@@ -1777,8 +2056,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.30)",
     alignItems: "center",
   },
-  saveText: { color: theme.colors.text, fontWeight: "900", fontSize: 15 },
-  saveSub: { marginTop: 6, color: theme.colors.textSecondary, fontWeight: "800", fontSize: 11, textAlign: "center" },
 
-  err: { marginTop: 10, color: "rgba(255,80,80,0.95)", fontWeight: "900" },
+  saveText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  saveSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    textAlign: "center",
+  },
+
+  err: {
+    marginTop: 10,
+    color: "rgba(255,80,80,0.95)",
+    fontWeight: "900",
+  },
 });
