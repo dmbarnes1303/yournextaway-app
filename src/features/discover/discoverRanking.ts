@@ -156,43 +156,43 @@ function cityPrestigeScore(city: string): number {
 function leagueWeight(leagueId: number | null): number {
   if (leagueId == null) return 54;
 
-  if (leagueId === 2) return 126;   // UCL
-  if (leagueId === 3) return 102;   // UEL
-  if (leagueId === 848) return 90;  // UECL
+  if (leagueId === 2) return 126;
+  if (leagueId === 3) return 102;
+  if (leagueId === 848) return 90;
 
-  if (leagueId === 39) return 118;  // Premier League
-  if (leagueId === 140) return 112; // La Liga
-  if (leagueId === 135) return 108; // Serie A
-  if (leagueId === 78) return 104;  // Bundesliga
-  if (leagueId === 61) return 96;   // Ligue 1
+  if (leagueId === 39) return 118;
+  if (leagueId === 140) return 112;
+  if (leagueId === 135) return 108;
+  if (leagueId === 78) return 104;
+  if (leagueId === 61) return 96;
 
-  if (leagueId === 88) return 88;   // Eredivisie
-  if (leagueId === 94) return 86;   // Primeira Liga
-  if (leagueId === 203) return 85;  // Super Lig
-  if (leagueId === 179) return 82;  // Scotland
-  if (leagueId === 144) return 80;  // Belgium
-  if (leagueId === 218) return 78;  // Austria
-  if (leagueId === 207) return 77;  // Switzerland
-  if (leagueId === 197) return 77;  // Greece
+  if (leagueId === 88) return 88;
+  if (leagueId === 94) return 86;
+  if (leagueId === 203) return 85;
+  if (leagueId === 179) return 82;
+  if (leagueId === 144) return 80;
+  if (leagueId === 218) return 78;
+  if (leagueId === 207) return 77;
+  if (leagueId === 197) return 77;
 
-  if (leagueId === 119) return 73;  // Denmark
-  if (leagueId === 345) return 73;  // Czechia
-  if (leagueId === 106) return 72;  // Poland
-  if (leagueId === 210) return 71;  // Croatia
-  if (leagueId === 286) return 71;  // Serbia
-  if (leagueId === 271) return 69;  // Hungary
-  if (leagueId === 283) return 69;  // Romania
-  if (leagueId === 332) return 67;  // Slovakia
-  if (leagueId === 373) return 66;  // Slovenia
-  if (leagueId === 172) return 66;  // Bulgaria
-  if (leagueId === 318) return 65;  // Cyprus
-  if (leagueId === 315) return 64;  // Bosnia
+  if (leagueId === 119) return 73;
+  if (leagueId === 345) return 73;
+  if (leagueId === 106) return 72;
+  if (leagueId === 210) return 71;
+  if (leagueId === 286) return 71;
+  if (leagueId === 271) return 69;
+  if (leagueId === 283) return 69;
+  if (leagueId === 332) return 67;
+  if (leagueId === 373) return 66;
+  if (leagueId === 172) return 66;
+  if (leagueId === 318) return 65;
+  if (leagueId === 315) return 64;
 
-  if (leagueId === 357) return 61;  // Ireland
-  if (leagueId === 113) return 60;  // Sweden
-  if (leagueId === 103) return 60;  // Norway
-  if (leagueId === 244) return 58;  // Finland
-  if (leagueId === 164) return 56;  // Iceland
+  if (leagueId === 357) return 61;
+  if (leagueId === 113) return 60;
+  if (leagueId === 103) return 60;
+  if (leagueId === 244) return 58;
+  if (leagueId === 164) return 56;
 
   return 54;
 }
@@ -206,10 +206,6 @@ function leagueBreadthBonus(leagueId: number | null): number {
   return 4;
 }
 
-/**
- * Broad “how much pull does this fixture already have before category intent?”
- * This is not the final ranking score.
- */
 export function baseFixtureScore(row: FixtureListRow): number {
   const leagueId = getLeagueId(row);
   let score = leagueWeight(leagueId) + leagueBreadthBonus(leagueId);
@@ -658,4 +654,4 @@ export function discoverScoreForCategory(
   score += tripLengthBoost(scored, ctx);
 
   return Math.round(score);
-        }
+}
