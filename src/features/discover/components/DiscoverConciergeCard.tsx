@@ -1,5 +1,14 @@
+// src/features/discover/components/DiscoverConciergeCard.tsx
+
 import React from "react";
-import { Pressable, View, Text, StyleSheet, ActivityIndicator, Platform } from "react-native";
+import {
+  Pressable,
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import GlassCard from "@/src/components/GlassCard";
@@ -20,19 +29,21 @@ export default function DiscoverConciergeCard({
     <Pressable
       onPress={onPress}
       disabled={loading}
-      style={({ pressed }) => [styles.randomPress, (pressed || loading) && styles.pressed]}
+      style={({ pressed }) => [styles.cardPress, (pressed || loading) && styles.pressed]}
     >
-      <GlassCard strength="default" style={styles.randomCard} noPadding>
-        <View style={styles.randomInner}>
-          <View style={styles.randomTop}>
-            <View style={styles.randomTopText}>
-              <Text style={styles.randomTitle}>Let the app choose</Text>
-              <Text style={styles.randomSub}>
-                We rank a live pool against your setup before making the pick.
+      <GlassCard strength="strong" style={styles.card} noPadding>
+        <View style={styles.inner}>
+          <View style={styles.topRow}>
+            <View style={styles.copyWrap}>
+              <Text style={styles.kicker}>CONCIERGE PICK</Text>
+              <Text style={styles.title}>Let the app choose your best live route</Text>
+              <Text style={styles.sub}>
+                This is not random filler. The app scores the live pool against your current setup
+                and surfaces one of the strongest real options.
               </Text>
             </View>
 
-            <View style={styles.randomIconWrap}>
+            <View style={styles.iconWrap}>
               {loading ? (
                 <ActivityIndicator />
               ) : (
@@ -41,15 +52,65 @@ export default function DiscoverConciergeCard({
             </View>
           </View>
 
-          <View style={styles.randomSummaryBox}>
-            <Text style={styles.randomSummaryLabel}>Using</Text>
-            <Text style={styles.randomHint}>{filterSummary}</Text>
+          <View style={styles.signalRow}>
+            <View style={styles.signalPillStrong}>
+              <Text style={styles.signalPillStrongText}>Live-ranked</Text>
+            </View>
+
+            <View style={styles.signalPill}>
+              <Text style={styles.signalPillText}>Setup-aware</Text>
+            </View>
+
+            <View style={styles.signalPill}>
+              <Text style={styles.signalPillText}>Trip-first</Text>
+            </View>
           </View>
 
-          <View style={styles.randomButton}>
-            <Text style={styles.randomButtonText}>
-              {loading ? "Finding a strong option..." : "Pick a trip for me"}
-            </Text>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Using your current setup</Text>
+            <Text style={styles.summaryText}>{filterSummary}</Text>
+          </View>
+
+          <View style={styles.whyBox}>
+            <View style={styles.whyRow}>
+              <View style={styles.whyIconWrap}>
+                <Ionicons name="options-outline" size={14} color={theme.colors.textSecondary} />
+              </View>
+              <Text style={styles.whyText}>
+                Better when you want one strong answer instead of scrolling endless routes.
+              </Text>
+            </View>
+
+            <View style={styles.whyRow}>
+              <View style={styles.whyIconWrap}>
+                <Ionicons name="pulse-outline" size={14} color={theme.colors.textSecondary} />
+              </View>
+              <Text style={styles.whyText}>
+                Pulls from the live fixture pool, then applies your current trip logic before
+                choosing.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.ctaRow}>
+            <View style={styles.ctaTextWrap}>
+              <Text style={styles.ctaTitle}>
+                {loading ? "Finding a strong live route…" : "Pick my route"}
+              </Text>
+              <Text style={styles.ctaSub}>
+                {loading
+                  ? "Scoring live options now"
+                  : "Open a stronger live option matched to this setup"}
+              </Text>
+            </View>
+
+            <View style={[styles.ctaArrowWrap, loading && styles.ctaArrowWrapLoading]}>
+              {loading ? (
+                <ActivityIndicator size="small" />
+              ) : (
+                <Ionicons name="arrow-forward-outline" size={16} color={theme.colors.text} />
+              )}
+            </View>
           </View>
         </View>
       </GlassCard>
@@ -58,58 +119,103 @@ export default function DiscoverConciergeCard({
 }
 
 const styles = StyleSheet.create({
-  randomPress: {
+  cardPress: {
     borderRadius: 22,
     overflow: "hidden",
   },
 
-  randomCard: {
+  card: {
     borderRadius: 22,
     borderColor: "rgba(87,162,56,0.16)",
   },
 
-  randomInner: {
+  inner: {
     padding: 16,
     gap: 14,
   },
 
-  randomTop: {
+  topRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
   },
 
-  randomTopText: {
+  copyWrap: {
     flex: 1,
     gap: 4,
   },
 
-  randomTitle: {
+  kicker: {
+    color: theme.colors.primary,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 1,
+  },
+
+  title: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 20,
+    lineHeight: 25,
     fontWeight: theme.fontWeight.black,
   },
 
-  randomSub: {
+  sub: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
 
-  randomIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
+    borderColor: "rgba(87,162,56,0.20)",
     backgroundColor: "rgba(87,162,56,0.08)",
   },
 
-  randomSummaryBox: {
+  signalRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  signalPillStrong: {
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.24)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  signalPillStrongText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  signalPill: {
+    borderRadius: 999,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+  },
+
+  signalPillText: {
+    color: theme.colors.textSecondary,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  summaryCard: {
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
@@ -120,36 +226,92 @@ const styles = StyleSheet.create({
     gap: 4,
   },
 
-  randomSummaryLabel: {
+  summaryLabel: {
     color: theme.colors.textTertiary,
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.3,
   },
 
-  randomHint: {
+  summaryText: {
     color: theme.colors.text,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
 
-  randomButton: {
-    minHeight: 48,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.28)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 14,
+  whyBox: {
+    gap: 8,
   },
 
-  randomButtonText: {
+  whyRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+
+  whyIconWrap: {
+    width: 22,
+    alignItems: "center",
+    paddingTop: 1,
+  },
+
+  whyText: {
+    flex: 1,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  ctaRow: {
+    minHeight: 56,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.26)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  ctaTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+
+  ctaTitle: {
     color: theme.colors.text,
     fontSize: 14,
     fontWeight: theme.fontWeight.black,
+  },
+
+  ctaSub: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  ctaArrowWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  ctaArrowWrapLoading: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
   },
 
   pressed: {
