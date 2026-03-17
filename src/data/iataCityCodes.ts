@@ -158,7 +158,7 @@ const CITY_TO_IATA: Record<CityKey, IataCityCode> = {
   [normalizeCityName("Cornella")]: "BCN",
   [normalizeCityName("Vitoria-Gasteiz")]: "VIT",
   [normalizeCityName("Vitoria")]: "VIT",
-  [normalizeCityName("Gasteiz")]: "VIT"),
+  [normalizeCityName("Gasteiz")]: "VIT",
 
   // ---------------------------------------------------------------------------
   // FRANCE
