@@ -59,10 +59,10 @@ function isoDateOnlyFromKickoffIso(kickoffIso?: string | null): string | null {
 
 function formatKickoffLocal(kickoffIso?: string | null): string {
   const raw = clean(kickoffIso);
-  if (!raw) return "Kickoff time TBC";
+  if (!raw) return "Kick-off time TBC";
 
   const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return "Kickoff time TBC";
+  if (Number.isNaN(d.getTime())) return "Kick-off time TBC";
 
   const date = d.toLocaleDateString("en-GB", {
     weekday: "short",
@@ -208,7 +208,7 @@ function providerLabel(provider?: string | null): string {
   if (raw === "footballticketsnet") return "FootballTicketNet";
   if (raw === "sportsevents365") return "SportsEvents365";
   if (raw === "gigsberg") return "Gigsberg";
-  return provider || "Provider";
+  return provider || "Ticket site";
 }
 
 function providerShort(provider?: string | null): string {
@@ -216,7 +216,7 @@ function providerShort(provider?: string | null): string {
   if (raw === "footballticketsnet") return "FTN";
   if (raw === "sportsevents365") return "365";
   if (raw === "gigsberg") return "G";
-  return "P";
+  return "T";
 }
 
 function providerBadgeStyle(provider?: string | null) {
@@ -255,34 +255,43 @@ function providerBadgeStyle(provider?: string | null) {
 
 function formatPriceText(priceText?: string | null): string {
   const value = clean(priceText);
-  if (!value) return "Live prices";
-  if (/^(from\s+)/i.test(value)) return value;
+  if (!value) return "View live price";
+
+  if (/^from\s+/i.test(value)) {
+    return value.replace(/^from\s+/i, "From ");
+  }
+
   if (/^[£$€]/.test(value)) return `From ${value}`;
+
   return `From ${value}`;
 }
 
 function availabilityLabel(option: TicketResolutionOption): string {
   if (clean(option.priceText)) {
-    if (option.exact) return "Tickets available";
-    return "Live availability";
+    return option.exact ? "Price found for this match" : "Live price found";
   }
 
-  if (option.exact) return "Tickets available";
-  return "More ticket options";
+  return option.exact ? "Tickets found" : "Check latest availability";
 }
 
 function bestOptionSupportText(option: TicketResolutionOption): string {
-  if (clean(option.priceText)) return availabilityLabel(option);
-  if (option.exact) return "Live prices available";
-  return "Open provider to check latest prices";
+  if (clean(option.priceText)) {
+    return option.exact
+      ? "This looks like the strongest current ticket option."
+      : "This is one of the better live options currently showing.";
+  }
+
+  return option.exact
+    ? "Tickets were found for this match. Open to check the latest listing."
+    : "Open to check current availability and pricing.";
 }
 
 function providerSummaryLabel(provider?: string | null): string {
   const raw = clean(provider).toLowerCase();
-  if (raw === "footballticketsnet") return "Secondary marketplace";
+  if (raw === "footballticketsnet") return "Resale marketplace";
   if (raw === "sportsevents365") return "Ticket marketplace";
   if (raw === "gigsberg") return "Ticket marketplace";
-  return "Ticket provider";
+  return "Ticket site";
 }
 
 function dedupeOptions(result: TicketResolutionResult | null): TicketResolutionOption[] {
@@ -364,22 +373,22 @@ function openFailureMessage(result: TicketResolutionResult | null): string {
   if (!result) return "Ticket options could not be loaded right now.";
 
   if ((result as any).error === "missing_backend_url") {
-    return "Tickets are not set up properly yet.";
+    return "Ticket search is not set up properly yet.";
   }
 
   if ((result as any).error === "network_error") {
-    return "Couldn’t reach the ticket service right now.";
+    return "Couldn’t reach ticket search right now.";
   }
 
   if ((result as any).error === "timeout") {
-    return "Ticket service timed out. Please try again.";
+    return "Ticket search took too long. Please try again.";
   }
 
   if ((result as any).error === "invalid_backend_json") {
-    return "Ticket service returned invalid data.";
+    return "Ticket search returned invalid data.";
   }
 
-  return "No ticket options found right now.";
+  return "No ticket options were found right now.";
 }
 
 function isBestOption(index: number) {
@@ -471,7 +480,7 @@ export default function MatchScreen() {
   }, [trip, fixture]);
 
   const kickoffText = useMemo(
-    () => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kickoff time TBC"),
+    () => (kickoffIso ? formatKickoffLocal(kickoffIso) : "Kick-off time TBC"),
     [kickoffIso]
   );
 
@@ -646,7 +655,7 @@ export default function MatchScreen() {
     if (!homeName || !awayName || !kickoffIso) {
       Alert.alert(
         "Tickets not ready",
-        "This match is missing some key details. Try again once it has fully loaded."
+        "This match is still missing some details. Try again in a moment."
       );
       return;
     }
@@ -668,7 +677,7 @@ export default function MatchScreen() {
       const options = dedupeOptions(resolved);
 
       if (!resolved?.ok || options.length === 0) {
-        Alert.alert("No ticket options found", openFailureMessage(resolved));
+        Alert.alert("No tickets found", openFailureMessage(resolved));
         return;
       }
 
@@ -676,7 +685,7 @@ export default function MatchScreen() {
         await openTicketOption(options[0]);
       }
     } catch {
-      Alert.alert("Couldn’t load ticket options");
+      Alert.alert("Couldn’t load tickets");
     } finally {
       setOpeningTickets(false);
     }
@@ -706,7 +715,7 @@ export default function MatchScreen() {
         <SafeAreaView style={styles.safe}>
           <EmptyState
             title="Match not found"
-            message="Missing fixture ID."
+            message="This fixture could not be loaded."
             primaryAction={{ label: "Go back", onPress: () => router.back() }}
           />
         </SafeAreaView>
@@ -761,15 +770,15 @@ export default function MatchScreen() {
 
               <View style={styles.statusRow}>
                 <Chip
-                  label={kickoffConfirmed ? "Kickoff confirmed" : "Kickoff time TBC"}
+                  label={kickoffConfirmed ? "Kick-off confirmed" : "Kick-off time TBC"}
                   variant={kickoffConfirmed ? "primary" : "default"}
                 />
                 {ticketOptions.length > 0 ? (
                   <Chip
                     label={
                       ticketOptions.length === 1
-                        ? "1 ticket option available"
-                        : `${ticketOptions.length} ticket options available`
+                        ? "1 ticket option found"
+                        : `${ticketOptions.length} ticket options found`
                     }
                     variant="default"
                   />
@@ -780,28 +789,24 @@ export default function MatchScreen() {
                 <Button
                   label={
                     openingTickets
-                      ? "Finding tickets…"
+                      ? "Checking tickets…"
                       : ticketOptions.length > 0
-                        ? "Refresh ticket options"
-                        : "View ticket options"
+                        ? "Refresh tickets"
+                        : "Compare tickets"
                   }
                   tone="primary"
                   loading={openingTickets}
                   onPress={openTickets}
                   glow
                 />
-                <Button
-                  label="Build trip around this match"
-                  tone="secondary"
-                  onPress={goBuildTrip}
-                />
+                <Button label="Plan trip from this match" tone="secondary" onPress={goBuildTrip} />
               </View>
 
               {!tripId ? (
                 <View style={styles.helperBox}>
                   <Text style={styles.helperText}>
-                    Check ticket providers now, then build a trip if you want to save bookings and
-                    keep everything in Wallet.
+                    Check tickets first, then turn this match into a trip with hotel, travel and
+                    saved bookings.
                   </Text>
                 </View>
               ) : null}
@@ -811,14 +816,14 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Tickets</Text>
             <Text style={styles.sectionSub}>
-              Compare ticket providers for this match and open the option you want.
+              Compare current ticket options and open the one you want.
             </Text>
 
             {bestOption ? (
               <View style={styles.bestOptionBox}>
                 <View style={styles.bestOptionTopRow}>
                   <View style={styles.bestOptionPriceBlock}>
-                    <Text style={styles.bestOptionLabel}>Best option right now</Text>
+                    <Text style={styles.bestOptionLabel}>Top pick</Text>
                     <Text style={styles.bestOptionPrice}>
                       {formatPriceText(bestOption.priceText)}
                     </Text>
@@ -831,9 +836,9 @@ export default function MatchScreen() {
               </View>
             ) : (
               <View style={styles.emptyInfoCard}>
-                <Text style={styles.emptyInfoLabel}>No ticket options loaded yet</Text>
+                <Text style={styles.emptyInfoLabel}>No ticket options checked yet</Text>
                 <Text style={styles.emptyInfoText}>
-                  Tap “View ticket options” to check current ticket providers for this fixture.
+                  Tap “Compare tickets” to search current listings for this match.
                 </Text>
               </View>
             )}
@@ -872,7 +877,7 @@ export default function MatchScreen() {
                           <ProviderBadge provider={option.provider} showLabel />
                           {isBestOption(index) ? (
                             <View style={styles.bestBadge}>
-                              <Text style={styles.bestBadgeText}>Best option</Text>
+                              <Text style={styles.bestBadgeText}>Top pick</Text>
                             </View>
                           ) : null}
                         </View>
@@ -884,7 +889,7 @@ export default function MatchScreen() {
 
                       <View style={styles.optionActionRow}>
                         <Text style={styles.optionActionText}>
-                          {isOpening ? "Opening provider…" : "View tickets"}
+                          {isOpening ? "Opening…" : "View tickets"}
                         </Text>
                       </View>
                     </Pressable>
@@ -894,18 +899,18 @@ export default function MatchScreen() {
             ) : null}
 
             <View style={styles.actions}>
-              <Button label="Official club website" tone="secondary" onPress={openOfficialClub} />
+              <Button label="Check official club tickets" tone="secondary" onPress={openOfficialClub} />
             </View>
           </GlassCard>
 
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Stadium & local info</Text>
             <Text style={styles.sectionSub}>
-              Useful basics for getting there and choosing where to stay.
+              Quick basics for getting there and deciding where to stay.
             </Text>
 
             <View style={styles.primaryActionWrap}>
-              <Button label="Directions to stadium" tone="secondary" onPress={openDirections} />
+              <Button label="Get directions" tone="secondary" onPress={openDirections} />
             </View>
 
             {resolvedStadium ? (
@@ -913,7 +918,7 @@ export default function MatchScreen() {
                 <View style={styles.infoBlock}>
                   <Text style={styles.infoBlockLabel}>Nearest airport</Text>
                   <Text style={styles.infoBlockText}>
-                    {airportLine ?? "Airport detail not added yet"}
+                    {airportLine ?? "Airport details not added yet"}
                   </Text>
                 </View>
 
@@ -933,7 +938,7 @@ export default function MatchScreen() {
                       );
                     })
                   ) : (
-                    <Text style={styles.infoBlockText}>Transport guidance not added yet.</Text>
+                    <Text style={styles.infoBlockText}>Travel tips not added yet.</Text>
                   )}
                 </View>
 
@@ -946,12 +951,12 @@ export default function MatchScreen() {
                       </Text>
                     ))
                   ) : (
-                    <Text style={styles.infoBlockText}>Stay-area guidance not added yet.</Text>
+                    <Text style={styles.infoBlockText}>Stay suggestions not added yet.</Text>
                   )}
                 </View>
 
                 <View style={styles.infoBlock}>
-                  <Text style={styles.infoBlockLabel}>Matchday tips</Text>
+                  <Text style={styles.infoBlockLabel}>Useful tips</Text>
                   {tipItems.length > 0 ? (
                     tipItems.map((tip, index) => (
                       <Text key={`tip-${index}`} style={styles.infoBlockText}>
@@ -959,32 +964,31 @@ export default function MatchScreen() {
                       </Text>
                     ))
                   ) : (
-                    <Text style={styles.infoBlockText}>Matchday tips not added yet.</Text>
+                    <Text style={styles.infoBlockText}>Extra local tips not added yet.</Text>
                   )}
                 </View>
               </View>
             ) : (
               <View style={styles.emptyInfoCard}>
-                <Text style={styles.emptyInfoLabel}>Venue guide not mapped yet</Text>
+                <Text style={styles.emptyInfoLabel}>No stadium guide yet</Text>
                 <Text style={styles.emptyInfoText}>
-                  Directions still work, but airport, transport and stay-area guidance have not
-                  been added for this stadium yet.
+                  You can still open directions, but local airport, transport and stay guidance has
+                  not been added for this stadium yet.
                 </Text>
               </View>
             )}
           </GlassCard>
 
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Build around this match</Text>
+            <Text style={styles.sectionTitle}>Turn this into a trip</Text>
             <Text style={styles.sectionSub}>
-              Save this fixture into a trip workspace and then sort tickets, travel, hotel and
-              everything else around it.
+              Save this match and build the rest of the trip around it.
             </Text>
 
             <View style={styles.nextStepsList}>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>1</Text>
-                <Text style={styles.nextStepText}>Choose your ticket route</Text>
+                <Text style={styles.nextStepText}>Pick your preferred ticket option</Text>
               </View>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>2</Text>
@@ -992,15 +996,13 @@ export default function MatchScreen() {
               </View>
               <View style={styles.nextStepRow}>
                 <Text style={styles.nextStepNumber}>3</Text>
-                <Text style={styles.nextStepText}>
-                  Add flights, hotel and extras in the trip workspace
-                </Text>
+                <Text style={styles.nextStepText}>Add hotel, travel and anything else you need</Text>
               </View>
             </View>
 
             <View style={styles.primaryActionWrap}>
               <Button
-                label="Build trip around this match"
+                label="Plan trip from this match"
                 tone="primary"
                 onPress={goBuildTrip}
                 glow
