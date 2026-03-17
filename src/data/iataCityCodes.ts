@@ -1,19 +1,22 @@
 // src/data/iataCityCodes.ts
 
 /**
- * City -> IATA CITY CODE registry.
+ * City -> IATA registry.
  *
- * Goal:
- * - Use IATA CITY codes (e.g., LON, MIL, PAR) rather than single airports.
- * - Keep this small and pragmatic: only add cities we actually surface in fixtures.
- * - Expand opportunistically when we detect unknown cities.
+ * Strategy:
+ * - Prefer IATA CITY / metro codes where they exist and are commercially useful
+ *   (e.g. LON, MIL, PAR, ROM, STO, BUH).
+ * - Otherwise use the main commercial airport serving that city / club area.
+ * - Keep aliases aggressive so API-Football city strings still resolve.
  *
- * Notes:
- * - This is NOT "closest airport". It's "city code" so partners can show all airports.
- * - Some cities have multiple airports; city code avoids forcing the wrong one.
+ * Important:
+ * - This file is intentionally pragmatic, not aviation-purist.
+ * - Goal is reliable partner routing for football-trip planning.
+ * - Some club cities do not have a meaningful "all airports" city code, so we map
+ *   to the primary airport users would realistically search/book.
  */
 
-export type IataCityCode = string; // e.g. "LON"
+export type IataCityCode = string; // e.g. "LON", "MIL", "AMS"
 export type CityKey = string;
 
 export function isIataCityCode(s?: string): s is IataCityCode {
@@ -39,51 +42,155 @@ export function normalizeCityName(input: unknown): CityKey {
 
   // normalize separators / punctuation
   const cleaned = noDia
-    .replace(/['’`]/g, "") // apostrophes
-    .replace(/[().,]/g, " ") // punctuation to spaces
-    .replace(/[-/]/g, " ") // separators to spaces
-    .replace(/\s+/g, " ") // collapse spaces
+    .replace(/['’`]/g, "")
+    .replace(/[().,]/g, " ")
+    .replace(/[-/]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 
   return cleaned;
 }
 
 /**
- * Canonical map: normalized city -> IATA CITY code.
+ * Canonical map: normalized city -> IATA city/airport code.
  *
- * IMPORTANT:
- * - Keys MUST be normalized (use normalizeCityName("City") to check).
- * - Values MUST be 3-letter IATA.
- *
- * Start small. Add as needed.
+ * Rules:
+ * - Keys MUST be normalized.
+ * - Values MUST be valid 3-letter IATA codes.
+ * - Use metro / city codes where useful, otherwise the main airport code.
  */
 const CITY_TO_IATA: Record<CityKey, IataCityCode> = {
-  // UK
+  // ---------------------------------------------------------------------------
+  // ENGLAND
+  // ---------------------------------------------------------------------------
   [normalizeCityName("London")]: "LON",
   [normalizeCityName("Manchester")]: "MAN",
   [normalizeCityName("Liverpool")]: "LPL",
   [normalizeCityName("Birmingham")]: "BHX",
   [normalizeCityName("Newcastle")]: "NCL",
   [normalizeCityName("Leeds")]: "LBA",
+  [normalizeCityName("Leicester")]: "EMA",
+  [normalizeCityName("Nottingham")]: "EMA",
+  [normalizeCityName("Southampton")]: "SOU",
+  [normalizeCityName("Brighton")]: "LGW",
+  [normalizeCityName("Portsmouth")]: "SOU",
+  [normalizeCityName("Bristol")]: "BRS",
+  [normalizeCityName("Wolverhampton")]: "BHX",
+  [normalizeCityName("Coventry")]: "BHX",
+  [normalizeCityName("Ipswich")]: "STN",
+  [normalizeCityName("Sheffield")]: "LBA",
+  [normalizeCityName("Sunderland")]: "NCL",
+  [normalizeCityName("Middlesbrough")]: "MME",
+  [normalizeCityName("Blackburn")]: "MAN",
+  [normalizeCityName("Burnley")]: "MAN",
+  [normalizeCityName("Preston")]: "MAN",
+  [normalizeCityName("Stoke")]: "MAN",
+  [normalizeCityName("Stoke-on-Trent")]: "MAN",
+  [normalizeCityName("Norwich")]: "NWI",
+  [normalizeCityName("Hull")]: "HUY",
+  [normalizeCityName("Watford")]: "LON",
+  [normalizeCityName("Luton")]: "LON",
+  [normalizeCityName("Reading")]: "LON",
+  [normalizeCityName("Milton Keynes")]: "LON",
+  [normalizeCityName("Oxford")]: "LON",
+
+  // ---------------------------------------------------------------------------
+  // SCOTLAND
+  // ---------------------------------------------------------------------------
   [normalizeCityName("Glasgow")]: "GLA",
   [normalizeCityName("Edinburgh")]: "EDI",
+  [normalizeCityName("Aberdeen")]: "ABZ",
+  [normalizeCityName("Dundee")]: "DND",
+  [normalizeCityName("Perth")]: "EDI",
+  [normalizeCityName("Motherwell")]: "GLA",
+  [normalizeCityName("Paisley")]: "GLA",
+  [normalizeCityName("Kilmarnock")]: "GLA",
+  [normalizeCityName("Livingston")]: "EDI",
 
-  // Spain
+  // ---------------------------------------------------------------------------
+  // WALES
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Cardiff")]: "CWL",
+  [normalizeCityName("Swansea")]: "CWL",
+  [normalizeCityName("Wrexham")]: "LPL",
+
+  // ---------------------------------------------------------------------------
+  // NORTHERN IRELAND / IRELAND
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Belfast")]: "BFS",
+  [normalizeCityName("Londonderry")]: "LDY",
+  [normalizeCityName("Derry")]: "LDY",
+  [normalizeCityName("Dublin")]: "DUB",
+  [normalizeCityName("Cork")]: "ORK",
+  [normalizeCityName("Limerick")]: "SNN",
+  [normalizeCityName("Galway")]: "GWY",
+  [normalizeCityName("Waterford")]: "WAT",
+  [normalizeCityName("Drogheda")]: "DUB",
+  [normalizeCityName("Sligo")]: "SXL",
+
+  // ---------------------------------------------------------------------------
+  // SPAIN
+  // ---------------------------------------------------------------------------
   [normalizeCityName("Madrid")]: "MAD",
   [normalizeCityName("Barcelona")]: "BCN",
   [normalizeCityName("Valencia")]: "VLC",
   [normalizeCityName("Seville")]: "SVQ",
   [normalizeCityName("Sevilla")]: "SVQ",
   [normalizeCityName("Bilbao")]: "BIO",
+  [normalizeCityName("San Sebastian")]: "EAS",
+  [normalizeCityName("Donostia")]: "EAS",
+  [normalizeCityName("Vigo")]: "VGO",
+  [normalizeCityName("A Coruna")]: "LCG",
+  [normalizeCityName("La Coruna")]: "LCG",
+  [normalizeCityName("Coruna")]: "LCG",
+  [normalizeCityName("Pamplona")]: "PNA",
+  [normalizeCityName("Girona")]: "GRO",
+  [normalizeCityName("Malaga")]: "AGP",
+  [normalizeCityName("Palma")]: "PMI",
+  [normalizeCityName("Valladolid")]: "VLL",
+  [normalizeCityName("Las Palmas")]: "LPA",
+  [normalizeCityName("Las Palmas de Gran Canaria")]: "LPA",
+  [normalizeCityName("Santa Cruz de Tenerife")]: "TCI",
+  [normalizeCityName("Getafe")]: "MAD",
+  [normalizeCityName("Leganes")]: "MAD",
+  [normalizeCityName("Alcorcon")]: "MAD",
+  [normalizeCityName("Cornella de Llobregat")]: "BCN",
+  [normalizeCityName("Cornella")]: "BCN",
+  [normalizeCityName("Vitoria-Gasteiz")]: "VIT",
+  [normalizeCityName("Vitoria")]: "VIT",
+  [normalizeCityName("Gasteiz")]: "VIT"),
 
-  // France
+  // ---------------------------------------------------------------------------
+  // FRANCE
+  // ---------------------------------------------------------------------------
   [normalizeCityName("Paris")]: "PAR",
   [normalizeCityName("Marseille")]: "MRS",
   [normalizeCityName("Lyon")]: "LYS",
   [normalizeCityName("Lille")]: "LIL",
   [normalizeCityName("Nice")]: "NCE",
+  [normalizeCityName("Monaco")]: "NCE",
+  [normalizeCityName("Nantes")]: "NTE",
+  [normalizeCityName("Strasbourg")]: "SXB",
+  [normalizeCityName("Toulouse")]: "TLS",
+  [normalizeCityName("Rennes")]: "RNS",
+  [normalizeCityName("Brest")]: "BES",
+  [normalizeCityName("Montpellier")]: "MPL",
+  [normalizeCityName("Reims")]: "RHE",
+  [normalizeCityName("Lens")]: "LIL",
+  [normalizeCityName("Metz")]: "ETZ",
+  [normalizeCityName("Angers")]: "ANE",
+  [normalizeCityName("Le Havre")]: "LEH",
+  [normalizeCityName("Auxerre")]: "AUF",
+  [normalizeCityName("Saint-Etienne")]: "EBU",
+  [normalizeCityName("St Etienne")]: "EBU",
+  [normalizeCityName("Clermont-Ferrand")]: "CFE",
+  [normalizeCityName("Clermont Ferrand")]: "CFE",
+  [normalizeCityName("Lorient")]: "LRT",
+  [normalizeCityName("Caen")]: "CFR",
 
-  // Italy
+  // ---------------------------------------------------------------------------
+  // ITALY
+  // ---------------------------------------------------------------------------
   [normalizeCityName("Rome")]: "ROM",
   [normalizeCityName("Roma")]: "ROM",
   [normalizeCityName("Milan")]: "MIL",
@@ -92,32 +199,527 @@ const CITY_TO_IATA: Record<CityKey, IataCityCode> = {
   [normalizeCityName("Napoli")]: "NAP",
   [normalizeCityName("Turin")]: "TRN",
   [normalizeCityName("Torino")]: "TRN",
+  [normalizeCityName("Bologna")]: "BLQ",
+  [normalizeCityName("Florence")]: "FLR",
+  [normalizeCityName("Firenze")]: "FLR",
+  [normalizeCityName("Verona")]: "VRN",
+  [normalizeCityName("Genoa")]: "GOA",
+  [normalizeCityName("Genova")]: "GOA",
+  [normalizeCityName("Venice")]: "VCE",
+  [normalizeCityName("Venezia")]: "VCE",
+  [normalizeCityName("Udine")]: "TRS",
+  [normalizeCityName("Trieste")]: "TRS",
+  [normalizeCityName("Parma")]: "PMF",
+  [normalizeCityName("Cagliari")]: "CAG",
+  [normalizeCityName("Lecce")]: "BDS",
+  [normalizeCityName("Brindisi")]: "BDS",
+  [normalizeCityName("Pisa")]: "PSA",
+  [normalizeCityName("Empoli")]: "FLR",
+  [normalizeCityName("Como")]: "MIL",
+  [normalizeCityName("Monza")]: "MIL",
+  [normalizeCityName("Bergamo")]: "BGY",
+  [normalizeCityName("Reggio Emilia")]: "BLQ",
+  [normalizeCityName("Sassuolo")]: "BLQ",
+  [normalizeCityName("Salerno")]: "NAP",
+  [normalizeCityName("Palermo")]: "PMO",
+  [normalizeCityName("Catania")]: "CTA",
+  [normalizeCityName("Bari")]: "BRI",
+  [normalizeCityName("Cesena")]: "RMI",
+  [normalizeCityName("Rimini")]: "RMI",
 
-  // Germany
+  // ---------------------------------------------------------------------------
+  // GERMANY
+  // ---------------------------------------------------------------------------
   [normalizeCityName("Munich")]: "MUC",
+  [normalizeCityName("Munchen")]: "MUC",
   [normalizeCityName("München")]: "MUC",
   [normalizeCityName("Berlin")]: "BER",
   [normalizeCityName("Hamburg")]: "HAM",
   [normalizeCityName("Frankfurt")]: "FRA",
   [normalizeCityName("Cologne")]: "CGN",
+  [normalizeCityName("Koln")]: "CGN",
   [normalizeCityName("Köln")]: "CGN",
   [normalizeCityName("Dortmund")]: "DTM",
   [normalizeCityName("Leipzig")]: "LEJ",
+  [normalizeCityName("Stuttgart")]: "STR",
+  [normalizeCityName("Dusseldorf")]: "DUS",
+  [normalizeCityName("Düsseldorf")]: "DUS",
+  [normalizeCityName("Bremen")]: "BRE",
+  [normalizeCityName("Hannover")]: "HAJ",
+  [normalizeCityName("Hanover")]: "HAJ",
+  [normalizeCityName("Leverkusen")]: "CGN",
+  [normalizeCityName("Monchengladbach")]: "DUS",
+  [normalizeCityName("Mönchengladbach")]: "DUS",
+  [normalizeCityName("Freiburg")]: "BSL",
+  [normalizeCityName("Mainz")]: "FRA",
+  [normalizeCityName("Wolfsburg")]: "HAJ",
+  [normalizeCityName("Sinsheim")]: "FRA",
+  [normalizeCityName("Augsburg")]: "MUC",
+  [normalizeCityName("Heidenheim")]: "STR",
+  [normalizeCityName("Bochum")]: "DTM",
+  [normalizeCityName("Gelsenkirchen")]: "DTM",
+  [normalizeCityName("Kaiserslautern")]: "FRA",
+  [normalizeCityName("Nuremberg")]: "NUE",
+  [normalizeCityName("Nurnberg")]: "NUE",
+  [normalizeCityName("Nürnberg")]: "NUE",
+
+  // ---------------------------------------------------------------------------
+  // NETHERLANDS
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Amsterdam")]: "AMS",
+  [normalizeCityName("Rotterdam")]: "RTM",
+  [normalizeCityName("The Hague")]: "RTM",
+  [normalizeCityName("Den Haag")]: "RTM",
+  [normalizeCityName("Eindhoven")]: "EIN",
+  [normalizeCityName("Utrecht")]: "AMS",
+  [normalizeCityName("Alkmaar")]: "AMS",
+  [normalizeCityName("Arnhem")]: "EIN",
+  [normalizeCityName("Nijmegen")]: "EIN",
+  [normalizeCityName("Groningen")]: "GRQ",
+  [normalizeCityName("Heerenveen")]: "GRQ",
+  [normalizeCityName("Tilburg")]: "EIN",
+  [normalizeCityName("Breda")]: "RTM",
+  [normalizeCityName("Maastricht")]: "MST",
+  [normalizeCityName("Sittard")]: "MST",
+  [normalizeCityName("Enschede")]: "AMS",
+  [normalizeCityName("Almelo")]: "AMS",
+  [normalizeCityName("Zwolle")]: "AMS",
+  [normalizeCityName("Waalwijk")]: "EIN",
+
+  // ---------------------------------------------------------------------------
+  // BELGIUM
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Brussels")]: "BRU",
+  [normalizeCityName("Bruxelles")]: "BRU",
+  [normalizeCityName("Brussel")]: "BRU",
+  [normalizeCityName("Antwerp")]: "ANR",
+  [normalizeCityName("Antwerpen")]: "ANR",
+  [normalizeCityName("Ghent")]: "BRU",
+  [normalizeCityName("Gent")]: "BRU",
+  [normalizeCityName("Bruges")]: "OST",
+  [normalizeCityName("Brugge")]: "OST",
+  [normalizeCityName("Liege")]: "LGG",
+  [normalizeCityName("Liège")]: "LGG",
+  [normalizeCityName("Genk")]: "LGG",
+  [normalizeCityName("Charleroi")]: "CRL",
+  [normalizeCityName("Leuven")]: "BRU",
+  [normalizeCityName("Mechelen")]: "BRU",
+  [normalizeCityName("Sint-Truiden")]: "LGG",
+  [normalizeCityName("Sint Truiden")]: "LGG",
+  [normalizeCityName("Anderlecht")]: "BRU",
+
+  // ---------------------------------------------------------------------------
+  // PORTUGAL
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Lisbon")]: "LIS",
+  [normalizeCityName("Lisboa")]: "LIS",
+  [normalizeCityName("Porto")]: "OPO",
+  [normalizeCityName("Braga")]: "OPO",
+  [normalizeCityName("Guimaraes")]: "OPO",
+  [normalizeCityName("Guimarães")]: "OPO",
+  [normalizeCityName("Coimbra")]: "OPO",
+  [normalizeCityName("Faro")]: "FAO",
+  [normalizeCityName("Funchal")]: "FNC",
+  [normalizeCityName("Ponta Delgada")]: "PDL",
+  [normalizeCityName("Aveiro")]: "OPO",
+  [normalizeCityName("Estoril")]: "LIS",
+  [normalizeCityName("Cascais")]: "LIS",
+  [normalizeCityName("Vila do Conde")]: "OPO",
+  [normalizeCityName("Matosinhos")]: "OPO",
+
+  // ---------------------------------------------------------------------------
+  // AUSTRIA
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Vienna")]: "VIE",
+  [normalizeCityName("Wien")]: "VIE",
+  [normalizeCityName("Salzburg")]: "SZG",
+  [normalizeCityName("Graz")]: "GRZ",
+  [normalizeCityName("Linz")]: "LNZ",
+  [normalizeCityName("Klagenfurt")]: "KLU",
+  [normalizeCityName("Wolfsberg")]: "KLU",
+  [normalizeCityName("Innsbruck")]: "INN",
+  [normalizeCityName("Hartberg")]: "GRZ",
+  [normalizeCityName("Altach")]: "ACH",
+  [normalizeCityName("Lustenau")]: "ACH",
+  [normalizeCityName("Wals-Siezenheim")]: "SZG",
+  [normalizeCityName("Wals Siezenheim")]: "SZG",
+
+  // ---------------------------------------------------------------------------
+  // SWITZERLAND
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Zurich")]: "ZRH",
+  [normalizeCityName("Zürich")]: "ZRH",
+  [normalizeCityName("Basel")]: "BSL",
+  [normalizeCityName("Bern")]: "BRN",
+  [normalizeCityName("Geneva")]: "GVA",
+  [normalizeCityName("Genève")]: "GVA",
+  [normalizeCityName("Lausanne")]: "GVA",
+  [normalizeCityName("Lugano")]: "LUG",
+  [normalizeCityName("Lucerne")]: "ZRH",
+  [normalizeCityName("Luzern")]: "ZRH",
+  [normalizeCityName("St Gallen")]: "ACH",
+  [normalizeCityName("Saint Gallen")]: "ACH",
+  [normalizeCityName("Sion")]: "SIR",
+  [normalizeCityName("Winterthur")]: "ZRH",
+  [normalizeCityName("Yverdon-les-Bains")]: "GVA",
+  [normalizeCityName("Yverdon les Bains")]: "GVA",
+
+  // ---------------------------------------------------------------------------
+  // TURKEY
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Istanbul")]: "IST",
+  [normalizeCityName("Ankara")]: "ESB",
+  [normalizeCityName("Izmir")]: "IZM",
+  [normalizeCityName("İzmir")]: "IZM",
+  [normalizeCityName("Antalya")]: "AYT",
+  [normalizeCityName("Trabzon")]: "TZX",
+  [normalizeCityName("Bursa")]: "BTZ",
+  [normalizeCityName("Konya")]: "KYA",
+  [normalizeCityName("Kayseri")]: "ASR",
+  [normalizeCityName("Samsun")]: "SZF",
+  [normalizeCityName("Gaziantep")]: "GZT",
+  [normalizeCityName("Adana")]: "ADA",
+  [normalizeCityName("Hatay")]: "HTY",
+  [normalizeCityName("Rize")]: "RZV",
+  [normalizeCityName("Sivas")]: "VAS",
+  [normalizeCityName("Kocaeli")]: "SAW",
+
+  // ---------------------------------------------------------------------------
+  // GREECE
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Athens")]: "ATH",
+  [normalizeCityName("Athina")]: "ATH",
+  [normalizeCityName("Thessaloniki")]: "SKG",
+  [normalizeCityName("Piraeus")]: "ATH",
+  [normalizeCityName("Volos")]: "VOL",
+  [normalizeCityName("Heraklion")]: "HER",
+  [normalizeCityName("Patras")]: "GPA",
+  [normalizeCityName("Ioannina")]: "IOA",
+  [normalizeCityName("Larissa")]: "VOL",
+  [normalizeCityName("Tripoli")]: "KLX",
+  [normalizeCityName("Kallithea")]: "ATH",
+  [normalizeCityName("Nea Filadelfeia")]: "ATH",
+
+  // ---------------------------------------------------------------------------
+  // CZECHIA
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Prague")]: "PRG",
+  [normalizeCityName("Praha")]: "PRG",
+  [normalizeCityName("Brno")]: "BRQ",
+  [normalizeCityName("Ostrava")]: "OSR",
+  [normalizeCityName("Plzen")]: "PRG",
+  [normalizeCityName("Plzeň")]: "PRG",
+  [normalizeCityName("Olomouc")]: "OSR",
+  [normalizeCityName("Mlada Boleslav")]: "PRG",
+  [normalizeCityName("Mladá Boleslav")]: "PRG",
+  [normalizeCityName("Jablonec")]: "PRG",
+  [normalizeCityName("Liberec")]: "PRG",
+
+  // ---------------------------------------------------------------------------
+  // DENMARK
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Copenhagen")]: "CPH",
+  [normalizeCityName("Kobenhavn")]: "CPH",
+  [normalizeCityName("København")]: "CPH",
+  [normalizeCityName("Aarhus")]: "AAR",
+  [normalizeCityName("Odense")]: "ODE",
+  [normalizeCityName("Aalborg")]: "AAL",
+  [normalizeCityName("Herning")]: "BLL",
+  [normalizeCityName("Viborg")]: "AAR",
+  [normalizeCityName("Silkeborg")]: "AAR",
+  [normalizeCityName("Randers")]: "AAR",
+  [normalizeCityName("Brondby")]: "CPH",
+  [normalizeCityName("Brøndby")]: "CPH",
+  [normalizeCityName("Farum")]: "CPH",
+
+  // ---------------------------------------------------------------------------
+  // SWEDEN
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Stockholm")]: "STO",
+  [normalizeCityName("Solna")]: "STO",
+  [normalizeCityName("Gothenburg")]: "GOT",
+  [normalizeCityName("Göteborg")]: "GOT",
+  [normalizeCityName("Malmo")]: "MMA",
+  [normalizeCityName("Malmö")]: "MMA",
+  [normalizeCityName("Norrkoping")]: "NRK",
+  [normalizeCityName("Norrköping")]: "NRK",
+  [normalizeCityName("Uppsala")]: "STO",
+  [normalizeCityName("Halmstad")]: "HAD",
+  [normalizeCityName("Varnamo")]: "VXO",
+  [normalizeCityName("Värnamo")]: "VXO",
+  [normalizeCityName("Boras")]: "GOT",
+  [normalizeCityName("Borås")]: "GOT",
+  [normalizeCityName("Kalmar")]: "KLR",
+  [normalizeCityName("Vasteras")]: "VST",
+  [normalizeCityName("Västerås")]: "VST",
+
+  // ---------------------------------------------------------------------------
+  // NORWAY
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Oslo")]: "OSL",
+  [normalizeCityName("Bergen")]: "BGO",
+  [normalizeCityName("Trondheim")]: "TRD",
+  [normalizeCityName("Stavanger")]: "SVG",
+  [normalizeCityName("Tromso")]: "TOS",
+  [normalizeCityName("Tromsø")]: "TOS",
+  [normalizeCityName("Kristiansund")]: "KSU",
+  [normalizeCityName("Bodo")]: "BOO",
+  [normalizeCityName("Bodø")]: "BOO",
+  [normalizeCityName("Sandefjord")]: "TRF",
+  [normalizeCityName("Lillestrom")]: "OSL",
+  [normalizeCityName("Lillestrøm")]: "OSL",
+  [normalizeCityName("Molde")]: "MOL",
+
+  // ---------------------------------------------------------------------------
+  // POLAND
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Warsaw")]: "WAW",
+  [normalizeCityName("Warszawa")]: "WAW",
+  [normalizeCityName("Krakow")]: "KRK",
+  [normalizeCityName("Kraków")]: "KRK",
+  [normalizeCityName("Wroclaw")]: "WRO",
+  [normalizeCityName("Wrocław")]: "WRO",
+  [normalizeCityName("Poznan")]: "POZ",
+  [normalizeCityName("Poznań")]: "POZ",
+  [normalizeCityName("Gdansk")]: "GDN",
+  [normalizeCityName("Gdańsk")]: "GDN",
+  [normalizeCityName("Szczecin")]: "SZZ",
+  [normalizeCityName("Lodz")]: "LCJ",
+  [normalizeCityName("Łódź")]: "LCJ",
+  [normalizeCityName("Katowice")]: "KTW",
+  [normalizeCityName("Zabrze")]: "KTW",
+  [normalizeCityName("Gliwice")]: "KTW",
+  [normalizeCityName("Czestochowa")]: "KTW",
+  [normalizeCityName("Częstochowa")]: "KTW",
+  [normalizeCityName("Lublin")]: "LUZ",
+  [normalizeCityName("Bialystok")]: "WAW",
+  [normalizeCityName("Białystok")]: "WAW",
+  [normalizeCityName("Kielce")]: "KRK",
+  [normalizeCityName("Niepolomice")]: "KRK",
+  [normalizeCityName("Niepołomice")]: "KRK",
+  [normalizeCityName("Lubin")]: "WRO",
+
+  // ---------------------------------------------------------------------------
+  // CROATIA
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Zagreb")]: "ZAG",
+  [normalizeCityName("Split")]: "SPU",
+  [normalizeCityName("Rijeka")]: "RJK",
+  [normalizeCityName("Osijek")]: "OSI",
+  [normalizeCityName("Pula")]: "PUY",
+  [normalizeCityName("Varazdin")]: "ZAG",
+  [normalizeCityName("Varaždin")]: "ZAG",
+
+  // ---------------------------------------------------------------------------
+  // SERBIA
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Belgrade")]: "BEG",
+  [normalizeCityName("Beograd")]: "BEG",
+  [normalizeCityName("Novi Sad")]: "BEG",
+  [normalizeCityName("Nis")]: "INI",
+  [normalizeCityName("Niš")]: "INI",
+  [normalizeCityName("Kragujevac")]: "BEG",
+  [normalizeCityName("Backa Topola")]: "BEG",
+  [normalizeCityName("Bačka Topola")]: "BEG",
+
+  // ---------------------------------------------------------------------------
+  // HUNGARY
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Budapest")]: "BUD",
+  [normalizeCityName("Debrecen")]: "DEB",
+  [normalizeCityName("Paks")]: "BUD",
+  [normalizeCityName("Miskolc")]: "DEB",
+  [normalizeCityName("Gyor")]: "BUD",
+  [normalizeCityName("Győr")]: "BUD",
+  [normalizeCityName("Fehervar")]: "BUD",
+  [normalizeCityName("Fehérvár")]: "BUD",
+  [normalizeCityName("Kecskemet")]: "BUD",
+  [normalizeCityName("Kecskemét")]: "BUD",
+
+  // ---------------------------------------------------------------------------
+  // ROMANIA
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Bucharest")]: "BUH",
+  [normalizeCityName("Bucuresti")]: "BUH",
+  [normalizeCityName("București")]: "BUH",
+  [normalizeCityName("Cluj-Napoca")]: "CLJ",
+  [normalizeCityName("Cluj Napoca")]: "CLJ",
+  [normalizeCityName("Craiova")]: "CRA",
+  [normalizeCityName("Constanta")]: "CND",
+  [normalizeCityName("Constanța")]: "CND",
+  [normalizeCityName("Sibiu")]: "SBZ",
+  [normalizeCityName("Iasi")]: "IAS",
+  [normalizeCityName("Iași")]: "IAS",
+  [normalizeCityName("Arad")]: "ARW",
+  [normalizeCityName("Ploiesti")]: "BUH",
+  [normalizeCityName("Ploiești")]: "BUH",
+  [normalizeCityName("Sfantu Gheorghe")]: "BCM",
+  [normalizeCityName("Sfântu Gheorghe")]: "BCM",
+
+  // ---------------------------------------------------------------------------
+  // SLOVAKIA
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Bratislava")]: "BTS",
+  [normalizeCityName("Kosice")]: "KSC",
+  [normalizeCityName("Košice")]: "KSC",
+  [normalizeCityName("Trnava")]: "BTS",
+  [normalizeCityName("Zilina")]: "ILZ",
+  [normalizeCityName("Žilina")]: "ILZ",
+  [normalizeCityName("Dunajska Streda")]: "BTS",
+  [normalizeCityName("Dunajská Streda")]: "BTS",
+  [normalizeCityName("Presov")]: "KSC",
+  [normalizeCityName("Prešov")]: "KSC",
+
+  // ---------------------------------------------------------------------------
+  // SLOVENIA
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Ljubljana")]: "LJU",
+  [normalizeCityName("Maribor")]: "MBX",
+  [normalizeCityName("Celje")]: "LJU",
+  [normalizeCityName("Koper")]: "TRS",
+  [normalizeCityName("Murska Sobota")]: "MBX",
+
+  // ---------------------------------------------------------------------------
+  // BULGARIA
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Sofia")]: "SOF",
+  [normalizeCityName("Plovdiv")]: "PDV",
+  [normalizeCityName("Varna")]: "VAR",
+  [normalizeCityName("Razgrad")]: "VAR",
+  [normalizeCityName("Kardzhali")]: "PDV",
+  [normalizeCityName("Kardjali")]: "PDV",
+
+  // ---------------------------------------------------------------------------
+  // UKRAINE
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Kyiv")]: "IEV",
+  [normalizeCityName("Kiev")]: "IEV",
+  [normalizeCityName("Lviv")]: "LWO",
+  [normalizeCityName("Odesa")]: "ODS",
+  [normalizeCityName("Odessa")]: "ODS",
+  [normalizeCityName("Kharkiv")]: "HRK",
+  [normalizeCityName("Dnipro")]: "DNK",
+  [normalizeCityName("Zhytomyr")]: "IEV",
+  [normalizeCityName("Poltava")]: "HRK",
+
+  // ---------------------------------------------------------------------------
+  // CYPRUS
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Nicosia")]: "LCA",
+  [normalizeCityName("Lefkosia")]: "LCA",
+  [normalizeCityName("Limassol")]: "LCA",
+  [normalizeCityName("Larnaca")]: "LCA",
+  [normalizeCityName("Paphos")]: "PFO",
+
+  // ---------------------------------------------------------------------------
+  // ISRAEL (UEFA comps / travel coverage)
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Tel Aviv")]: "TLV",
+  [normalizeCityName("Jerusalem")]: "TLV",
+  [normalizeCityName("Haifa")]: "HFA",
+  [normalizeCityName("Beersheba")]: "TLV",
+  [normalizeCityName("Beer Sheva")]: "TLV",
+
+  // ---------------------------------------------------------------------------
+  // FINLAND
+  // ---------------------------------------------------------------------------
+  [normalizeCityName("Helsinki")]: "HEL",
+  [normalizeCityName("Tampere")]: "TMP",
+  [normalizeCityName("Turku")]: "TKU",
+  [normalizeCityName("Kuopio")]: "KUO",
+  [normalizeCityName("Vaasa")]: "VAA",
+  [normalizeCityName("Mariehamn")]: "MHQ",
 };
 
 /**
- * Optional aliases for weird venue city strings you might see from API-Football.
- * Example: stadium cities can be districts or metro areas.
+ * Optional aliases for weird venue city strings you might see from API-Football
+ * or stadium registries.
  */
 const ALIASES: Record<CityKey, CityKey> = {
-  // Common football data quirks:
+  // Generic data quirks
   [normalizeCityName("Greater Manchester")]: normalizeCityName("Manchester"),
+  [normalizeCityName("West London")]: normalizeCityName("London"),
+  [normalizeCityName("North London")]: normalizeCityName("London"),
+  [normalizeCityName("East London")]: normalizeCityName("London"),
+  [normalizeCityName("South London")]: normalizeCityName("London"),
+
+  // Italy quirks
   [normalizeCityName("Milano (MI)")]: normalizeCityName("Milano"),
   [normalizeCityName("Roma (RM)")]: normalizeCityName("Roma"),
+  [normalizeCityName("Firenze (FI)")]: normalizeCityName("Firenze"),
+  [normalizeCityName("Torino (TO)")]: normalizeCityName("Torino"),
+  [normalizeCityName("Genova (GE)")]: normalizeCityName("Genova"),
+  [normalizeCityName("Monza (MB)")]: normalizeCityName("Monza"),
+  [normalizeCityName("Reggio nell'Emilia")]: normalizeCityName("Reggio Emilia"),
+  [normalizeCityName("Reggio nell Emilia")]: normalizeCityName("Reggio Emilia"),
+
+  // Spain quirks
+  [normalizeCityName("Donostia-San Sebastian")]: normalizeCityName("San Sebastian"),
+  [normalizeCityName("A Coruña")]: normalizeCityName("A Coruna"),
+  [normalizeCityName("A Coruna (La Coruna)")]: normalizeCityName("A Coruna"),
+  [normalizeCityName("Cornellà de Llobregat")]: normalizeCityName("Cornella de Llobregat"),
+  [normalizeCityName("Vitoria Gasteiz")]: normalizeCityName("Vitoria-Gasteiz"),
+
+  // Germany quirks
+  [normalizeCityName("Koln")]: normalizeCityName("Cologne"),
+  [normalizeCityName("Köln")]: normalizeCityName("Cologne"),
+  [normalizeCityName("Düsseldorf")]: normalizeCityName("Dusseldorf"),
+  [normalizeCityName("München")]: normalizeCityName("Munich"),
+  [normalizeCityName("Mönchengladbach")]: normalizeCityName("Monchengladbach"),
+  [normalizeCityName("Nürnberg")]: normalizeCityName("Nuremberg"),
+
+  // France quirks
+  [normalizeCityName("Saint Etienne")]: normalizeCityName("Saint-Etienne"),
+  [normalizeCityName("St Etienne")]: normalizeCityName("Saint-Etienne"),
+
+  // Portugal quirks
+  [normalizeCityName("Lisboa")]: normalizeCityName("Lisbon"),
+  [normalizeCityName("Guimarães")]: normalizeCityName("Guimaraes"),
+
+  // Austria / Switzerland / Nordics / Balkans diacritics
+  [normalizeCityName("Wien")]: normalizeCityName("Vienna"),
+  [normalizeCityName("Zürich")]: normalizeCityName("Zurich"),
+  [normalizeCityName("Genève")]: normalizeCityName("Geneva"),
+  [normalizeCityName("Malmö")]: normalizeCityName("Malmo"),
+  [normalizeCityName("Göteborg")]: normalizeCityName("Gothenburg"),
+  [normalizeCityName("Tromsø")]: normalizeCityName("Tromso"),
+  [normalizeCityName("Brøndby")]: normalizeCityName("Brondby"),
+  [normalizeCityName("København")]: normalizeCityName("Copenhagen"),
+  [normalizeCityName("Łódź")]: normalizeCityName("Lodz"),
+  [normalizeCityName("Gdańsk")]: normalizeCityName("Gdansk"),
+  [normalizeCityName("Poznań")]: normalizeCityName("Poznan"),
+  [normalizeCityName("Wrocław")]: normalizeCityName("Wroclaw"),
+  [normalizeCityName("Częstochowa")]: normalizeCityName("Czestochowa"),
+  [normalizeCityName("Niepołomice")]: normalizeCityName("Niepolomice"),
+  [normalizeCityName("Košice")]: normalizeCityName("Kosice"),
+  [normalizeCityName("Žilina")]: normalizeCityName("Zilina"),
+  [normalizeCityName("Dunajská Streda")]: normalizeCityName("Dunajska Streda"),
+  [normalizeCityName("Prešov")]: normalizeCityName("Presov"),
+  [normalizeCityName("Varaždin")]: normalizeCityName("Varazdin"),
+  [normalizeCityName("Bačka Topola")]: normalizeCityName("Backa Topola"),
+  [normalizeCityName("Niš")]: normalizeCityName("Nis"),
+  [normalizeCityName("Győr")]: normalizeCityName("Gyor"),
+  [normalizeCityName("Fehérvár")]: normalizeCityName("Fehervar"),
+  [normalizeCityName("Kecskemét")]: normalizeCityName("Kecskemet"),
+  [normalizeCityName("București")]: normalizeCityName("Bucuresti"),
+  [normalizeCityName("Constanța")]: normalizeCityName("Constanta"),
+  [normalizeCityName("Iași")]: normalizeCityName("Iasi"),
+  [normalizeCityName("Ploiești")]: normalizeCityName("Ploiesti"),
+  [normalizeCityName("Sfântu Gheorghe")]: normalizeCityName("Sfantu Gheorghe"),
+
+  // Turkey quirks
+  [normalizeCityName("İzmir")]: normalizeCityName("Izmir"),
+
+  // Greece quirks
+  [normalizeCityName("Athina")]: normalizeCityName("Athens"),
+
+  // Ukraine quirks
+  [normalizeCityName("Kiev")]: normalizeCityName("Kyiv"),
+  [normalizeCityName("Odessa")]: normalizeCityName("Odesa"),
 };
 
 /**
- * Lookup: returns IATA city code or null.
+ * Lookup: returns IATA city/airport code or null.
  */
 export function getIataCityCodeForCity(city: unknown): IataCityCode | null {
   const key = normalizeCityName(city);
@@ -131,11 +733,15 @@ export function getIataCityCodeForCity(city: unknown): IataCityCode | null {
 }
 
 /**
- * Optional: helper for expanding opportunistically.
- * You can call this when you encounter an unknown fixture venue city.
- *
- * In Phase 1 we just return the normalized key so you can paste it into the map later.
+ * Optional helper for debugging unknown city strings.
  */
 export function debugCityKey(city: unknown): string {
   return normalizeCityName(city);
 }
+
+/**
+ * Optional export if you want to run coverage checks elsewhere.
+ */
+export const ALL_IATA_CITY_KEYS = Object.freeze(
+  Object.keys(CITY_TO_IATA).sort()
+);
