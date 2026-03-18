@@ -1,10 +1,10 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 
-import { theme } from "@/src/constants/theme";
 import GlassCard from "@/src/components/GlassCard";
 import Button from "@/src/components/Button";
 import Chip from "@/src/components/Chip";
+import { theme } from "@/src/constants/theme";
 
 export type NextAction = {
   title: string;
@@ -17,28 +17,30 @@ export type NextAction = {
   proLocked?: boolean;
 };
 
-export default function NextBestActionCard({
-  action,
-  isPro,
-  onUpgradePress,
-}: {
+type Props = {
   action: NextAction | null;
   isPro: boolean;
   onUpgradePress?: () => void;
-}) {
-  if (!action) return null;
+};
 
-  const locked = Boolean(action.proLocked && !isPro);
+export default function NextBestActionCard({ action, isPro, onUpgradePress }: Props) {
+  const locked = useMemo(() => Boolean(action?.proLocked && !isPro), [action?.proLocked, isPro]);
 
   const primaryLabel = useMemo(() => {
+    if (!action) return "";
     return locked ? "Unlock with Pro" : action.cta;
-  }, [locked, action.cta]);
+  }, [action, locked]);
 
-  const primaryPress = useMemo(() => {
+  const primaryPress = useMemo<(() => void) | undefined>(() => {
+    if (!action) return undefined;
     return locked ? (onUpgradePress ?? action.onPress) : action.onPress;
-  }, [locked, onUpgradePress, action.onPress]);
+  }, [action, locked, onUpgradePress]);
 
-  const secondaryVisible = Boolean(action.secondaryCta && action.onSecondaryPress && !locked);
+  const secondaryVisible = useMemo(() => {
+    return Boolean(action?.secondaryCta && action?.onSecondaryPress && !locked);
+  }, [action, locked]);
+
+  if (!action || !primaryPress) return null;
 
   return (
     <GlassCard level="default" variant="matte" style={styles.card} noPadding>
@@ -71,11 +73,11 @@ export default function NextBestActionCard({
             style={secondaryVisible ? styles.primarySplit : styles.primaryFull}
           />
 
-          {secondaryVisible ? (
+          {secondaryVisible && action.secondaryCta && action.onSecondaryPress ? (
             <Button
-              label={action.secondaryCta!}
+              label={action.secondaryCta}
               tone="secondary"
-              onPress={action.onSecondaryPress!}
+              onPress={action.onSecondaryPress}
               style={styles.secondarySplit}
             />
           ) : null}
