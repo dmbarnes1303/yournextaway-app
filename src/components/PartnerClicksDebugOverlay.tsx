@@ -27,7 +27,7 @@ export default function PartnerClicksDebugOverlay() {
     return () => clearInterval(t);
   }, []);
 
-  const s = useMemo(() => getPartnerClicksDebugState(), [tick]);
+  const s = useMemo(() => getPartnerClicksDebugState(), []);
 
   if (!__DEV__) return null;
   if (!open) {
