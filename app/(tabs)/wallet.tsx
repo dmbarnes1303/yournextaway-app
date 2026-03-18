@@ -57,7 +57,7 @@ type WalletDoc = {
 type CategoryFilter = "all" | SavedItemType;
 type UploadKind = "camera" | "photo" | "document";
 
-const CATEGORY_FILTERS: Array<{ id: CategoryFilter; label: string }> = [
+const CATEGORY_FILTERS: { id: CategoryFilter; label: string } []
   { id: "all", label: "All" },
   { id: "tickets", label: "Tickets" },
   { id: "hotel", label: "Hotels" },
