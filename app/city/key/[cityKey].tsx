@@ -1,5 +1,5 @@
 // app/city/key/[cityKey].tsx
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -35,11 +35,11 @@ import { normalizeCityKey } from "@/src/utils/city";
 /* Utils */
 /* -------------------------------------------------------------------------- */
 
-function safeStr(v: any) {
+function safeStr(v: unknown) {
   return String(v ?? "").trim();
 }
 
-function toIsoOrEmpty(v: any) {
+function toIsoOrEmpty(v: unknown) {
   return safeStr(v);
 }
 
@@ -75,11 +75,13 @@ function groupByMonth(rows: FixtureListRow[]) {
     const iso = safeStr(r?.fixture?.date);
     const title = monthHeading(iso) || "Other";
     if (!map.has(title)) map.set(title, []);
-    map.get(title)!.push(r);
+    map.get(title)?.push(r);
   }
 
   const out: { key: string; title: string; rows: FixtureListRow[] }[] = [];
-  for (const [key, list] of map.entries()) out.push({ key, title: key, rows: list });
+  for (const [key, list] of map.entries()) {
+    out.push({ key, title: key, rows: list });
+  }
 
   out.sort((a, b) => {
     const da = a.rows[0]?.fixture?.date ? new Date(a.rows[0].fixture.date).getTime() : 0;
@@ -276,7 +278,13 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
   const stay = safeStr(guide.accommodation);
   if (stay) blocks.push({ heading: "Where to stay", text: stay });
 
-  if (!blocks.length) return { title, blocks: [{ heading: undefined, text: "Guide content is available for this city." }] };
+  if (!blocks.length) {
+    return {
+      title,
+      blocks: [{ heading: undefined, text: "Guide content is available for this city." }],
+    };
+  }
+
   return { title, blocks };
 }
 
@@ -369,7 +377,7 @@ function GuideModal({
       <Background imageSource={backgroundSource} overlayOpacity={0.78}>
         <SafeAreaView style={styles.modalSafe} edges={["top", "bottom"]}>
           <View style={styles.modalTop}>
-            <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={styles.flexTextWrap}>
               <Text style={styles.modalKicker}>CITY GUIDE</Text>
               <Text style={styles.modalTitle} numberOfLines={1}>
                 {title}
@@ -387,7 +395,11 @@ function GuideModal({
             </Pressable>
           </View>
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalContent}
+            showsVerticalScrollIndicator={false}
+          >
             {!blocks.length ? (
               <GlassCard strength="default" style={styles.block} noPadding>
                 <View style={styles.blockInner}>
@@ -395,7 +407,7 @@ function GuideModal({
                 </View>
               </GlassCard>
             ) : (
-              <View style={{ gap: 12 }}>
+              <View style={styles.modalSectionsWrap}>
                 {blocks.map((b, idx) => {
                   const key = `${safeStr(b.heading) || "Guide"}-${idx}`;
                   return (
@@ -411,7 +423,7 @@ function GuideModal({
               </View>
             )}
 
-            <View style={{ height: 18 }} />
+            <View style={styles.modalBottomSpacer} />
           </ScrollView>
         </SafeAreaView>
       </Background>
@@ -492,10 +504,13 @@ function uniqueLeaguesById(list: LeagueOption[]) {
   return out;
 }
 
-function pickLeaguesForCity(city: CityRecord | null, fallback: LeagueOption[]): { leagues: LeagueOption[]; reason: string } {
+function pickLeaguesForCity(
+  city: CityRecord | null,
+  fallback: LeagueOption[]
+): { leagues: LeagueOption[]; reason: string } {
   const all = uniqueLeaguesById(fallback);
 
-  const leagueIds = Array.isArray((city as any)?.leagueIds) ? ((city as any).leagueIds as any[]) : [];
+  const leagueIds = Array.isArray((city as any)?.leagueIds) ? (((city as any).leagueIds as any[]) ?? []) : [];
   const leagueIdNums = leagueIds.map((x) => Number(x)).filter((n) => Number.isFinite(n));
 
   if (leagueIdNums.length) {
@@ -581,9 +596,13 @@ export default function CityScreen() {
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
 
-  const [progress, setProgress] = useState<{ done: number; total: number; reason: string }>({ done: 0, total: 0, reason: "" });
-  const cancelRef = useRef(false);
+  const [progress, setProgress] = useState<{ done: number; total: number; reason: string }>({
+    done: 0,
+    total: 0,
+    reason: "",
+  });
 
+  const cancelRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -597,109 +616,168 @@ export default function CityScreen() {
     setCityLiveLoading(true);
     try {
       const c = await getCityByKeyLive(citySlug, LEAGUES);
+      if (cancelRef.current) return;
       setCityLive(c);
     } catch {
+      if (cancelRef.current) return;
       setCityLive(null);
     } finally {
-      setCityLiveLoading(false);
+      if (!cancelRef.current) setCityLiveLoading(false);
     }
   }, [citySlug]);
 
-  const loadCityFixtures = useCallback(async () => {
-    if (!citySlug) {
-      setLoadingFx(false);
-      setFxRows([]);
-      setFxError("Missing city key.");
-      return;
-    }
+  const loadCityFixtures = useCallback(
+    async (cityOverride?: CityRecord | null) => {
+      const activeCity = cityOverride ?? cityLive;
 
-    setLoadingFx(true);
-    setFxError(null);
-    setFxRows([]);
-
-    try {
-      const venueIds = Array.isArray(cityLive?.venueIds) ? cityLive!.venueIds : [];
-      const targetSlug = cityLive?.slug || citySlug;
-
-      const pick = pickLeaguesForCity(cityLive, LEAGUES);
-      setProgress({ done: 0, total: pick.leagues.length, reason: pick.reason });
-
-      const all = await fetchFixturesBatched({
-        leagues: pick.leagues,
-        from,
-        to,
-        concurrency: 5,
-        onProgress: (done, total) => setProgress((p) => ({ ...p, done, total })),
-        shouldCancel: () => cancelRef.current,
-      });
-
-      if (cancelRef.current) return;
-
-      const filtered = all.filter((r) => {
-        const vCity = safeStr(r?.fixture?.venue?.city);
-        const vSlug = vCity ? normalizeCityKey(vCity) : "";
-        const vId = r?.fixture?.venue?.id;
-
-        const byCitySlug = !!targetSlug && !!vSlug && vSlug === targetSlug;
-        const byVenueId = typeof vId === "number" && venueIds.includes(vId);
-
-        return byCitySlug || byVenueId;
-      });
-
-      const dedup = new Map<string, FixtureListRow>();
-      for (const r of filtered) {
-        const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
-        if (!id) continue;
-        if (!dedup.has(id)) dedup.set(id, r);
+      if (!citySlug) {
+        setLoadingFx(false);
+        setFxRows([]);
+        setFxError("Missing city key.");
+        return;
       }
 
-      const cleaned = Array.from(dedup.values()).sort((a, b) => {
-        const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
-        const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
-        return da - db;
-      });
+      setLoadingFx(true);
+      setFxError(null);
+      setFxRows([]);
 
-      setFxRows(cleaned);
-    } catch (e: any) {
-      setFxError(e?.message ?? "Failed to load city fixtures.");
-    } finally {
-      setLoadingFx(false);
-    }
-  }, [citySlug, cityLive, from, to]);
+      try {
+        const venueIds = Array.isArray(activeCity?.venueIds) ? activeCity.venueIds : [];
+        const targetSlug = activeCity?.slug || citySlug;
+
+        const pick = pickLeaguesForCity(activeCity, LEAGUES);
+        setProgress({ done: 0, total: pick.leagues.length, reason: pick.reason });
+
+        const all = await fetchFixturesBatched({
+          leagues: pick.leagues,
+          from,
+          to,
+          concurrency: 5,
+          onProgress: (done, total) => setProgress((p) => ({ ...p, done, total })),
+          shouldCancel: () => cancelRef.current,
+        });
+
+        if (cancelRef.current) return;
+
+        const filtered = all.filter((r) => {
+          const vCity = safeStr(r?.fixture?.venue?.city);
+          const vSlug = vCity ? normalizeCityKey(vCity) : "";
+          const vId = r?.fixture?.venue?.id;
+
+          const byCitySlug = !!targetSlug && !!vSlug && vSlug === targetSlug;
+          const byVenueId = typeof vId === "number" && venueIds.includes(vId);
+
+          return byCitySlug || byVenueId;
+        });
+
+        const dedup = new Map<string, FixtureListRow>();
+        for (const r of filtered) {
+          const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
+          if (!id) continue;
+          if (!dedup.has(id)) dedup.set(id, r);
+        }
+
+        const cleaned = Array.from(dedup.values()).sort((a, b) => {
+          const da = a?.fixture?.date ? new Date(a.fixture.date).getTime() : 0;
+          const db = b?.fixture?.date ? new Date(b.fixture.date).getTime() : 0;
+          return da - db;
+        });
+
+        setFxRows(cleaned);
+      } catch (e: any) {
+        if (cancelRef.current) return;
+        setFxError(e?.message ?? "Failed to load city fixtures.");
+      } finally {
+        if (!cancelRef.current) setLoadingFx(false);
+      }
+    },
+    [citySlug, cityLive, from, to]
+  );
 
   useEffect(() => {
     let mounted = true;
 
     async function boot() {
       if (!citySlug) return;
-      await loadCity();
-      if (!mounted) return;
-      await loadCityFixtures();
+      const c = await getCityByKeyLive(citySlug, LEAGUES);
+      if (!mounted || cancelRef.current) return;
+      setCityLive(c);
+      setCityLiveLoading(false);
+      await loadCityFixtures(c);
     }
 
-    boot().catch(() => null);
+    setCityLiveLoading(true);
+    boot().catch(() => {
+      if (!mounted || cancelRef.current) return;
+      setCityLive(null);
+      setCityLiveLoading(false);
+      loadCityFixtures(null).catch(() => null);
+    });
 
     return () => {
       mounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [citySlug, from, to]);
+  }, [citySlug, from, to, loadCityFixtures]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadCity();
-      await loadCityFixtures();
+      const c = await getCityByKeyLive(citySlug, LEAGUES);
+      if (cancelRef.current) return;
+      setCityLive(c);
+      await loadCityFixtures(c);
+    } catch {
+      if (cancelRef.current) return;
+      setCityLive(null);
+      await loadCityFixtures(null);
     } finally {
-      setRefreshing(false);
+      if (!cancelRef.current) setRefreshing(false);
     }
-  }, [loadCity, loadCityFixtures]);
+  }, [citySlug, loadCityFixtures]);
 
   const grouped = useMemo(() => groupByMonth(fxRows), [fxRows]);
 
   const title = cityLive?.name || cityKeyToTitle(citySlug || cityKeyParam);
   const countryCode = safeStr(cityLive?.countryCode);
   const countryName = safeStr(cityLive?.country);
+
+  const guideBlocks = useMemo<GuideBlock[]>(() => {
+    return guideFull?.blocks ?? [];
+  }, [guideFull]);
+
+  const overview = useMemo(() => {
+    return (
+      guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text ||
+      guideBlocks[0]?.text ||
+      ""
+    );
+  }, [guideBlocks]);
+
+  const guidePreview = useMemo(() => {
+    return guideFull ? clampText(overview, 220) : "";
+  }, [guideFull, overview]);
+
+  const guideStats = useMemo(() => {
+    if (!guideFull) return "";
+    const sections = guideBlocks.length;
+    const hasTop = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("top"));
+    const hasStay = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("stay"));
+    const parts = [
+      sections ? `${sections} sections` : "",
+      hasTop ? "things to do" : "",
+      hasStay ? "where to stay" : "",
+    ].filter(Boolean);
+    return parts.join(" • ");
+  }, [guideFull, guideBlocks]);
+
+  const progressLine = useMemo(() => {
+    if (!loadingFx) return "";
+    if (!progress.total) return "Searching leagues…";
+    const base = `Searching ${progress.done}/${progress.total} leagues…`;
+    if (progress.reason === "registry-leagueIds") return `${base} (matched by city registry)`;
+    if (progress.reason === "country-filter") return `${base} (filtered to country)`;
+    return base;
+  }, [loadingFx, progress]);
 
   const goHome = useCallback(() => {
     router.push("/(tabs)/home" as any);
@@ -731,29 +809,6 @@ export default function CityScreen() {
   const bg = getCityBackground(citySlug || cityKeyParam);
   const bgSource = typeof bg === "string" ? { uri: bg } : bg;
 
-  const guideBlocks = guideFull?.blocks ?? [];
-  const overview =
-    guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text || guideBlocks[0]?.text || "";
-  const guidePreview = guideFull ? clampText(overview, 220) : "";
-
-  const guideStats = useMemo(() => {
-    if (!guideFull) return "";
-    const sections = guideBlocks.length;
-    const hasTop = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("top"));
-    const hasStay = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("stay"));
-    const parts = [sections ? `${sections} sections` : "", hasTop ? "things to do" : "", hasStay ? "where to stay" : ""].filter(Boolean);
-    return parts.join(" • ");
-  }, [guideFull, guideBlocks]);
-
-  const progressLine = useMemo(() => {
-    if (!loadingFx) return "";
-    if (!progress.total) return "Searching leagues…";
-    const base = `Searching ${progress.done}/${progress.total} leagues…`;
-    if (progress.reason === "registry-leagueIds") return `${base} (matched by city registry)`;
-    if (progress.reason === "country-filter") return `${base} (filtered to country)`;
-    return base;
-  }, [loadingFx, progress]);
-
   return (
     <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -761,14 +816,20 @@ export default function CityScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.textSecondary} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.textSecondary}
+            />
+          }
         >
           <GlassCard strength="strong" style={styles.hero} noPadding>
             <View style={styles.heroInner}>
               <Text style={styles.kicker}>CITY GUIDE</Text>
 
               <View style={styles.heroTitleRow}>
-                <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={styles.flexTextWrap}>
                   <Text style={styles.heroTitle} numberOfLines={2} ellipsizeMode="tail">
                     {title}
                   </Text>
@@ -787,7 +848,9 @@ export default function CityScreen() {
                 </Text>
               ) : null}
 
-              <Text style={styles.heroRange}>{from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}</Text>
+              <Text style={styles.heroRange}>
+                {from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}
+              </Text>
 
               <View style={styles.heroActions}>
                 <Pressable
@@ -806,10 +869,12 @@ export default function CityScreen() {
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
               <View style={styles.guideTopRow}>
-                <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={styles.flexTextWrap}>
                   <Text style={styles.blockTitle}>Guide</Text>
                   <Text style={styles.guideSub} numberOfLines={1}>
-                    {guideFull ? guideStats || "Practical, city-break planning notes." : "Guide content unavailable for this city yet."}
+                    {guideFull
+                      ? guideStats || "Practical, city-break planning notes."
+                      : "Guide content unavailable for this city yet."}
                   </Text>
                 </View>
 
@@ -829,7 +894,9 @@ export default function CityScreen() {
               {guideFull && guidePreview ? (
                 <Text style={styles.blockNote}>{guidePreview}</Text>
               ) : !guideFull ? (
-                <Text style={styles.blockNote}>We’ll add this city soon. For now, use fixtures below to anchor your trip.</Text>
+                <Text style={styles.blockNote}>
+                  We’ll add this city soon. For now, use fixtures below to anchor your trip.
+                </Text>
               ) : null}
             </View>
           </GlassCard>
@@ -852,12 +919,12 @@ export default function CityScreen() {
               ) : null}
 
               {!loadingFx && !fxError && fxRows.length > 0 ? (
-                <View style={{ gap: 14 }}>
+                <View style={styles.groupWrap}>
                   {grouped.map((g) => (
-                    <View key={g.key} style={{ gap: 10 }}>
+                    <View key={g.key} style={styles.monthWrap}>
                       <Text style={styles.month}>{g.title}</Text>
 
-                      <View style={{ gap: 12 }}>
+                      <View style={styles.fixtureListWrap}>
                         {g.rows.map((r, idx) => {
                           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
                           const stableKey = id ? `fx-${id}` : `fx-${g.key}-${idx}`;
@@ -871,7 +938,7 @@ export default function CityScreen() {
             </View>
           </GlassCard>
 
-          <View style={{ height: 14 }} />
+          <View style={styles.bottomSpacer} />
         </ScrollView>
 
         <GuideModal
@@ -897,10 +964,17 @@ const styles = StyleSheet.create({
 
   pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
 
+  flexTextWrap: { flex: 1, minWidth: 0 },
+
   hero: { marginTop: theme.spacing.lg, borderRadius: 26 },
   heroInner: { padding: theme.spacing.lg, gap: 10 },
 
-  kicker: { color: "rgba(79,224,138,0.70)", fontSize: 12, fontWeight: theme.fontWeight.black, letterSpacing: 0.4 },
+  kicker: {
+    color: "rgba(79,224,138,0.70)",
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
   heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   heroTitle: { color: theme.colors.text, fontSize: 28, lineHeight: 34, fontWeight: theme.fontWeight.black },
 
@@ -908,12 +982,25 @@ const styles = StyleSheet.create({
   heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
   flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
 
-  heroSubtitle: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 18, opacity: 0.95 },
+  heroSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 18,
+    opacity: 0.95,
+  },
   heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
 
   heroActions: { flexDirection: "row", gap: 10, marginTop: 6 },
 
-  btn: { flex: 1, borderRadius: 16, paddingVertical: 12, alignItems: "center", borderWidth: 1, overflow: "hidden" },
+  btn: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    overflow: "hidden",
+  },
   btnGhost: {
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
@@ -942,6 +1029,10 @@ const styles = StyleSheet.create({
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
 
+  groupWrap: { gap: 14 },
+  monthWrap: { gap: 10 },
+  fixtureListWrap: { gap: 12 },
+
   month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
 
   fxRow: {
@@ -959,7 +1050,14 @@ const styles = StyleSheet.create({
   teamSideRight: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
 
   teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
-  teamNameRight: { flex: 1, minWidth: 0, textAlign: "right", color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  teamNameRight: {
+    flex: 1,
+    minWidth: 0,
+    textAlign: "right",
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
 
   vsPill: {
     flexShrink: 0,
@@ -992,8 +1090,19 @@ const styles = StyleSheet.create({
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
 
   modalSafe: { flex: 1, paddingHorizontal: theme.spacing.lg },
-  modalTop: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.md, flexDirection: "row", alignItems: "center", gap: 12 },
-  modalKicker: { color: "rgba(79,224,138,0.70)", fontSize: 11, fontWeight: theme.fontWeight.black, letterSpacing: 0.5 },
+  modalTop: {
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  modalKicker: {
+    color: "rgba(79,224,138,0.70)",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.5,
+  },
   modalTitle: { marginTop: 4, color: theme.colors.text, fontSize: 20, fontWeight: theme.fontWeight.black },
   closePill: {
     borderRadius: 999,
@@ -1006,11 +1115,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     overflow: "hidden",
   },
-  closePillText: { color: "rgba(255,255,255,0.78)", fontWeight: theme.fontWeight.black, fontSize: 12, letterSpacing: 0.2 },
+  closePillText: {
+    color: "rgba(255,255,255,0.78)",
+    fontWeight: theme.fontWeight.black,
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
+  modalScroll: { flex: 1 },
   modalContent: { paddingBottom: theme.spacing.xxl, gap: 12 },
+  modalSectionsWrap: { gap: 12 },
+  modalBottomSpacer: { height: 18 },
+  bottomSpacer: { height: 14 },
 
   guideSecCard: { borderRadius: 22 },
-  guideSecHeader: { paddingHorizontal: 14, paddingVertical: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  guideSecHeader: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   guideSecHeading: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
   guideSecChevron: { color: theme.colors.textSecondary, fontSize: 18, fontWeight: "900", marginTop: -2 },
   guideSecBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
