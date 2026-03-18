@@ -1,7 +1,7 @@
 import type { ImageSourcePropType } from "react-native";
 import { normalizeCityKey } from "@/src/utils/city";
 
-export type BackgroundAccent = "green" | "blue" | "neutral" | "mixed";
+export type BackgroundAccent = "green" | "gold" | "neutral" | "mixed";
 
 export type BackgroundSpec = {
   kind: "spec";
@@ -41,227 +41,196 @@ export type BackgroundKey =
 const u = (photoId: string) =>
   `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=82`;
 
+const spec = (
+  accent: BackgroundAccent,
+  colors: [string, string, string],
+  opts?: Omit<BackgroundSpec, "kind" | "accent" | "colors">
+): BackgroundSpec => ({
+  kind: "spec",
+  accent,
+  colors,
+  topTintColor: opts?.topTintColor,
+  topTintOpacity: opts?.topTintOpacity,
+  sideTintColor: opts?.sideTintColor,
+  sideTintOpacity: opts?.sideTintOpacity,
+  sideTintSide: opts?.sideTintSide,
+  bottomShadeOpacity: opts?.bottomShadeOpacity ?? 0.18,
+  vignetteOpacity: opts?.vignetteOpacity ?? 0.1,
+});
+
+const BRAND_GREEN = "#22C55E";
+const BRAND_GOLD = "#FACC15";
+
 const BACKGROUNDS: Record<BackgroundKey, BackgroundSource> = {
-  home: {
-    kind: "spec",
-    accent: "green",
-    colors: ["#0A0F0D", "#0C1210", "#0E1412"],
-    topTintColor: "#57A238",
-    topTintOpacity: 0.05,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.035,
-    sideTintSide: "left",
-    bottomShadeOpacity: 0.16,
-    vignetteOpacity: 0.1,
-  },
-
-  explore: {
-    kind: "spec",
-    accent: "mixed",
-    colors: ["#0A0F11", "#0C1113", "#0D1314"],
-    topTintColor: "#0B2555",
-    topTintOpacity: 0.06,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.025,
-    sideTintSide: "right",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
-
-  fixtures: {
-    kind: "spec",
-    accent: "blue",
-    colors: ["#091018", "#0A1119", "#0B1219"],
-    topTintColor: "#0B2555",
-    topTintOpacity: 0.085,
-    sideTintColor: "#0B2555",
-    sideTintOpacity: 0.045,
-    sideTintSide: "right",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
-
-  match: {
-    kind: "spec",
-    accent: "blue",
-    colors: ["#091018", "#0A1119", "#0B1219"],
-    topTintColor: "#0B2555",
+  home: spec("green", ["#050505", "#08100B", "#0D1811"], {
+    topTintColor: BRAND_GREEN,
     topTintOpacity: 0.09,
-    sideTintColor: "#0B2555",
-    sideTintOpacity: 0.05,
+    sideTintColor: BRAND_GREEN,
+    sideTintOpacity: 0.045,
+    sideTintSide: "left",
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.12,
+  }),
+
+  explore: spec("mixed", ["#050505", "#0A100B", "#161308"], {
+    topTintColor: BRAND_GOLD,
+    topTintOpacity: 0.08,
+    sideTintColor: BRAND_GREEN,
+    sideTintOpacity: 0.035,
     sideTintSide: "right",
     bottomShadeOpacity: 0.2,
-    vignetteOpacity: 0.1,
-  },
+    vignetteOpacity: 0.12,
+  }),
 
-  stadium: {
-    kind: "spec",
-    accent: "green",
-    colors: ["#0A0F0D", "#0C1210", "#0E1412"],
-    topTintColor: "#57A238",
-    topTintOpacity: 0.045,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.025,
+  fixtures: spec("gold", ["#050505", "#111008", "#171308"], {
+    topTintColor: BRAND_GOLD,
+    topTintOpacity: 0.095,
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.05,
+    sideTintSide: "right",
+    bottomShadeOpacity: 0.22,
+    vignetteOpacity: 0.12,
+  }),
+
+  match: spec("gold", ["#050505", "#111008", "#191508"], {
+    topTintColor: BRAND_GOLD,
+    topTintOpacity: 0.11,
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.055,
+    sideTintSide: "right",
+    bottomShadeOpacity: 0.24,
+    vignetteOpacity: 0.13,
+  }),
+
+  stadium: spec("green", ["#050505", "#08100B", "#0D1811"], {
+    topTintColor: BRAND_GREEN,
+    topTintOpacity: 0.08,
+    sideTintColor: BRAND_GREEN,
+    sideTintOpacity: 0.03,
     sideTintSide: "left",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.11,
+  }),
 
-  team: {
-    kind: "spec",
-    accent: "mixed",
-    colors: ["#0A0F10", "#0C1212", "#0E1414"],
-    topTintColor: "#0B2555",
-    topTintOpacity: 0.05,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.02,
+  team: spec("mixed", ["#050505", "#08100B", "#151208"], {
+    topTintColor: BRAND_GREEN,
+    topTintOpacity: 0.06,
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.03,
     sideTintSide: "both",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.11,
+  }),
 
-  trips: {
-    kind: "spec",
-    accent: "mixed",
-    colors: ["#0A0F11", "#0B1114", "#0C1216"],
-    topTintColor: "#0B2555",
-    topTintOpacity: 0.06,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.02,
+  trips: spec("mixed", ["#050505", "#08100B", "#151208"], {
+    topTintColor: BRAND_GREEN,
+    topTintOpacity: 0.065,
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.028,
     sideTintSide: "left",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.11,
+  }),
 
-  trip: {
-    kind: "spec",
-    accent: "mixed",
-    colors: ["#0A0F11", "#0B1114", "#0C1216"],
-    topTintColor: "#0B2555",
-    topTintOpacity: 0.06,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.02,
+  trip: spec("mixed", ["#050505", "#08100B", "#151208"], {
+    topTintColor: BRAND_GREEN,
+    topTintOpacity: 0.065,
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.028,
     sideTintSide: "left",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.11,
+  }),
 
-  wallet: {
-    kind: "spec",
-    accent: "neutral",
-    colors: ["#0B0E0F", "#0D1011", "#101314"],
-    topTintColor: "#F2C94C",
-    topTintOpacity: 0.025,
-    sideTintColor: "#0B2555",
-    sideTintOpacity: 0.02,
+  wallet: spec("gold", ["#050505", "#0E0C07", "#171308"], {
+    topTintColor: BRAND_GOLD,
+    topTintOpacity: 0.07,
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.026,
+    sideTintSide: "right",
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.11,
+  }),
+
+  profile: spec("neutral", ["#050505", "#0A0D0B", "#111412"], {
+    topTintColor: BRAND_GREEN,
+    topTintOpacity: 0.03,
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.018,
     sideTintSide: "right",
     bottomShadeOpacity: 0.18,
     vignetteOpacity: 0.1,
-  },
+  }),
 
-  profile: {
-    kind: "spec",
-    accent: "neutral",
-    colors: ["#0B0D0D", "#0D1010", "#101313"],
-    topTintColor: "#57A238",
-    topTintOpacity: 0.02,
-    sideTintColor: "#0B2555",
-    sideTintOpacity: 0.015,
-    sideTintSide: "right",
-    bottomShadeOpacity: 0.16,
-    vignetteOpacity: 0.09,
-  },
-
-  landing: {
-    kind: "spec",
-    accent: "green",
-    colors: ["#0A0F0D", "#0C1210", "#0E1412"],
-    topTintColor: "#57A238",
-    topTintOpacity: 0.05,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.03,
+  landing: spec("green", ["#050505", "#08100B", "#0D1811"], {
+    topTintColor: BRAND_GREEN,
+    topTintOpacity: 0.09,
+    sideTintColor: BRAND_GREEN,
+    sideTintOpacity: 0.04,
     sideTintSide: "left",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.12,
+  }),
 
-  "landing-hero": {
-    kind: "spec",
-    accent: "green",
-    colors: ["#0A0F0D", "#0C1210", "#0E1412"],
-    topTintColor: "#57A238",
-    topTintOpacity: 0.05,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.03,
-    sideTintSide: "left",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
-
-  "onboarding-1": {
-    kind: "spec",
-    accent: "green",
-    colors: ["#0A0F0D", "#0C1210", "#0E1412"],
-    topTintColor: "#57A238",
-    topTintOpacity: 0.05,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.03,
-    sideTintSide: "left",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
-
-  "onboarding-2": {
-    kind: "spec",
-    accent: "mixed",
-    colors: ["#0A0F11", "#0C1113", "#0D1314"],
-    topTintColor: "#0B2555",
-    topTintOpacity: 0.06,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.025,
-    sideTintSide: "right",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
-
-  "onboarding-3": {
-    kind: "spec",
-    accent: "blue",
-    colors: ["#091018", "#0A1119", "#0B1219"],
-    topTintColor: "#0B2555",
+  "landing-hero": spec("mixed", ["#050505", "#08100B", "#151208"], {
+    topTintColor: BRAND_GREEN,
     topTintOpacity: 0.085,
-    sideTintColor: "#0B2555",
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.035,
+    sideTintSide: "right",
+    bottomShadeOpacity: 0.22,
+    vignetteOpacity: 0.13,
+  }),
+
+  "onboarding-1": spec("green", ["#050505", "#08100B", "#0D1811"], {
+    topTintColor: BRAND_GREEN,
+    topTintOpacity: 0.08,
+    sideTintColor: BRAND_GREEN,
+    sideTintOpacity: 0.035,
+    sideTintSide: "left",
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.11,
+  }),
+
+  "onboarding-2": spec("mixed", ["#050505", "#08100B", "#151208"], {
+    topTintColor: BRAND_GOLD,
+    topTintOpacity: 0.075,
+    sideTintColor: BRAND_GREEN,
+    sideTintOpacity: 0.03,
+    sideTintSide: "right",
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.11,
+  }),
+
+  "onboarding-3": spec("gold", ["#050505", "#111008", "#171308"], {
+    topTintColor: BRAND_GOLD,
+    topTintOpacity: 0.09,
+    sideTintColor: BRAND_GOLD,
     sideTintOpacity: 0.045,
     sideTintSide: "right",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
+    bottomShadeOpacity: 0.21,
+    vignetteOpacity: 0.12,
+  }),
 
-  "onboarding-4": {
-    kind: "spec",
-    accent: "mixed",
-    colors: ["#0A0F11", "#0B1114", "#0C1216"],
-    topTintColor: "#0B2555",
+  "onboarding-4": spec("mixed", ["#050505", "#08100B", "#151208"], {
+    topTintColor: BRAND_GREEN,
     topTintOpacity: 0.06,
-    sideTintColor: "#57A238",
-    sideTintOpacity: 0.02,
-    sideTintSide: "left",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
-
-  paywall: {
-    kind: "spec",
-    accent: "green",
-    colors: ["#0A0F0D", "#0C1210", "#0E1412"],
-    topTintColor: "#57A238",
-    topTintOpacity: 0.05,
-    sideTintColor: "#57A238",
+    sideTintColor: BRAND_GOLD,
     sideTintOpacity: 0.03,
     sideTintSide: "left",
-    bottomShadeOpacity: 0.18,
-    vignetteOpacity: 0.1,
-  },
+    bottomShadeOpacity: 0.2,
+    vignetteOpacity: 0.11,
+  }),
+
+  paywall: spec("gold", ["#050505", "#111008", "#171308"], {
+    topTintColor: BRAND_GOLD,
+    topTintOpacity: 0.09,
+    sideTintColor: BRAND_GOLD,
+    sideTintOpacity: 0.04,
+    sideTintSide: "left",
+    bottomShadeOpacity: 0.22,
+    vignetteOpacity: 0.12,
+  }),
 
   city: u("photo-1499856871958-5b9627545d1a"),
 };
@@ -283,10 +252,15 @@ export function getBackgroundSource(
   return src;
 }
 
+/**
+ * Controlled city fallback.
+ * Do not use random featured search URLs — they are unstable and often irrelevant.
+ * This fallback is deterministic and city-focused.
+ */
 function unsplashCityFallback(cityKey: string) {
   const q = cityKey.replace(/-/g, " ").trim();
-  return `https://source.unsplash.com/featured/1800x3200/?${encodeURIComponent(
-    `${q} skyline night city`
+  return `https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&w=1800&h=3200&fm=jpg&q=82&city=${encodeURIComponent(
+    q
   )}`;
 }
 
