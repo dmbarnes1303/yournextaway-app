@@ -25,30 +25,30 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function estimatedLabel(value: string | null, suffix?: string) {
+function toEstimatedChip(value: string | null, suffix?: string) {
   if (!value) return null;
   const stripped = value.replace(/^From\s+/i, "");
-  return suffix ? `Est. ${stripped} ${suffix}` : `Est. ${stripped}`;
+  return suffix ? `Estimated ${stripped} ${suffix}` : `Estimated ${stripped}`;
 }
 
 function confidenceCopy(confidence: "low" | "medium" | "high") {
   if (confidence === "high") {
     return {
       short: "High confidence",
-      foot: "Estimate based on strong fixture detail",
+      foot: "Estimated using strong fixture, league and venue detail.",
     };
   }
 
   if (confidence === "medium") {
     return {
       short: "Medium confidence",
-      foot: "Estimate based on partial fixture detail",
+      foot: "Estimated using solid fixture detail with some assumptions.",
     };
   }
 
   return {
     short: "Early estimate",
-    foot: "Estimate based on limited fixture detail",
+    foot: "Estimated using limited fixture detail. Live partner prices may differ.",
   };
 }
 
@@ -66,7 +66,7 @@ function confidenceTextTone(confidence: "low" | "medium" | "high") {
 
 function formatLeagueLine(row?: FixtureListRow) {
   const league = clean(row?.league?.name);
-  const country = clean((row?.league as any)?.country);
+  const country = clean((row?.league as { country?: string } | undefined)?.country);
 
   if (league && country) return `${league} • ${country}`;
   return league || country || null;
@@ -83,13 +83,13 @@ function routeAngleLabel(
   if (subtitle) return subtitle;
 
   if (variant === "trending") {
-    if (pricing.tripEstimate) return "Big-interest football trip with strong travel pull";
-    if (pricing.ticketEstimate) return "High-interest fixture with usable ticket guidance";
-    return "Big-occasion football trip worth opening now";
+    if (pricing.tripEstimate) return "High-interest fixture with estimated trip cost guidance";
+    if (pricing.ticketEstimate) return "High-interest fixture with estimated ticket guidance";
+    return "High-interest football route worth checking now";
   }
 
-  if (pricing.tripEstimate) return "Trip-ready route with estimated cost guidance";
-  if (pricing.ticketEstimate) return "Live route with early ticket cost guidance";
+  if (pricing.tripEstimate) return "Live fixture route with estimated trip cost guidance";
+  if (pricing.ticketEstimate) return "Live fixture route with estimated ticket guidance";
   return "Live discovery route worth checking now";
 }
 
@@ -99,7 +99,7 @@ function ctaLabel(variant: Variant) {
 
 function topRightLabel(variant: Variant, tripEstimate: string | null) {
   if (tripEstimate) return tripEstimate;
-  return variant === "trending" ? "Open trip" : "Live route";
+  return variant === "trending" ? "Estimated trip" : "Live route";
 }
 
 function imageHeight(variant: Variant) {
@@ -123,12 +123,15 @@ export default function DiscoverFixtureCard({
     return row ? estimateFixturePricing(row) : null;
   }, [row]);
 
-  const tripEstimate = pricing?.tripLabel ? estimatedLabel(pricing.tripLabel, "trip") : null;
-  const ticketEstimate = pricing?.ticketLabel ? estimatedLabel(pricing.ticketLabel, "ticket") : null;
+  const tripEstimate = pricing?.tripLabel ? toEstimatedChip(pricing.tripLabel, "trip") : null;
+  const ticketEstimate = pricing?.ticketLabel
+    ? toEstimatedChip(pricing.ticketLabel, "ticket")
+    : null;
+
   const confidence = pricing?.confidence ?? "low";
   const confidenceUi = confidenceCopy(confidence);
-
   const leagueLine = formatLeagueLine(row);
+
   const routeAngle = routeAngleLabel(variant, subtitle, {
     tripEstimate,
     ticketEstimate,
@@ -223,7 +226,7 @@ export default function DiscoverFixtureCard({
           ) : null}
 
           <View style={styles.footerRow}>
-            <Text style={styles.estimateNote} numberOfLines={2}>
+            <Text style={styles.estimateNote} numberOfLines={3}>
               {pricing ? confidenceUi.foot : "Live discovery route"}
             </Text>
 
@@ -323,7 +326,7 @@ const styles = StyleSheet.create({
   },
 
   heroPricePill: {
-    maxWidth: 150,
+    maxWidth: 176,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -374,13 +377,13 @@ const styles = StyleSheet.create({
   liveBody: {
     padding: 14,
     gap: 6,
-    minHeight: 168,
+    minHeight: 174,
   },
 
   trendingBody: {
     padding: 14,
     gap: 7,
-    minHeight: 182,
+    minHeight: 188,
   },
 
   liveTitle: {
