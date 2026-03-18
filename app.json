@@ -4,13 +4,13 @@
     "slug": "yournextaway",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/natively-dark.png",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "scheme": "yournextaway",
 
+    "icon": "./assets/images/final_quest_240x240.png",
+    "userInterfaceStyle": "dark",
+
     "splash": {
-      "image": "./assets/images/natively-dark.png",
+      "image": "./assets/images/final_quest_240x240.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
@@ -26,7 +26,7 @@
     "android": {
       "package": "com.diabloaquila.yournextaway",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/natively-dark.png",
+        "foregroundImage": "./assets/images/final_quest_240x240.png",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true
