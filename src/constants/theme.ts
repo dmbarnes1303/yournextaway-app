@@ -1,107 +1,188 @@
 // src/constants/theme.ts
 
 /**
- * YourNextAway Theme (V2 — Premium Sporty Dark, 2026)
+ * YourNextAway Theme (V3 — Emerald / Gold Premium Travel Sport, 2026)
  *
  * Design system rules:
- * - Dark theme only
- * - Strict spacing, radius, and type scales
- * - Surfaces are matte; blur/glass is for overlays only
- * - Backgrounds should feel premium and restrained, never illustrative
+ * - Dark-first product shell
+ * - Premium football-travel identity aligned to the new logo
+ * - Emerald is the primary action colour
+ * - Gold is the premium / highlight / occasion colour
+ * - Blue is removed from the core brand system
+ * - Surfaces should feel rich, sharp and controlled — not generic glass
+ * - Matte dark foundations, with selective glow and badge accents
  */
 
 export const theme = {
   colors: {
-    // ---------------------------
-    // Core surfaces (V2)
-    // ---------------------------
-    bgBase: "#0A0D0E",
-    bgSurface: "#151917",
-    bgElevated: "#1B201D",
-    bgPressed: "#232926",
+    // ------------------------------------------------------------------
+    // Core backgrounds
+    // ------------------------------------------------------------------
+    bgBase: "#050505",
+    bgSurface: "#0B0F14",
+    bgElevated: "#11161C",
+    bgPressed: "#171D24",
+
+    // Section / branded dark tints
+    bgBrandDeep: "#07110B",
+    bgBrandElevated: "#0D1811",
+    bgGoldDeep: "#171308",
 
     // Overlays
-    overlay: "rgba(8,10,11,0.72)",
-    overlayStrong: "rgba(6,8,9,0.84)",
-    overlayLight: "rgba(10,12,13,0.56)",
+    overlay: "rgba(5,7,8,0.72)",
+    overlayStrong: "rgba(4,5,6,0.84)",
+    overlayLight: "rgba(9,11,12,0.56)",
 
-    // ---------------------------
-    // Text (V2)
-    // ---------------------------
-    textPrimary: "#E7ECE7",
-    textSecondary: "#A3ADA3",
-    textMuted: "#6B736B",
+    // ------------------------------------------------------------------
+    // Text
+    // ------------------------------------------------------------------
+    textPrimary: "#F5F7F6",
+    textSecondary: "#B7C0B8",
+    textMuted: "#7C867D",
+    textOnBrand: "#041008",
+    textOnGold: "#171308",
 
-    // ---------------------------
-    // Brand (V2)
-    // ---------------------------
-    accentGreen: "#57A238",
-    accentBlue: "#0B2555",
-    accentGold: "#F2C94C",
+    // ------------------------------------------------------------------
+    // Brand
+    // ------------------------------------------------------------------
+    accentGreen: "#22C55E",
+    accentGreenStrong: "#16A34A",
+    accentGreenSoft: "#86EFAC",
 
-    // Branded dark tints for premium backgrounds
-    tintGreenDeep: "#102116",
-    tintGreenSoft: "#183021",
-    tintBlueDeep: "#0A1831",
-    tintBlueSoft: "#102545",
-    tintNeutralDeep: "#111515",
-    tintNeutralSoft: "#1A1F1D",
+    accentGold: "#FACC15",
+    accentGoldStrong: "#EAB308",
+    accentGoldSoft: "#FDE68A",
 
-    // ---------------------------
-    // Semantic status (V2)
-    // ---------------------------
-    success: "#57A238",
-    info: "#0B2555",
-    warning: "#F2C94C",
-    error: "#D64545",
+    accentNeutral: "#D9E1DA",
 
-    // ---------------------------
-    // Lines
-    // ---------------------------
-    borderSubtle: "rgba(231,236,231,0.06)",
-    dividerSubtle: "rgba(231,236,231,0.06)",
+    // Branded tints
+    tintGreenDeep: "#0B1D12",
+    tintGreenSoft: "#153222",
+    tintGoldDeep: "#221A07",
+    tintGoldSoft: "#3A2C0B",
+    tintNeutralDeep: "#0F1311",
+    tintNeutralSoft: "#1A211C",
 
-    // ---------------------------
+    // ------------------------------------------------------------------
+    // Semantic
+    // ------------------------------------------------------------------
+    success: "#22C55E",
+    info: "#38BDF8",
+    warning: "#FACC15",
+    error: "#E05252",
+
+    // ------------------------------------------------------------------
+    // Borders / dividers
+    // ------------------------------------------------------------------
+    borderSubtle: "rgba(245,247,246,0.08)",
+    borderStrong: "rgba(245,247,246,0.14)",
+    dividerSubtle: "rgba(245,247,246,0.07)",
+
+    borderGreenSoft: "rgba(34,197,94,0.22)",
+    borderGreenStrong: "rgba(34,197,94,0.38)",
+    borderGoldSoft: "rgba(250,204,21,0.22)",
+    borderGoldStrong: "rgba(250,204,21,0.36)",
+
+    glowGreen: "rgba(34,197,94,0.16)",
+    glowGold: "rgba(250,204,21,0.16)",
+
+    // ------------------------------------------------------------------
     // Backwards-compatible aliases
-    // ---------------------------
-    background: "#0A0D0E",
-    backgroundSecondary: "#151917",
+    // ------------------------------------------------------------------
+    background: "#050505",
+    backgroundSecondary: "#0B0F14",
 
-    text: "#E7ECE7",
-    textTertiary: "#6B736B",
+    text: "#F5F7F6",
+    textTertiary: "#7C867D",
 
-    primary: "#57A238",
-    primaryDark: "rgba(87,162,56,0.78)",
-    primaryLight: "rgba(87,162,56,0.95)",
+    primary: "#22C55E",
+    primaryDark: "rgba(34,197,94,0.78)",
+    primaryLight: "rgba(134,239,172,0.96)",
 
-    accent: "#0B2555",
+    accent: "#FACC15",
 
-    border: "rgba(231,236,231,0.06)",
-    divider: "rgba(231,236,231,0.06)",
+    border: "rgba(245,247,246,0.08)",
+    divider: "rgba(245,247,246,0.07)",
   },
 
   /**
    * Legacy "glass" tokens.
-   * Keep these for backwards compatibility.
-   * The visual goal is restrained matte translucency, not flashy blur.
+   * Keep these for backwards compatibility while screens are migrated.
+   * Target feel: controlled matte translucency, not washed-out blur.
    */
   glass: {
-    border: "rgba(231,236,231,0.10)",
+    border: "rgba(245,247,246,0.10)",
     iosBg: {
-      subtle: "rgba(255,255,255,0.04)",
-      default: "rgba(255,255,255,0.055)",
-      strong: "rgba(255,255,255,0.075)",
+      subtle: "rgba(255,255,255,0.035)",
+      default: "rgba(255,255,255,0.05)",
+      strong: "rgba(255,255,255,0.07)",
     },
     androidBg: {
       subtle: "rgba(0,0,0,0.18)",
-      default: "rgba(0,0,0,0.22)",
-      strong: "rgba(0,0,0,0.26)",
+      default: "rgba(0,0,0,0.24)",
+      strong: "rgba(0,0,0,0.3)",
     },
   },
 
-  // ---------------------------
-  // Strict layout scales (V2)
-  // ---------------------------
+  /**
+   * New badge / surface tokens for the updated visual system.
+   */
+  surfaces: {
+    card: "#0B0F14",
+    cardElevated: "#11161C",
+    cardPressed: "#171D24",
+    cardBrand: "#0D1811",
+    cardGold: "#171308",
+  },
+
+  gradients: {
+    green: ["#16A34A", "#22C55E", "#86EFAC"] as const,
+    gold: ["#CA8A04", "#EAB308", "#FACC15"] as const,
+    dark: ["#050505", "#0B0F14", "#11161C"] as const,
+    brand: ["#07110B", "#0D1811", "#11161C"] as const,
+  },
+
+  badge: {
+    bgGreen: "rgba(34,197,94,0.12)",
+    bgGold: "rgba(250,204,21,0.12)",
+    bgNeutral: "rgba(255,255,255,0.05)",
+
+    borderGreen: "rgba(34,197,94,0.26)",
+    borderGold: "rgba(250,204,21,0.28)",
+    borderNeutral: "rgba(255,255,255,0.10)",
+
+    textGreen: "#86EFAC",
+    textGold: "#FDE68A",
+    textNeutral: "#D6DDD7",
+  },
+
+  shadow: {
+    greenGlow: {
+      shadowColor: "#22C55E",
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 8,
+    },
+    goldGlow: {
+      shadowColor: "#FACC15",
+      shadowOpacity: 0.16,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 8,
+    },
+    soft: {
+      shadowColor: "#000000",
+      shadowOpacity: 0.24,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 6,
+    },
+  },
+
+  // ------------------------------------------------------------------
+  // Strict layout scales
+  // ------------------------------------------------------------------
   spacing: {
     xxs: 4,
     xs: 8,
@@ -118,6 +199,7 @@ export const theme = {
     input: 14,
     card: 18,
     sheet: 24,
+    badge: 12,
     pill: 9999,
 
     // Backwards-compatible keys
