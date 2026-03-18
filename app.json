@@ -5,16 +5,13 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "yournextaway",
-
-    "icon": "./assets/images/final_quest_240x240.png",
+    "icon": "./assets/images/yna-app-icon.png",
     "userInterfaceStyle": "dark",
-
     "splash": {
-      "image": "./assets/images/final_quest_240x240.png",
+      "image": "./assets/images/yna-app-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#07120F"
     },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.diabloaquila.yournextaway",
@@ -22,36 +19,30 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
-
     "android": {
       "package": "com.diabloaquila.yournextaway",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/final_quest_240x240.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/images/yna-app-icon.png",
+        "backgroundColor": "#07120F"
       },
       "edgeToEdgeEnabled": true
     },
-
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/images/final_quest_240x240.png"
+      "favicon": "./assets/images/yna-app-icon.png"
     },
-
     "plugins": [
       "expo-font",
       "expo-router",
       "expo-web-browser",
       "@react-native-community/datetimepicker"
     ],
-
     "experiments": {
       "typedRoutes": true
     },
-
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-
     "runtimeVersion": {
       "policy": "appVersion"
     }
