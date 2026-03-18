@@ -44,6 +44,13 @@ function hexToRgba(hex: string, opacity: number) {
   return `rgba(${r},${g},${b},${opacity})`;
 }
 
+function accentGlowColor(spec: BackgroundSpec) {
+  if (spec.accent === "green") return theme.colors.accentGreen;
+  if (spec.accent === "gold") return theme.colors.accentGold;
+  if (spec.accent === "mixed") return theme.colors.accentGreen;
+  return theme.colors.textPrimary;
+}
+
 function BrandSpecSurface({
   spec,
   children,
@@ -60,6 +67,7 @@ function BrandSpecSurface({
 
   const showLeft = spec.sideTintSide === "left" || spec.sideTintSide === "both";
   const showRight = spec.sideTintSide === "right" || spec.sideTintSide === "both";
+  const glow = accentGlowColor(spec);
 
   return (
     <View style={styles.root}>
@@ -114,11 +122,27 @@ function BrandSpecSurface({
 
         <LinearGradient
           pointerEvents="none"
-          colors={["rgba(255,255,255,0.012)", "rgba(255,255,255,0)"]}
-          locations={[0, 1]}
+          colors={[
+            "rgba(255,255,255,0.014)",
+            "rgba(255,255,255,0.004)",
+            "rgba(255,255,255,0)",
+          ]}
+          locations={[0, 0.4, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.softHighlight}
+        />
+
+        <LinearGradient
+          pointerEvents="none"
+          colors={[
+            hexToRgba(glow, spec.accent === "neutral" ? 0.015 : 0.03),
+            "rgba(0,0,0,0)",
+          ]}
+          locations={[0, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.brandGlow}
         />
 
         <LinearGradient
@@ -130,10 +154,7 @@ function BrandSpecSurface({
           style={styles.bottomShade}
         />
 
-        <View
-          pointerEvents="none"
-          style={[styles.vignette, { opacity: vignetteOpacity }]}
-        />
+        <View pointerEvents="none" style={[styles.vignette, { opacity: vignetteOpacity }]} />
 
         {overlayOpacity > 0 ? (
           <View
@@ -157,8 +178,8 @@ export default function Background({
   imageUrl = null,
   overlayOpacity = 0,
   topShadeOpacity = 0.34,
-  bottomShadeOpacity = 0.5,
-  centerShadeOpacity = 0.04,
+  bottomShadeOpacity = 0.56,
+  centerShadeOpacity = 0.06,
 }: Props) {
   const resolved = useMemo<
     | { mode: "spec"; spec: BackgroundSpec }
@@ -211,10 +232,10 @@ export default function Background({
           pointerEvents="none"
           colors={[
             `rgba(0,0,0,${topShadeOpacity})`,
-            "rgba(0,0,0,0.10)",
+            "rgba(0,0,0,0.14)",
             "rgba(0,0,0,0.00)",
           ]}
-          locations={[0, 0.42, 1]}
+          locations={[0, 0.4, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.imageTopShade}
@@ -235,12 +256,27 @@ export default function Background({
 
         <LinearGradient
           pointerEvents="none"
+          colors={[
+            "rgba(255,255,255,0.016)",
+            "rgba(255,255,255,0.004)",
+            "rgba(255,255,255,0.00)",
+          ]}
+          locations={[0, 0.25, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={styles.imageHighlight}
+        />
+
+        <LinearGradient
+          pointerEvents="none"
           colors={["rgba(0,0,0,0.02)", `rgba(0,0,0,${bottomShadeOpacity})`]}
           locations={[0, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
           style={styles.bottomShade}
         />
+
+        <View pointerEvents="none" style={[styles.vignette, styles.imageVignette]} />
 
         {overlayOpacity > 0 ? (
           <View
@@ -308,6 +344,14 @@ const styles = StyleSheet.create({
     height: "14%",
   },
 
+  brandGlow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "18%",
+  },
+
   vignette: {
     ...StyleSheet.absoluteFillObject,
     borderLeftWidth: 10,
@@ -318,6 +362,10 @@ const styles = StyleSheet.create({
     borderRightColor: "rgba(0,0,0,0.18)",
     borderTopColor: "rgba(0,0,0,0.08)",
     borderBottomColor: "rgba(0,0,0,0.24)",
+  },
+
+  imageVignette: {
+    opacity: 0.85,
   },
 
   bottomShade: {
@@ -333,7 +381,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: "38%",
+    height: "40%",
   },
 
   imageCenterShade: {
@@ -342,5 +390,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+  },
+
+  imageHighlight: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "16%",
   },
 });
