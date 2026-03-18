@@ -1,6 +1,5 @@
-// src/services/walletAttachments.ts
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { Linking, Platform } from "react-native";
 
@@ -8,6 +7,31 @@ import type { WalletAttachment, WalletAttachmentKind } from "@/src/core/savedIte
 
 const BASE_DIR = FileSystem.documentDirectory ?? "";
 const DIR = `${BASE_DIR}yna_wallet_attachments/`;
+
+type PickerParsed =
+  | { canceled: true }
+  | {
+      canceled: false;
+      uri: string;
+      name?: string;
+      mimeType?: string;
+      size?: number;
+    };
+
+type PickerLike = {
+  canceled?: unknown;
+  type?: unknown;
+  assets?: Array<{
+    uri?: unknown;
+    name?: unknown;
+    mimeType?: unknown;
+    size?: unknown;
+  }>;
+  uri?: unknown;
+  name?: unknown;
+  mimeType?: unknown;
+  size?: unknown;
+};
 
 function now() {
   return Date.now();
@@ -17,8 +41,8 @@ function id(prefix = "att") {
   return `${prefix}_${now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-function cleanString(v: unknown) {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+function cleanString(value: unknown) {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
 function sanitizeFilePart(value: unknown) {
@@ -46,47 +70,42 @@ async function ensureDir() {
 }
 
 function inferKind(name?: string, mimeType?: string): WalletAttachmentKind {
-  const n = String(name ?? "").toLowerCase();
-  const m = String(mimeType ?? "").toLowerCase();
+  const fileName = String(name ?? "").toLowerCase();
+  const type = String(mimeType ?? "").toLowerCase();
 
-  if (m.includes("pdf") || n.endsWith(".pdf")) return "pdf";
-  if (m.startsWith("image/") || /\.(png|jpg|jpeg|webp|heic)$/i.test(n)) return "image";
+  if (type.includes("pdf") || fileName.endsWith(".pdf")) return "pdf";
+  if (type.startsWith("image/") || /\.(png|jpg|jpeg|webp|heic)$/i.test(fileName)) {
+    return "image";
+  }
+
   return "file";
 }
 
 function safeExt(name?: string, mimeType?: string): string {
-  const n = String(name ?? "").trim();
-  const dot = n.lastIndexOf(".");
-  if (dot > -1 && dot < n.length - 1) return n.slice(dot);
+  const fileName = String(name ?? "").trim();
+  const dot = fileName.lastIndexOf(".");
+  if (dot > -1 && dot < fileName.length - 1) return fileName.slice(dot);
 
-  const m = String(mimeType ?? "").toLowerCase();
-  if (m.includes("pdf")) return ".pdf";
-  if (m.includes("png")) return ".png";
-  if (m.includes("jpeg") || m.includes("jpg")) return ".jpg";
-  if (m.includes("webp")) return ".webp";
-  if (m.includes("heic")) return ".heic";
+  const type = String(mimeType ?? "").toLowerCase();
+  if (type.includes("pdf")) return ".pdf";
+  if (type.includes("png")) return ".png";
+  if (type.includes("jpeg") || type.includes("jpg")) return ".jpg";
+  if (type.includes("webp")) return ".webp";
+  if (type.includes("heic")) return ".heic";
   return "";
 }
 
-type PickerParsed =
-  | { canceled: true }
-  | {
-      canceled: false;
-      uri: string;
-      name?: string;
-      mimeType?: string;
-      size?: number;
-    };
+function normalizePickerResult(result: unknown): PickerParsed {
+  const value = result as PickerLike;
 
-function normalizePickerResult(res: any): PickerParsed {
   const canceled =
-    res?.canceled === true ||
-    String(res?.type ?? "").toLowerCase() === "cancel" ||
-    String(res?.type ?? "").toLowerCase() === "canceled";
+    value?.canceled === true ||
+    String(value?.type ?? "").toLowerCase() === "cancel" ||
+    String(value?.type ?? "").toLowerCase() === "canceled";
 
   if (canceled) return { canceled: true };
 
-  const asset = Array.isArray(res?.assets) ? res.assets[0] : res;
+  const asset = Array.isArray(value?.assets) ? value.assets[0] : value;
   const uri = cleanString(asset?.uri);
   if (!uri) throw new Error("No file selected");
 
@@ -95,7 +114,7 @@ function normalizePickerResult(res: any): PickerParsed {
     uri,
     name: typeof asset?.name === "string" ? asset.name : undefined,
     mimeType: typeof asset?.mimeType === "string" ? asset.mimeType : undefined,
-    size: Number.isFinite(Number(asset?.size)) ? Number(asset.size) : undefined,
+    size: Number.isFinite(Number(asset?.size)) ? Number(asset?.size) : undefined,
   };
 }
 
@@ -107,7 +126,7 @@ function buildStoredFilename(itemId?: string, name?: string, mimeType?: string) 
 
 export function isAppOwnedAttachmentUri(uri: string): boolean {
   const raw = cleanString(uri);
-  return !!raw && !!DIR && raw.startsWith(DIR);
+  return Boolean(raw && DIR && raw.startsWith(DIR));
 }
 
 export async function attachmentExists(att: Pick<WalletAttachment, "uri">): Promise<boolean> {
@@ -116,7 +135,7 @@ export async function attachmentExists(att: Pick<WalletAttachment, "uri">): Prom
 
   try {
     const info = await FileSystem.getInfoAsync(uri);
-    return !!info.exists;
+    return Boolean(info.exists);
   } catch {
     return false;
   }
@@ -125,21 +144,21 @@ export async function attachmentExists(att: Pick<WalletAttachment, "uri">): Prom
 export async function pickAndStoreAttachmentForItem(itemId: string): Promise<WalletAttachment> {
   await ensureDir();
 
-  const res = await DocumentPicker.getDocumentAsync({
+  const result = await DocumentPicker.getDocumentAsync({
     copyToCacheDirectory: true,
     multiple: false,
     type: "*/*",
   });
 
-  const parsed = normalizePickerResult(res as any);
+  const parsed = normalizePickerResult(result);
   if (parsed.canceled) throw new Error("cancelled");
 
   const kind = inferKind(parsed.name, parsed.mimeType);
   const storedName = buildStoredFilename(itemId, parsed.name, parsed.mimeType);
-  const dest = `${DIR}${storedName}`;
+  const destination = `${DIR}${storedName}`;
 
   try {
-    await FileSystem.copyAsync({ from: parsed.uri, to: dest });
+    await FileSystem.copyAsync({ from: parsed.uri, to: destination });
 
     return {
       id: id("att"),
@@ -147,7 +166,7 @@ export async function pickAndStoreAttachmentForItem(itemId: string): Promise<Wal
       name: parsed.name,
       mimeType: parsed.mimeType,
       size: parsed.size,
-      uri: dest,
+      uri: destination,
       createdAt: now(),
     };
   } catch {
@@ -176,8 +195,12 @@ async function openNativeUri(uri: string) {
     try {
       const fileUri = raw.startsWith("file://") ? raw : `file://${raw}`;
       const contentUri = await FileSystem.getContentUriAsync(fileUri);
-      const can = await Linking.canOpenURL(contentUri);
-      if (!can) throw new Error("Cannot open content URI");
+      const canOpen = await Linking.canOpenURL(contentUri);
+
+      if (!canOpen) {
+        throw new Error("Cannot open content URI");
+      }
+
       await Linking.openURL(contentUri);
       return;
     } catch {
@@ -186,12 +209,16 @@ async function openNativeUri(uri: string) {
   }
 
   const url =
-    raw.startsWith("file://") || raw.startsWith("content://") || raw.startsWith("http://") || raw.startsWith("https://")
+    raw.startsWith("file://") ||
+    raw.startsWith("content://") ||
+    raw.startsWith("http://") ||
+    raw.startsWith("https://")
       ? raw
       : `file://${raw}`;
 
-  const can = await Linking.canOpenURL(url);
-  if (!can) throw new Error("Cannot open attachment");
+  const canOpen = await Linking.canOpenURL(url);
+  if (!canOpen) throw new Error("Cannot open attachment");
+
   await Linking.openURL(url);
 }
 
@@ -205,7 +232,7 @@ export async function openAttachment(att: WalletAttachment) {
       await Sharing.shareAsync(uri, {
         mimeType: att.mimeType,
         UTI: att.kind === "pdf" ? "com.adobe.pdf" : undefined,
-      } as any);
+      });
       return;
     }
   } catch {
