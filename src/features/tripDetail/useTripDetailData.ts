@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import type { SavedItem } from "@/src/core/savedItemTypes";
 import type {
   AffiliateUrls,
   GuidanceArea,
@@ -372,10 +372,9 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     return ids.map((x) => String(x).trim()).filter(isNumericId);
   }, [trip?.matchIds]);
 
-  const primaryMatchId = useMemo(
-    () => pickPrimaryMatchId(trip, numericMatchIds),
-    [trip, numericMatchIds]
-  );
+  const primaryMatchId = useMemo(() => {
+    return pickPrimaryMatchId(trip, numericMatchIds);
+  }, [trip, numericMatchIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -418,47 +417,41 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     };
   }, [numericMatchIds]);
 
-  const primaryFixture = useMemo(
-    () => (primaryMatchId ? fixturesById[String(primaryMatchId)] ?? null : null),
-    [primaryMatchId, fixturesById]
-  );
+  const primaryFixture = useMemo(() => {
+    return primaryMatchId ? fixturesById[String(primaryMatchId)] ?? null : null;
+  }, [primaryMatchId, fixturesById]);
 
-  const cityName = useMemo(() => getTripCity(trip, primaryFixture), [trip, primaryFixture]);
+  const cityName = useMemo(() => {
+    return getTripCity(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  const primaryLeagueId = useMemo(
-    () => getPrimaryLeagueId(trip, primaryFixture),
-    [trip, primaryFixture]
-  );
+  const primaryLeagueId = useMemo(() => {
+    return getPrimaryLeagueId(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  const affiliateUrls = useMemo(
-    () =>
-      buildAffiliateUrls({
-        trip,
-        cityName,
-        originIata,
-      }),
-    [trip, cityName, originIata]
-  );
+  const affiliateUrls = useMemo(() => {
+    return buildAffiliateUrls({
+      trip,
+      cityName,
+      originIata,
+    });
+  }, [trip, cityName, originIata]);
 
-  const primaryHomeName = useMemo(
-    () => getPrimaryHomeName(trip, primaryFixture),
-    [trip, primaryFixture]
-  );
+  const primaryHomeName = useMemo(() => {
+    return getPrimaryHomeName(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  const primaryLeagueName = useMemo(
-    () => getPrimaryLeagueName(trip, primaryFixture),
-    [trip, primaryFixture]
-  );
+  const primaryLeagueName = useMemo(() => {
+    return getPrimaryLeagueName(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  const primaryKickoffIso = useMemo(
-    () => getPrimaryKickoffIso(trip, primaryFixture),
-    [trip, primaryFixture]
-  );
+  const primaryKickoffIso = useMemo(() => {
+    return getPrimaryKickoffIso(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  const kickoffMeta = useMemo(
-    () => formatKickoffMeta(primaryFixture, trip),
-    [primaryFixture, trip]
-  );
+  const kickoffMeta = useMemo(() => {
+    return formatKickoffMeta(primaryFixture, trip);
+  }, [primaryFixture, trip]);
 
   const primaryLogistics = useMemo(() => {
     if (!primaryHomeName) return null;
@@ -469,45 +462,38 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     });
   }, [primaryHomeName, primaryLeagueName]);
 
-  const primaryLogisticsSnippet = useMemo(
-    () => (primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : ""),
-    [primaryLogistics]
-  );
+  const primaryLogisticsSnippet = useMemo(() => {
+    return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
+  }, [primaryLogistics]);
 
-  const stadiumName = useMemo(
-    () => clean((primaryLogistics as any)?.stadium),
-    [primaryLogistics]
-  );
+  const stadiumName = useMemo(() => {
+    return clean((primaryLogistics as any)?.stadium);
+  }, [primaryLogistics]);
 
-  const stadiumCity = useMemo(
-    () => clean((primaryLogistics as any)?.city ?? cityName),
-    [primaryLogistics, cityName]
-  );
+  const stadiumCity = useMemo(() => {
+    return clean((primaryLogistics as any)?.city ?? cityName);
+  }, [primaryLogistics, cityName]);
 
   const stadiumMapsUrl = useMemo(() => {
     const query = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
     return buildMapsSearchUrl(query);
   }, [stadiumName, stadiumCity]);
 
-  const stayBestAreas = useMemo(
-    () => normalizeAreas((primaryLogistics as any)?.stay?.bestAreas),
-    [primaryLogistics]
-  );
+  const stayBestAreas = useMemo(() => {
+    return normalizeAreas((primaryLogistics as any)?.stay?.bestAreas);
+  }, [primaryLogistics]);
 
-  const stayBudgetAreas = useMemo(
-    () => normalizeAreas((primaryLogistics as any)?.stay?.budgetAreas),
-    [primaryLogistics]
-  );
+  const stayBudgetAreas = useMemo(() => {
+    return normalizeAreas((primaryLogistics as any)?.stay?.budgetAreas);
+  }, [primaryLogistics]);
 
-  const transportStops = useMemo(
-    () => normalizeTransportStops((primaryLogistics as any)?.transport?.primaryStops),
-    [primaryLogistics]
-  );
+  const transportStops = useMemo(() => {
+    return normalizeTransportStops((primaryLogistics as any)?.transport?.primaryStops);
+  }, [primaryLogistics]);
 
-  const transportTips = useMemo(
-    () => normalizeTips((primaryLogistics as any)?.transport?.tips),
-    [primaryLogistics]
-  );
+  const transportTips = useMemo(() => {
+    return normalizeTips((primaryLogistics as any)?.transport?.tips);
+  }, [primaryLogistics]);
 
   const lateTransportNote = useMemo(() => {
     const explicit = clean((primaryLogistics as any)?.transport?.lateNightNote);
@@ -555,54 +541,44 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     };
   }, [rankedTrip]);
 
-  const ticketsByMatchId = useMemo(
-    () =>
-      buildTicketsByMatchId({
-        numericMatchIds,
-        savedItems,
-      }),
-    [numericMatchIds, savedItems]
-  );
+  const ticketsByMatchId = useMemo(() => {
+    return buildTicketsByMatchId({
+      numericMatchIds,
+      savedItems,
+    });
+  }, [numericMatchIds, savedItems]);
 
-  const primaryTicketItem = useMemo(
-    () => (primaryMatchId ? ticketsByMatchId[String(primaryMatchId)] ?? null : null),
-    [primaryMatchId, ticketsByMatchId]
-  );
+  const primaryTicketItem = useMemo(() => {
+    return primaryMatchId ? ticketsByMatchId[String(primaryMatchId)] ?? null : null;
+  }, [primaryMatchId, ticketsByMatchId]);
 
-  const bookingPriceBoard = useMemo(
-    () => buildBookingPriceBoard(savedItems),
-    [savedItems]
-  );
+  const bookingPriceBoard = useMemo(() => {
+    return buildBookingPriceBoard(savedItems);
+  }, [savedItems]);
 
-  const ticketsPriceFrom = useMemo(
-    () => priceLine(bookingPriceBoard.tickets),
-    [bookingPriceBoard.tickets]
-  );
+  const ticketsPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.tickets);
+  }, [bookingPriceBoard.tickets]);
 
-  const flightsPriceFrom = useMemo(
-    () => priceLine(bookingPriceBoard.flights),
-    [bookingPriceBoard.flights]
-  );
+  const flightsPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.flights);
+  }, [bookingPriceBoard.flights]);
 
-  const hotelsPriceFrom = useMemo(
-    () => priceLine(bookingPriceBoard.hotels),
-    [bookingPriceBoard.hotels]
-  );
+  const hotelsPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.hotels);
+  }, [bookingPriceBoard.hotels]);
 
-  const transfersPriceFrom = useMemo(
-    () => priceLine(bookingPriceBoard.transfers),
-    [bookingPriceBoard.transfers]
-  );
+  const transfersPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.transfers);
+  }, [bookingPriceBoard.transfers]);
 
-  const experiencesPriceFrom = useMemo(
-    () => priceLine(bookingPriceBoard.experiences),
-    [bookingPriceBoard.experiences]
-  );
+  const experiencesPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.experiences);
+  }, [bookingPriceBoard.experiences]);
 
-  const tripPriceFrom = useMemo(
-    () => priceLine(bookingPriceBoard.tripTotal),
-    [bookingPriceBoard.tripTotal]
-  );
+  const tripPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.tripTotal);
+  }, [bookingPriceBoard.tripTotal]);
 
   const progress = useMemo(() => {
     if (!activeTripId) {
@@ -616,17 +592,16 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     }
 
     return getTripProgress(activeTripId);
-  }, [activeTripId, savedItems]);
+  }, [activeTripId]);
 
   const readiness = useMemo(() => {
     if (!activeTripId) return { score: 0, missing: [] as string[] };
     return getTripHealth(activeTripId);
-  }, [activeTripId, savedItems]);
+  }, [activeTripId]);
 
-  const dateIsoForPrimaryMatch = useMemo(
-    () => trip?.startDate || getIsoDateOnly(primaryKickoffIso),
-    [trip?.startDate, primaryKickoffIso]
-  );
+  const dateIsoForPrimaryMatch = useMemo(() => {
+    return trip?.startDate || getIsoDateOnly(primaryKickoffIso);
+  }, [trip?.startDate, primaryKickoffIso]);
 
   return {
     fixturesById,
@@ -665,4 +640,4 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     readiness,
     dateIsoForPrimaryMatch,
   };
-    }
+}
