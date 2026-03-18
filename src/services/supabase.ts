@@ -1,23 +1,40 @@
-// src/services/supabase.ts
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-console.log("SUPABASE URL", process.env.EXPO_PUBLIC_SUPABASE_URL);
+function getEnv(name: string): string | null {
+  const value = process.env[name];
+  if (typeof value !== "string") return null;
 
-import { createClient } from "@supabase/supabase-js";
-
-function mustEnv(name: string) {
-  const v = (process.env as any)?.[name];
-  if (!v) throw new Error(`Missing env var: ${name}`);
-  return String(v);
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-export const supabase = createClient(
-  mustEnv("EXPO_PUBLIC_SUPABASE_URL"),
-  mustEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY"),
-  {
+const supabaseUrl = getEnv("EXPO_PUBLIC_SUPABASE_URL");
+const supabaseAnonKey = getEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY");
+
+let supabaseInstance: SupabaseClient | null = null;
+
+if (supabaseUrl && supabaseAnonKey) {
+  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: false,
     },
+  });
+}
+
+export const supabase = supabaseInstance;
+
+export function isSupabaseConfigured(): boolean {
+  return Boolean(supabaseInstance);
+}
+
+export function getSupabaseClient(): SupabaseClient {
+  if (!supabaseInstance) {
+    throw new Error(
+      "Supabase is not configured. Missing EXPO_PUBLIC_SUPABASE_URL and/or EXPO_PUBLIC_SUPABASE_ANON_KEY."
+    );
   }
-);
+
+  return supabaseInstance;
+}
