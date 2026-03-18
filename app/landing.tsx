@@ -9,7 +9,7 @@ import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
 import { getBackgroundSource } from "@/src/constants/backgrounds";
 
-const LOGO = require("@/src/yna-logo.png");
+const LOGO = require("@/src/YNAlogo.png");
 
 // Remote (fixed) image.unsplash.com URL (RN-safe, stable).
 // If this ever fails, we fallback to your local landing background.
