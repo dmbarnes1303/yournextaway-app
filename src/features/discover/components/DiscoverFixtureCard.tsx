@@ -28,27 +28,27 @@ function clean(value: unknown): string {
 function toEstimatedChip(value: string | null, suffix?: string) {
   if (!value) return null;
   const stripped = value.replace(/^From\s+/i, "");
-  return suffix ? `Estimated ${stripped} ${suffix}` : `Estimated ${stripped}`;
+  return suffix ? `Estimated only • ${stripped} ${suffix}` : `Estimated only • ${stripped}`;
 }
 
 function confidenceCopy(confidence: "low" | "medium" | "high") {
   if (confidence === "high") {
     return {
       short: "High confidence",
-      foot: "Estimated using strong fixture, league and venue detail.",
+      foot: "Estimated only. Based on strong fixture, league and venue detail.",
     };
   }
 
   if (confidence === "medium") {
     return {
       short: "Medium confidence",
-      foot: "Estimated using solid fixture detail with some assumptions.",
+      foot: "Estimated only. Based on solid fixture detail with some assumptions.",
     };
   }
 
   return {
     short: "Early estimate",
-    foot: "Estimated using limited fixture detail. Live partner prices may differ.",
+    foot: "Estimated only. Based on limited fixture detail. Live partner prices may differ.",
   };
 }
 
@@ -83,13 +83,15 @@ function routeAngleLabel(
   if (subtitle) return subtitle;
 
   if (variant === "trending") {
-    if (pricing.tripEstimate) return "High-interest fixture with estimated trip cost guidance";
-    if (pricing.ticketEstimate) return "High-interest fixture with estimated ticket guidance";
+    if (pricing.tripEstimate) return "High-interest fixture with estimated-only trip cost guidance";
+    if (pricing.ticketEstimate) {
+      return "High-interest fixture with estimated-only ticket guidance";
+    }
     return "High-interest football route worth checking now";
   }
 
-  if (pricing.tripEstimate) return "Live fixture route with estimated trip cost guidance";
-  if (pricing.ticketEstimate) return "Live fixture route with estimated ticket guidance";
+  if (pricing.tripEstimate) return "Live fixture route with estimated-only trip cost guidance";
+  if (pricing.ticketEstimate) return "Live fixture route with estimated-only ticket guidance";
   return "Live discovery route worth checking now";
 }
 
@@ -99,7 +101,7 @@ function ctaLabel(variant: Variant) {
 
 function topRightLabel(variant: Variant, tripEstimate: string | null) {
   if (tripEstimate) return tripEstimate;
-  return variant === "trending" ? "Estimated trip" : "Live route";
+  return variant === "trending" ? "Estimated only" : "Live route";
 }
 
 function imageHeight(variant: Variant) {
@@ -326,7 +328,7 @@ const styles = StyleSheet.create({
   },
 
   heroPricePill: {
-    maxWidth: 176,
+    maxWidth: 188,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -377,13 +379,13 @@ const styles = StyleSheet.create({
   liveBody: {
     padding: 14,
     gap: 6,
-    minHeight: 174,
+    minHeight: 176,
   },
 
   trendingBody: {
     padding: 14,
     gap: 7,
-    minHeight: 188,
+    minHeight: 190,
   },
 
   liveTitle: {
