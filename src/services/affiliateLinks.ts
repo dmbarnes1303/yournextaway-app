@@ -21,6 +21,7 @@ export type BuiltAffiliateLinks = {
   experiencesUrl: string | null;
   transportUrl: string | null;
   insuranceUrl: string | null;
+  claimsUrl: string | null;
   mapsUrl: string | null;
 };
 
@@ -210,10 +211,7 @@ function buildOmioUrl(args: {
   startDate: string | null;
   endDate: string | null;
 }): string | null {
-  const base =
-    safeTrackedUrl((AffiliateConfig as any).omioTracked) ??
-    safeTrackedUrl("https://omio.sjv.io/KBjDon");
-
+  const base = safeTrackedUrl(AffiliateConfig.omioTracked);
   if (!base) return null;
 
   const city = clean(args.city);
@@ -228,17 +226,16 @@ function buildOmioUrl(args: {
   });
 }
 
-function buildSafetyWingUrl(args: {
-  startDate: string | null;
-  endDate: string | null;
-}): string | null {
-  const base = safeTrackedUrl((AffiliateConfig as any).safetywingTracked);
-  if (!base) return null;
+function buildTrackedOnlyUrl(value: unknown): string | null {
+  return safeTrackedUrl(value);
+}
 
-  return appendQuery(base, {
-    startDate: args.startDate,
-    endDate: args.endDate,
-  });
+function buildClaimsUrl(): string | null {
+  return (
+    buildTrackedOnlyUrl(AffiliateConfig.airhelpTracked) ??
+    buildTrackedOnlyUrl(AffiliateConfig.compensairTracked) ??
+    null
+  );
 }
 
 /**
@@ -284,10 +281,8 @@ export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffilia
       startDate,
       endDate,
     }),
-    insuranceUrl: buildSafetyWingUrl({
-      startDate,
-      endDate,
-    }),
+    insuranceUrl: buildTrackedOnlyUrl(AffiliateConfig.ektaTracked),
+    claimsUrl: buildClaimsUrl(),
     mapsUrl: googleMapsSearchUrl(cityName),
   };
-}
+    }
