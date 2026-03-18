@@ -198,7 +198,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
 
-  const LOGO = useMemo(() => require("@/src/yna-logo.png"), []);
+  const LOGO = useMemo(() => require("@/src/YNAlogo.png"), []);
   const displayName = useMemo(() => "Guest traveller", []);
   const email = useMemo(() => "Not signed in", []);
 
