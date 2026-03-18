@@ -1,4 +1,4 @@
-import * as rawIataCitiesModule from "@/src/data/iataCities";
+import * as rawIataCitiesModule from "@/src/data/iataCityCodes";
 
 // Defensive IATA city index builder.
 // MUST NEVER throw during import (Metro loads it globally).
