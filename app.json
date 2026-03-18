@@ -5,10 +5,10 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "yournextaway",
-    "icon": "./assets/images/yna-app-icon.png",
+    "icon": "./assets/images/YNAlogo.png",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/images/yna-app-icon.png",
+      "image": "./assets/images/YNAlogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#07120F"
     },
@@ -22,14 +22,14 @@
     "android": {
       "package": "com.diabloaquila.yournextaway",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/yna-app-icon.png",
+        "foregroundImage": "./assets/images/YNAlogo.png",
         "backgroundColor": "#07120F"
       },
       "edgeToEdgeEnabled": true
     },
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/images/yna-app-icon.png"
+      "favicon": "./assets/images/YNAlogo.png"
     },
     "plugins": [
       "expo-font",
