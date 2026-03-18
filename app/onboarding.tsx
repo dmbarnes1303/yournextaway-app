@@ -8,7 +8,7 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
 
-const LOGO = require("@/src/yna-logo.png");
+const LOGO = require("@/src/YNAlogo.png");
 
 // Local fallbacks (never fails)
 const FALLBACK_1 = require("@/src/assets/backgrounds/onboarding-1.png");
