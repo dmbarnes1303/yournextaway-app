@@ -1,5 +1,4 @@
-// src/services/walletApi.ts
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
 type WalletListItem = {
@@ -34,11 +33,16 @@ type WalletUploadResponse = {
   meta: WalletUploadMeta;
 };
 
-const BASE =
-  process.env.EXPO_PUBLIC_WALLET_API_BASE?.replace(/\/+$/, "") ||
-  "https://yna-email.db-17c.workers.dev";
+const rawBase = process.env.EXPO_PUBLIC_WALLET_API_BASE;
+const rawApiKey = process.env.EXPO_PUBLIC_WALLET_API_KEY;
 
-const API_KEY = process.env.EXPO_PUBLIC_WALLET_API_KEY || "";
+const BASE =
+  typeof rawBase === "string" && rawBase.trim().length > 0
+    ? rawBase.replace(/\/+$/, "")
+    : "https://yna-email.db-17c.workers.dev";
+
+const API_KEY =
+  typeof rawApiKey === "string" && rawApiKey.trim().length > 0 ? rawApiKey : "";
 
 function assertConfigured() {
   if (!BASE) throw new Error("Wallet API base URL missing");
@@ -48,23 +52,26 @@ function assertConfigured() {
 function withAuthHeaders(extra?: Record<string, string>) {
   return {
     "x-api-key": API_KEY,
-    ...(extra || {}),
+    ...(extra ?? {}),
   };
 }
 
 function buildUrl(path: string, params?: Record<string, string | number | undefined | null>) {
   const url = new URL(BASE + path);
+
   if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v === undefined || v === null || v === "") continue;
-      url.searchParams.set(k, String(v));
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null || value === "") continue;
+      url.searchParams.set(key, String(value));
     }
   }
+
   return url.toString();
 }
 
-async function safeJson(res: Response) {
+async function safeJson(res: Response): Promise<unknown> {
   const text = await res.text();
+
   try {
     return JSON.parse(text);
   } catch {
@@ -82,6 +89,7 @@ export async function walletList(opts?: {
   cursor?: string | null;
 }): Promise<WalletListResponse> {
   assertConfigured();
+
   const url = buildUrl("/wallet/list", {
     prefix: opts?.prefix || "wallet/",
     limit: opts?.limit ?? 200,
@@ -93,8 +101,9 @@ export async function walletList(opts?: {
     headers: withAuthHeaders(),
   });
 
-  const data = await safeJson(res);
-  if (!res.ok) throw new Error(data?.error || `Wallet list failed (${res.status})`);
+  const data = await safeJson(res) as { error?: string } & Partial<WalletListResponse>;
+  if (!res.ok) throw new Error(data.error || `Wallet list failed (${res.status})`);
+
   return data as WalletListResponse;
 }
 
@@ -118,7 +127,7 @@ export async function walletUpload(opts: {
     uri: opts.fileUri,
     name: opts.filename,
     type: opts.mimeType,
-  } as any);
+  } as unknown as Blob);
 
   if (opts.userId) form.append("userId", opts.userId);
   if (opts.tripId) form.append("tripId", opts.tripId);
@@ -131,14 +140,15 @@ export async function walletUpload(opts: {
     body: form,
   });
 
-  const data = await safeJson(res);
-  if (!res.ok) throw new Error(data?.error || `Wallet upload failed (${res.status})`);
+  const data = await safeJson(res) as { error?: string } & Partial<WalletUploadResponse>;
+  if (!res.ok) throw new Error(data.error || `Wallet upload failed (${res.status})`);
+
   return data as WalletUploadResponse;
 }
 
 /**
  * DOWNLOAD (auth required)
- * Uses FileSystem.downloadAsync with headers (reliable, no base64, no btoa).
+ * Uses FileSystem.downloadAsync with headers.
  */
 export async function walletDownloadToCache(opts: {
   key: string;
@@ -151,15 +161,20 @@ export async function walletDownloadToCache(opts: {
     decodeURIComponent(opts.key.split("/").pop() || "wallet-file");
 
   const safeName = sanitizeFilename(filename);
-  const localUri = `${FileSystem.cacheDirectory}${safeName}`;
+  const cacheDirectory = FileSystem.cacheDirectory;
 
+  if (!cacheDirectory) {
+    throw new Error("Wallet cache directory unavailable");
+  }
+
+  const localUri = `${cacheDirectory}${safeName}`;
   const url = buildUrl("/wallet/file", { key: opts.key });
 
   const result = await FileSystem.downloadAsync(url, localUri, {
     headers: withAuthHeaders(),
   });
 
-  if (result?.status && result.status >= 400) {
+  if (result.status >= 400) {
     throw new Error(`Wallet download failed (${result.status})`);
   }
 
@@ -185,7 +200,9 @@ export async function walletOpenOrShare(opts: { key: string }) {
  * DELETE
  * DELETE /wallet/file?key=...
  */
-export async function walletDelete(opts: { key: string }): Promise<{ ok: boolean; deleted: string }> {
+export async function walletDelete(opts: {
+  key: string;
+}): Promise<{ ok: boolean; deleted: string }> {
   assertConfigured();
 
   const url = buildUrl("/wallet/file", { key: opts.key });
@@ -194,8 +211,9 @@ export async function walletDelete(opts: { key: string }): Promise<{ ok: boolean
     headers: withAuthHeaders(),
   });
 
-  const data = await safeJson(res);
-  if (!res.ok) throw new Error(data?.error || `Wallet delete failed (${res.status})`);
+  const data = await safeJson(res) as { error?: string; ok?: boolean; deleted?: string };
+  if (!res.ok) throw new Error(data.error || `Wallet delete failed (${res.status})`);
+
   return data as { ok: boolean; deleted: string };
 }
 
@@ -205,8 +223,8 @@ export async function walletDelete(opts: { key: string }): Promise<{ ok: boolean
 export function walletPrefixForTrip(opts: { userId: string; tripId: string; category?: string }) {
   const user = safeSegment(opts.userId || "anon");
   const trip = safeSegment(opts.tripId || "general");
-  const cat = safeSegment(opts.category || "");
-  return cat ? `wallet/${user}/${trip}/${cat}/` : `wallet/${user}/${trip}/`;
+  const category = safeSegment(opts.category || "");
+  return category ? `wallet/${user}/${trip}/${category}/` : `wallet/${user}/${trip}/`;
 }
 
 export function walletPrefixForUser(opts: { userId: string }) {
@@ -214,12 +232,8 @@ export function walletPrefixForUser(opts: { userId: string }) {
   return `wallet/${user}/`;
 }
 
-// -----------------------
-// Small utilities
-// -----------------------
-
-function safeSegment(s: string) {
-  return (s || "")
+function safeSegment(value: string) {
+  return (value || "")
     .toString()
     .trim()
     .replace(/[/\\?%*:|"<>]/g, "-")
