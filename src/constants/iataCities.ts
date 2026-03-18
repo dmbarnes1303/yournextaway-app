@@ -1,42 +1,47 @@
-// src/constants/iataCities.ts
+import * as rawIataCitiesModule from "@/src/data/iataCities";
+
 // Defensive IATA city index builder.
 // MUST NEVER throw during import (Metro loads it globally).
 
 export type IataCity = {
-  iata: string;            // e.g. "ROM"
-  city: string;            // e.g. "Rome"
-  country?: string;        // e.g. "Italy"
-  countryCode?: string;    // e.g. "IT"
+  iata: string;
+  city: string;
+  country?: string;
+  countryCode?: string;
   lat?: number;
   lon?: number;
   timezone?: string;
   aliases?: string[];
 };
 
-function safeStr(v: any) {
+function safeStr(v: unknown) {
   return String(v ?? "").trim();
 }
 
-function normKey(v: any) {
+function normKey(v: unknown) {
   return safeStr(v).toLowerCase();
 }
 
-function toNumberOrUndef(v: any): number | undefined {
+function toNumberOrUndef(v: unknown): number | undefined {
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 }
 
-function loadRawDataset(): any {
+function loadRawDataset(): unknown {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require("@/src/data/iataCities");
-    return mod?.default ?? mod?.IATA_CITIES ?? mod?.cities ?? mod;
+    const mod = rawIataCitiesModule as {
+      default?: unknown;
+      IATA_CITIES?: unknown;
+      cities?: unknown;
+    };
+
+    return mod.default ?? mod.IATA_CITIES ?? mod.cities ?? mod;
   } catch {
     return null;
   }
 }
 
-export function normalizeIataCity(raw: any): IataCity | null {
+export function normalizeIataCity(raw: unknown): IataCity | null {
   if (!raw) return null;
 
   if (Array.isArray(raw)) {
@@ -44,22 +49,35 @@ export function normalizeIataCity(raw: any): IataCity | null {
     const city = safeStr(raw[1]);
     const country = safeStr(raw[2]);
     const countryCode = safeStr(raw[3]);
+
     if (!iata || !city) return null;
-    return { iata, city, country: country || undefined, countryCode: countryCode || undefined };
+
+    return {
+      iata,
+      city,
+      country: country || undefined,
+      countryCode: countryCode || undefined,
+    };
   }
 
-  const iata = safeStr(raw.iata ?? raw.code ?? raw.IATA ?? raw.airportCode);
-  const city = safeStr(raw.city ?? raw.name ?? raw.cityName);
-  const country = safeStr(raw.country ?? raw.countryName);
-  const countryCode = safeStr(raw.countryCode ?? raw.iso2 ?? raw.iso);
+  if (typeof raw !== "object") return null;
+
+  const value = raw as Record<string, unknown>;
+
+  const iata = safeStr(value.iata ?? value.code ?? value.IATA ?? value.airportCode);
+  const city = safeStr(value.city ?? value.name ?? value.cityName);
+  const country = safeStr(value.country ?? value.countryName);
+  const countryCode = safeStr(value.countryCode ?? value.iso2 ?? value.iso);
 
   if (!iata || !city) return null;
 
-  const lat = toNumberOrUndef(raw.lat ?? raw.latitude);
-  const lon = toNumberOrUndef(raw.lon ?? raw.lng ?? raw.longitude);
-  const timezone = safeStr(raw.timezone);
+  const lat = toNumberOrUndef(value.lat ?? value.latitude);
+  const lon = toNumberOrUndef(value.lon ?? value.lng ?? value.longitude);
+  const timezone = safeStr(value.timezone);
 
-  const aliases = Array.isArray(raw.aliases) ? raw.aliases.map(safeStr).filter(Boolean) : undefined;
+  const aliases = Array.isArray(value.aliases)
+    ? value.aliases.map(safeStr).filter(Boolean)
+    : undefined;
 
   return {
     iata,
@@ -73,101 +91,106 @@ export function normalizeIataCity(raw: any): IataCity | null {
   };
 }
 
-export function buildIndex(listInput: any): {
+export function buildIndex(listInput: unknown): {
   byCityKey: Record<string, IataCity>;
   byIata: Record<string, IataCity>;
   all: IataCity[];
 } {
+  const input = listInput as {
+    default?: unknown;
+    cities?: unknown;
+  } | null;
+
   const rawList = Array.isArray(listInput)
     ? listInput
-    : Array.isArray(listInput?.default)
-      ? listInput.default
-      : Array.isArray(listInput?.cities)
-        ? listInput.cities
+    : Array.isArray(input?.default)
+      ? input.default
+      : Array.isArray(input?.cities)
+        ? input.cities
         : [];
 
   const all: IataCity[] = [];
+
   for (const raw of rawList) {
-    const c = normalizeIataCity(raw);
-    if (c) all.push(c);
+    const city = normalizeIataCity(raw);
+    if (city) all.push(city);
   }
 
   const byCityKey: Record<string, IataCity> = {};
   const byIata: Record<string, IataCity> = {};
 
-  for (const c of all) {
-    const iataKey = normKey(c.iata);
-    if (iataKey && !byIata[iataKey]) byIata[iataKey] = c;
+  for (const city of all) {
+    const iataKey = normKey(city.iata);
+    if (iataKey && !byIata[iataKey]) byIata[iataKey] = city;
 
-    const cityKeyBase = normKey(c.city);
-    const cc = normKey(c.countryCode);
+    const cityKeyBase = normKey(city.city);
+    const cc = normKey(city.countryCode);
     const cityKey = cc ? `${cityKeyBase}-${cc}` : cityKeyBase;
 
-    if (cityKey && !byCityKey[cityKey]) byCityKey[cityKey] = c;
-    if (cityKeyBase && !byCityKey[cityKeyBase]) byCityKey[cityKeyBase] = c;
+    if (cityKey && !byCityKey[cityKey]) byCityKey[cityKey] = city;
+    if (cityKeyBase && !byCityKey[cityKeyBase]) byCityKey[cityKeyBase] = city;
 
-    const aliases = Array.isArray(c.aliases) ? c.aliases : [];
-    for (const a of aliases) {
-      const ak = normKey(a);
-      if (ak && !byCityKey[ak]) byCityKey[ak] = c;
+    const aliases = Array.isArray(city.aliases) ? city.aliases : [];
+    for (const alias of aliases) {
+      const aliasKey = normKey(alias);
+      if (aliasKey && !byCityKey[aliasKey]) byCityKey[aliasKey] = city;
     }
   }
 
   return { byCityKey, byIata, all };
 }
 
-// Build once at import, but safely.
 const RAW = loadRawDataset();
 const INDEX = buildIndex(RAW);
 
-// Public exports (existing + stable)
 export const IATA_CITIES: IataCity[] = INDEX.all;
 export const IATA_BY_CITYKEY: Record<string, IataCity> = INDEX.byCityKey;
 export const IATA_BY_CODE: Record<string, IataCity> = INDEX.byIata;
 
-// ---- Backwards-compatible API (THIS is what your affiliateLinks expects) ----
-
-/**
- * Given a city name like "Rome" or "London", return IATA city code like "ROM" / "LON".
- * Returns "" if unknown (never throws).
- */
 export function getIataCityCodeForCity(cityName: string): string {
   const key = normKey(cityName);
   if (!key) return "";
+
   const hit = IATA_BY_CITYKEY[key];
   return hit?.iata ? safeStr(hit.iata).toUpperCase() : "";
 }
 
-/**
- * Given a cityKey like "rome" or "rome-it", return IATA city code.
- * Returns "" if unknown (never throws).
- */
 export function getIataCityCodeForCityKey(cityKey: string): string {
   const key = normKey(cityKey);
   if (!key) return "";
+
   const hit = IATA_BY_CITYKEY[key];
   return hit?.iata ? safeStr(hit.iata).toUpperCase() : "";
 }
 
-// Optional helpers (fine to keep)
 export function getIataCityByCode(code: string): IataCity | null {
-  const k = normKey(code);
-  return k ? IATA_BY_CODE[k] ?? null : null;
+  const key = normKey(code);
+  return key ? IATA_BY_CODE[key] ?? null : null;
 }
 
 export function getIataCityByCityKey(cityKey: string): IataCity | null {
-  const k = normKey(cityKey);
-  return k ? IATA_BY_CITYKEY[k] ?? null : null;
+  const key = normKey(cityKey);
+  return key ? IATA_BY_CITYKEY[key] ?? null : null;
 }
 
 export function searchIataCities(query: string, limit = 20): IataCity[] {
   const q = normKey(query);
   if (!q) return [];
+
   const out: IataCity[] = [];
 
-  for (const c of IATA_CITIES) {
-    const hay = [c.city, c.iata, c.country ?? "", c.countryCode ?? "", ...(c.aliases ?? [])].map(normKey).join(" ");
-    if (hay.includes(q)) out.push(c);
+  for (const city of IATA_CITIES) {
+    const haystack = [
+      city.city,
+      city.iata,
+      city.country ?? "",
+      city.countryCode ?? "",
+      ...(city.aliases ?? []),
+    ]
+      .map(normKey)
+      .join(" ");
+
+    if (haystack.includes(q)) out.push(city);
     if (out.length >= limit) break;
   }
 
