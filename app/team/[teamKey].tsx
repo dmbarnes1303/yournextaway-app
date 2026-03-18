@@ -1,5 +1,5 @@
 // app/team/[teamKey].tsx
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import EmptyState from "@/src/components/EmptyState";
 
 import { theme } from "@/src/constants/theme";
 import { getBackground } from "@/src/constants/backgrounds";
+import { getRollingWindowIso } from "@/src/constants/football";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
@@ -28,7 +29,7 @@ import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import { getTeam, leagueForTeam, normalizeTeamKey } from "@/src/data/teams";
 import { getStadium, getStadiumByTeam, type StadiumRecord } from "@/src/data/stadiums";
 import { hasTeamGuide } from "@/src/data/teamGuides";
-import { getRollingWindowIso } from "@/src/constants/football";
+import * as TeamGuidesModule from "@/src/data/teamGuides";
 
 // Remote stadium backgrounds (V1). Use direct JPG/PNG URLs.
 const TEAM_BACKGROUNDS: Record<string, string> = {
@@ -42,15 +43,14 @@ const TEAM_BACKGROUNDS: Record<string, string> = {
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
   `https://media.api-sports.io/football/teams/${teamId}.png`;
 
-/* -------------------------------------------------------------------------- */
-/* Utils */
-/* -------------------------------------------------------------------------- */
+type GuideBlock = { heading?: string; text: string };
+type GuideFull = { title: string; blocks: GuideBlock[] };
 
-function safeStr(v: any) {
+function safeStr(v: unknown) {
   return String(v ?? "").trim();
 }
 
-function toIsoOrEmpty(v: any) {
+function toIsoOrEmpty(v: unknown) {
   return safeStr(v);
 }
 
@@ -77,11 +77,13 @@ function groupByMonth(rows: FixtureListRow[]) {
     const iso = safeStr(r?.fixture?.date);
     const title = monthHeading(iso) || "Other";
     if (!map.has(title)) map.set(title, []);
-    map.get(title)!.push(r);
+    map.get(title)?.push(r);
   }
 
   const out: { key: string; title: string; rows: FixtureListRow[] }[] = [];
-  for (const [key, list] of map.entries()) out.push({ key, title: key, rows: list });
+  for (const [key, list] of map.entries()) {
+    out.push({ key, title: key, rows: list });
+  }
 
   out.sort((a, b) => {
     const da = a.rows[0]?.fixture?.date ? new Date(a.rows[0].fixture.date).getTime() : 0;
@@ -116,9 +118,8 @@ function splitLinesToBullets(text: string) {
     .map((l) => l.trim())
     .filter(Boolean);
 
-  const looksBulleted =
-    lines.length >= 3 &&
-    lines.filter((l) => /^[-•]/.test(l) || /^\d+[.)]\s/.test(l)).length >= Math.ceil(lines.length * 0.6);
+  const bulletishCount = lines.filter((l) => /^[-•]/.test(l) || /^\d+[.)]\s/.test(l)).length;
+  const looksBulleted = lines.length >= 3 && bulletishCount >= Math.ceil(lines.length * 0.6);
 
   if (!looksBulleted) return { bullets: [] as string[], paragraph: raw };
 
@@ -157,10 +158,6 @@ function formatCapacity(capacity?: number) {
   if (typeof capacity !== "number" || !Number.isFinite(capacity)) return null;
   return capacity.toLocaleString("en-GB");
 }
-
-/* -------------------------------------------------------------------------- */
-/* Country → ISO2 resolver */
-/* -------------------------------------------------------------------------- */
 
 function countryToIso2(code?: string, name?: string): string | null {
   const c = safeStr(code).toUpperCase();
@@ -245,7 +242,92 @@ function countryToIso2(code?: string, name?: string): string | null {
   return nameMap[n] || null;
 }
 
-function FlagMini({ countryCode, countryName }: { countryCode?: string; countryName?: string }) {
+function joinParas(v: unknown): string {
+  if (Array.isArray(v)) {
+    return v.map((x) => safeStr(x)).filter(Boolean).join("\n\n");
+  }
+  return safeStr(v);
+}
+
+function getTeamGuideFull(teamKey: string): GuideFull | null {
+  const key = safeStr(teamKey);
+  if (!key) return null;
+
+  try {
+    const mod = TeamGuidesModule as Record<string, unknown>;
+
+    const getTeamGuideFn =
+      typeof mod.getTeamGuide === "function"
+        ? (mod.getTeamGuide as (teamKey: string) => any)
+        : typeof mod.getGuide === "function"
+          ? (mod.getGuide as (teamKey: string) => any)
+          : null;
+
+    if (!getTeamGuideFn) return null;
+
+    const guide = getTeamGuideFn(key);
+    if (!guide) return null;
+
+    const title =
+      safeStr(guide.title) || safeStr(guide.name) || safeStr(guide.teamName) || "Team guide";
+
+    const blocks: GuideBlock[] = [];
+
+    const overview =
+      safeStr(guide.overview) ||
+      safeStr(guide.intro) ||
+      safeStr(guide.description) ||
+      "";
+
+    if (overview) {
+      blocks.push({ heading: "Overview", text: overview });
+    }
+
+    if (Array.isArray(guide.sections) && guide.sections.length) {
+      for (const section of guide.sections) {
+        const heading =
+          safeStr(section?.title) ||
+          safeStr(section?.heading) ||
+          safeStr(section?.name) ||
+          "";
+
+        const text =
+          safeStr(section?.body) ||
+          safeStr(section?.content) ||
+          joinParas(section?.paragraphs) ||
+          safeStr(section?.text) ||
+          "";
+
+        if (text) {
+          blocks.push({ heading: heading || undefined, text });
+        }
+      }
+    }
+
+    if (!blocks.length) {
+      const anyText = safeStr(guide.content) || safeStr(guide.text) || "";
+      if (anyText) {
+        blocks.push({ heading: undefined, text: anyText });
+      }
+    }
+
+    if (!blocks.length) {
+      blocks.push({ heading: undefined, text: "Guide content is available for this team." });
+    }
+
+    return { title, blocks };
+  } catch {
+    return null;
+  }
+}
+
+function FlagMini({
+  countryCode,
+  countryName,
+}: {
+  countryCode?: string;
+  countryName?: string;
+}) {
   const iso2 = countryToIso2(countryCode, countryName);
   if (!iso2) return null;
 
@@ -255,86 +337,19 @@ function FlagMini({ countryCode, countryName }: { countryCode?: string; countryN
   return <Image source={{ uri: url }} style={styles.flagMini} resizeMode="cover" />;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Small UI */
-/* -------------------------------------------------------------------------- */
-
 function TeamCrestHero({ teamId }: { teamId?: number }) {
   if (typeof teamId !== "number") return null;
+
   return (
     <View style={styles.heroCrestWrap}>
-      <Image source={{ uri: API_SPORTS_TEAM_LOGO(teamId) }} style={styles.heroCrestImg} resizeMode="contain" />
+      <Image
+        source={{ uri: API_SPORTS_TEAM_LOGO(teamId) }}
+        style={styles.heroCrestImg}
+        resizeMode="contain"
+      />
     </View>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* Guide loader */
-/* -------------------------------------------------------------------------- */
-
-type GuideBlock = { heading?: string; text: string };
-type GuideFull = { title: string; blocks: GuideBlock[] };
-
-function joinParas(v: any): string {
-  if (Array.isArray(v)) return v.map((x) => safeStr(x)).filter(Boolean).join("\n\n");
-  return safeStr(v);
-}
-
-function getTeamGuideFull(teamKey: string): GuideFull | null {
-  const key = safeStr(teamKey);
-  if (!key) return null;
-
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod: any = require("@/src/data/teamGuides");
-
-    const getter =
-      typeof mod.getTeamGuide === "function"
-        ? mod.getTeamGuide
-        : typeof mod.getGuide === "function"
-          ? mod.getGuide
-          : null;
-
-    if (!getter) return null;
-
-    const guide = getter(key);
-    if (!guide) return null;
-
-    const title = safeStr(guide.title) || safeStr(guide.name) || safeStr(guide.teamName) || "Team guide";
-    const blocks: GuideBlock[] = [];
-
-    const overview = safeStr(guide.overview) || safeStr(guide.intro) || safeStr(guide.description) || "";
-    if (overview) blocks.push({ heading: "Overview", text: overview });
-
-    if (Array.isArray(guide.sections) && guide.sections.length) {
-      for (const s of guide.sections) {
-        const heading = safeStr(s?.title) || safeStr(s?.heading) || safeStr(s?.name) || "";
-        const text =
-          safeStr(s?.body) ||
-          safeStr(s?.content) ||
-          joinParas(s?.paragraphs) ||
-          safeStr(s?.text) ||
-          "";
-        if (text) blocks.push({ heading: heading || undefined, text });
-      }
-    }
-
-    if (!blocks.length) {
-      const anyText = safeStr(guide.content) || safeStr(guide.text) || "";
-      if (anyText) blocks.push({ heading: undefined, text: anyText });
-    }
-
-    if (!blocks.length) blocks.push({ heading: undefined, text: "Guide content is available for this team." });
-
-    return { title, blocks };
-  } catch {
-    return null;
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Guide Modal */
-/* -------------------------------------------------------------------------- */
 
 function GuideAccordionSection({
   heading,
@@ -417,11 +432,16 @@ function GuideModal({
   }, []);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
       <Background imageSource={backgroundSource} overlayOpacity={0.78}>
         <SafeAreaView style={styles.modalSafe} edges={["top", "bottom"]}>
           <View style={styles.modalTop}>
-            <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={styles.modalTopText}>
               <Text style={styles.modalKicker}>TEAM GUIDE</Text>
               <Text style={styles.modalTitle} numberOfLines={1}>
                 {title}
@@ -439,7 +459,11 @@ function GuideModal({
             </Pressable>
           </View>
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={styles.modalContent}
+            showsVerticalScrollIndicator={false}
+          >
             {!blocks.length ? (
               <GlassCard strength="default" style={styles.block} noPadding>
                 <View style={styles.blockInner}>
@@ -447,7 +471,7 @@ function GuideModal({
                 </View>
               </GlassCard>
             ) : (
-              <View style={{ gap: 12 }}>
+              <View style={styles.guideSectionsWrap}>
                 {blocks.map((b, idx) => {
                   const key = `${safeStr(b.heading) || "Guide"}-${idx}`;
                   return (
@@ -463,7 +487,7 @@ function GuideModal({
               </View>
             )}
 
-            <View style={{ height: 18 }} />
+            <View style={styles.modalSpacer} />
           </ScrollView>
         </SafeAreaView>
       </Background>
@@ -471,11 +495,13 @@ function GuideModal({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Fixture Row */
-/* -------------------------------------------------------------------------- */
-
-function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: () => void }) {
+function FixtureRow({
+  row,
+  onPressPlan,
+}: {
+  row: FixtureListRow;
+  onPressPlan: () => void;
+}) {
   const homeName = safeStr(row?.teams?.home?.name) || "Home";
   const awayName = safeStr(row?.teams?.away?.name) || "Away";
   const homeLogo = safeStr(row?.teams?.home?.logo);
@@ -489,7 +515,9 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
     <View style={styles.fxRow}>
       <View style={styles.matchLine}>
         <View style={styles.teamSideLeft}>
-          {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+          {homeLogo ? (
+            <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" />
+          ) : null}
           <Text style={styles.teamNameLeft} numberOfLines={2}>
             {homeName}
           </Text>
@@ -503,7 +531,9 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
           <Text style={styles.teamNameRight} numberOfLines={2}>
             {awayName}
           </Text>
-          {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+          {awayLogo ? (
+            <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" />
+          ) : null}
         </View>
       </View>
 
@@ -528,10 +558,6 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Stadium card */
-/* -------------------------------------------------------------------------- */
-
 function StadiumInfoCard({ stadium }: { stadium: StadiumRecord }) {
   const capacityText = formatCapacity(stadium.capacity);
   const airportLine =
@@ -545,7 +571,7 @@ function StadiumInfoCard({ stadium }: { stadium: StadiumRecord }) {
         <Text style={styles.blockTitle}>Stadium</Text>
 
         <View style={styles.stadiumTop}>
-          <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={styles.stadiumMain}>
             <Text style={styles.stadiumName}>{stadium.name}</Text>
             <Text style={styles.stadiumMeta}>
               {[stadium.city, stadium.country].filter(Boolean).join(" • ")}
@@ -610,10 +636,6 @@ function StadiumInfoCard({ stadium }: { stadium: StadiumRecord }) {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Screen */
-/* -------------------------------------------------------------------------- */
-
 export default function TeamScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -621,25 +643,28 @@ export default function TeamScreen() {
   const teamKeyParam = safeStr(params.teamKey);
   const teamKey = useMemo(() => normalizeTeamKey(teamKeyParam), [teamKeyParam]);
 
-  const rolling = useMemo(() => getRollingWindowIso(), []);
+  const rollingWindow = useMemo(() => getRollingWindowIso(), []);
   const fromParam = toIsoOrEmpty(params.from);
   const toParam = toIsoOrEmpty(params.to);
-  const from = fromParam || rolling.from;
-  const to = toParam || rolling.to;
+  const from = fromParam || rollingWindow.from;
+  const to = toParam || rollingWindow.to;
 
   const team = useMemo(() => getTeam(teamKey) ?? getTeam(teamKeyParam), [teamKey, teamKeyParam]);
   const league = useMemo(() => (team ? leagueForTeam(team) : null), [team]);
 
   const resolvedStadium = useMemo(() => {
     if (!team) return null;
+
     if (team.stadiumKey) {
       const direct = getStadium(team.stadiumKey);
       if (direct) return direct;
     }
+
     return getStadiumByTeam(team.teamKey);
   }, [team]);
 
   const bgUrl = useMemo(() => TEAM_BACKGROUNDS[team?.teamKey ?? teamKey] ?? "", [team, teamKey]);
+  const bgSource = useMemo(() => (bgUrl ? { uri: bgUrl } : getBackground("team")), [bgUrl]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -648,6 +673,7 @@ export default function TeamScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const cancelRef = useRef(false);
+
   useEffect(() => {
     cancelRef.current = false;
     return () => {
@@ -655,15 +681,48 @@ export default function TeamScreen() {
     };
   }, []);
 
-  const canShowGuide = useMemo(() => (team?.teamKey ? hasTeamGuide(team.teamKey) : false), [team]);
-
   const guideFull = useMemo(() => {
     if (!team?.teamKey) return null;
-    if (!canShowGuide) return null;
+    if (!hasTeamGuide(team.teamKey)) return null;
     return getTeamGuideFull(team.teamKey);
-  }, [team, canShowGuide]);
+  }, [team]);
 
-  const countryCode = safeStr((league as any)?.countryCode) || safeStr((team as any)?.countryCode) || "";
+  const guideBlocks = useMemo(() => guideFull?.blocks ?? [], [guideFull]);
+
+  const overview = useMemo(() => {
+    return (
+      guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text ||
+      guideBlocks[0]?.text ||
+      ""
+    );
+  }, [guideBlocks]);
+
+  const guidePreview = useMemo(() => {
+    return guideFull ? clampText(overview, 220) : "";
+  }, [guideFull, overview]);
+
+  const guideStats = useMemo(() => {
+    if (!guideFull) return "";
+
+    const sections = guideBlocks.length;
+    const hasHistory = guideBlocks.some((b) =>
+      safeStr(b.heading).toLowerCase().includes("history")
+    );
+    const hasTravel = guideBlocks.some((b) =>
+      safeStr(b.heading).toLowerCase().includes("travel")
+    );
+
+    const parts = [
+      sections ? `${sections} sections` : "",
+      hasTravel ? "practical travel" : "",
+      hasHistory ? "history" : "",
+    ].filter(Boolean);
+
+    return parts.join(" • ");
+  }, [guideFull, guideBlocks]);
+
+  const countryCode =
+    safeStr((league as any)?.countryCode) || safeStr((team as any)?.countryCode) || "";
   const countryName = safeStr((league as any)?.country) || safeStr((team as any)?.country) || "";
 
   const load = useCallback(async () => {
@@ -705,10 +764,13 @@ export default function TeamScreen() {
       });
 
       const dedup = new Map<string, FixtureListRow>();
+
       for (const r of filtered) {
         const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
         if (!id) continue;
-        if (!dedup.has(id)) dedup.set(id, r);
+        if (!dedup.has(id)) {
+          dedup.set(id, r);
+        }
       }
 
       const cleaned = Array.from(dedup.values()).sort((a, b) => {
@@ -722,7 +784,9 @@ export default function TeamScreen() {
       if (cancelRef.current) return;
       setError(e?.message ?? "Failed to load fixtures.");
     } finally {
-      if (!cancelRef.current) setLoading(false);
+      if (!cancelRef.current) {
+        setLoading(false);
+      }
     }
   }, [team, league, from, to]);
 
@@ -790,28 +854,6 @@ export default function TeamScreen() {
     [router, league, from, to]
   );
 
-  const bgSource = bgUrl ? ({ uri: bgUrl } as any) : getBackground("team");
-
-  const guideBlocks = guideFull?.blocks ?? [];
-  const overview =
-    guideBlocks.find((b) => safeStr(b.heading).toLowerCase() === "overview")?.text ||
-    guideBlocks[0]?.text ||
-    "";
-  const guidePreview = guideFull ? clampText(overview, 220) : "";
-
-  const guideStats = useMemo(() => {
-    if (!guideFull) return "";
-    const sections = guideBlocks.length;
-    const hasHistory = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("history"));
-    const hasTravel = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("travel"));
-    const parts = [
-      sections ? `${sections} sections` : "",
-      hasTravel ? "practical travel" : "",
-      hasHistory ? "history" : "",
-    ].filter(Boolean);
-    return parts.join(" • ");
-  }, [guideFull, guideBlocks]);
-
   return (
     <Background imageSource={bgSource} overlayOpacity={0.7}>
       <SafeAreaView style={styles.container} edges={["top"]}>
@@ -834,7 +876,7 @@ export default function TeamScreen() {
               <View style={styles.heroTitleRow}>
                 <TeamCrestHero teamId={team?.teamId} />
 
-                <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={styles.heroTextWrap}>
                   <View style={styles.heroNameRow}>
                     <Text style={styles.heroTitle} numberOfLines={2} ellipsizeMode="tail">
                       {title}
@@ -879,7 +921,7 @@ export default function TeamScreen() {
           <GlassCard strength="default" style={styles.block} noPadding>
             <View style={styles.blockInner}>
               <View style={styles.guideTopRow}>
-                <View style={{ flex: 1, minWidth: 0 }}>
+                <View style={styles.guideTextWrap}>
                   <Text style={styles.blockTitle}>Team guide</Text>
                   <Text style={styles.guideSub} numberOfLines={1}>
                     {guideFull
@@ -931,16 +973,22 @@ export default function TeamScreen() {
               ) : null}
 
               {!loading && !error && rows.length > 0 ? (
-                <View style={{ gap: 14 }}>
+                <View style={styles.groupedWrap}>
                   {grouped.map((g) => (
-                    <View key={g.key} style={{ gap: 10 }}>
+                    <View key={g.key} style={styles.monthGroup}>
                       <Text style={styles.month}>{g.title}</Text>
 
-                      <View style={{ gap: 12 }}>
+                      <View style={styles.fixtureList}>
                         {g.rows.map((r, idx) => {
                           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
                           const stableKey = id ? `fx-${id}` : `fx-${g.key}-${idx}`;
-                          return <FixtureRow key={stableKey} row={r} onPressPlan={() => goPlanTrip(r)} />;
+                          return (
+                            <FixtureRow
+                              key={stableKey}
+                              row={r}
+                              onPressPlan={() => goPlanTrip(r)}
+                            />
+                          );
                         })}
                       </View>
                     </View>
@@ -950,7 +998,7 @@ export default function TeamScreen() {
             </View>
           </GlassCard>
 
-          <View style={{ height: 14 }} />
+          <View style={styles.bottomSpacer} />
         </ScrollView>
 
         <GuideModal
@@ -965,19 +1013,28 @@ export default function TeamScreen() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Styles */
-/* -------------------------------------------------------------------------- */
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.xxl, gap: 14 },
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+    gap: 14,
+  },
 
-  pressed: { opacity: 0.94, transform: [{ scale: 0.995 }] },
+  pressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.995 }],
+  },
 
-  hero: { marginTop: theme.spacing.lg, borderRadius: 26 },
-  heroInner: { padding: theme.spacing.lg, gap: 10 },
+  hero: {
+    marginTop: theme.spacing.lg,
+    borderRadius: 26,
+  },
+  heroInner: {
+    padding: theme.spacing.lg,
+    gap: 10,
+  },
 
   kicker: {
     color: "rgba(79,224,138,0.70)",
@@ -986,7 +1043,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  heroTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  heroTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
 
   heroCrestWrap: {
     width: 64,
@@ -999,9 +1065,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  heroCrestImg: { width: 46, height: 46, opacity: 0.98 },
+  heroCrestImg: {
+    width: 46,
+    height: 46,
+    opacity: 0.98,
+  },
 
-  heroNameRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "nowrap" },
+  heroNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "nowrap",
+  },
   heroTitle: {
     flex: 1,
     minWidth: 0,
@@ -1011,14 +1086,38 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  heroMetaRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
+  heroMetaRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  heroMetaText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
 
-  flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
+  flagMini: {
+    width: 20,
+    height: 14,
+    borderRadius: 3,
+    opacity: 0.9,
+  },
 
-  heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
+  heroRange: {
+    color: theme.colors.textTertiary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    marginTop: 2,
+  },
 
-  heroActions: { flexDirection: "row", gap: 10, marginTop: 6 },
+  heroActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 6,
+  },
 
   btn: {
     flex: 1,
@@ -1030,17 +1129,50 @@ const styles = StyleSheet.create({
   },
   btnGhost: {
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
-  btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
+  btnGhostText: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
 
-  block: { borderRadius: 24 },
-  blockInner: { padding: 14, gap: 10 },
-  blockTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  blockNote: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+  block: {
+    borderRadius: 24,
+  },
+  blockInner: {
+    padding: 14,
+    gap: 10,
+  },
+  blockTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+  blockNote: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 19,
+  },
 
-  guideTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  guideSub: { marginTop: 4, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+  guideTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  guideTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  guideSub: {
+    marginTop: 4,
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   miniPrimaryPill: {
     paddingVertical: 10,
@@ -1048,15 +1180,24 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(79,224,138,0.26)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     overflow: "hidden",
   },
-  miniPrimaryPillText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
+  miniPrimaryPillText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
 
   stadiumTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
+  },
+  stadiumMain: {
+    flex: 1,
+    minWidth: 0,
   },
   stadiumName: {
     color: theme.colors.text,
@@ -1091,11 +1232,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
+
   infoPanel: {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
     paddingVertical: 12,
     paddingHorizontal: 12,
     gap: 6,
@@ -1113,26 +1256,73 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
-  muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
+  center: {
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 10,
+  },
+  muted: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
 
-  month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
+  groupedWrap: {
+    gap: 14,
+  },
+  monthGroup: {
+    gap: 10,
+  },
+  fixtureList: {
+    gap: 12,
+  },
+  month: {
+    color: theme.colors.textTertiary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
 
   fxRow: {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
     paddingVertical: 16,
     paddingHorizontal: 12,
     gap: 12,
   },
-  matchLine: { width: "100%", flexDirection: "row", alignItems: "center", gap: 10 },
+  matchLine: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
 
-  teamSideLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
-  teamSideRight: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
+  teamSideLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  teamSideRight: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
 
-  teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  teamNameLeft: {
+    flex: 1,
+    minWidth: 0,
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
   teamNameRight: {
     flex: 1,
     minWidth: 0,
@@ -1153,26 +1343,53 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  vsText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.black },
+  vsText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
 
-  smallCrestImg: { width: 18, height: 18, opacity: 0.95 },
+  smallCrestImg: {
+    width: 18,
+    height: 18,
+    opacity: 0.95,
+  },
 
-  fxMetaBlock: { gap: 4 },
-  fxMetaLine: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
+  fxMetaBlock: {
+    gap: 4,
+  },
+  fxMetaLine: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 16,
+  },
 
-  fxCtaRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center" },
+  fxCtaRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
   planBtn: {
     paddingVertical: 9,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(79,224,138,0.26)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     overflow: "hidden",
   },
-  planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
+  planBtnText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
 
-  modalSafe: { flex: 1, paddingHorizontal: theme.spacing.lg },
+  modalSafe: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.lg,
+  },
   modalTop: {
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.md,
@@ -1180,13 +1397,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  modalTopText: {
+    flex: 1,
+    minWidth: 0,
+  },
   modalKicker: {
     color: "rgba(79,224,138,0.70)",
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.5,
   },
-  modalTitle: { marginTop: 4, color: theme.colors.text, fontSize: 20, fontWeight: theme.fontWeight.black },
+  modalTitle: {
+    marginTop: 4,
+    color: theme.colors.text,
+    fontSize: 20,
+    fontWeight: theme.fontWeight.black,
+  },
   closePill: {
     borderRadius: 999,
     borderWidth: 1,
@@ -1204,9 +1430,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.2,
   },
-  modalContent: { paddingBottom: theme.spacing.xxl, gap: 12 },
+  modalScroll: {
+    flex: 1,
+  },
+  modalContent: {
+    paddingBottom: theme.spacing.xxl,
+    gap: 12,
+  },
+  modalSpacer: {
+    height: 18,
+  },
 
-  guideSecCard: { borderRadius: 22 },
+  guideSectionsWrap: {
+    gap: 12,
+  },
+  guideSecCard: {
+    borderRadius: 22,
+  },
   guideSecHeader: {
     paddingHorizontal: 14,
     paddingVertical: 14,
@@ -1215,14 +1455,55 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  guideSecHeading: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  guideSecChevron: { color: theme.colors.textSecondary, fontSize: 18, fontWeight: "900", marginTop: -2 },
-  guideSecBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
+  guideSecHeading: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.black,
+  },
+  guideSecChevron: {
+    color: theme.colors.textSecondary,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: -2,
+  },
+  guideSecBody: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    gap: 10,
+  },
 
-  guideText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+  guideText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 19,
+  },
 
-  bulletList: { gap: 10, paddingTop: 2 },
-  bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  bulletDot: { width: 6, height: 6, borderRadius: 999, marginTop: 7, backgroundColor: "rgba(79,224,138,0.65)" },
-  bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+  bulletList: {
+    gap: 10,
+    paddingTop: 2,
+  },
+  bulletRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    marginTop: 7,
+    backgroundColor: "rgba(79,224,138,0.65)",
+  },
+  bulletText: {
+    flex: 1,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 19,
+  },
+
+  bottomSpacer: {
+    height: 14,
+  },
 });
