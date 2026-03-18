@@ -8,7 +8,7 @@ type Props = {
   size?: "sm" | "md";
 };
 
-const LOGO = require("../yna-logo.png");
+const LOGO = require("../YNAlogo.png");
 
 export default function LogoHeader({ title, subtitle, size = "md" }: Props) {
   const badgeSize = size === "sm" ? 42 : 54;
