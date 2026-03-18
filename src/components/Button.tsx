@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { theme } from "@/src/constants/theme";
 
-type Tone = "primary" | "secondary" | "ghost" | "danger";
+type Tone = "primary" | "secondary" | "ghost" | "danger" | "gold";
 type Size = "sm" | "md" | "lg";
 
 type Props = {
@@ -49,14 +49,22 @@ function getToneStyles(tone: Tone) {
     case "primary":
       return {
         bg: theme.colors.accentGreen,
-        border: "transparent",
-        text: "#FFFFFF",
-        spinner: "#FFFFFF",
+        border: theme.colors.borderGreenStrong,
+        text: theme.colors.textOnBrand,
+        spinner: theme.colors.textOnBrand,
+      };
+
+    case "gold":
+      return {
+        bg: theme.colors.accentGold,
+        border: theme.colors.borderGoldStrong,
+        text: theme.colors.textOnGold,
+        spinner: theme.colors.textOnGold,
       };
 
     case "secondary":
       return {
-        bg: "rgba(255,255,255,0.05)",
+        bg: theme.colors.bgElevated,
         border: theme.colors.borderSubtle,
         text: theme.colors.textPrimary,
         spinner: theme.colors.textPrimary,
@@ -74,7 +82,7 @@ function getToneStyles(tone: Tone) {
     default:
       return {
         bg: theme.colors.error,
-        border: "transparent",
+        border: alpha(theme.colors.error, 0.85),
         text: "#FFFFFF",
         spinner: "#FFFFFF",
       };
@@ -131,14 +139,10 @@ export default function Button({
 
   const glowStyle =
     glow && tone === "primary"
-      ? {
-          shadowColor: theme.colors.accentGreen,
-          shadowOpacity: 0.24,
-          shadowRadius: 20,
-          shadowOffset: { width: 0, height: 10 },
-          elevation: 8,
-        }
-      : null;
+      ? theme.shadow.greenGlow
+      : glow && tone === "gold"
+        ? theme.shadow.goldGlow
+        : null;
 
   const content =
     children ?? (
@@ -151,6 +155,7 @@ export default function Button({
             color: cfg.text,
             fontSize: s.fontSize,
           },
+          tone === "ghost" && styles.ghostText,
           textStyle,
         ]}
       >
@@ -171,11 +176,13 @@ export default function Button({
           backgroundColor: cfg.bg,
           borderColor: cfg.border,
           borderWidth: tone === "ghost" ? 0 : 1,
-          opacity: isDisabled ? 0.55 : 1,
+          opacity: isDisabled ? 0.5 : 1,
           transform: pressed && !isDisabled ? [{ scale: 0.985 }] : [{ scale: 1 }],
         },
         tone === "primary" && styles.primarySurface,
+        tone === "gold" && styles.goldSurface,
         tone === "secondary" && styles.secondarySurface,
+        tone === "ghost" && styles.ghostSurface,
         glowStyle,
         style,
       ]}
@@ -210,8 +217,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accentGreen,
   },
 
+  goldSurface: {
+    backgroundColor: theme.colors.accentGold,
+  },
+
   secondarySurface: {
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: theme.colors.bgElevated,
+  },
+
+  ghostSurface: {
+    backgroundColor: "transparent",
   },
 
   row: {
@@ -233,8 +248,12 @@ const styles = StyleSheet.create({
   },
 
   text: {
-    fontWeight: theme.fontWeight.semibold,
+    fontWeight: theme.fontWeight.bold,
     letterSpacing: 0.2,
     textAlign: "center",
+  },
+
+  ghostText: {
+    textDecorationLine: "none",
   },
 });
