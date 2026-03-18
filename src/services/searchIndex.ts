@@ -1,11 +1,11 @@
-// src/services/searchIndex.ts
-import { normalizeSearchText, tokenizeQuery, expandQueryTokens } from "@/src/constants/search";
 import { LEAGUES, type LeagueOption } from "@/src/constants/football";
+import { expandQueryTokens, normalizeSearchText, tokenizeQuery } from "@/src/constants/search";
 import cityGuidesRegistry from "@/src/data/cityGuides";
 import teamGuidesRegistry from "@/src/data/teamGuides";
-import teamsRegistry, { normalizeTeamKey } from "@/src/data/teams";
+import teamsRegistry, { normalizeTeamKey, resolveTeamKey } from "@/src/data/teams";
+import type { FixtureListRow } from "@/src/services/apiFootball";
+import { getFixtures } from "@/src/services/apiFootball";
 import { normalizeCityKey } from "@/src/utils/city";
-import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 
 /**
  * Search Index
@@ -84,25 +84,22 @@ function toEntryTokens(parts: Array<string | undefined | null>): string[] {
 }
 
 function isDebugEnabled(): boolean {
-  return typeof __DEV__ !== "undefined" ? !!__DEV__ : false;
+  return typeof __DEV__ !== "undefined" ? __DEV__ : false;
 }
 
 function tryResolveTeamKey(input: string): string | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require("@/src/data/teams");
-    const fn = mod?.resolveTeamKey;
-    if (typeof fn === "function") {
-      const out = fn(input);
-      return typeof out === "string" && out.trim() ? out.trim() : null;
-    }
+    const out = resolveTeamKey(input);
+    return typeof out === "string" && out.trim() ? out.trim() : null;
   } catch {
-    // ignore
+    return null;
   }
-  return null;
 }
 
-function canonicalTeamSlug(input: string | undefined | null): { slug: string | null; resolved: boolean } {
+function canonicalTeamSlug(input: string | undefined | null): {
+  slug: string | null;
+  resolved: boolean;
+} {
   const s = safeStr(input);
   if (!s) return { slug: null, resolved: false };
 
@@ -165,12 +162,16 @@ function upsertEntry(map: Map<string, IndexEntry>, entry: IndexEntry) {
     return;
   }
 
-  const existingPayload: any = existing.payload;
-  const nextPayload: any = entry.payload;
+  const existingPayload = existing.payload as SearchPayload;
+  const nextPayload = entry.payload as SearchPayload;
 
   const mergedPayload =
-    existingPayload?.kind === "team" && nextPayload?.kind === "team"
-      ? { ...existingPayload, ...nextPayload, teamId: existingPayload.teamId ?? nextPayload.teamId }
+    existingPayload.kind === "team" && nextPayload.kind === "team"
+      ? {
+          ...existingPayload,
+          ...nextPayload,
+          teamId: existingPayload.teamId ?? nextPayload.teamId,
+        }
       : existing.payload ?? entry.payload;
 
   map.set(entry.key, {
@@ -183,14 +184,15 @@ function upsertEntry(map: Map<string, IndexEntry>, entry: IndexEntry) {
 }
 
 function buildCityGuideEntries(map: Map<string, IndexEntry>) {
-  Object.values(cityGuidesRegistry as any).forEach((g: any) => {
-    const name = safeStr(g?.name ?? g?.cityId);
+  Object.values(cityGuidesRegistry as Record<string, unknown>).forEach((g) => {
+    const guide = g as Record<string, unknown>;
+    const name = safeStr(guide.name ?? guide.cityId);
     if (!name) return;
 
-    const slug = normalizeCityKey(g?.cityId ?? name);
+    const slug = normalizeCityKey(guide.cityId ?? name);
     if (!slug) return;
 
-    const country = safeStr(g?.country);
+    const country = safeStr(guide.country);
 
     upsertEntry(map, {
       type: "city",
@@ -235,43 +237,55 @@ function buildCountriesFromLeagues(map: Map<string, IndexEntry>, leagues: League
 }
 
 function buildTeamsRegistryEntries(map: Map<string, IndexEntry>) {
-  Object.values(teamsRegistry as any).forEach((t: any) => {
-    const name = safeStr(t?.name);
-    const teamKey = safeStr(t?.teamKey);
+  Object.values(teamsRegistry as Record<string, unknown>).forEach((t) => {
+    const team = t as Record<string, unknown>;
+    const name = safeStr(team.name);
+    const teamKey = safeStr(team.teamKey);
     if (!name || !teamKey) return;
 
     const { slug } = canonicalTeamSlug(teamKey);
     if (!slug) return;
 
-    const subtitle = safeStr(t?.city || t?.country) || "Team";
-    const aliases = Array.isArray(t?.aliases) ? t.aliases : [];
+    const subtitle = safeStr(team.city || team.country) || "Team";
+    const aliases = Array.isArray(team.aliases) ? team.aliases.map((a) => safeStr(a)) : [];
 
     upsertEntry(map, {
       type: "team",
       key: `team:${slug}`,
       title: name,
       subtitle,
-      tokens: toEntryTokens([name, slug, t?.city, t?.country, ...aliases]),
-      payload: { kind: "team", slug, teamId: typeof t?.teamId === "number" ? t.teamId : undefined },
+      tokens: toEntryTokens([name, slug, team.city as string, team.country as string, ...aliases]),
+      payload: {
+        kind: "team",
+        slug,
+        teamId: typeof team.teamId === "number" ? team.teamId : undefined,
+      },
     });
   });
 }
 
 function buildTeamGuideEntries(map: Map<string, IndexEntry>) {
-  Object.values(teamGuidesRegistry as any).forEach((g: any) => {
-    const name = safeStr(g?.name ?? g?.teamName ?? g?.teamKey ?? g?.teamId);
+  Object.values(teamGuidesRegistry as Record<string, unknown>).forEach((g) => {
+    const guide = g as Record<string, unknown>;
+    const name = safeStr(guide.name ?? guide.teamName ?? guide.teamKey ?? guide.teamId);
     if (!name) return;
 
-    const raw = g?.teamKey ?? g?.teamId ?? name;
-    const { slug } = canonicalTeamSlug(raw);
+    const raw = guide.teamKey ?? guide.teamId ?? name;
+    const { slug } = canonicalTeamSlug(String(raw));
     if (!slug) return;
 
     upsertEntry(map, {
       type: "team",
       key: `team:${slug}`,
       title: name,
-      subtitle: safeStr(g?.city ?? g?.country) || "Team",
-      tokens: toEntryTokens([name, slug, g?.city, g?.country, g?.stadium]),
+      subtitle: safeStr(guide.city ?? guide.country) || "Team",
+      tokens: toEntryTokens([
+        name,
+        slug,
+        guide.city as string,
+        guide.country as string,
+        guide.stadium as string,
+      ]),
       payload: { kind: "team", slug },
     });
   });
@@ -279,17 +293,21 @@ function buildTeamGuideEntries(map: Map<string, IndexEntry>) {
 
 function buildLeagueEntries(map: Map<string, IndexEntry>, leagues: LeagueOption[]) {
   leagues.forEach((l) => {
-    const title = safeStr(l?.label);
+    const title = safeStr(l.label);
     if (!title) return;
 
-    const season = Number(l?.season) || 0;
-    const country = safeStr(l?.country);
+    const season = Number(l.season) || 0;
+    const country = safeStr(l.country);
 
     upsertEntry(map, {
       type: "league",
       key: `league:${String(l.leagueId)}:${String(season)}`,
       title,
-      subtitle: country ? `${country}${season ? ` • ${season}` : ""}` : season ? `Season ${season}` : undefined,
+      subtitle: country
+        ? `${country}${season ? ` • ${season}` : ""}`
+        : season
+          ? `Season ${season}`
+          : undefined,
       tokens: toEntryTokens([
         title,
         l.slug,
@@ -402,26 +420,35 @@ async function buildFixtureDerivedEntries(args: {
   return rows.length;
 }
 
-export async function buildSearchIndex(args: { from: string; to: string; leagues?: LeagueOption[] }): Promise<SearchIndex> {
-  const from = safeStr(args?.from);
-  const to = safeStr(args?.to);
-  const leagues = Array.isArray(args?.leagues) && args.leagues.length > 0 ? args.leagues : LEAGUES;
+export async function buildSearchIndex(args: {
+  from: string;
+  to: string;
+  leagues?: LeagueOption[];
+}): Promise<SearchIndex> {
+  const from = safeStr(args.from);
+  const to = safeStr(args.to);
+  const leagues =
+    Array.isArray(args.leagues) && args.leagues.length > 0 ? args.leagues : LEAGUES;
 
   const map = new Map<string, IndexEntry>();
   const debugEnabled = isDebugEnabled();
   const unresolvedFixtureTeams = debugEnabled ? new Set<string>() : undefined;
 
-  // Deterministic base
   buildCityGuideEntries(map);
   buildCountriesFromLeagues(map, leagues);
   buildTeamsRegistryEntries(map);
   buildTeamGuideEntries(map);
   buildLeagueEntries(map, leagues);
 
-  // Fixture-derived (adds missing cities/venues/teams automatically per current season)
   let fixtureRowsScanned = 0;
   try {
-    fixtureRowsScanned = await buildFixtureDerivedEntries({ map, from, to, leagues, unresolvedFixtureTeams });
+    fixtureRowsScanned = await buildFixtureDerivedEntries({
+      map,
+      from,
+      to,
+      leagues,
+      unresolvedFixtureTeams,
+    });
   } catch {
     // offline-safe
   }
@@ -432,7 +459,14 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
     return { builtAt: Date.now(), from, to, leagues, entries };
   }
 
-  const counts: Record<SearchEntityType, number> = { team: 0, city: 0, venue: 0, country: 0, league: 0 };
+  const counts: Record<SearchEntityType, number> = {
+    team: 0,
+    city: 0,
+    venue: 0,
+    country: 0,
+    league: 0,
+  };
+
   for (const e of entries) counts[e.type] += 1;
 
   return {
@@ -446,12 +480,18 @@ export async function buildSearchIndex(args: { from: string; to: string; leagues
       counts,
       totalEntries: entries.length,
       fixtureRowsScanned,
-      unresolvedFixtureTeamNames: unresolvedFixtureTeams ? Array.from(unresolvedFixtureTeams).sort() : [],
+      unresolvedFixtureTeamNames: unresolvedFixtureTeams
+        ? Array.from(unresolvedFixtureTeams).sort()
+        : [],
     },
   };
 }
 
-export function querySearchIndex(index: SearchIndex, query: string, opts?: { limit?: number }): SearchResult[] {
+export function querySearchIndex(
+  index: SearchIndex,
+  query: string,
+  opts?: { limit?: number }
+): SearchResult[] {
   const limit = Math.max(1, Math.min(Number(opts?.limit ?? 20), 100));
   const q = safeStr(query);
   if (!q) return [];
@@ -460,7 +500,7 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
   const queryTokens = expandQueryTokens(baseTokens);
   if (!queryTokens.length) return [];
 
-  const scored: SearchResult[] = (index?.entries ?? [])
+  const scored: SearchResult[] = (index.entries ?? [])
     .map((e) => {
       const baseScore = scoreMatch(queryTokens, e.tokens);
       if (baseScore <= 0) return null;
@@ -474,10 +514,10 @@ export function querySearchIndex(index: SearchIndex, query: string, opts?: { lim
         subtitle: e.subtitle,
         score,
         payload: e.payload,
-      } as SearchResult;
+      } satisfies SearchResult;
     })
-    .filter((x): x is SearchResult => !!x)
+    .filter((x): x is SearchResult => x !== null)
     .sort((a, b) => b.score - a.score);
 
   return scored.slice(0, limit);
-          }
+}
