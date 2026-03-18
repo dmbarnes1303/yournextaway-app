@@ -49,13 +49,13 @@ export const AffiliateConfig = {
 
   omioTracked: "https://omio.sjv.io/KBjDon",
 
-  // SafetyWing removed from active config until a real tracked setup exists.
+  // SafetyWing removed until a real tracked setup exists again.
   ektaTracked: "",
   klookTracked: "",
   tiqetsTracked: "",
-  wegotripTracked: "",
-  airhelpTracked: "",
-  compensairTracked: "",
+  wegotripTracked: "https://wegotrip.tpm.lv/2TmC2jxD",
+  airhelpTracked: "https://airhelp.tpm.lv/G53R3pcD",
+  compensairTracked: "https://compensair.tpm.lv/crv6X5hT",
   welcomepickupsTracked: "",
 } as const;
 
