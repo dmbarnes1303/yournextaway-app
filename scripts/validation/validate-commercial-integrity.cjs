@@ -7,6 +7,9 @@ function readFileSafe(relPath) {
   return fs.readFileSync(path.join(root, relPath), "utf8");
 }
 
+let failures = 0;
+let warnings = 0;
+
 function fail(message) {
   console.error(`\x1b[31mFAIL\x1b[0m ${message}`);
   failures += 1;
@@ -29,17 +32,11 @@ function extractLeagueIdsFromFootball() {
 function extractLeagueIdsFromDiscoverPrice() {
   const content = readFileSafe("src/features/discover/discoverPrice.ts");
 
-  const explicitIds = [
-    ...content.matchAll(/EXPLICIT_LEAGUE_PRICING\s*:\s*Record<number[\s\S]*?{([\s\S]*?)^};/m),
-  ];
-
-  const idsFromWholeFile = [...content.matchAll(/\b(\d+)\s*:/g)]
-    .map((m) => Number(m[1]))
-    .filter((n) => Number.isFinite(n));
-
+  const tupleIds = [...content.matchAll(/\[\s*(\d+)\s*,\s*\d+\s*\]/g)].map((m) => Number(m[1]));
+  const objectIds = [...content.matchAll(/\b(\d+)\s*:\s*\{/g)].map((m) => Number(m[1]));
   const ifIds = [...content.matchAll(/if\s*\(\s*.*?===\s*(\d+)\s*\)/g)].map((m) => Number(m[1]));
 
-  return [...new Set([...idsFromWholeFile, ...ifIds])];
+  return [...new Set([...tupleIds, ...objectIds, ...ifIds])];
 }
 
 function requireNonEmptyConfigKey(fileContent, keyName) {
@@ -76,9 +73,6 @@ function requireOptionalConfigKey(fileContent, keyName) {
   pass(`AffiliateConfig.${keyName} is present.`);
 }
 
-let failures = 0;
-let warnings = 0;
-
 console.log("\n=== Validate commercial integrity ===\n");
 
 const footballIds = extractLeagueIdsFromFootball();
@@ -86,9 +80,7 @@ const priceIds = extractLeagueIdsFromDiscoverPrice();
 
 const missingInPrice = footballIds.filter((id) => !priceIds.includes(id));
 if (missingInPrice.length) {
-  fail(
-    `discoverPrice.ts is missing league IDs from football.ts: ${missingInPrice.join(", ")}`
-  );
+  fail(`discoverPrice.ts is missing league IDs from football.ts: ${missingInPrice.join(", ")}`);
 } else {
   pass("discoverPrice.ts covers every league ID found in football.ts.");
 }
@@ -124,9 +116,7 @@ if (/safetywingTracked\s*:/m.test(partnersContent)) {
 const partnerRegistry = readFileSafe("src/services/partnerRegistry.ts");
 const affiliateLinks = readFileSafe("src/services/affiliateLinks.ts");
 const fixtureRowCard = readFileSafe("src/features/fixtures/FixtureRowCard.tsx");
-const discoverFixtureCard = readFileSafe(
-  "src/features/discover/components/DiscoverFixtureCard.tsx"
-);
+const discoverFixtureCard = readFileSafe("src/features/discover/components/DiscoverFixtureCard.tsx");
 const ticketGuidesIndex = readFileSafe("src/data/ticketGuides/index.ts");
 
 if (/google\.com\/search/i.test(partnerRegistry)) {
