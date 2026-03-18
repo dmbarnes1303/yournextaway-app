@@ -1,10 +1,11 @@
 import React, { useCallback, useMemo } from "react";
-import { View, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { View, StyleSheet, FlatList, ActivityIndicator, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import EmptyState from "@/src/components/EmptyState";
+import GlassCard from "@/src/components/GlassCard";
 
 import { theme } from "@/src/constants/theme";
 import { getBackground } from "@/src/constants/backgrounds";
@@ -33,6 +34,29 @@ function getCsvParamSet(value: unknown) {
       .split(",")
       .map((part) => cleanString(part))
       .filter(Boolean)
+  );
+}
+
+function SectionShell({
+  children,
+  accent = "neutral",
+}: {
+  children: React.ReactNode;
+  accent?: "green" | "gold" | "neutral";
+}) {
+  return (
+    <View
+      style={[
+        styles.sectionShell,
+        accent === "green"
+          ? styles.sectionShellGreen
+          : accent === "gold"
+            ? styles.sectionShellGold
+            : styles.sectionShellNeutral,
+      ]}
+    >
+      {children}
+    </View>
   );
 }
 
@@ -178,13 +202,15 @@ export default function FixturesScreen() {
       ? ({ imageUrl: bg } as const)
       : ({ imageSource: bg } as const);
 
+  const hasRows = !loading && !error && visibleRows.length > 0;
+
   return (
     <Background
       {...bgProps}
       overlayOpacity={0.08}
       topShadeOpacity={0.36}
-      bottomShadeOpacity={0.42}
-      centerShadeOpacity={0.04}
+      bottomShadeOpacity={0.44}
+      centerShadeOpacity={0.05}
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <FlatList
@@ -215,56 +241,93 @@ export default function FixturesScreen() {
             );
           }}
           ListHeaderComponent={
-            <FixturesHeader
-              titleText={derivedTitleText}
-              subtitleText={derivedSubtitleText}
-              headerDateLine={derivedHeaderDateLine}
-              query={query}
-              setQuery={setQuery}
-              stripDays={stripDays}
-              isRange={isRange}
-              selectedDay={selectedDay}
-              onTapStripDate={onTapStripDate}
-              selectedLeagueIds={selectedLeagueIds}
-              resetToFeatured={resetToFeatured}
-              selectSingleLeague={selectSingleLeague}
-              activeRegion={activeRegion}
-              setActiveRegion={setActiveRegion}
-              leaguesByRegion={leaguesByRegion}
-              toggleLeague={toggleLeague}
-              selectedLeagues={selectedLeagues}
-              helperLineText={derivedHelperLineText}
-              loading={loading}
-              error={error}
-              filteredCount={visibleRows.length}
-              openCalendar={openCalendar}
-            />
+            <View style={styles.headerWrap}>
+              <SectionShell accent={comboMode ? "gold" : "green"}>
+                <FixturesHeader
+                  titleText={derivedTitleText}
+                  subtitleText={derivedSubtitleText}
+                  headerDateLine={derivedHeaderDateLine}
+                  query={query}
+                  setQuery={setQuery}
+                  stripDays={stripDays}
+                  isRange={isRange}
+                  selectedDay={selectedDay}
+                  onTapStripDate={onTapStripDate}
+                  selectedLeagueIds={selectedLeagueIds}
+                  resetToFeatured={resetToFeatured}
+                  selectSingleLeague={selectSingleLeague}
+                  activeRegion={activeRegion}
+                  setActiveRegion={setActiveRegion}
+                  leaguesByRegion={leaguesByRegion}
+                  toggleLeague={toggleLeague}
+                  selectedLeagues={selectedLeagues}
+                  helperLineText={derivedHelperLineText}
+                  loading={loading}
+                  error={error}
+                  filteredCount={visibleRows.length}
+                  openCalendar={openCalendar}
+                />
+              </SectionShell>
+
+              {!loading && !error ? (
+                <View style={styles.summaryRow}>
+                  <GlassCard
+                    variant={comboMode ? "gold" : "brand"}
+                    level="default"
+                    style={styles.summaryCard}
+                  >
+                    <Text style={styles.summaryKicker}>
+                      {comboMode ? "Combo mode" : "Live fixture pool"}
+                    </Text>
+                    <Text style={styles.summaryTitle}>
+                      {visibleRows.length} fixture{visibleRows.length === 1 ? "" : "s"} in view
+                    </Text>
+                    <Text style={styles.summaryText}>
+                      {comboMode
+                        ? "These are the selected matches for a stackable football trip."
+                        : "Filtered, ranked and ready to open into match or trip planning."}
+                    </Text>
+                  </GlassCard>
+                </View>
+              ) : null}
+            </View>
           }
           ListEmptyComponent={
             <View style={[styles.content, styles.listWrap]}>
               {loading ? (
-                <View style={styles.center}>
-                  <ActivityIndicator />
-                </View>
+                <GlassCard variant="brand" level="default" style={styles.loadingCard}>
+                  <View style={styles.center}>
+                    <ActivityIndicator color={theme.colors.accentGold} />
+                    <Text style={styles.loadingTitle}>Loading fixtures</Text>
+                    <Text style={styles.loadingText}>
+                      Pulling the strongest current match options from the selected range.
+                    </Text>
+                  </View>
+                </GlassCard>
               ) : null}
 
               {!loading && error ? (
-                <EmptyState title="Error" message={error} iconName="alert-circle" />
+                <GlassCard variant="gold" level="default" style={styles.stateCard}>
+                  <EmptyState title="Error" message={error} iconName="alert-circle" />
+                </GlassCard>
               ) : null}
 
               {!loading && !error ? (
-                <EmptyState
-                  title={comboMode ? "No combo fixtures found" : "No matches found"}
-                  message={
-                    comboMode
-                      ? "This stacked trip no longer matches the current fixture view. Widen the date range or reopen it from Discover."
-                      : "Try another date, another region, or a different league selection."
-                  }
-                  iconName={comboMode ? "git-compare" : "search"}
-                />
+                <GlassCard variant="matte" level="default" style={styles.stateCard}>
+                  <EmptyState
+                    title={comboMode ? "No combo fixtures found" : "No matches found"}
+                    message={
+                      comboMode
+                        ? "This stacked trip no longer matches the current fixture view. Widen the date range or reopen it from Discover."
+                        : "Try another date, another region, or a different league selection."
+                    }
+                    iconName={comboMode ? "git-compare" : "search"}
+                  />
+                </GlassCard>
               ) : null}
             </View>
           }
+          ListFooterComponent={hasRows ? <View style={styles.footerSpace} /> : null}
           contentContainerStyle={styles.flatListContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -302,6 +365,11 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xl,
   },
 
+  headerWrap: {
+    paddingTop: 2,
+    gap: 12,
+  },
+
   content: {
     paddingHorizontal: theme.spacing.lg,
   },
@@ -310,9 +378,94 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  sectionShell: {
+    marginHorizontal: theme.spacing.lg,
+    borderRadius: 24,
+    padding: 12,
+    borderWidth: 1,
+  },
+
+  sectionShellGreen: {
+    borderColor: theme.colors.borderGreenSoft,
+    backgroundColor: "rgba(34,197,94,0.035)",
+  },
+
+  sectionShellGold: {
+    borderColor: theme.colors.borderGoldSoft,
+    backgroundColor: "rgba(250,204,21,0.04)",
+  },
+
+  sectionShellNeutral: {
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.02)",
+  },
+
+  summaryRow: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+
+  summaryCard: {
+    gap: 6,
+    borderRadius: 20,
+    padding: 14,
+  },
+
+  summaryKicker: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.25,
+    textTransform: "uppercase",
+  },
+
+  summaryTitle: {
+    color: theme.colors.text,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  summaryText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  loadingCard: {
+    borderRadius: 20,
+    padding: 18,
+  },
+
+  stateCard: {
+    borderRadius: 20,
+    padding: 12,
+  },
+
   center: {
-    paddingVertical: 24,
+    paddingVertical: 14,
     alignItems: "center",
     gap: 10,
+  },
+
+  loadingTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  loadingText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+    textAlign: "center",
+    maxWidth: 280,
+  },
+
+  footerSpace: {
+    height: 6,
   },
 });
