@@ -29,10 +29,17 @@ function extractLeagueIdsFromFootball() {
 function extractLeagueIdsFromDiscoverPrice() {
   const content = readFileSafe("src/features/discover/discoverPrice.ts");
 
-  const mapIds = [...content.matchAll(/\[\s*(\d+)\s*,\s*\d+\s*\]/g)].map((m) => Number(m[1]));
-  const ifIds = [...content.matchAll(/if\s*\(\s*id\s*===\s*(\d+)\s*\)/g)].map((m) => Number(m[1]));
+  const explicitIds = [
+    ...content.matchAll(/EXPLICIT_LEAGUE_PRICING\s*:\s*Record<number[\s\S]*?{([\s\S]*?)^};/m),
+  ];
 
-  return [...new Set([...mapIds, ...ifIds])];
+  const idsFromWholeFile = [...content.matchAll(/\b(\d+)\s*:/g)]
+    .map((m) => Number(m[1]))
+    .filter((n) => Number.isFinite(n));
+
+  const ifIds = [...content.matchAll(/if\s*\(\s*.*?===\s*(\d+)\s*\)/g)].map((m) => Number(m[1]));
+
+  return [...new Set([...idsFromWholeFile, ...ifIds])];
 }
 
 function requireNonEmptyConfigKey(fileContent, keyName) {
@@ -46,6 +53,23 @@ function requireNonEmptyConfigKey(fileContent, keyName) {
 
   if (!String(match[1] || "").trim()) {
     fail(`AffiliateConfig.${keyName} is empty.`);
+    return;
+  }
+
+  pass(`AffiliateConfig.${keyName} is present.`);
+}
+
+function requireOptionalConfigKey(fileContent, keyName) {
+  const regex = new RegExp(`${keyName}\\s*:\\s*"([^"]*)"`, "m");
+  const match = fileContent.match(regex);
+
+  if (!match) {
+    fail(`AffiliateConfig is missing optional key: ${keyName}`);
+    return;
+  }
+
+  if (!String(match[1] || "").trim()) {
+    warn(`AffiliateConfig.${keyName} is empty.`);
     return;
   }
 
@@ -81,11 +105,21 @@ const partnersContent = readFileSafe("src/constants/partners.ts");
   "omioTracked",
 ].forEach((key) => requireNonEmptyConfigKey(partnersContent, key));
 
-if (/safetywingTracked\s*:\s*""/m.test(partnersContent)) {
-  warn("AffiliateConfig.safetywingTracked is still empty.");
-} else if (/safetywingTracked\s*:\s*"[^"]+"/m.test(partnersContent)) {
-  pass("AffiliateConfig.safetywingTracked is present.");
+if (/safetywingTracked\s*:/m.test(partnersContent)) {
+  fail("AffiliateConfig still contains safetywingTracked. SafetyWing should be removed if not live.");
+} else {
+  pass("AffiliateConfig no longer contains stale SafetyWing config.");
 }
+
+[
+  "ektaTracked",
+  "klookTracked",
+  "tiqetsTracked",
+  "wegotripTracked",
+  "airhelpTracked",
+  "compensairTracked",
+  "welcomepickupsTracked",
+].forEach((key) => requireOptionalConfigKey(partnersContent, key));
 
 const partnerRegistry = readFileSafe("src/services/partnerRegistry.ts");
 const affiliateLinks = readFileSafe("src/services/affiliateLinks.ts");
@@ -105,6 +139,12 @@ if (/google\.com\/search/i.test(affiliateLinks)) {
   fail("affiliateLinks.ts still contains google.com/search fallback URLs.");
 } else {
   pass("affiliateLinks.ts no longer uses fake Google search affiliate fallbacks.");
+}
+
+if (/safetywingTracked/i.test(affiliateLinks)) {
+  fail("affiliateLinks.ts still references SafetyWing.");
+} else {
+  pass("affiliateLinks.ts no longer references SafetyWing.");
 }
 
 if (!/resolveAffiliateUrl\s*\(/.test(fixtureRowCard)) {
@@ -137,8 +177,8 @@ if (/Tickets live/.test(fixtureRowCard)) {
   pass('FixtureRowCard.tsx no longer uses the weak "Tickets live" fallback.');
 }
 
-if (!/Estimated only/.test(discoverFixtureCard)) {
-  fail('DiscoverFixtureCard.tsx does not clearly label pricing as estimated.');
+if (!/Estimated only/i.test(discoverFixtureCard)) {
+  fail("DiscoverFixtureCard.tsx does not clearly label pricing as estimated.");
 } else {
   pass("DiscoverFixtureCard.tsx clearly labels pricing as estimated.");
 }
