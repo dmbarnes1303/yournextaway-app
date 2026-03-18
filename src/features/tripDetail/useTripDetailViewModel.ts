@@ -207,7 +207,7 @@ export default function useTripDetailViewModel({
   const hasTransport = isStarted(transportState);
   const hasThings = isStarted(thingsState);
 
-  const tripCount = useMemo(() => tripsStore.getState().trips?.length ?? 0, [tripsLoaded]);
+  const tripCount = useMemo(() => tripsStore.getState().trips?.length ?? 0, []);
 
   const loading = useMemo(
     () => Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded)),
