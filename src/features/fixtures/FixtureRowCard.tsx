@@ -138,7 +138,6 @@ export default function FixtureRowCard({
   onPressBuildTrip: (fixtureId: string, ctx?: FixtureRouteCtx) => void;
 }) {
   const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
-  if (!fixtureId) return null;
 
   const home = clean(item?.teams?.home?.name) || "Home";
   const away = clean(item?.teams?.away?.name) || "Away";
@@ -214,6 +213,8 @@ export default function FixtureRowCard({
     leagueId: ctxLeagueId,
     season: ctxSeason,
   };
+
+  if (!fixtureId) return null;
 
   return (
     <View style={styles.rowWrap}>
