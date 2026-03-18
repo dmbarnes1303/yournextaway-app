@@ -1,4 +1,3 @@
-// backend/src/index.ts
 import "dotenv/config";
 import Fastify from "fastify";
 import { env, hasFtnConfig, hasGigsbergConfig, hasSe365Config } from "./lib/env.js";
@@ -10,13 +9,13 @@ const app = Fastify({
   genReqId: () => `yna_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
 });
 
-function clean(v: unknown): string {
-  return String(v ?? "").trim();
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function toBool(v: unknown): boolean {
-  const value = clean(v).toLowerCase();
-  return value === "1" || value === "true" || value === "yes";
+function toBool(value: unknown): boolean {
+  const normalized = clean(value).toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
 app.addHook("onSend", async (request, reply, payload) => {
@@ -42,8 +41,8 @@ app.get("/", async (request) => {
   return {
     ok: true,
     message: "YourNextAway backend is running",
-    requestId: request.id,
     service: "yournextaway-backend",
+    requestId: request.id,
   };
 });
 
@@ -146,7 +145,6 @@ app.get<{
         reason: result.reason,
         checkedProviders: result.checkedProviders,
         ok: result.ok,
-        error: result.error ?? null,
       },
       "Ticket resolve request completed"
     );
@@ -193,7 +191,7 @@ app.get<{
   }
 });
 
-const start = async () => {
+async function start() {
   try {
     await app.listen({
       port: env.port,
@@ -202,15 +200,18 @@ const start = async () => {
 
     app.log.info(
       {
+        port: env.port,
         localhost: `http://localhost:${env.port}`,
-        network: `http://192.168.1.39:${env.port}`,
       },
       "Backend running"
     );
-  } catch (err) {
-    app.log.error(err);
+  } catch (error) {
+    app.log.error(error);
     process.exit(1);
   }
-};
+}
 
 start();
+
+export { app };
+export type App = typeof app;
