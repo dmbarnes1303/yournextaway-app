@@ -84,9 +84,7 @@ function routeAngleLabel(
 
   if (variant === "trending") {
     if (pricing.tripEstimate) return "High-interest fixture with estimated-only trip cost guidance";
-    if (pricing.ticketEstimate) {
-      return "High-interest fixture with estimated-only ticket guidance";
-    }
+    if (pricing.ticketEstimate) return "High-interest fixture with estimated-only ticket guidance";
     return "High-interest football route worth checking now";
   }
 
@@ -105,7 +103,7 @@ function topRightLabel(variant: Variant, tripEstimate: string | null) {
 }
 
 function imageHeight(variant: Variant) {
-  return variant === "trending" ? 138 : 122;
+  return variant === "trending" ? 144 : 126;
 }
 
 export default function DiscoverFixtureCard({
@@ -148,6 +146,7 @@ export default function DiscoverFixtureCard({
       ]}
     >
       <GlassCard
+        variant={isTrending ? "gold" : "brand"}
         strength={isTrending ? "strong" : "default"}
         style={isTrending ? styles.trendingCard : styles.liveCard}
         noPadding
@@ -166,8 +165,17 @@ export default function DiscoverFixtureCard({
             <View style={tripEstimate ? styles.heroPricePill : styles.heroGhostPill}>
               {tripEstimate ? (
                 <>
-                  <Ionicons name="airplane-outline" size={11} color={theme.colors.text} />
-                  <Text style={styles.heroPricePillText} numberOfLines={1}>
+                  <Ionicons
+                    name="airplane-outline"
+                    size={11}
+                    color={isTrending ? theme.colors.textOnGold : theme.colors.text}
+                  />
+                  <Text
+                    style={
+                      isTrending ? styles.heroPricePillGoldText : styles.heroPricePillText
+                    }
+                    numberOfLines={1}
+                  >
                     {topRightLabel(variant, tripEstimate)}
                   </Text>
                 </>
@@ -205,8 +213,16 @@ export default function DiscoverFixtureCard({
             <View style={styles.pricingBlock}>
               <View style={styles.pricingRow}>
                 {tripEstimate ? (
-                  <View style={styles.pricingChipStrong}>
-                    <Text style={styles.pricingChipStrongText}>{tripEstimate}</Text>
+                  <View style={isTrending ? styles.pricingChipGold : styles.pricingChipStrong}>
+                    <Text
+                      style={
+                        isTrending
+                          ? styles.pricingChipGoldText
+                          : styles.pricingChipStrongText
+                      }
+                    >
+                      {tripEstimate}
+                    </Text>
                   </View>
                 ) : null}
 
@@ -233,8 +249,14 @@ export default function DiscoverFixtureCard({
             </Text>
 
             <View style={styles.ctaInline}>
-              <Text style={styles.ctaInlineText}>{ctaLabel(variant)}</Text>
-              <Ionicons name="arrow-forward-outline" size={13} color={theme.colors.primary} />
+              <Text style={isTrending ? styles.ctaInlineGoldText : styles.ctaInlineText}>
+                {ctaLabel(variant)}
+              </Text>
+              <Ionicons
+                name="arrow-forward-outline"
+                size={13}
+                color={isTrending ? theme.colors.accentGold : theme.colors.primary}
+              />
             </View>
           </View>
         </View>
@@ -245,13 +267,13 @@ export default function DiscoverFixtureCard({
 
 const styles = StyleSheet.create({
   livePress: {
-    width: 264,
+    width: 268,
     borderRadius: 22,
     overflow: "hidden",
   },
 
   trendingPress: {
-    width: 290,
+    width: 294,
     borderRadius: 22,
     overflow: "hidden",
   },
@@ -262,7 +284,6 @@ const styles = StyleSheet.create({
 
   trendingCard: {
     borderRadius: 22,
-    borderColor: "rgba(255,255,255,0.10)",
   },
 
   imageWrap: {
@@ -276,12 +297,12 @@ const styles = StyleSheet.create({
 
   liveImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,10,0.44)",
+    backgroundColor: "rgba(4,8,6,0.42)",
   },
 
   trendingImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,10,0.34)",
+    backgroundColor: "rgba(12,10,4,0.28)",
   },
 
   topBar: {
@@ -296,44 +317,44 @@ const styles = StyleSheet.create({
   },
 
   liveBadgePill: {
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
     paddingVertical: 5,
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.24)",
-    backgroundColor: "rgba(6,10,8,0.62)",
+    borderColor: theme.colors.borderGreenSoft,
+    backgroundColor: theme.badge.bgGreen,
   },
 
   liveBadgeText: {
-    color: theme.colors.text,
+    color: theme.badge.textGreen,
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
+    letterSpacing: 0.25,
   },
 
   trendingBadgePill: {
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(8,10,10,0.72)",
+    borderColor: theme.colors.borderGoldSoft,
+    backgroundColor: theme.badge.bgGold,
   },
 
   trendingBadgeText: {
-    color: theme.colors.text,
+    color: theme.badge.textGold,
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
+    letterSpacing: 0.25,
   },
 
   heroPricePill: {
-    maxWidth: 188,
-    borderRadius: 999,
+    maxWidth: 192,
+    borderRadius: theme.borderRadius.pill,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: theme.colors.borderStrong,
     backgroundColor: "rgba(8,10,10,0.72)",
     flexDirection: "row",
     alignItems: "center",
@@ -347,12 +368,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
+  heroPricePillGoldText: {
+    color: theme.colors.textOnGold,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
+
   heroGhostPill: {
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: theme.colors.borderSubtle,
     backgroundColor: "rgba(8,10,10,0.52)",
   },
 
@@ -370,7 +398,7 @@ const styles = StyleSheet.create({
   },
 
   bottomImageLabelText: {
-    color: "rgba(255,255,255,0.94)",
+    color: "rgba(255,255,255,0.95)",
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.2,
@@ -379,13 +407,13 @@ const styles = StyleSheet.create({
   liveBody: {
     padding: 14,
     gap: 6,
-    minHeight: 176,
+    minHeight: 180,
   },
 
   trendingBody: {
     padding: 14,
     gap: 7,
-    minHeight: 190,
+    minHeight: 194,
   },
 
   liveTitle: {
@@ -410,7 +438,7 @@ const styles = StyleSheet.create({
   },
 
   liveAngle: {
-    color: theme.colors.primary,
+    color: theme.colors.accentGreenSoft,
     fontSize: 11,
     lineHeight: 16,
     fontWeight: theme.fontWeight.black,
@@ -418,7 +446,7 @@ const styles = StyleSheet.create({
   },
 
   trendingAngle: {
-    color: theme.colors.primary,
+    color: theme.colors.accentGoldSoft,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.black,
@@ -436,11 +464,11 @@ const styles = StyleSheet.create({
   },
 
   pricingChip: {
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
     paddingVertical: 5,
     paddingHorizontal: 9,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: theme.colors.borderSubtle,
     backgroundColor: "rgba(255,255,255,0.04)",
   },
 
@@ -451,22 +479,37 @@ const styles = StyleSheet.create({
   },
 
   pricingChipStrong: {
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
     paddingVertical: 5,
     paddingHorizontal: 9,
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.24)",
-    backgroundColor: "rgba(87,162,56,0.10)",
+    borderColor: theme.colors.borderGreenSoft,
+    backgroundColor: theme.badge.bgGreen,
   },
 
   pricingChipStrongText: {
-    color: theme.colors.text,
+    color: theme.badge.textGreen,
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  pricingChipGold: {
+    borderRadius: theme.borderRadius.pill,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGoldSoft,
+    backgroundColor: theme.badge.bgGold,
+  },
+
+  pricingChipGoldText: {
+    color: theme.badge.textGold,
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
   },
 
   confidenceChip: {
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
     paddingVertical: 5,
     paddingHorizontal: 9,
     borderWidth: 1,
@@ -478,27 +521,27 @@ const styles = StyleSheet.create({
   },
 
   confidenceHigh: {
-    borderColor: "rgba(87,162,56,0.24)",
-    backgroundColor: "rgba(87,162,56,0.10)",
+    borderColor: theme.colors.borderGreenSoft,
+    backgroundColor: theme.badge.bgGreen,
   },
 
   confidenceMedium: {
-    borderColor: "rgba(242,201,76,0.24)",
-    backgroundColor: "rgba(242,201,76,0.10)",
+    borderColor: theme.colors.borderGoldSoft,
+    backgroundColor: theme.badge.bgGold,
   },
 
   confidenceLow: {
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: theme.colors.borderSubtle,
     backgroundColor:
       Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.04)",
   },
 
   confidenceHighText: {
-    color: "rgba(87,162,56,0.95)",
+    color: theme.badge.textGreen,
   },
 
   confidenceMediumText: {
-    color: "rgba(242,201,76,0.95)",
+    color: theme.badge.textGold,
   },
 
   confidenceLowText: {
@@ -530,6 +573,12 @@ const styles = StyleSheet.create({
 
   ctaInlineText: {
     color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  ctaInlineGoldText: {
+    color: theme.colors.accentGold,
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
   },
