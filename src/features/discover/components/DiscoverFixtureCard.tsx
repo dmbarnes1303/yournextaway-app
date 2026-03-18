@@ -229,7 +229,7 @@ export default function DiscoverFixtureCard({
 
           <View style={styles.footerRow}>
             <Text style={styles.estimateNote} numberOfLines={3}>
-              {pricing ? confidenceUi.foot : "Live discovery route"}
+              {pricing ? confidenceUi.foot : "Estimated only. Live partner prices may differ."}
             </Text>
 
             <View style={styles.ctaInline}>
