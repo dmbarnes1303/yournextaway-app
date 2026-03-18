@@ -1,6 +1,3 @@
-// app/_layout.tsx
-
-import "@/src/utils/errorLogger";
 import React, { useEffect, useRef, useState } from "react";
 import { Stack } from "expo-router";
 
@@ -35,32 +32,31 @@ export default function RootLayout() {
   useEffect(() => {
     mountedRef.current = true;
 
-    // 1) Stable device identity (guest path)
+    // ✅ SAFE: initialise logger AFTER app starts
+    try {
+      const { setupErrorLogging } = require("@/src/utils/errorLogger");
+      setupErrorLogging();
+    } catch (e) {
+      console.warn("Logger init failed", e);
+    }
+
     identity.ensureIdentity().catch(() => null);
 
-    // 2) Partner return detection (booking loop)
     bootstrapPartnerReturnPrompt();
 
-    // IMPORTANT: ensure we can unregister on refresh/remount
-    // If registerReturnModalHandler doesn't currently return an unsubscribe,
-    // update it so it does. Otherwise you WILL get duplicate handlers over time.
     const maybeUnsub = registerReturnModalHandler((itemId, click) => {
       if (!mountedRef.current) return;
       setModalItemId(itemId);
       setModalClick(click);
     });
 
-    // 3) Preferences (e.g. origin IATA)
     preferencesStore.load().catch(() => null);
 
     return () => {
       mountedRef.current = false;
       try {
-        // If your registerReturnModalHandler returns () => void, this cleans up properly.
         if (typeof maybeUnsub === "function") maybeUnsub();
-      } catch {
-        // ignore
-      }
+      } catch {}
     };
   }, []);
 
