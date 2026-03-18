@@ -276,7 +276,7 @@ export default function HomeScreen() {
     const idx = indexRef.current;
     if (!idx || !qDebounced) return [];
     return querySearchIndex(idx, qDebounced, { limit: 16 });
-  }, [qDebounced, searchBuiltAt]);
+  }, [qDebounced]);
 
   const buckets = useMemo(() => splitSearchBuckets(rawSearchResults), [rawSearchResults]);
 
