@@ -1,5 +1,3 @@
-// src/features/discover/components/DiscoverHero.tsx
-
 import React from "react";
 import {
   View,
@@ -36,7 +34,7 @@ export default function DiscoverHero({
   featuredIcon,
   onPressFeatured,
 }: Props) {
-  const hasFeatured = !!featuredTitle;
+  const hasFeatured = Boolean(featuredTitle);
   const actionLabel = setupExpanded ? "Hide setup" : "Refine setup";
 
   return (
@@ -142,13 +140,13 @@ export default function DiscoverHero({
                 </View>
               </View>
 
-              {!!featuredMeta ? (
+              {featuredMeta ? (
                 <Text style={styles.featureMeta} numberOfLines={2}>
                   {featuredMeta}
                 </Text>
               ) : null}
 
-              {!!featuredWhy ? (
+              {featuredWhy ? (
                 <View style={styles.featureWhyBox}>
                   <Text style={styles.featureWhyLabel}>Why this works</Text>
                   <Text style={styles.featureWhy} numberOfLines={3}>
