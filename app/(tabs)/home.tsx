@@ -470,7 +470,7 @@ export default function HomeScreen() {
     return getCityImageUrl(city || "london");
   }, [featured]);
 
-  const logoSource = useMemo(() => require("@/src/yna-logo.png"), []);
+  const logoSource = useMemo(() => require("@/src/YNAlogo.png"), []);
 
   return (
     <Background
