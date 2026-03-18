@@ -1,5 +1,3 @@
-// src/features/discover/components/DiscoverMultiMatchRow.tsx
-
 import React from "react";
 import {
   ScrollView,
@@ -97,7 +95,7 @@ export default function DiscoverMultiMatchRow({
     );
   }
 
-  if (!!error) {
+  if (error) {
     return (
       <GlassCard strength="default" style={styles.stateCard}>
         <View style={styles.stateIconWrap}>
