@@ -1,7 +1,7 @@
-// src/components/BookingReturnPrompt.tsx
 import React, { useEffect, useRef } from "react";
-import { AppState, AppStateStatus, Alert } from "react-native";
+import { Alert, AppState, type AppStateStatus } from "react-native";
 
+import { readJson, writeJson } from "@/src/state/persist";
 import savedItemsStore from "@/src/state/savedItems";
 
 type PendingBookingPrompt = {
@@ -14,32 +14,30 @@ type PendingBookingPrompt = {
 
 const KEY = "yna_pending_booking_prompt_v1";
 
-// Minimal async storage wrapper via your existing persist helpers.
-// If you already have a generic KV store, swap these.
-import { readJson, writeJson } from "@/src/state/persist";
-
 async function getPrompt(): Promise<PendingBookingPrompt | null> {
-  const raw = await readJson<any>(KEY, null);
+  const raw = await readJson<unknown>(KEY, null);
   if (!raw || typeof raw !== "object") return null;
 
-  const itemId = String(raw.itemId ?? "").trim();
-  const tripId = String(raw.tripId ?? "").trim();
-  const startedAt = Number(raw.startedAt);
+  const value = raw as Record<string, unknown>;
+  const itemId = String(value.itemId ?? "").trim();
+  const tripId = String(value.tripId ?? "").trim();
+  const startedAt = Number(value.startedAt);
 
   if (!itemId || !tripId || !Number.isFinite(startedAt)) return null;
 
-  const snoozeUntil = Number(raw.snoozeUntil);
+  const snoozeUntil = Number(value.snoozeUntil);
+
   return {
     itemId,
     tripId,
-    partnerName: typeof raw.partnerName === "string" ? raw.partnerName : undefined,
+    partnerName: typeof value.partnerName === "string" ? value.partnerName : undefined,
     startedAt,
     snoozeUntil: Number.isFinite(snoozeUntil) ? snoozeUntil : undefined,
   };
 }
 
-async function setPrompt(p: PendingBookingPrompt | null) {
-  await writeJson(KEY, p);
+async function setPrompt(prompt: PendingBookingPrompt | null) {
+  await writeJson(KEY, prompt);
 }
 
 export async function startBookingReturnPrompt(args: {
@@ -59,8 +57,8 @@ async function clearPrompt() {
   await setPrompt(null);
 }
 
-function minutes(ms: number) {
-  return ms * 60 * 1000;
+function minutes(value: number) {
+  return value * 60 * 1000;
 }
 
 export default function BookingReturnPrompt() {
@@ -71,57 +69,60 @@ export default function BookingReturnPrompt() {
       const prev = lastState.current;
       lastState.current = next;
 
-      // Only react on background -> active (returning to app)
       if (!(prev === "background" && next === "active")) return;
 
-      const p = await getPrompt();
-      if (!p) return;
+      const prompt = await getPrompt();
+      if (!prompt) return;
 
       const now = Date.now();
 
-      // Snoozed
-      if (p.snoozeUntil && now < p.snoozeUntil) return;
+      if (prompt.snoozeUntil && now < prompt.snoozeUntil) return;
 
-      // Don’t prompt forever. 60 min window is fine for Phase 1.
-      if (now - p.startedAt > minutes(60)) {
+      if (now - prompt.startedAt > minutes(60)) {
         await clearPrompt();
         return;
       }
 
-      // If item no longer exists or already booked/archived, clear silently
-      const state = savedItemsStore.getState();
-      if (!state.loaded) {
+      const store = savedItemsStore.getState();
+      if (!store.loaded) {
         try {
           await savedItemsStore.load();
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
 
-      const item = savedItemsStore.getState().items.find((x) => x.id === p.itemId);
+      const item = savedItemsStore.getState().items.find((entry) => entry.id === prompt.itemId);
+
       if (!item) {
         await clearPrompt();
         return;
       }
+
       if (item.status === "booked" || item.status === "archived") {
         await clearPrompt();
         return;
       }
 
-      const who = p.partnerName ? ` on ${p.partnerName}` : "";
+      const partnerSuffix = prompt.partnerName ? ` on ${prompt.partnerName}` : "";
+
       Alert.alert(
         "Did you book it?",
-        `You just returned from your booking search${who}.\n\nMark "${item.title}" as booked?`,
+        `You just returned from your booking search${partnerSuffix}.\n\nMark "${item.title}" as booked?`,
         [
           {
             text: "Not now",
             style: "cancel",
             onPress: async () => {
-              await setPrompt({ ...p, snoozeUntil: Date.now() + minutes(30) });
+              await setPrompt({
+                ...prompt,
+                snoozeUntil: Date.now() + minutes(30),
+              });
             },
           },
           {
             text: "No",
             onPress: async () => {
-              // Keep as pending. Just clear the prompt so it doesn’t nag.
               await clearPrompt();
             },
           },
@@ -131,8 +132,9 @@ export default function BookingReturnPrompt() {
               try {
                 await savedItemsStore.transitionStatus(item.id, "booked");
               } catch {
-                // If transition fails, don’t lie—leave it pending.
+                // ignore
               }
+
               await clearPrompt();
             },
           },
