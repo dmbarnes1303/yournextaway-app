@@ -126,25 +126,21 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     setDiscoverOrigin("");
   }, []);
 
-  const currentWindow = useMemo(
-    () => windowForKey(discoverWindowKey),
-    [discoverWindowKey]
-  );
+  const currentWindow = useMemo(() => {
+    return windowForKey(discoverWindowKey);
+  }, [discoverWindowKey]);
 
-  const seededCategory = useMemo(
-    () =>
-      categorySeedFromFilters({
-        vibes: discoverVibes,
-        windowKey: discoverWindowKey,
-        tripLength: discoverTripLength,
-      }),
-    [discoverVibes, discoverWindowKey, discoverTripLength]
-  );
+  const seededCategory = useMemo(() => {
+    return categorySeedFromFilters({
+      vibes: discoverVibes,
+      windowKey: discoverWindowKey,
+      tripLength: discoverTripLength,
+    });
+  }, [discoverVibes, discoverWindowKey, discoverTripLength]);
 
-  const prioritisedPrimaryCategories = useMemo(
-    () => prioritiseCategories(DISCOVER_PRIMARY_CATEGORIES, seededCategory),
-    [seededCategory]
-  );
+  const prioritisedPrimaryCategories = useMemo(() => {
+    return prioritiseCategories(DISCOVER_PRIMARY_CATEGORIES, seededCategory);
+  }, [seededCategory]);
 
   const prioritisedSecondaryCategories = useMemo(() => {
     const primarySet = new Set(prioritisedPrimaryCategories);
@@ -172,9 +168,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     const parts = [
       shortLabelForKey(discoverWindowKey),
       shortLabelForTripLength(discoverTripLength),
-      discoverVibes.length
-        ? discoverVibes.map(shortLabelForVibe).join(" + ")
-        : "Any vibe",
+      discoverVibes.length ? discoverVibes.map(shortLabelForVibe).join(" + ") : "Any vibe",
     ];
 
     if (discoverOrigin.trim()) parts.push(discoverOrigin.trim());
@@ -220,8 +214,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       cancelled = true;
     };
   }, [
-    currentWindow.from,
-    currentWindow.to,
+    currentWindow,
     discoverWindowKey,
     discoverOrigin,
     discoverTripLength,
@@ -259,15 +252,13 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       .slice(0, 6);
   }, [rankedLive]);
 
-  const multiMatchTrips = useMemo(
-    () =>
-      buildMultiMatchTrips(rankedLive, {
-        vibes: discoverVibes,
-        tripLength: discoverTripLength,
-        windowKey: discoverWindowKey,
-      }),
-    [rankedLive, discoverVibes, discoverTripLength, discoverWindowKey]
-  );
+  const multiMatchTrips = useMemo(() => {
+    return buildMultiMatchTrips(rankedLive, {
+      vibes: discoverVibes,
+      tripLength: discoverTripLength,
+      windowKey: discoverWindowKey,
+    });
+  }, [rankedLive, discoverVibes, discoverTripLength, discoverWindowKey]);
 
   const goFixturesCategory = useCallback(
     (category: DiscoverCategory) => {
@@ -283,14 +274,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
         },
       } as any);
     },
-    [
-      router,
-      currentWindow.from,
-      currentWindow.to,
-      discoverOrigin,
-      discoverTripLength,
-      discoverVibes,
-    ]
+    [router, currentWindow, discoverOrigin, discoverTripLength, discoverVibes]
   );
 
   const goMatchFromRow = useCallback(
@@ -319,15 +303,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
         },
       } as any);
     },
-    [
-      router,
-      currentWindow.from,
-      currentWindow.to,
-      discoverOrigin,
-      discoverWindowKey,
-      discoverTripLength,
-      discoverVibes,
-    ]
+    [router, currentWindow, discoverOrigin, discoverWindowKey, discoverTripLength, discoverVibes]
   );
 
   const goMultiMatchTrip = useCallback(
@@ -360,11 +336,13 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       if (preset.tripLength) setDiscoverTripLength(preset.tripLength);
       if (preset.vibe) setDiscoverVibes([preset.vibe]);
 
+      const nextWindow = windowForKey(nextWindowKey);
+
       router.push({
         pathname: "/(tabs)/fixtures",
         params: {
-          from: windowForKey(nextWindowKey).from,
-          to: windowForKey(nextWindowKey).to,
+          from: nextWindow.from,
+          to: nextWindow.to,
           discover: preset.category,
           discoverFrom: discoverOrigin.trim() || undefined,
           discoverTripLength: nextTripLength,
@@ -385,11 +363,13 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       if (spark.tripLength) setDiscoverTripLength(spark.tripLength);
       if (spark.vibe) setDiscoverVibes([spark.vibe]);
 
+      const nextWindow = windowForKey(nextWindowKey);
+
       router.push({
         pathname: "/(tabs)/fixtures",
         params: {
-          from: windowForKey(nextWindowKey).from,
-          to: windowForKey(nextWindowKey).to,
+          from: nextWindow.from,
+          to: nextWindow.to,
           discover: spark.category,
           discoverFrom: discoverOrigin.trim() || undefined,
           discoverTripLength: nextTripLength,
@@ -459,8 +439,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     discoverTripLength,
     discoverVibes,
     router,
-    currentWindow.from,
-    currentWindow.to,
+    currentWindow,
     discoverWindowKey,
   ]);
 
@@ -511,4 +490,4 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       rankLabel,
     },
   };
-            }
+}
