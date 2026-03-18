@@ -1,4 +1,3 @@
-// src/services/tripTimeline.ts
 import type { SavedItem } from "@/src/core/savedItemTypes";
 import type { Trip } from "@/src/core/tripTypes";
 
@@ -20,7 +19,7 @@ export type TripTimelineEvent = {
   kind: TripTimelineKind;
   title: string;
   subtitle?: string;
-  dateIso: string; // YYYY-MM-DD
+  dateIso: string;
   timeLabel?: string;
   sortTs: number;
   status?: SavedItem["status"];
@@ -76,7 +75,6 @@ function toSortTs(dateIso: string, timeLike?: unknown, fallbackHour = 12): numbe
   const d = parseDate(timeLike);
 
   if (d) return d.getTime();
-
   if (!isIsoDateOnly(dateIso)) return 0;
 
   const safe = new Date(`${dateIso}T${String(fallbackHour).padStart(2, "0")}:00:00`);
@@ -134,7 +132,7 @@ function detectItemKind(item: SavedItem): TripTimelineKind {
   }
 }
 
-function itemDateCandidates(item: SavedItem, trip?: Trip | null): Array<unknown> {
+function itemDateCandidates(item: SavedItem, trip?: Trip | null): unknown[] {
   const m = (item.metadata ?? {}) as Record<string, any>;
 
   switch (item.type) {
@@ -229,7 +227,7 @@ function itemTimeCandidate(item: SavedItem, trip?: Trip | null): unknown {
   }
 }
 
-function firstDateIso(values: Array<unknown>): string | null {
+function firstDateIso(values: unknown[]): string | null {
   for (const v of values) {
     const iso = toDateIso(v);
     if (iso) return iso;
@@ -292,7 +290,8 @@ export function buildTripTimeline(args: {
   const events: TripTimelineEvent[] = [];
 
   const kickoffIso = clean((trip as any)?.kickoffIso);
-  const kickoffDateIso = toDateIso(kickoffIso) || (isIsoDateOnly(trip.startDate) ? trip.startDate : null);
+  const kickoffDateIso =
+    toDateIso(kickoffIso) || (isIsoDateOnly(trip.startDate) ? trip.startDate : null);
 
   if (kickoffDateIso) {
     events.push({
@@ -302,7 +301,7 @@ export function buildTripTimeline(args: {
       title: titleFromTripMatch(trip),
       subtitle: subtitleFromTripMatch(trip),
       dateIso: kickoffDateIso,
-      timeLabel: toTimeLabel(kickoffIso) || (Boolean((trip as any)?.kickoffTbc) ? "TBC" : undefined),
+      timeLabel: toTimeLabel(kickoffIso) || ((trip as any)?.kickoffTbc ? "TBC" : undefined),
       sortTs: toSortTs(kickoffDateIso, kickoffIso, 15),
       source: "trip",
       fixtureId: clean((trip as any)?.fixtureIdPrimary) || undefined,
@@ -320,7 +319,7 @@ export function buildTripTimeline(args: {
     const timeLike = itemTimeCandidate(item, trip);
     const timeLabel =
       toTimeLabel(timeLike) ||
-      (item.type === "tickets" && Boolean((trip as any)?.kickoffTbc) ? "TBC" : undefined);
+      (item.type === "tickets" && (trip as any)?.kickoffTbc ? "TBC" : undefined);
 
     events.push({
       id: `item-${item.id}`,
