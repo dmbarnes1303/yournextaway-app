@@ -11,23 +11,13 @@ import { BlurView } from "expo-blur";
 import { theme } from "@/src/constants/theme";
 
 type GlassLevel = "subtle" | "default" | "strong";
-type Variant = "matte" | "glass";
+type Variant = "matte" | "glass" | "brand" | "gold";
 
-/**
- * Legacy compatibility notes:
- * - Many screens used: <GlassCard strength="subtle" noPadding />
- * - Some used: <GlassCard intensity={26} />
- * - Some used: <GlassCard strength="strong" ...> expecting blur-ish overlay
- *
- * V2 intent:
- * - Matte surfaces by default (premium)
- * - True blur only for overlays or explicit usage
- */
 type Props = {
   children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 
-  // Legacy props (supported)
+  // Legacy props
   strength?: GlassLevel;
   noPadding?: boolean;
   intensity?: number;
@@ -64,6 +54,73 @@ function levelFromIntensity(intensity?: number): GlassLevel {
   return "strong";
 }
 
+function getBackgroundColor(variant: Variant, level: GlassLevel) {
+  if (variant === "brand") {
+    if (level === "subtle") return theme.colors.bgBrandDeep;
+    if (level === "strong") return theme.colors.bgBrandElevated;
+    return theme.colors.bgBrandElevated;
+  }
+
+  if (variant === "gold") {
+    if (level === "subtle") return alpha(theme.colors.bgGoldDeep, 0.78);
+    if (level === "strong") return alpha(theme.colors.bgGoldDeep, 0.94);
+    return alpha(theme.colors.bgGoldDeep, 0.88);
+  }
+
+  if (variant === "glass") {
+    if (level === "subtle") return alpha(theme.colors.bgSurface, 0.34);
+    if (level === "strong") return alpha(theme.colors.bgSurface, 0.18);
+    return alpha(theme.colors.bgSurface, 0.24);
+  }
+
+  if (level === "subtle") return theme.colors.bgSurface;
+  if (level === "strong") return theme.colors.bgElevated;
+  return theme.colors.bgElevated;
+}
+
+function getBorderColor(
+  variant: Variant,
+  level: GlassLevel,
+  override?: string
+): string {
+  if (override) return override;
+
+  if (variant === "brand") {
+    return level === "strong"
+      ? theme.colors.borderGreenStrong
+      : theme.colors.borderGreenSoft;
+  }
+
+  if (variant === "gold") {
+    return level === "strong"
+      ? theme.colors.borderGoldStrong
+      : theme.colors.borderGoldSoft;
+  }
+
+  if (variant === "glass") {
+    return theme.glass.border;
+  }
+
+  return theme.colors.borderSubtle;
+}
+
+function getBorderWidth(variant: Variant) {
+  if (variant === "matte") return 1;
+  return 1;
+}
+
+function getShadowStyle(variant: Variant, level: GlassLevel) {
+  if (variant === "brand" && level === "strong") {
+    return theme.shadow.greenGlow;
+  }
+
+  if (variant === "gold" && level === "strong") {
+    return theme.shadow.goldGlow;
+  }
+
+  return theme.shadow.soft;
+}
+
 export default function GlassCard({
   children,
   style,
@@ -92,7 +149,7 @@ export default function GlassCard({
 
   const resolvedVariant: Variant = useMemo(() => {
     if (variant) return variant;
-    return resolvedLevel === "strong" ? "glass" : "matte";
+    return resolvedLevel === "strong" ? "brand" : "matte";
   }, [variant, resolvedLevel]);
 
   const isBlurCapable = Platform.OS === "ios" || Platform.OS === "web";
@@ -107,24 +164,9 @@ export default function GlassCard({
       (resolvedVariant === "glass" &&
         (resolvedLevel === "strong" || eligibleByLegacy)));
 
-  const matteBg =
-    resolvedLevel === "subtle"
-      ? theme.colors.bgSurface
-      : theme.colors.bgElevated;
-
-  const glassBg =
-    resolvedLevel === "subtle"
-      ? alpha(theme.colors.bgSurface, 0.35)
-      : resolvedLevel === "default"
-        ? alpha(theme.colors.bgSurface, 0.28)
-        : alpha(theme.colors.bgSurface, 0.22);
-
-  const bg = resolvedVariant === "glass" ? glassBg : matteBg;
-
-  const defaultBorder =
-    resolvedVariant === "glass" ? theme.colors.borderSubtle : "transparent";
-
-  const resolvedBorder = borderColor ?? defaultBorder;
+  const backgroundColor = getBackgroundColor(resolvedVariant, resolvedLevel);
+  const resolvedBorder = getBorderColor(resolvedVariant, resolvedLevel, borderColor);
+  const resolvedBorderWidth = getBorderWidth(resolvedVariant);
 
   const resolvedPadding =
     noPadding ? 0 : typeof padding === "number" ? padding : theme.spacing.md;
@@ -132,18 +174,20 @@ export default function GlassCard({
   const blurIntensity = useMemo(() => {
     if (!shouldBlur) return 0;
     if (legacyIntensity != null) return clamp(legacyIntensity, 1, 100);
-    return resolvedLevel === "subtle" ? 18 : resolvedLevel === "default" ? 26 : 34;
+    return resolvedLevel === "subtle" ? 18 : resolvedLevel === "default" ? 26 : 36;
   }, [shouldBlur, legacyIntensity, resolvedLevel]);
+
+  const shadowStyle = getShadowStyle(resolvedVariant, resolvedLevel);
 
   const baseStyle: any[] = [
     styles.base,
     {
       padding: resolvedPadding,
-      backgroundColor: bg,
+      backgroundColor,
       borderColor: resolvedBorder,
-      borderWidth: resolvedVariant === "glass" ? 1 : 0,
+      borderWidth: resolvedBorderWidth,
     },
-    styles.shadow,
+    shadowStyle,
     Platform.OS === "android" && androidFallbackColor
       ? { backgroundColor: androidFallbackColor }
       : null,
@@ -165,13 +209,5 @@ const styles = StyleSheet.create({
   base: {
     borderRadius: theme.borderRadius.card,
     overflow: "hidden",
-  },
-
-  shadow: {
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 10,
   },
 });
