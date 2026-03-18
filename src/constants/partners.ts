@@ -31,12 +31,9 @@ export type Partner = {
   category: PartnerCategory;
   affiliate: boolean;
   api: boolean;
+  live: boolean;
   buildUrl: (ctx: AffiliateContext) => string | null;
 };
-
-/* -------------------------------------------------------------------------- */
-/* Affiliate config                                                           */
-/* -------------------------------------------------------------------------- */
 
 export const AffiliateConfig = {
   aviasalesMarker: "700937",
@@ -52,8 +49,7 @@ export const AffiliateConfig = {
 
   omioTracked: "https://omio.sjv.io/KBjDon",
 
-  safetywingTracked: "",
-
+  // SafetyWing removed from active config until a real tracked setup exists.
   ektaTracked: "",
   klookTracked: "",
   tiqetsTracked: "",
@@ -114,6 +110,10 @@ function appendQuery(
   const joiner = safeBase.includes("?") ? "&" : "?";
   const qs = entries.map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
   return `${safeBase}${joiner}${qs}`;
+}
+
+function hasTrackedConfig(key: keyof typeof AffiliateConfig): boolean {
+  return !!safeTrackedUrl(AffiliateConfig[key]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -198,16 +198,6 @@ function buildOmio(ctx: AffiliateContext): string | null {
   });
 }
 
-function buildSafetyWing(ctx: AffiliateContext): string | null {
-  const tracked = safeTrackedUrl(AffiliateConfig.safetywingTracked);
-  if (!tracked) return null;
-
-  return appendQuery(tracked, {
-    startDate: ymd(ctx.startDate),
-    endDate: ymd(ctx.endDate),
-  });
-}
-
 function buildTrackedOnly(key: keyof typeof AffiliateConfig) {
   return function buildTrackedPartner(_ctx: AffiliateContext): string | null {
     return safeTrackedUrl(AffiliateConfig[key]);
@@ -225,6 +215,7 @@ export const PARTNERS = [
     category: "flights",
     affiliate: true,
     api: false,
+    live: true,
     buildUrl: buildAviasales,
   },
   {
@@ -233,6 +224,7 @@ export const PARTNERS = [
     category: "stays",
     affiliate: true,
     api: false,
+    live: true,
     buildUrl: buildExpedia,
   },
   {
@@ -241,6 +233,7 @@ export const PARTNERS = [
     category: "transfers",
     affiliate: true,
     api: false,
+    live: true,
     buildUrl: buildKiwitaxi,
   },
   {
@@ -249,6 +242,7 @@ export const PARTNERS = [
     category: "experiences",
     affiliate: true,
     api: false,
+    live: true,
     buildUrl: buildGetYourGuide,
   },
   {
@@ -257,6 +251,7 @@ export const PARTNERS = [
     category: "tickets",
     affiliate: true,
     api: true,
+    live: true,
     buildUrl: buildSportsEvents365,
   },
   {
@@ -265,70 +260,70 @@ export const PARTNERS = [
     category: "transport",
     affiliate: true,
     api: false,
+    live: true,
     buildUrl: buildOmio,
-  },
-  {
-    id: "safetywing",
-    name: "SafetyWing",
-    category: "insurance",
-    affiliate: true,
-    api: false,
-    buildUrl: buildSafetyWing,
   },
   {
     id: "ekta",
     name: "EKTA",
     category: "insurance",
-    affiliate: true,
+    affiliate: hasTrackedConfig("ektaTracked"),
     api: false,
+    live: hasTrackedConfig("ektaTracked"),
     buildUrl: buildTrackedOnly("ektaTracked"),
   },
   {
     id: "klook",
     name: "Klook",
     category: "experiences",
-    affiliate: true,
+    affiliate: hasTrackedConfig("klookTracked"),
     api: false,
+    live: hasTrackedConfig("klookTracked"),
     buildUrl: buildTrackedOnly("klookTracked"),
   },
   {
     id: "tiqets",
     name: "Tiqets",
     category: "experiences",
-    affiliate: true,
+    affiliate: hasTrackedConfig("tiqetsTracked"),
     api: false,
+    live: hasTrackedConfig("tiqetsTracked"),
     buildUrl: buildTrackedOnly("tiqetsTracked"),
   },
   {
     id: "wegotrip",
     name: "WeGoTrip",
     category: "experiences",
-    affiliate: true,
+    affiliate: hasTrackedConfig("wegotripTracked"),
     api: false,
+    live: hasTrackedConfig("wegotripTracked"),
     buildUrl: buildTrackedOnly("wegotripTracked"),
   },
   {
     id: "airhelp",
     name: "AirHelp",
     category: "claims",
-    affiliate: true,
+    affiliate: hasTrackedConfig("airhelpTracked"),
     api: false,
+    live: hasTrackedConfig("airhelpTracked"),
     buildUrl: buildTrackedOnly("airhelpTracked"),
   },
   {
     id: "compensair",
     name: "Compensair",
     category: "claims",
-    affiliate: true,
+    affiliate: hasTrackedConfig("compensairTracked"),
     api: false,
+    live: hasTrackedConfig("compensairTracked"),
     buildUrl: buildTrackedOnly("compensairTracked"),
   },
   {
     id: "welcomepickups",
     name: "Welcome Pickups",
     category: "transfers",
-    affiliate: true,
+    affiliate: hasTrackedConfig("welcomepickupsTracked"),
     api: false,
+    live: hasTrackedConfig("welcomepickupsTracked"),
     buildUrl: buildTrackedOnly("welcomepickupsTracked"),
   },
 ] as const satisfies readonly Partner[];
@@ -360,13 +355,19 @@ export function getPartnerOrNull(id: string | null | undefined): Partner | null 
   return PARTNER_MAP[key] ?? null;
 }
 
+export function getLivePartners(): Partner[] {
+  return PARTNERS.filter((partner) => partner.live);
+}
+
 export function buildPartnerUrl(
   id: PartnerId | string,
   ctx: AffiliateContext
 ): string | null {
   try {
-    return getPartner(id).buildUrl(ctx);
+    const partner = getPartner(id);
+    if (!partner.live) return null;
+    return partner.buildUrl(ctx);
   } catch {
     return null;
   }
-}
+    }
