@@ -1,11 +1,10 @@
-// src/utils/errorLogger.ts
-// Dev-only log forwarding + safe console interception.
-// Must NEVER crash the app (iOS/Android/Web).
+import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 declare const __DEV__: boolean;
 
-import { Platform } from "react-native";
-import Constants from "expo-constants";
+// Dev-only log forwarding + safe console interception.
+// Must NEVER crash the app (iOS/Android/Web).
 
 type LogLevel = "log" | "warn" | "error";
 
@@ -38,12 +37,13 @@ const getPlatformName = (): string => {
   }
 };
 
-const stringifyArgs = (args: any[]): string => {
+const stringifyArgs = (args: unknown[]): string => {
   return args
     .map((arg) => {
       if (typeof arg === "string") return arg;
       if (arg === null) return "null";
       if (arg === undefined) return "undefined";
+
       try {
         return JSON.stringify(arg);
       } catch {
@@ -53,21 +53,20 @@ const stringifyArgs = (args: any[]): string => {
     .join(" ");
 };
 
-// Best-effort "file:line" from stack (dev only)
 const getCallerInfo = (): string => {
   try {
     const stack = new Error().stack || "";
     const lines = stack.split("\n");
 
-    for (let i = 3; i < lines.length; i++) {
+    for (let i = 3; i < lines.length; i += 1) {
       const line = lines[i] || "";
       if (line.includes("errorLogger") || line.includes("node_modules")) continue;
 
-      const m =
+      const match =
         line.match(/at\s+\S+\s+\((?:.*\/)?([^/\s:)]+\.[jt]sx?):(\d+):(\d+)\)/) ||
         line.match(/at\s+(?:.*\/)?([^/\s:)]+\.[jt]sx?):(\d+):(\d+)/);
 
-      if (m) return `${m[1]}:${m[2]}`;
+      if (match) return `${match[1]}:${match[2]}`;
     }
   } catch {
     // ignore
@@ -83,26 +82,29 @@ const getLogServerUrl = (): string | null => {
   if (urlChecked) return cachedLogServerUrl;
 
   try {
-    // Web: use location.origin if available
     if (Platform.OS === "web") {
-      const w = (globalThis as any)?.window;
-      const origin = w?.location?.origin;
-      if (typeof origin === "string" && origin.length) {
+      const win = (globalThis as { window?: { location?: { origin?: string } } }).window;
+      const origin = win?.location?.origin;
+
+      if (typeof origin === "string" && origin.length > 0) {
         cachedLogServerUrl = `${origin}/natively-logs`;
         urlChecked = true;
         return cachedLogServerUrl;
       }
     }
 
-    // RN/Expo: try hostUri variants
-    const anyConstants = Constants as any;
+    const expoConstants = Constants as Constants & {
+      manifest?: { hostUri?: string };
+      manifest2?: { extra?: { expoClient?: { hostUri?: string } } };
+      experienceUrl?: string;
+    };
 
     const hostUri =
       Constants.expoConfig?.hostUri ||
-      anyConstants.manifest?.hostUri ||
-      anyConstants.manifest2?.extra?.expoClient?.hostUri;
+      expoConstants.manifest?.hostUri ||
+      expoConstants.manifest2?.extra?.expoClient?.hostUri;
 
-    if (typeof hostUri === "string" && hostUri.length) {
+    if (typeof hostUri === "string" && hostUri.length > 0) {
       const host = hostUri.split("/")[0];
       const protocol = host.includes("ngrok") || host.includes(".io") ? "https" : "http";
       cachedLogServerUrl = `${protocol}://${host}/natively-logs`;
@@ -110,8 +112,8 @@ const getLogServerUrl = (): string | null => {
       return cachedLogServerUrl;
     }
 
-    const experienceUrl = anyConstants.experienceUrl;
-    if (typeof experienceUrl === "string" && experienceUrl.length) {
+    const experienceUrl = expoConstants.experienceUrl;
+    if (typeof experienceUrl === "string" && experienceUrl.length > 0) {
       const stripped = experienceUrl.replace("exp://", "");
       const host = stripped.split("/")[0];
       const protocol = host.includes("ngrok") || host.includes(".io") ? "https" : "http";
@@ -132,10 +134,12 @@ const recentLogs: Record<string, number> = {};
 const DUP_MS = 200;
 
 const seenRecently = (key: string) => {
-  const now = Date.now();
+  const nowTs = Date.now();
   const last = recentLogs[key] || 0;
-  if (now - last < DUP_MS) return true;
-  recentLogs[key] = now;
+
+  if (nowTs - last < DUP_MS) return true;
+
+  recentLogs[key] = nowTs;
   return false;
 };
 
@@ -163,8 +167,6 @@ const queueLog = (level: LogLevel, message: string, source = "") => {
   }
 };
 
-let fetchErrorLogged = false;
-
 const flushLogs = async () => {
   if (queue.length === 0) return;
 
@@ -179,14 +181,12 @@ const flushLogs = async () => {
 
   for (const item of batch) {
     try {
-      // fire-and-forget
       fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(item),
       }).catch(() => {
-        // only log once (and never throw)
-        fetchErrorLogged = true;
+        // ignore
       });
     } catch {
       // ignore
@@ -194,35 +194,34 @@ const flushLogs = async () => {
   }
 };
 
-const safeGetWindow = (): any | null => {
+const safeGetWindow = (): Window | null => {
   try {
-    const w = (globalThis as any)?.window;
-    return w && typeof w === "object" ? w : null;
+    const win = globalThis.window;
+    return win && typeof win === "object" ? win : null;
   } catch {
     return null;
   }
 };
 
-const sendErrorToParent = (level: LogLevel, message: string, data: any) => {
-  // Web-only (and only if postMessage exists)
+const sendErrorToParent = (level: LogLevel, message: string, data: unknown) => {
   if (Platform.OS !== "web") return;
 
   try {
-    const w = safeGetWindow();
-    if (!w) return;
-    if (!w.parent || w.parent === w) return;
-    if (typeof w.parent.postMessage !== "function") return;
+    const win = safeGetWindow();
+    if (!win) return;
+    if (!win.parent || win.parent === win) return;
+    if (typeof win.parent.postMessage !== "function") return;
 
-    const ua = (globalThis as any)?.navigator?.userAgent ?? "unknown";
+    const userAgent = globalThis.navigator?.userAgent ?? "unknown";
 
-    w.parent.postMessage(
+    win.parent.postMessage(
       {
         type: "EXPO_ERROR",
         level,
         message,
         data,
         timestamp: new Date().toISOString(),
-        userAgent: ua,
+        userAgent,
         source: "expo",
       },
       "*"
@@ -235,23 +234,27 @@ const sendErrorToParent = (level: LogLevel, message: string, data: any) => {
 export const setupErrorLogging = () => {
   if (!__DEV__) return;
 
-  // Guard: don't install twice (fast refresh)
   const markerKey = "__yna_error_logger_installed__";
-  const g = globalThis as any;
-  if (g[markerKey]) return;
-  g[markerKey] = true;
+  const globalObj = globalThis as typeof globalThis & {
+    __yna_error_logger_installed__?: boolean;
+  };
 
-  // Capture originals safely
-  const originalLog = typeof console.log === "function" ? console.log.bind(console) : () => {};
-  const originalWarn = typeof console.warn === "function" ? console.warn.bind(console) : () => {};
-  const originalError = typeof console.error === "function" ? console.error.bind(console) : () => {};
+  if (globalObj[markerKey]) return;
+  globalObj[markerKey] = true;
+
+  const originalLog =
+    typeof console.log === "function" ? console.log.bind(console) : () => {};
+  const originalWarn =
+    typeof console.warn === "function" ? console.warn.bind(console) : () => {};
+  const originalError =
+    typeof console.error === "function" ? console.error.bind(console) : () => {};
 
   const serverUrl = getLogServerUrl();
   originalLog("[Natively] Error logging enabled");
   originalLog("[Natively] Platform:", Platform.OS);
   originalLog("[Natively] Log server URL:", serverUrl || "NOT AVAILABLE");
 
-  console.log = (...args: any[]) => {
+  console.log = (...args: unknown[]) => {
     originalLog(...args);
     try {
       const message = stringifyArgs(args);
@@ -262,11 +265,12 @@ export const setupErrorLogging = () => {
     }
   };
 
-  console.warn = (...args: any[]) => {
+  console.warn = (...args: unknown[]) => {
     originalWarn(...args);
     try {
       const message = stringifyArgs(args);
       if (shouldMuteMessage(message)) return;
+
       const source = getCallerInfo();
       queueLog("warn", message, source);
     } catch {
@@ -274,7 +278,7 @@ export const setupErrorLogging = () => {
     }
   };
 
-  console.error = (...args: any[]) => {
+  console.error = (...args: unknown[]) => {
     originalError(...args);
     try {
       const message = stringifyArgs(args);
@@ -288,14 +292,18 @@ export const setupErrorLogging = () => {
     }
   };
 
-  // Web-only runtime hooks (must be ultra defensive)
   if (Platform.OS === "web") {
     try {
-      const w = safeGetWindow();
-      if (!w) return;
+      const win = safeGetWindow();
+      if (!win) return;
 
-      // onerror exists on web; if missing, skip
-      w.onerror = (message: any, source: any, lineno: any, colno: any, error: any) => {
+      win.onerror = (
+        message: Event | string,
+        source?: string,
+        lineno?: number,
+        colno?: number,
+        error?: Error
+      ) => {
         try {
           const src = source ? String(source).split("/").pop() : "unknown";
           const msg = `RUNTIME ERROR: ${String(message)} at ${src}:${lineno}:${colno}`;
@@ -308,16 +316,18 @@ export const setupErrorLogging = () => {
         } catch {
           // ignore
         }
+
         return false;
       };
 
-      // addEventListener might exist but not be a function depending on environment
-      if (typeof w.addEventListener === "function") {
-        w.addEventListener("unhandledrejection", (event: any) => {
+      if (typeof win.addEventListener === "function") {
+        win.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
           try {
-            const msg = `UNHANDLED PROMISE REJECTION: ${String(event?.reason ?? "unknown")}`;
+            const msg = `UNHANDLED PROMISE REJECTION: ${String(event.reason ?? "unknown")}`;
             queueLog("error", msg, "");
-            sendErrorToParent("error", "Unhandled Promise Rejection", { reason: event?.reason });
+            sendErrorToParent("error", "Unhandled Promise Rejection", {
+              reason: event.reason,
+            });
           } catch {
             // ignore
           }
@@ -329,11 +339,10 @@ export const setupErrorLogging = () => {
   }
 };
 
-// Auto-init on import in dev
 if (__DEV__) {
   try {
     setupErrorLogging();
   } catch {
     // absolutely never crash
   }
-      }
+}
