@@ -1,5 +1,10 @@
-import { runMigrations, logger } from "@specific-dev/framework";
+async function run() {
+  console.log("No database migrations are configured for this backend.");
+}
 
-runMigrations({ logger })
+run()
   .then(() => process.exit(0))
-  .catch(() => process.exit(1));
+  .catch((error) => {
+    console.error("Migration runner failed:", error);
+    process.exit(1);
+  });
