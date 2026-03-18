@@ -46,6 +46,29 @@ function SectionSpacer() {
   return <View style={styles.sectionSpacer} />;
 }
 
+function SectionShell({
+  children,
+  accent = "neutral",
+}: {
+  children: React.ReactNode;
+  accent?: "green" | "gold" | "neutral";
+}) {
+  return (
+    <View
+      style={[
+        styles.sectionShell,
+        accent === "green"
+          ? styles.sectionShellGreen
+          : accent === "gold"
+            ? styles.sectionShellGold
+            : styles.sectionShellNeutral,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
 
@@ -100,15 +123,15 @@ export default function DiscoverScreen() {
       imageSource={getBackground("explore")}
       overlayOpacity={0.05}
       topShadeOpacity={0.32}
-      bottomShadeOpacity={0.4}
-      centerShadeOpacity={0.04}
+      bottomShadeOpacity={0.42}
+      centerShadeOpacity={0.05}
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: 28 + insets.bottom },
+            { paddingBottom: 32 + insets.bottom },
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -150,224 +173,247 @@ export default function DiscoverScreen() {
             onToggleVibe={toggleVibe}
           />
 
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Fast ways in"
-              subtitle="Start with a trip type, not a blank search."
-            />
-            <DiscoverQuickSparks sparks={QUICK_SPARKS} onPressSpark={applyQuickSpark} />
-          </View>
-
-          <SectionSpacer />
-
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Best live options"
-              subtitle="Current fixtures that fit your setup now, not generic filler."
-            />
-
-            {loadingLive ? (
-              <GlassCard style={styles.stateCard} level="default" variant="matte">
-                <Text style={styles.stateTitle}>Loading live routes</Text>
-                <Text style={styles.stateText}>
-                  Pulling the strongest current football-trip options across your selected window.
-                </Text>
-              </GlassCard>
-            ) : liveError ? (
-              <EmptyState title="Live previews unavailable" message={liveError} />
-            ) : hasLiveRows ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.liveRow}
-              >
-                {previewLive.map((entry, index) => (
-                  <DiscoverFixtureCard
-                    key={String(entry.item.fixture?.fixture?.id ?? index)}
-                    row={entry.item.fixture}
-                    variant="live"
-                    title={helpers.fixtureTitle(entry.item.fixture)}
-                    meta={helpers.fixtureMeta(entry.item.fixture)}
-                    subtitle={helpers.whyThisFits(
-                      entry.item.fixture,
-                      seededCategory,
-                      discoverVibes,
-                      discoverTripLength
-                    )}
-                    badge={helpers.rankLabel(index)}
-                    onPress={() => goMatchFromRow(entry.item.fixture)}
-                  />
-                ))}
-              </ScrollView>
-            ) : (
-              <GlassCard style={styles.stateCard} level="default" variant="matte">
-                <Text style={styles.stateTitle}>No live fits yet</Text>
-                <Text style={styles.stateText}>
-                  Try widening the date window, switching trip length, or dropping one vibe so
-                  Discover can surface more routes.
-                </Text>
-              </GlassCard>
-            )}
-          </View>
-
-          <SectionSpacer />
-
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Trending trips"
-              subtitle="The louder, bigger, more travel-worthy fixtures in the current pool."
-            />
-
-            {loadingLive ? (
-              <GlassCard style={styles.stateCardThin} level="default" variant="matte">
-                <Text style={styles.stateText}>Building trending football-trip picks…</Text>
-              </GlassCard>
-            ) : hasTrendingRows ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.trendingRow}
-              >
-                {trendingTrips.map((entry, index) => (
-                  <DiscoverFixtureCard
-                    key={`trend-${String(entry.item.fixture?.fixture?.id ?? index)}`}
-                    row={entry.item.fixture}
-                    variant="trending"
-                    title={helpers.fixtureTitle(entry.item.fixture)}
-                    meta={helpers.fixtureMeta(entry.item.fixture)}
-                    subtitle={helpers.trendingLabelForFixture(entry.item.fixture)}
-                    badge="🔥 Trending"
-                    onPress={() => goMatchFromRow(entry.item.fixture)}
-                  />
-                ))}
-              </ScrollView>
-            ) : (
-              <GlassCard style={styles.stateCardThin} level="default" variant="matte">
-                <Text style={styles.stateText}>
-                  No trending routes surfaced from the current live pool.
-                </Text>
-              </GlassCard>
-            )}
-          </View>
-
-          <SectionSpacer />
-
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Multi-match trips"
-              subtitle="Stack more than one fixture into the same football break."
-            />
-
-            {loadingLive ? (
-              <GlassCard style={styles.stateCardThin} level="default" variant="matte">
-                <Text style={styles.stateText}>Looking for stackable trip combinations…</Text>
-              </GlassCard>
-            ) : hasMultiMatchTrips ? (
-              <DiscoverMultiMatchRow
-                loading={loadingLive}
-                error={liveError}
-                trips={multiMatchTrips}
-                onPressTrip={goMultiMatchTrip}
+          <SectionShell accent="green">
+            <View style={styles.section}>
+              <DiscoverSectionHeader
+                title="Fast ways in"
+                subtitle="Start with a trip type, not a blank search."
               />
-            ) : (
-              <GlassCard style={styles.stateCard} level="default" variant="matte">
-                <Text style={styles.stateTitle}>No strong combos yet</Text>
-                <Text style={styles.stateText}>
-                  Your current setup is producing mainly single-match routes. Try a longer window or
-                  2–3 nights to unlock better stackable options.
-                </Text>
-              </GlassCard>
-            )}
-          </View>
+              <DiscoverQuickSparks sparks={QUICK_SPARKS} onPressSpark={applyQuickSpark} />
+            </View>
+          </SectionShell>
 
           <SectionSpacer />
 
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Start from a mood"
-              subtitle="Fast editorial routes for the kind of trip that already sounds right."
-            />
-            <DiscoverInspirationRow
-              presets={INSPIRATION_PRESETS}
-              onPressPreset={applyPreset}
-            />
-          </View>
+          <SectionShell accent="green">
+            <View style={styles.section}>
+              <DiscoverSectionHeader
+                title="Best live options"
+                subtitle="Current fixtures that fit your setup now, not generic filler."
+              />
+
+              {loadingLive ? (
+                <GlassCard style={styles.stateCard} variant="brand" level="default">
+                  <Text style={styles.stateTitle}>Loading live routes</Text>
+                  <Text style={styles.stateText}>
+                    Pulling the strongest current football-trip options across your selected window.
+                  </Text>
+                </GlassCard>
+              ) : liveError ? (
+                <EmptyState title="Live previews unavailable" message={liveError} />
+              ) : hasLiveRows ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.liveRow}
+                >
+                  {previewLive.map((entry, index) => (
+                    <DiscoverFixtureCard
+                      key={String(entry.item.fixture?.fixture?.id ?? index)}
+                      row={entry.item.fixture}
+                      variant="live"
+                      title={helpers.fixtureTitle(entry.item.fixture)}
+                      meta={helpers.fixtureMeta(entry.item.fixture)}
+                      subtitle={helpers.whyThisFits(
+                        entry.item.fixture,
+                        seededCategory,
+                        discoverVibes,
+                        discoverTripLength
+                      )}
+                      badge={helpers.rankLabel(index)}
+                      onPress={() => goMatchFromRow(entry.item.fixture)}
+                    />
+                  ))}
+                </ScrollView>
+              ) : (
+                <GlassCard style={styles.stateCard} variant="matte" level="default">
+                  <Text style={styles.stateTitle}>No live fits yet</Text>
+                  <Text style={styles.stateText}>
+                    Try widening the date window, switching trip length, or dropping one vibe so
+                    Discover can surface more routes.
+                  </Text>
+                </GlassCard>
+              )}
+            </View>
+          </SectionShell>
 
           <SectionSpacer />
 
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Best browse route"
-              subtitle={`Right now, ${browseModeLabel} is the strongest angle from your setup.`}
-            />
+          <SectionShell accent="gold">
+            <View style={styles.section}>
+              <DiscoverSectionHeader
+                title="Trending trips"
+                subtitle="The louder, bigger, more travel-worthy fixtures in the current pool."
+              />
 
-            <View style={styles.bestFitBlock}>
-              {!featuredLive && leadCategory ? (
-                <DiscoverCategoryCard
-                  category={leadCategory}
-                  compact={false}
-                  onPress={goFixturesCategory}
+              {loadingLive ? (
+                <GlassCard style={styles.stateCardThin} variant="gold" level="default">
+                  <Text style={styles.stateText}>Building trending football-trip picks…</Text>
+                </GlassCard>
+              ) : hasTrendingRows ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.trendingRow}
+                >
+                  {trendingTrips.map((entry, index) => (
+                    <DiscoverFixtureCard
+                      key={`trend-${String(entry.item.fixture?.fixture?.id ?? index)}`}
+                      row={entry.item.fixture}
+                      variant="trending"
+                      title={helpers.fixtureTitle(entry.item.fixture)}
+                      meta={helpers.fixtureMeta(entry.item.fixture)}
+                      subtitle={helpers.trendingLabelForFixture(entry.item.fixture)}
+                      badge="🔥 Trending"
+                      onPress={() => goMatchFromRow(entry.item.fixture)}
+                    />
+                  ))}
+                </ScrollView>
+              ) : (
+                <GlassCard style={styles.stateCardThin} variant="matte" level="default">
+                  <Text style={styles.stateText}>
+                    No trending routes surfaced from the current live pool.
+                  </Text>
+                </GlassCard>
+              )}
+            </View>
+          </SectionShell>
+
+          <SectionSpacer />
+
+          <SectionShell accent="neutral">
+            <View style={styles.section}>
+              <DiscoverSectionHeader
+                title="Multi-match trips"
+                subtitle="Stack more than one fixture into the same football break."
+              />
+
+              {loadingLive ? (
+                <GlassCard style={styles.stateCardThin} variant="matte" level="default">
+                  <Text style={styles.stateText}>Looking for stackable trip combinations…</Text>
+                </GlassCard>
+              ) : hasMultiMatchTrips ? (
+                <DiscoverMultiMatchRow
+                  loading={loadingLive}
+                  error={liveError}
+                  trips={multiMatchTrips}
+                  onPressTrip={goMultiMatchTrip}
                 />
-              ) : null}
+              ) : (
+                <GlassCard style={styles.stateCard} variant="matte" level="default">
+                  <Text style={styles.stateTitle}>No strong combos yet</Text>
+                  <Text style={styles.stateText}>
+                    Your current setup is producing mainly single-match routes. Try a longer window
+                    or 2–3 nights to unlock better stackable options.
+                  </Text>
+                </GlassCard>
+              )}
+            </View>
+          </SectionShell>
 
-              <View style={styles.primaryGrid}>
-                {remainingPrimaryCategories.map((category) => (
+          <SectionSpacer />
+
+          <SectionShell accent="green">
+            <View style={styles.section}>
+              <DiscoverSectionHeader
+                title="Start from a mood"
+                subtitle="Fast editorial routes for the kind of trip that already sounds right."
+              />
+              <DiscoverInspirationRow
+                presets={INSPIRATION_PRESETS}
+                onPressPreset={applyPreset}
+              />
+            </View>
+          </SectionShell>
+
+          <SectionSpacer />
+
+          <SectionShell accent="gold">
+            <View style={styles.section}>
+              <DiscoverSectionHeader
+                title="Best browse route"
+                subtitle={`Right now, ${browseModeLabel} is the strongest angle from your setup.`}
+              />
+
+              <View style={styles.bestFitBlock}>
+                {!featuredLive && leadCategory ? (
                   <DiscoverCategoryCard
-                    key={category}
-                    category={category}
+                    category={leadCategory}
                     compact={false}
                     onPress={goFixturesCategory}
                   />
-                ))}
+                ) : null}
+
+                <View style={styles.primaryGrid}>
+                  {remainingPrimaryCategories.map((category) => (
+                    <DiscoverCategoryCard
+                      key={category}
+                      category={category}
+                      compact={false}
+                      onPress={goFixturesCategory}
+                    />
+                  ))}
+                </View>
               </View>
             </View>
-          </View>
+          </SectionShell>
 
           <SectionSpacer />
 
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Specialist browse angles"
-              subtitle="Use narrower lenses when you care more about atmosphere, city pull, stakes or specific trip logic."
-            />
+          <SectionShell accent="neutral">
+            <View style={styles.section}>
+              <DiscoverSectionHeader
+                title="Specialist browse angles"
+                subtitle="Use narrower lenses when you care more about atmosphere, city pull, stakes or specific trip logic."
+              />
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.secondaryRow}
-            >
-              {prioritisedSecondaryCategories.map((category) => (
-                <DiscoverCategoryCard
-                  key={category}
-                  category={category}
-                  compact
-                  onPress={goFixturesCategory}
-                />
-              ))}
-            </ScrollView>
-          </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.secondaryRow}
+              >
+                {prioritisedSecondaryCategories.map((category) => (
+                  <DiscoverCategoryCard
+                    key={category}
+                    category={category}
+                    compact
+                    onPress={goFixturesCategory}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          </SectionShell>
 
           <SectionSpacer />
 
-          <View style={styles.section}>
-            <DiscoverSectionHeader
-              title="Need one good answer?"
-              subtitle="Let Discover stop browsing and just hand you one of the strongest live routes."
-            />
-            <DiscoverConciergeCard
-              loading={loadingRandom}
-              filterSummary={filterSummary}
-              onPress={goRandomTrip}
-            />
-          </View>
+          <SectionShell accent="gold">
+            <View style={styles.section}>
+              <DiscoverSectionHeader
+                title="Need one good answer?"
+                subtitle="Let Discover stop browsing and just hand you one of the strongest live routes."
+              />
+              <DiscoverConciergeCard
+                loading={loadingRandom}
+                filterSummary={filterSummary}
+                onPress={goRandomTrip}
+              />
+            </View>
+          </SectionShell>
 
           <View style={styles.bottomActionWrap}>
-            <Button
-              label="Browse all live fits"
-              onPress={() => goFixturesCategory(seededCategory)}
-              tone="primary"
-              glow
-            />
+            <GlassCard variant="brand" level="strong" style={styles.bottomActionCard}>
+              <Text style={styles.bottomActionTitle}>Ready to browse properly?</Text>
+              <Text style={styles.bottomActionText}>
+                Open the strongest live Discover route from your current setup and keep moving.
+              </Text>
+
+              <Button
+                label="Browse all live fits"
+                onPress={() => goFixturesCategory(seededCategory)}
+                tone="gold"
+                glow
+              />
+            </GlassCard>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -395,6 +441,27 @@ const styles = StyleSheet.create({
 
   sectionSpacer: {
     height: 2,
+  },
+
+  sectionShell: {
+    borderRadius: 22,
+    padding: 12,
+    borderWidth: 1,
+  },
+
+  sectionShellGreen: {
+    borderColor: theme.colors.borderGreenSoft,
+    backgroundColor: "rgba(34,197,94,0.035)",
+  },
+
+  sectionShellGold: {
+    borderColor: theme.colors.borderGoldSoft,
+    backgroundColor: "rgba(250,204,21,0.035)",
+  },
+
+  sectionShellNeutral: {
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.02)",
   },
 
   liveRow: {
@@ -427,14 +494,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 16,
     gap: 8,
-    borderColor: "rgba(255,255,255,0.08)",
   },
 
   stateCardThin: {
     borderRadius: 18,
     padding: 14,
     gap: 6,
-    borderColor: "rgba(255,255,255,0.08)",
   },
 
   stateTitle: {
@@ -453,5 +518,25 @@ const styles = StyleSheet.create({
 
   bottomActionWrap: {
     paddingTop: 4,
+  },
+
+  bottomActionCard: {
+    gap: 12,
+    padding: 16,
+    borderRadius: 22,
+  },
+
+  bottomActionTitle: {
+    color: theme.colors.text,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  bottomActionText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: theme.fontWeight.bold,
   },
 });
