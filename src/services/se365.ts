@@ -47,17 +47,18 @@ function extraEnv(name: string): string | undefined {
   return s || undefined;
 }
 
-function clean(v: any): string {
+function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-function norm(v: any): string {
+function norm(v: unknown): string {
   return clean(v).toLowerCase();
 }
 
 function safeDate(iso?: string): Date | null {
   const raw = clean(iso);
   if (!raw) return null;
+
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -70,6 +71,7 @@ function absDays(a: Date, b: Date): number {
 function dateOnlyFromIso(iso: string): string | null {
   const raw = clean(iso);
   if (!raw) return null;
+
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
   const d = new Date(raw);
@@ -78,6 +80,7 @@ function dateOnlyFromIso(iso: string): string | null {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
+
   return `${y}-${m}-${day}`;
 }
 
@@ -88,7 +91,12 @@ function containsTeamName(eventName: string, home: string, away: string): boolea
   return n.includes(h) && n.includes(a);
 }
 
-function scoreEvent(ev: Se365Event, home: string, away: string, kickoffIso: string): number {
+function scoreEvent(
+  ev: Se365Event,
+  home: string,
+  away: string,
+  kickoffIso: string
+): number {
   let score = 0;
 
   const evName = clean(ev.name);
@@ -113,10 +121,9 @@ function scoreEvent(ev: Se365Event, home: string, away: string, kickoffIso: stri
  *
  * IMPORTANT:
  * - SE365 commonly uses a_aid=<id> as the affiliate parameter.
- * - Your .env currently has EXPO_PUBLIC_SE365_AFFILIATE_ID="a_aid=958" (already includes the key).
- *   We support BOTH formats:
- *     - "958"  -> appends "a_aid=958"
- *     - "a_aid=958" (or any "key=value") -> appends exactly that
+ * - We support BOTH formats:
+ *   - "958" -> appends "a_aid=958"
+ *   - "a_aid=958" (or any "key=value") -> appends exactly that
  */
 export function buildAffiliateUrl(eventUrl: string): string {
   const url = clean(eventUrl);
@@ -125,28 +132,25 @@ export function buildAffiliateUrl(eventUrl: string): string {
   const rawAff = clean(extraEnv("EXPO_PUBLIC_SE365_AFFILIATE_ID"));
   if (!rawAff) return url;
 
-  // If URL already has a_aid or affiliate-ish param, don’t duplicate.
   if (/\ba_aid=/.test(url) || /\baffiliate=/.test(url)) return url;
 
-  // If env already looks like "key=value" (e.g. "a_aid=958"), use it as-is.
-  // If it's just a number/string, use a_aid=<value>.
-  const affParam = rawAff.includes("=") ? rawAff : `a_aid=${encodeURIComponent(rawAff)}`;
+  const affParam = rawAff.includes("=")
+    ? rawAff
+    : `a_aid=${encodeURIComponent(rawAff)}`;
 
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}${affParam}`;
 }
 
-function getSe365Config() {
-  // Prefer proxy for production (keeps API key off-device)
+function getSe365ProxyUrl(): string {
   const proxyUrl = clean(extraEnv("EXPO_PUBLIC_SE365_PROXY_URL"));
-  const baseUrl = clean(extraEnv("EXPO_PUBLIC_SE365_BASE_URL"));
-  const apiKey = clean(extraEnv("EXPO_PUBLIC_SE365_API_KEY"));
 
-  return {
-    proxyUrl: proxyUrl || "",
-    baseUrl: baseUrl || "",
-    apiKey: apiKey || "",
-  };
+  if (!proxyUrl) {
+    console.warn("[SE365] Missing proxy URL");
+    return "";
+  }
+
+  return proxyUrl.replace(/\/+$/, "");
 }
 
 /**
@@ -158,12 +162,12 @@ function getSe365Config() {
  * - Pick highest score
  *
  * Transport:
- * - If EXPO_PUBLIC_SE365_PROXY_URL is set => call that (no key on device)
- * - Else call baseUrl with x-api-key (dev fallback)
+ * - Proxy/backend only
+ * - No direct provider API key usage from client
  */
-export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<ResolveResult> {
-  const cfg = getSe365Config();
-
+export async function resolveSe365EventForFixture(
+  args: ResolveArgs
+): Promise<ResolveResult> {
   const home = clean(args.homeName);
   const away = clean(args.awayName);
   const kickoffIso = clean(args.kickoffIso);
@@ -172,21 +176,18 @@ export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<Re
     return { eventId: null, eventUrl: null, reason: "missing_match_fields" };
   }
 
-  const query = encodeURIComponent(`${home} ${away}`);
+  const proxy = getSe365ProxyUrl();
 
-  let url = "";
-  const headers: Record<string, string> = { "content-type": "application/json" };
-
-  if (cfg.proxyUrl) {
-    url = `${cfg.proxyUrl.replace(/\/+$/, "")}/events/search?q=${query}`;
-    // proxy should handle auth
-  } else {
-    if (!cfg.baseUrl || !cfg.apiKey) {
-      return { eventId: null, eventUrl: null, reason: "missing_config" };
-    }
-    url = `${cfg.baseUrl.replace(/\/+$/, "")}/events/search?q=${query}`;
-    headers["x-api-key"] = cfg.apiKey;
+  if (!proxy) {
+    return { eventId: null, eventUrl: null, reason: "missing_proxy" };
   }
+
+  const query = encodeURIComponent(`${home} ${away}`);
+  const url = `${proxy}/events/search?q=${query}`;
+
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
 
   let res: Response;
   try {
@@ -218,7 +219,6 @@ export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<Re
     .map((ev) => {
       const s = scoreEvent(ev, home, away, kickoffIso);
 
-      // Hard filter if too far out when both dates exist
       if (kickoffDate && ev.startDate) {
         const start = safeDate(ev.startDate);
         if (start) {
@@ -227,7 +227,6 @@ export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<Re
         }
       }
 
-      // Soft penalty for date-only mismatch (±1 day already gets bumped)
       if (kickoffDay && ev.startDate) {
         const evDay = dateOnlyFromIso(ev.startDate);
         if (evDay && evDay !== kickoffDay) {
@@ -262,6 +261,7 @@ export async function resolveSe365EventForFixture(args: ResolveArgs): Promise<Re
 export async function getSe365EventUrl(args: ResolveArgs): Promise<string | null> {
   const { eventUrl } = await resolveSe365EventForFixture(args);
   if (!eventUrl) return null;
+
   const out = buildAffiliateUrl(eventUrl);
   return clean(out) || null;
 }
