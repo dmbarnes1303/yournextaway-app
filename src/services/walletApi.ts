@@ -1,4 +1,5 @@
 // src/services/walletApi.ts
+console.log("BACKEND URL:", process.env.EXPO_PUBLIC_BACKEND_URL);
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
