@@ -6,6 +6,7 @@ import {
   hasFtnConfig,
   hasGigsbergConfig,
   hasSe365Config,
+  hasWalletWorkerConfig,
   isProduction,
 } from "./lib/env.js";
 import { resolveTicket } from "./services/tickets/resolve.js";
@@ -34,6 +35,17 @@ function toBool(value: unknown): boolean {
   return normalized === "1" || normalized === "true" || normalized === "yes";
 }
 
+function safeUrl(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return null;
+  }
+}
+
 function getAllowedOrigin(requestOrigin: unknown): string | null {
   const origin = clean(requestOrigin);
   if (!origin) return null;
@@ -59,6 +71,11 @@ function applyCors(request: { headers: Record<string, unknown> }, reply: any): v
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Request-Id"
   );
+}
+
+function walletWorkerBaseUrl(): string {
+  const safe = safeUrl(env.walletWorkerBaseUrl);
+  return safe ? safe.replace(/\/+$/, "") : "";
 }
 
 async function apiFootballFetch<T>(
@@ -101,6 +118,38 @@ async function apiFootballFetch<T>(
   }
 
   return parsed.response as T;
+}
+
+async function walletWorkerFetch(
+  path: string,
+  init?: RequestInit,
+  query?: Record<string, string | number | undefined | null>
+): Promise<Response> {
+  if (!hasWalletWorkerConfig()) {
+    throw new Error("wallet_worker_not_configured");
+  }
+
+  const base = walletWorkerBaseUrl();
+  if (!base) {
+    throw new Error("wallet_worker_bad_base_url");
+  }
+
+  const url = new URL(`${base}${path}`);
+
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      if (value === undefined || value === null || value === "") continue;
+      url.searchParams.set(key, String(value));
+    }
+  }
+
+  const headers = new Headers(init?.headers || {});
+  headers.set("x-internal-wallet-key", env.walletWorkerApiKey);
+
+  return fetch(url.toString(), {
+    ...init,
+    headers,
+  });
 }
 
 app.addHook("onSend", async (request, reply, payload) => {
@@ -161,6 +210,7 @@ app.get("/health", async (request) => {
     requestId: request.id,
     providers: {
       apiFootball: { configured: hasApiFootballConfig() },
+      walletWorker: { configured: hasWalletWorkerConfig() },
       footballticketsnet: { configured: hasFtnConfig() },
       sportsevents365: { configured: hasSe365Config() },
       gigsberg: {
@@ -412,6 +462,172 @@ app.get<{
     return {
       ok: false,
       error: "football_teams_fetch_failed",
+      requestId: request.id,
+    };
+  }
+});
+
+// Wallet proxy routes
+
+app.get<{
+  Querystring: {
+    prefix?: string;
+    limit?: string;
+    cursor?: string;
+  };
+}>("/wallet/list", async (request, reply) => {
+  const prefix = clean(request.query.prefix) || "wallet/";
+  const limit = clean(request.query.limit) || "200";
+  const cursor = clean(request.query.cursor) || undefined;
+
+  try {
+    const upstream = await walletWorkerFetch(
+      "/wallet/list",
+      { method: "GET" },
+      {
+        prefix,
+        limit,
+        cursor,
+      }
+    );
+
+    const text = await upstream.text();
+
+    reply.code(upstream.status);
+    reply.header("Content-Type", "application/json; charset=utf-8");
+    return text;
+  } catch (error) {
+    request.log.error(
+      { err: error, prefix, limit, cursor: cursor ?? null },
+      "Wallet list proxy failed"
+    );
+
+    reply.code(502);
+    return {
+      ok: false,
+      error: "wallet_list_proxy_failed",
+      requestId: request.id,
+    };
+  }
+});
+
+app.post("/wallet/upload", async (request, reply) => {
+  try {
+    const contentType = clean(request.headers["content-type"]);
+    if (!contentType.includes("multipart/form-data")) {
+      reply.code(415);
+      return {
+        ok: false,
+        error: "Expected multipart/form-data",
+        requestId: request.id,
+      };
+    }
+
+    const upstream = await walletWorkerFetch("/wallet/upload", {
+      method: "POST",
+      headers: {
+        "content-type": contentType,
+      },
+      body: request.raw,
+      duplex: "half" as RequestDuplex,
+    });
+
+    const text = await upstream.text();
+
+    reply.code(upstream.status);
+    reply.header("Content-Type", "application/json; charset=utf-8");
+    return text;
+  } catch (error) {
+    request.log.error({ err: error }, "Wallet upload proxy failed");
+
+    reply.code(502);
+    return {
+      ok: false,
+      error: "wallet_upload_proxy_failed",
+      requestId: request.id,
+    };
+  }
+});
+
+app.get<{
+  Querystring: {
+    key?: string;
+  };
+}>("/wallet/file", async (request, reply) => {
+  const key = clean(request.query.key);
+
+  if (!key) {
+    reply.code(400);
+    return {
+      ok: false,
+      error: "Missing key",
+      requestId: request.id,
+    };
+  }
+
+  try {
+    const upstream = await walletWorkerFetch(
+      "/wallet/file",
+      { method: "GET" },
+      { key }
+    );
+
+    reply.code(upstream.status);
+
+    upstream.headers.forEach((value, header) => {
+      if (header.toLowerCase() === "transfer-encoding") return;
+      reply.header(header, value);
+    });
+
+    const arrayBuffer = await upstream.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    request.log.error({ err: error, key }, "Wallet file proxy failed");
+
+    reply.code(502);
+    return {
+      ok: false,
+      error: "wallet_file_proxy_failed",
+      requestId: request.id,
+    };
+  }
+});
+
+app.delete<{
+  Querystring: {
+    key?: string;
+  };
+}>("/wallet/file", async (request, reply) => {
+  const key = clean(request.query.key);
+
+  if (!key) {
+    reply.code(400);
+    return {
+      ok: false,
+      error: "Missing key",
+      requestId: request.id,
+    };
+  }
+
+  try {
+    const upstream = await walletWorkerFetch(
+      "/wallet/file",
+      { method: "DELETE" },
+      { key }
+    );
+
+    const text = await upstream.text();
+
+    reply.code(upstream.status);
+    reply.header("Content-Type", "application/json; charset=utf-8");
+    return text;
+  } catch (error) {
+    request.log.error({ err: error, key }, "Wallet delete proxy failed");
+
+    reply.code(502);
+    return {
+      ok: false,
+      error: "wallet_delete_proxy_failed",
       requestId: request.id,
     };
   }
