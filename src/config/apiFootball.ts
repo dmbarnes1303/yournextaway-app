@@ -1,35 +1,35 @@
-// src/config/apiFootball.ts
-import Constants from "expo-constants";
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
+}
 
-export const API_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
+function safeUrl(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
 
-function getExtraKey(): string | undefined {
-  const c: any = Constants;
-
-  const candidates = [
-    c?.expoConfig?.extra?.EXPO_PUBLIC_API_FOOTBALL_KEY,
-    c?.manifest?.extra?.EXPO_PUBLIC_API_FOOTBALL_KEY,
-    c?.manifest2?.extra?.EXPO_PUBLIC_API_FOOTBALL_KEY,
-  ];
-
-  for (const v of candidates) {
-    if (typeof v === "string" && v.trim()) return v.trim();
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return null;
   }
-  return undefined;
 }
 
-function readKey(): string | undefined {
-  const envKey = (process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ?? "").trim();
-  if (envKey) return envKey;
-  return getExtraKey();
+export function getBackendBaseUrl(): string {
+  const raw =
+    clean(process.env.EXPO_PUBLIC_BACKEND_URL) ||
+    clean((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL);
+
+  const safe = safeUrl(raw);
+  return safe ? safe.replace(/\/+$/, "") : "";
 }
 
-export function assertApiFootballKey(): string {
-  const key = readKey();
-  if (!key) {
+export function assertBackendBaseUrl(): string {
+  const url = getBackendBaseUrl();
+
+  if (!url) {
     throw new Error(
-      "Missing API-Football key. Set EXPO_PUBLIC_API_FOOTBALL_KEY."
+      "Missing backend URL. Set EXPO_PUBLIC_BACKEND_URL."
     );
   }
-  return key;
+
+  return url;
 }
