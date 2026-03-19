@@ -18,8 +18,29 @@ function optNumber(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function optList(name: string): string[] {
+  const raw = String(process.env[name] ?? "").trim();
+  if (!raw) return [];
+
+  return raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 export const env = {
+  nodeEnv: opt("NODE_ENV", "development"),
   port: optNumber("PORT", 3000),
+
+  // CORS
+  appCorsOrigins: optList("APP_CORS_ORIGINS"),
+
+  // API-Football
+  apiFootballBaseUrl: opt(
+    "API_FOOTBALL_BASE_URL",
+    "https://v3.football.api-sports.io"
+  ),
+  apiFootballKey: opt("API_FOOTBALL_KEY", ""),
 
   // FootballTicketNet
   ftnBaseUrl: opt("FTN_BASE_URL", "https://www.footballticketnet.com/api"),
@@ -34,10 +55,21 @@ export const env = {
   se365AffiliateId: opt("SE365_AFFILIATE_ID", ""),
 
   // Gigsberg
-  gigsbergBaseUrl: opt("GIGSBERG_BASE_URL", "https://integration2.gigsberg.com/v2"),
+  gigsbergBaseUrl: opt(
+    "GIGSBERG_BASE_URL",
+    "https://integration2.gigsberg.com/v2"
+  ),
   gigsbergApiKey: opt("GIGSBERG_API_KEY", ""),
   gigsbergAffiliateId: opt("GIGSBERG_AFFILIATE_ID", "yournextaway"),
 };
+
+export function isProduction(): boolean {
+  return env.nodeEnv.toLowerCase() === "production";
+}
+
+export function hasApiFootballConfig(): boolean {
+  return Boolean(env.apiFootballBaseUrl && env.apiFootballKey);
+}
 
 export function hasFtnConfig(): boolean {
   return Boolean(
