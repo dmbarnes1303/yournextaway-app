@@ -1,5 +1,6 @@
 import "dotenv/config";
 import Fastify from "fastify";
+import multipart from "@fastify/multipart";
 import {
   env,
   hasApiFootballConfig,
@@ -15,6 +16,14 @@ const app = Fastify({
   logger: true,
   requestIdHeader: "x-request-id",
   genReqId: () => `yna_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+});
+
+await app.register(multipart, {
+  attachFieldsToBody: false,
+  limits: {
+    files: 1,
+    fileSize: 20 * 1024 * 1024,
+  },
 });
 
 type ApiFootballEnvelope<T> = {
@@ -513,8 +522,7 @@ app.get<{
 
 app.post("/wallet/upload", async (request, reply) => {
   try {
-    const contentType = clean(request.headers["content-type"]);
-    if (!contentType.includes("multipart/form-data")) {
+    if (!request.isMultipart()) {
       reply.code(415);
       return {
         ok: false,
@@ -523,13 +531,59 @@ app.post("/wallet/upload", async (request, reply) => {
       };
     }
 
+    const parts = request.parts();
+
+    let fileBuffer: Buffer | null = null;
+    let fileName = "upload";
+    let mimeType = "application/octet-stream";
+    let userId = "";
+    let tripId = "";
+    let matchId = "";
+    let category = "";
+
+    for await (const part of parts) {
+      if (part.type === "file") {
+        fileName = clean(part.filename) || "upload";
+        mimeType = clean(part.mimetype) || "application/octet-stream";
+
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        fileBuffer = Buffer.concat(chunks);
+      } else {
+        const value = clean(part.value);
+        if (part.fieldname === "userId") userId = value;
+        if (part.fieldname === "tripId") tripId = value;
+        if (part.fieldname === "matchId") matchId = value;
+        if (part.fieldname === "category") category = value;
+      }
+    }
+
+    if (!fileBuffer) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: "Missing file field",
+        requestId: request.id,
+      };
+    }
+
+    const form = new FormData();
+    form.append(
+      "file",
+      new Blob([fileBuffer], { type: mimeType }),
+      fileName
+    );
+
+    if (userId) form.append("userId", userId);
+    if (tripId) form.append("tripId", tripId);
+    if (matchId) form.append("matchId", matchId);
+    if (category) form.append("category", category);
+
     const upstream = await walletWorkerFetch("/wallet/upload", {
       method: "POST",
-      headers: {
-        "content-type": contentType,
-      },
-      body: request.raw,
-      duplex: "half" as RequestDuplex,
+      body: form,
     });
 
     const text = await upstream.text();
