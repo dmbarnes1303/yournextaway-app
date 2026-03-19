@@ -1,3 +1,4 @@
+// src/services/walletApi.ts
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
@@ -33,31 +34,68 @@ type WalletUploadResponse = {
   meta: WalletUploadMeta;
 };
 
-const rawBase = process.env.EXPO_PUBLIC_WALLET_API_BASE;
-const rawApiKey = process.env.EXPO_PUBLIC_WALLET_API_KEY;
+type WalletDeleteResponse = {
+  ok: boolean;
+  deleted: string;
+};
 
-const BASE =
-  typeof rawBase === "string" && rawBase.trim().length > 0
-    ? rawBase.replace(/\/+$/, "")
-    : "https://yna-email.db-17c.workers.dev";
+type ErrorLike = {
+  ok?: boolean;
+  error?: string;
+};
 
-const API_KEY =
-  typeof rawApiKey === "string" && rawApiKey.trim().length > 0 ? rawApiKey : "";
+const REQUEST_TIMEOUT_MS = 30000;
 
-function assertConfigured() {
-  if (!BASE) throw new Error("Wallet API base URL missing");
-  if (!API_KEY) throw new Error("Wallet API key missing");
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-function withAuthHeaders(extra?: Record<string, string>) {
-  return {
-    "x-api-key": API_KEY,
-    ...(extra ?? {}),
-  };
+function safeUrl(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return null;
+  }
 }
 
-function buildUrl(path: string, params?: Record<string, string | number | undefined | null>) {
-  const url = new URL(BASE + path);
+function getWalletBaseUrl(): string {
+  const candidates = [
+    process.env.EXPO_PUBLIC_WALLET_API_BASE,
+    process.env.EXPO_PUBLIC_BACKEND_URL,
+    (process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL,
+  ];
+
+  for (const candidate of candidates) {
+    const safe = safeUrl(candidate);
+    if (safe) {
+      return safe.replace(/\/+$/, "");
+    }
+  }
+
+  return "";
+}
+
+function assertConfigured(): string {
+  const base = getWalletBaseUrl();
+
+  if (!base) {
+    throw new Error(
+      "Wallet API base URL missing. Set EXPO_PUBLIC_WALLET_API_BASE or EXPO_PUBLIC_BACKEND_URL."
+    );
+  }
+
+  return base;
+}
+
+function buildUrl(
+  path: string,
+  params?: Record<string, string | number | undefined | null>
+): string {
+  const base = assertConfigured();
+  const url = new URL(`${base}${path}`);
 
   if (params) {
     for (const [key, value] of Object.entries(params)) {
@@ -69,13 +107,57 @@ function buildUrl(path: string, params?: Record<string, string | number | undefi
   return url.toString();
 }
 
-async function safeJson(res: Response): Promise<unknown> {
-  const text = await res.text();
+function buildHeaders(extra?: Record<string, string>): Record<string, string> {
+  return {
+    Accept: "application/json",
+    ...(extra ?? {}),
+  };
+}
+
+async function safeJson<T>(res: Response): Promise<T | (ErrorLike & Record<string, unknown>)> {
+  const text = await res.text().catch(() => "");
+
+  if (!text) {
+    return {
+      ok: false,
+      error: `HTTP ${res.status}`,
+    };
+  }
 
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   } catch {
-    return { ok: false, error: text || `HTTP ${res.status}` };
+    return {
+      ok: false,
+      error: text || `HTTP ${res.status}`,
+    };
+  }
+}
+
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit
+): Promise<Response> {
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    : null;
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller?.signal,
+    });
+  } catch (error: any) {
+    if (String(error?.name ?? "") === "AbortError") {
+      throw new Error("wallet_timeout");
+    }
+
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 }
 
@@ -88,23 +170,35 @@ export async function walletList(opts?: {
   limit?: number;
   cursor?: string | null;
 }): Promise<WalletListResponse> {
-  assertConfigured();
-
   const url = buildUrl("/wallet/list", {
     prefix: opts?.prefix || "wallet/",
     limit: opts?.limit ?? 200,
     cursor: opts?.cursor ?? undefined,
   });
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "GET",
-    headers: withAuthHeaders(),
+    headers: buildHeaders(),
   });
 
-  const data = await safeJson(res) as { error?: string } & Partial<WalletListResponse>;
-  if (!res.ok) throw new Error(data.error || `Wallet list failed (${res.status})`);
+  const data = (await safeJson<WalletListResponse>(res)) as Partial<WalletListResponse> &
+    ErrorLike;
 
-  return data as WalletListResponse;
+  if (!res.ok) {
+    throw new Error(data.error || `Wallet list failed (${res.status})`);
+  }
+
+  return {
+    ok: Boolean(data.ok),
+    prefix: clean(data.prefix),
+    limit:
+      typeof data.limit === "number" && Number.isFinite(data.limit)
+        ? data.limit
+        : opts?.limit ?? 200,
+    cursor: typeof data.cursor === "string" ? data.cursor : null,
+    truncated: Boolean(data.truncated),
+    items: Array.isArray(data.items) ? data.items : [],
+  };
 }
 
 /**
@@ -120,9 +214,8 @@ export async function walletUpload(opts: {
   matchId?: string;
   category?: string;
 }): Promise<WalletUploadResponse> {
-  assertConfigured();
-
   const form = new FormData();
+
   form.append("file", {
     uri: opts.fileUri,
     name: opts.filename,
@@ -134,28 +227,43 @@ export async function walletUpload(opts: {
   if (opts.matchId) form.append("matchId", opts.matchId);
   if (opts.category) form.append("category", opts.category);
 
-  const res = await fetch(buildUrl("/wallet/upload"), {
+  const res = await fetchWithTimeout(buildUrl("/wallet/upload"), {
     method: "POST",
-    headers: withAuthHeaders(),
+    headers: buildHeaders(),
     body: form,
   });
 
-  const data = await safeJson(res) as { error?: string } & Partial<WalletUploadResponse>;
-  if (!res.ok) throw new Error(data.error || `Wallet upload failed (${res.status})`);
+  const data = (await safeJson<WalletUploadResponse>(res)) as Partial<WalletUploadResponse> &
+    ErrorLike;
 
-  return data as WalletUploadResponse;
+  if (!res.ok) {
+    throw new Error(data.error || `Wallet upload failed (${res.status})`);
+  }
+
+  return {
+    ok: Boolean(data.ok),
+    key: clean(data.key),
+    size:
+      typeof data.size === "number" && Number.isFinite(data.size) ? data.size : 0,
+    contentType: clean(data.contentType),
+    meta: {
+      userId: clean(data.meta?.userId),
+      tripId: clean(data.meta?.tripId),
+      category: clean(data.meta?.category),
+      matchId: clean(data.meta?.matchId) || null,
+      originalName: clean(data.meta?.originalName),
+    },
+  };
 }
 
 /**
- * DOWNLOAD (auth required)
- * Uses FileSystem.downloadAsync with headers.
+ * DOWNLOAD
+ * Uses FileSystem.downloadAsync without static client API key.
  */
 export async function walletDownloadToCache(opts: {
   key: string;
   suggestedFilename?: string;
 }): Promise<{ localUri: string; filename: string }> {
-  assertConfigured();
-
   const filename =
     opts.suggestedFilename ||
     decodeURIComponent(opts.key.split("/").pop() || "wallet-file");
@@ -171,7 +279,7 @@ export async function walletDownloadToCache(opts: {
   const url = buildUrl("/wallet/file", { key: opts.key });
 
   const result = await FileSystem.downloadAsync(url, localUri, {
-    headers: withAuthHeaders(),
+    headers: buildHeaders(),
   });
 
   if (result.status >= 400) {
@@ -202,29 +310,42 @@ export async function walletOpenOrShare(opts: { key: string }) {
  */
 export async function walletDelete(opts: {
   key: string;
-}): Promise<{ ok: boolean; deleted: string }> {
-  assertConfigured();
-
+}): Promise<WalletDeleteResponse> {
   const url = buildUrl("/wallet/file", { key: opts.key });
-  const res = await fetch(url, {
+
+  const res = await fetchWithTimeout(url, {
     method: "DELETE",
-    headers: withAuthHeaders(),
+    headers: buildHeaders(),
   });
 
-  const data = await safeJson(res) as { error?: string; ok?: boolean; deleted?: string };
-  if (!res.ok) throw new Error(data.error || `Wallet delete failed (${res.status})`);
+  const data = (await safeJson<WalletDeleteResponse>(res)) as Partial<WalletDeleteResponse> &
+    ErrorLike;
 
-  return data as { ok: boolean; deleted: string };
+  if (!res.ok) {
+    throw new Error(data.error || `Wallet delete failed (${res.status})`);
+  }
+
+  return {
+    ok: Boolean(data.ok),
+    deleted: clean(data.deleted),
+  };
 }
 
 /**
  * Prefix builders
  */
-export function walletPrefixForTrip(opts: { userId: string; tripId: string; category?: string }) {
+export function walletPrefixForTrip(opts: {
+  userId: string;
+  tripId: string;
+  category?: string;
+}) {
   const user = safeSegment(opts.userId || "anon");
   const trip = safeSegment(opts.tripId || "general");
   const category = safeSegment(opts.category || "");
-  return category ? `wallet/${user}/${trip}/${category}/` : `wallet/${user}/${trip}/`;
+
+  return category
+    ? `wallet/${user}/${trip}/${category}/`
+    : `wallet/${user}/${trip}/`;
 }
 
 export function walletPrefixForUser(opts: { userId: string }) {
