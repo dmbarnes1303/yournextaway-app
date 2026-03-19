@@ -61,9 +61,8 @@ function safeUrl(value: unknown): string | null {
   }
 }
 
-function getWalletBaseUrl(): string {
+function getBackendBaseUrl(): string {
   const candidates = [
-    process.env.EXPO_PUBLIC_WALLET_API_BASE,
     process.env.EXPO_PUBLIC_BACKEND_URL,
     (process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL,
   ];
@@ -79,12 +78,10 @@ function getWalletBaseUrl(): string {
 }
 
 function assertConfigured(): string {
-  const base = getWalletBaseUrl();
+  const base = getBackendBaseUrl();
 
   if (!base) {
-    throw new Error(
-      "Wallet API base URL missing. Set EXPO_PUBLIC_WALLET_API_BASE or EXPO_PUBLIC_BACKEND_URL."
-    );
+    throw new Error("Backend URL missing. Set EXPO_PUBLIC_BACKEND_URL.");
   }
 
   return base;
@@ -134,10 +131,7 @@ async function safeJson<T>(res: Response): Promise<T | (ErrorLike & Record<strin
   }
 }
 
-async function fetchWithTimeout(
-  input: string,
-  init?: RequestInit
-): Promise<Response> {
+async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
 
@@ -154,17 +148,12 @@ async function fetchWithTimeout(
     if (String(error?.name ?? "") === "AbortError") {
       throw new Error("wallet_timeout");
     }
-
     throw error;
   } finally {
     if (timeout) clearTimeout(timeout);
   }
 }
 
-/**
- * LIST
- * GET /wallet/list?prefix=wallet/...&limit=200&cursor=...
- */
 export async function walletList(opts?: {
   prefix?: string;
   limit?: number;
@@ -181,8 +170,7 @@ export async function walletList(opts?: {
     headers: buildHeaders(),
   });
 
-  const data = (await safeJson<WalletListResponse>(res)) as Partial<WalletListResponse> &
-    ErrorLike;
+  const data = (await safeJson<WalletListResponse>(res)) as Partial<WalletListResponse> & ErrorLike;
 
   if (!res.ok) {
     throw new Error(data.error || `Wallet list failed (${res.status})`);
@@ -201,10 +189,6 @@ export async function walletList(opts?: {
   };
 }
 
-/**
- * UPLOAD
- * POST /wallet/upload (multipart/form-data)
- */
 export async function walletUpload(opts: {
   fileUri: string;
   filename: string;
@@ -233,8 +217,7 @@ export async function walletUpload(opts: {
     body: form,
   });
 
-  const data = (await safeJson<WalletUploadResponse>(res)) as Partial<WalletUploadResponse> &
-    ErrorLike;
+  const data = (await safeJson<WalletUploadResponse>(res)) as Partial<WalletUploadResponse> & ErrorLike;
 
   if (!res.ok) {
     throw new Error(data.error || `Wallet upload failed (${res.status})`);
@@ -243,8 +226,7 @@ export async function walletUpload(opts: {
   return {
     ok: Boolean(data.ok),
     key: clean(data.key),
-    size:
-      typeof data.size === "number" && Number.isFinite(data.size) ? data.size : 0,
+    size: typeof data.size === "number" && Number.isFinite(data.size) ? data.size : 0,
     contentType: clean(data.contentType),
     meta: {
       userId: clean(data.meta?.userId),
@@ -256,10 +238,6 @@ export async function walletUpload(opts: {
   };
 }
 
-/**
- * DOWNLOAD
- * Uses FileSystem.downloadAsync without static client API key.
- */
 export async function walletDownloadToCache(opts: {
   key: string;
   suggestedFilename?: string;
@@ -289,9 +267,6 @@ export async function walletDownloadToCache(opts: {
   return { localUri: result.uri, filename: safeName };
 }
 
-/**
- * VIEW/SHARE helper
- */
 export async function walletOpenOrShare(opts: { key: string }) {
   const { localUri } = await walletDownloadToCache({ key: opts.key });
 
@@ -304,10 +279,6 @@ export async function walletOpenOrShare(opts: { key: string }) {
   return localUri;
 }
 
-/**
- * DELETE
- * DELETE /wallet/file?key=...
- */
 export async function walletDelete(opts: {
   key: string;
 }): Promise<WalletDeleteResponse> {
@@ -318,8 +289,7 @@ export async function walletDelete(opts: {
     headers: buildHeaders(),
   });
 
-  const data = (await safeJson<WalletDeleteResponse>(res)) as Partial<WalletDeleteResponse> &
-    ErrorLike;
+  const data = (await safeJson<WalletDeleteResponse>(res)) as Partial<WalletDeleteResponse> & ErrorLike;
 
   if (!res.ok) {
     throw new Error(data.error || `Wallet delete failed (${res.status})`);
@@ -331,9 +301,6 @@ export async function walletDelete(opts: {
   };
 }
 
-/**
- * Prefix builders
- */
 export function walletPrefixForTrip(opts: {
   userId: string;
   tripId: string;
