@@ -2,41 +2,38 @@
 import Constants from "expo-constants";
 
 type Env = {
-  // Sportsevents365
-  se365BaseUrl: string;       // e.g. https://api-v2.sandbox365.com OR https://api-v2.sportsevents365.com
-  se365ApiKey: string;        // your API key
-  se365AffiliateId: string;   // just the code/id, NOT a URL
+  backendUrl: string;
+  se365ProxyUrl: string;
+  se365AffiliateId: string;
 };
 
 function pickExtra(): any {
-  // Expo Go + builds: prefer expoConfig.extra
   const cfg: any = (Constants as any).expoConfig ?? (Constants as any).manifest;
   return cfg?.extra ?? {};
 }
 
-function str(v: any): string {
+function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : String(v ?? "").trim();
 }
 
 const extra = pickExtra();
 
-// NOTE: In Expo, EXPO_PUBLIC_* vars are usually surfaced into `extra`
-// depending on your setup (app.config / eas.json). We support both.
-const se365BaseUrl =
-  str(extra.EXPO_PUBLIC_SE365_BASE_URL) ||
-  str(process.env.EXPO_PUBLIC_SE365_BASE_URL) ||
-  "https://api-v2.sandbox365.com";
+const backendUrl =
+  str(extra.EXPO_PUBLIC_BACKEND_URL) ||
+  str(process.env.EXPO_PUBLIC_BACKEND_URL) ||
+  str((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL);
 
-const se365ApiKey =
-  str(extra.EXPO_PUBLIC_SE365_API_KEY) ||
-  str(process.env.EXPO_PUBLIC_SE365_API_KEY);
+const se365ProxyUrl =
+  str(extra.EXPO_PUBLIC_SE365_PROXY_URL) ||
+  str(process.env.EXPO_PUBLIC_SE365_PROXY_URL) ||
+  backendUrl;
 
 const se365AffiliateId =
   str(extra.EXPO_PUBLIC_SE365_AFFILIATE_ID) ||
   str(process.env.EXPO_PUBLIC_SE365_AFFILIATE_ID);
 
 export const ENV: Env = {
-  se365BaseUrl,
-  se365ApiKey,
+  backendUrl,
+  se365ProxyUrl,
   se365AffiliateId,
 };
