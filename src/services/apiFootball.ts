@@ -1,6 +1,3 @@
-// src/services/apiFootball.ts
-// API-Football client (secure Expo env usage)
-
 export type FixtureListRow = {
   fixture: {
     id: number;
@@ -34,45 +31,120 @@ type FixturesParams = {
   toIso?: string;
 };
 
-const API_BASE = "https://v3.football.api-sports.io";
+type BackendEnvelope<T> = {
+  ok?: boolean;
+  response?: T;
+  error?: string;
+  requestId?: string;
+};
 
-function getApiKey(): string {
-  const key = process.env.EXPO_PUBLIC_API_FOOTBALL_KEY ?? "";
-  const cleaned = String(key).trim();
+const REQUEST_TIMEOUT_MS = 20000;
 
-  if (!cleaned) {
-    console.warn("[YNA] API-Football key missing");
-  }
-
-  return cleaned;
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-async function apiFetch<T>(path: string, params?: Record<string, any>): Promise<T> {
-  const url = new URL(API_BASE + path);
+function safeUrl(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return null;
+  }
+}
+
+function getBackendBaseUrl(): string {
+  const raw =
+    clean(process.env.EXPO_PUBLIC_BACKEND_URL) ||
+    clean((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL);
+
+  const safe = safeUrl(raw);
+  return safe ? safe.replace(/\/+$/, "") : "";
+}
+
+function buildUrl(
+  path: string,
+  params?: Record<string, string | number | undefined | null>
+): string | null {
+  const base = getBackendBaseUrl();
+  if (!base) return null;
+
+  const url = new URL(`${base}${path}`);
 
   if (params) {
-    Object.entries(params).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== "") {
-        url.searchParams.append(k, String(v));
-      }
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null || value === "") continue;
+      url.searchParams.set(key, String(value));
+    }
+  }
+
+  return url.toString();
+}
+
+async function safeJson<T>(res: Response): Promise<T | null> {
+  const text = await res.text().catch(() => "");
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function backendFetch<T>(
+  path: string,
+  params?: Record<string, string | number | undefined | null>
+): Promise<T> {
+  const url = buildUrl(path, params);
+
+  if (!url) {
+    throw new Error("missing_backend_url");
+  }
+
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    : null;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+      cache: "no-store",
+      signal: controller?.signal,
     });
+
+    const parsed = await safeJson<BackendEnvelope<T>>(res);
+
+    if (!res.ok) {
+      const errorText =
+        clean(parsed?.error) || `backend_http_${res.status}`;
+      throw new Error(errorText);
+    }
+
+    if (!parsed || !("response" in parsed)) {
+      throw new Error("invalid_backend_response");
+    }
+
+    return parsed.response as T;
+  } catch (error: any) {
+    if (String(error?.name ?? "") === "AbortError") {
+      throw new Error("backend_timeout");
+    }
+
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
-
-  const key = getApiKey();
-
-  const res = await fetch(url.toString(), {
-    headers: {
-      "x-apisports-key": key,
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API-Football ${res.status} — ${text}`);
-  }
-
-  const json = await res.json();
-  return json.response as T;
 }
 
 export async function getFixtures(params: FixturesParams): Promise<FixtureListRow[]> {
@@ -82,7 +154,7 @@ export async function getFixtures(params: FixturesParams): Promise<FixtureListRo
 
   if (!league || !params.season) return [];
 
-  const rows = await apiFetch<FixtureListRow[]>("/fixtures", {
+  const rows = await backendFetch<FixtureListRow[]>("/football/fixtures", {
     league,
     season: params.season,
     from,
@@ -93,7 +165,8 @@ export async function getFixtures(params: FixturesParams): Promise<FixtureListRo
 }
 
 export async function getFixtureById(id: number | string): Promise<FixtureListRow | null> {
-  const rows = await apiFetch<any[]>("/fixtures", { id });
+  const rows = await backendFetch<FixtureListRow[]>("/football/fixture", { id });
+
   if (!Array.isArray(rows) || rows.length === 0) return null;
   return rows[0] as FixtureListRow;
 }
@@ -105,7 +178,7 @@ export async function getFixturesByRound(opts: {
 }): Promise<FixtureListRow[]> {
   if (!opts.leagueId || !opts.season || !opts.round) return [];
 
-  const rows = await apiFetch<FixtureListRow[]>("/fixtures", {
+  const rows = await backendFetch<FixtureListRow[]>("/football/fixtures/by-round", {
     league: opts.leagueId,
     season: opts.season,
     round: opts.round,
@@ -117,12 +190,12 @@ export async function getFixturesByRound(opts: {
 export async function getCountries(): Promise<
   { name: string; code: string; flag: string }[]
 > {
-  const rows = await apiFetch<any[]>("/countries");
+  const rows = await backendFetch<any[]>("/football/countries");
 
-  return (rows || []).map((r) => ({
-    name: r.name,
-    code: r.code,
-    flag: r.flag,
+  return (Array.isArray(rows) ? rows : []).map((r) => ({
+    name: clean(r?.name),
+    code: clean(r?.code),
+    flag: clean(r?.flag),
   }));
 }
 
@@ -132,14 +205,16 @@ export async function getTeams(opts: {
 }): Promise<{ id: number; name: string; logo?: string | null }[]> {
   if (!opts.leagueId || !opts.season) return [];
 
-  const rows = await apiFetch<any[]>("/teams", {
+  const rows = await backendFetch<any[]>("/football/teams", {
     league: opts.leagueId,
     season: opts.season,
   });
 
-  return (rows || []).map((r) => ({
-    id: r.team?.id,
-    name: r.team?.name,
-    logo: r.team?.logo ?? null,
-  }));
+  return (Array.isArray(rows) ? rows : [])
+    .map((r) => ({
+      id: Number(r?.team?.id),
+      name: clean(r?.team?.name),
+      logo: clean(r?.team?.logo) || null,
+    }))
+    .filter((team) => Number.isFinite(team.id) && !!team.name);
 }
