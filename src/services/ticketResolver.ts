@@ -1,4 +1,4 @@
-// src/services/ticketResolver.ts
+import { getBackendBaseUrl } from "../config/env";
 
 export type TicketResolutionOption = {
   provider: string;
@@ -57,15 +57,6 @@ function safeUrl(value: unknown): string | null {
   } catch {
     return null;
   }
-}
-
-function getBackendBaseUrl(): string {
-  const raw =
-    clean(process.env.EXPO_PUBLIC_BACKEND_URL) ||
-    clean((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL);
-
-  const safe = safeUrl(raw);
-  return safe ? safe.replace(/\/+$/, "") : "";
 }
 
 function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
@@ -208,41 +199,14 @@ export async function resolveTicketForFixture(
   const base = getBackendBaseUrl();
 
   if (!base) {
-    console.log("[ticketResolver] missing backend base url", {
-      EXPO_PUBLIC_BACKEND_URL: clean(process.env.EXPO_PUBLIC_BACKEND_URL),
-      EXPO_PUBLIC_BACKEND_BASE_URL: clean(
-        (process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL
-      ),
-    });
     return makeErrorResult("missing_backend_url");
   }
 
   const url = buildResolveUrl(base, args);
 
   if (!url) {
-    console.log("[ticketResolver] could not build resolve url", {
-      base,
-      fixtureId: clean(args.fixtureId),
-      homeName: clean(args.homeName),
-      awayName: clean(args.awayName),
-      kickoffIso: clean(args.kickoffIso),
-      leagueName: clean(args.leagueName),
-      leagueId: clean(args.leagueId),
-    });
     return makeErrorResult("invalid_resolve_args");
   }
-
-  console.log("[ticketResolver] request start", {
-    base,
-    url,
-    fixtureId: clean(args.fixtureId),
-    homeName: clean(args.homeName),
-    awayName: clean(args.awayName),
-    kickoffIso: clean(args.kickoffIso),
-    leagueName: clean(args.leagueName),
-    leagueId: clean(args.leagueId),
-    debugNoCache: Boolean(args.debugNoCache),
-  });
 
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -264,26 +228,14 @@ export async function resolveTicketForFixture(
     });
 
     const raw = await res.text();
-
-    console.log("[ticketResolver] raw response", {
-      status: res.status,
-      ok: res.ok,
-      bodyPreview: raw.slice(0, 800),
-    });
-
     const parsed = safeJsonParse<TicketResolutionResult>(raw);
     const normalized = normalizeResolutionResult(parsed);
 
     if (!normalized) {
-      console.log("[ticketResolver] invalid backend json", {
-        status: res.status,
-        raw,
-      });
       return makeErrorResult(res.ok ? "invalid_backend_json" : `http_${res.status}`);
     }
 
     if (!res.ok) {
-      console.log("[ticketResolver] backend non-ok normalized response", normalized);
       return {
         ...normalized,
         ok: false,
@@ -291,26 +243,9 @@ export async function resolveTicketForFixture(
       };
     }
 
-    console.log("[ticketResolver] normalized success", {
-      provider: normalized.provider,
-      reason: normalized.reason,
-      score: normalized.score,
-      optionsCount: Array.isArray(normalized.options)
-        ? normalized.options.length
-        : 0,
-      checkedProviders: normalized.checkedProviders ?? [],
-    });
-
     return normalized;
   } catch (e: any) {
     const name = String(e?.name ?? "");
-    const message = String(e?.message ?? "");
-
-    console.log("[ticketResolver] fetch failed", {
-      name,
-      message,
-      url,
-    });
 
     if (name === "AbortError") {
       return makeErrorResult("timeout");
