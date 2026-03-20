@@ -7,17 +7,14 @@
     "scheme": "yournextaway",
     "icon": "./assets/images/YNAlogo.png",
     "userInterfaceStyle": "dark",
-
     "extra": {
-      "EXPO_PUBLIC_BACKEND_URL": "http://192.168.1.39:3000"
+      "EXPO_PUBLIC_BACKEND_URL": "https://yournextaway.onrender.com"
     },
-
     "splash": {
       "image": "./assets/images/YNAlogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#07120F"
     },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.diabloaquila.yournextaway",
@@ -25,7 +22,6 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
-
     "android": {
       "package": "com.diabloaquila.yournextaway",
       "adaptiveIcon": {
@@ -34,27 +30,22 @@
       },
       "edgeToEdgeEnabled": true
     },
-
     "web": {
       "bundler": "metro",
       "favicon": "./assets/images/YNAlogo.png"
     },
-
     "plugins": [
       "expo-font",
       "expo-router",
       "expo-web-browser",
       "@react-native-community/datetimepicker"
     ],
-
     "experiments": {
       "typedRoutes": true
     },
-
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-
     "runtimeVersion": {
       "policy": "appVersion"
     }
