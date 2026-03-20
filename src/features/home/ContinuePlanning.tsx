@@ -28,20 +28,21 @@ type Props = {
   onOpenTrip: (tripId: string) => void;
 };
 
-export default function ContinuePlanning({
-  loadedTrips,
-  nextTrip,
-  nextTripCityImage,
-  nextTripFlagUrl,
-  nextTripTeamId,
-  nextTripCityTitle,
-  apiSportsTeamLogo,
-  tripSummaryLine,
-  goTrips,
-  goDiscover,
-  goFixturesHub,
-  onOpenTrip,
-}: Props) {
+export default function ContinuePlanning(props: Props) {
+  const {
+    loadedTrips,
+    nextTrip,
+    nextTripCityImage,
+    nextTripFlagUrl,
+    nextTripTeamId,
+    nextTripCityTitle,
+    apiSportsTeamLogo,
+    tripSummaryLine,
+    goTrips,
+    goDiscover,
+    onOpenTrip,
+  } = props;
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -65,44 +66,22 @@ export default function ContinuePlanning({
           ) : null}
 
           {loadedTrips && !nextTrip ? (
-            <>
-              <View style={styles.emptyTop}>
-                <Text style={styles.emptyEyebrow}>Workspace ready</Text>
-                <Text style={styles.emptyTitle}>No trip in progress yet</Text>
-                <Text style={styles.emptyMeta}>
-                  Start with Discover if you want inspiration. Use Fixtures if you already want real
-                  match options.
-                </Text>
-              </View>
+            <Pressable
+              onPress={goDiscover}
+              style={({ pressed }) => [styles.emptyCard, pressed && styles.pressedRow]}
+              android_ripple={{ color: "rgba(255,255,255,0.05)" }}
+            >
+              <Text style={styles.emptyEyebrow}>Trip workspace</Text>
+              <Text style={styles.emptyTitle}>No trip in progress</Text>
+              <Text style={styles.emptyMeta}>
+                Use search above or head into Discover when you want to start something new.
+              </Text>
 
-              <View style={styles.blockActions}>
-                <Pressable
-                  onPress={goDiscover}
-                  style={({ pressed }) => [
-                    styles.btn,
-                    styles.btnPrimary,
-                    pressed && styles.pressed,
-                  ]}
-                  android_ripple={{ color: "rgba(87,162,56,0.10)" }}
-                >
-                  <Text style={styles.btnPrimaryText}>Open Discover</Text>
-                  <Text style={styles.btnPrimarySub}>Find a trip idea</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={goFixturesHub}
-                  style={({ pressed }) => [
-                    styles.btn,
-                    styles.btnGhost,
-                    pressed && styles.pressed,
-                  ]}
-                  android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                >
-                  <Text style={styles.btnGhostText}>Browse Fixtures</Text>
-                  <Text style={styles.btnGhostSub}>Start from a match</Text>
-                </Pressable>
+              <View style={styles.inlineLinkRow}>
+                <Text style={styles.inlineLink}>Open Discover</Text>
+                <Text style={styles.inlineChevron}>›</Text>
               </View>
-            </>
+            </Pressable>
           ) : null}
 
           {loadedTrips && nextTrip ? (
@@ -149,36 +128,13 @@ export default function ContinuePlanning({
                   <Text style={styles.tripHint}>
                     Matches, links, bookings and notes kept in one place.
                   </Text>
+
+                  <View style={styles.inlineLinkRow}>
+                    <Text style={styles.inlineLink}>Continue trip</Text>
+                    <Text style={styles.inlineChevron}>›</Text>
+                  </View>
                 </View>
               </Pressable>
-
-              <View style={styles.blockActions}>
-                <Pressable
-                  onPress={() => onOpenTrip(String(nextTrip.id))}
-                  style={({ pressed }) => [
-                    styles.btn,
-                    styles.btnPrimary,
-                    pressed && styles.pressed,
-                  ]}
-                  android_ripple={{ color: "rgba(87,162,56,0.10)" }}
-                >
-                  <Text style={styles.btnPrimaryText}>Continue trip</Text>
-                  <Text style={styles.btnPrimarySub}>Open current workspace</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={goDiscover}
-                  style={({ pressed }) => [
-                    styles.btn,
-                    styles.btnGhost,
-                    pressed && styles.pressed,
-                  ]}
-                  android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-                >
-                  <Text style={styles.btnGhostText}>Plan another</Text>
-                  <Text style={styles.btnGhostSub}>Start something new</Text>
-                </Pressable>
-              </View>
             </>
           ) : null}
         </View>
@@ -228,7 +184,7 @@ const styles = StyleSheet.create({
 
   blockInner: {
     padding: 14,
-    gap: 14,
+    gap: 12,
   },
 
   center: {
@@ -243,7 +199,13 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  emptyTop: {
+  emptyCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.20)" : "rgba(10,12,14,0.16)",
+    paddingHorizontal: 14,
+    paddingVertical: 16,
     gap: 6,
   },
 
@@ -289,7 +251,7 @@ const styles = StyleSheet.create({
 
   tripImageStripOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(6,8,10,0.36)",
+    backgroundColor: "rgba(6,8,10,0.34)",
   },
 
   tripCardBody: {
@@ -357,59 +319,23 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  blockActions: {
+  inlineLinkRow: {
+    marginTop: 6,
     flexDirection: "row",
-    gap: 10,
-  },
-
-  btn: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 10,
     alignItems: "center",
-    borderWidth: 1,
-    overflow: "hidden",
-    gap: 3,
+    gap: 6,
   },
 
-  btnPrimary: {
-    borderColor: "rgba(87,162,56,0.28)",
-    backgroundColor: Platform.OS === "android" ? "rgba(87,162,56,0.12)" : "rgba(87,162,56,0.10)",
-  },
-
-  btnPrimaryText: {
-    color: theme.colors.text,
-    fontSize: 15,
+  inlineLink: {
+    color: theme.colors.primary,
+    fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
 
-  btnPrimarySub: {
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  btnGhost: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
-  },
-
-  btnGhostText: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  btnGhostSub: {
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  pressed: {
-    opacity: 0.94,
-    transform: [{ scale: 0.995 }],
+  inlineChevron: {
+    color: theme.colors.textTertiary,
+    fontSize: 18,
+    marginTop: -1,
   },
 
   pressedRow: {
