@@ -111,21 +111,22 @@ type Props = {
   goMatch: (fixtureId: string) => void;
 };
 
-export default function UpcomingMatches({
-  homeTopLeagues,
-  league,
-  setLeague,
-  upcomingWindow,
-  fxLoading,
-  fxError,
-  featured,
-  list,
-  featuredCityImage,
-  fixtureLine,
-  goFixtures,
-  goFixturesHub,
-  goMatch,
-}: Props) {
+export default function UpcomingMatches(props: Props) {
+  const {
+    homeTopLeagues,
+    league,
+    setLeague,
+    upcomingWindow,
+    fxLoading,
+    fxError,
+    featured,
+    list,
+    featuredCityImage,
+    fixtureLine,
+    goFixtures,
+    goMatch,
+  } = props;
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -139,7 +140,7 @@ export default function UpcomingMatches({
               season: league.season,
             })
           }
-          style={({ pressed }) => [styles.miniPill, pressed && { opacity: 0.9 }]}
+          style={({ pressed }) => [styles.miniPill, pressed && styles.pressedLite]}
         >
           <Text style={styles.miniPillText}>View all</Text>
         </Pressable>
@@ -154,18 +155,22 @@ export default function UpcomingMatches({
       <GlassCard strength="default" style={styles.block} noPadding>
         <View style={styles.blockInner}>
           {fxLoading ? (
-            <View style={styles.center}>
+            <View style={styles.loadingWrap}>
               <ActivityIndicator />
               <Text style={styles.muted}>Loading fixtures…</Text>
             </View>
           ) : null}
 
           {!fxLoading && fxError ? (
-            <EmptyState title="Fixtures unavailable" message={fxError} />
+            <View style={styles.errorWrap}>
+              <EmptyState title="Fixtures unavailable" message={fxError} />
+            </View>
           ) : null}
 
           {!fxLoading && !fxError && !featured ? (
-            <EmptyState title="No fixtures found" message="Try another league." />
+            <View style={styles.errorWrap}>
+              <EmptyState title="No fixtures found" message="Try another league." />
+            </View>
           ) : null}
 
           {!fxLoading && !fxError && featured ? (
@@ -243,6 +248,8 @@ export default function UpcomingMatches({
                         <Text style={styles.listTitle} numberOfLines={1} ellipsizeMode="tail">
                           {line.title}
                         </Text>
+
+                        <Text style={styles.rowChevron}>›</Text>
                       </View>
 
                       <Text style={styles.listMeta} numberOfLines={1} ellipsizeMode="tail">
@@ -251,17 +258,6 @@ export default function UpcomingMatches({
                     </Pressable>
                   );
                 })}
-              </View>
-
-              <View style={styles.blockActions}>
-                <Pressable
-                  onPress={goFixturesHub}
-                  style={({ pressed }) => [styles.btn, styles.btnPrimary, pressed && styles.pressed]}
-                  android_ripple={{ color: "rgba(87,162,56,0.10)" }}
-                >
-                  <Text style={styles.btnPrimaryText}>Browse Fixtures</Text>
-                  <Text style={styles.btnPrimarySub}>See the wider list</Text>
-                </Pressable>
               </View>
             </>
           ) : null}
@@ -363,207 +359,3 @@ const styles = StyleSheet.create({
   blockInner: {
     padding: 14,
     gap: 12,
-  },
-
-  blockKicker: {
-    color: theme.colors.primary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.5,
-  },
-
-  center: {
-    paddingVertical: 14,
-    alignItems: "center",
-    gap: 10,
-  },
-
-  muted: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  featured: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
-    overflow: "hidden",
-    position: "relative",
-    minHeight: 112,
-  },
-
-  featuredImage: {
-    ...StyleSheet.absoluteFillObject,
-    width: "100%",
-    height: "100%",
-  },
-
-  featuredImageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(6,8,10,0.56)",
-  },
-
-  featuredTop: {
-    paddingVertical: 15,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  featuredTextWrap: {
-    flex: 1,
-  },
-
-  featuredTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  featuredMeta: {
-    marginTop: 5,
-    color: "rgba(242,244,246,0.86)",
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  crestWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.09)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-
-  crestImg: {
-    width: 30,
-    height: 30,
-    opacity: 0.96,
-  },
-
-  crestFallback: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.4,
-  },
-
-  chev: {
-    color: theme.colors.textTertiary,
-    fontSize: 22,
-    marginTop: -2,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    marginTop: 2,
-  },
-
-  list: {
-    gap: 8,
-  },
-
-  listRow: {
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-  },
-
-  listRowTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  smallCrests: {
-    flexDirection: "row",
-    gap: 6,
-    alignItems: "center",
-  },
-
-  smallCrest: {
-    width: 18,
-    height: 18,
-    borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-
-  smallCrestImg: {
-    width: 14,
-    height: 14,
-    opacity: 0.95,
-  },
-
-  listTitle: {
-    flex: 1,
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  listMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  blockActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 2,
-  },
-
-  btn: {
-    flex: 1,
-    borderRadius: 18,
-    paddingVertical: 13,
-    alignItems: "center",
-    borderWidth: 1,
-    overflow: "hidden",
-    gap: 3,
-  },
-
-  btnPrimary: {
-    borderColor: "rgba(87,162,56,0.28)",
-    backgroundColor: Platform.OS === "android" ? "rgba(87,162,56,0.12)" : "rgba(87,162,56,0.10)",
-  },
-
-  btnPrimaryText: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  btnPrimarySub: {
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  pressed: {
-    opacity: 0.94,
-    transform: [{ scale: 0.995 }],
-  },
-
-  pressedRow: {
-    opacity: 0.94,
-  },
-});
