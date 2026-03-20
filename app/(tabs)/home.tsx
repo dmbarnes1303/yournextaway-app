@@ -184,14 +184,25 @@ export default function HomeScreen() {
   const nextTrip = useMemo(() => upcomingTrips[0] ?? null, [upcomingTrips]);
 
   const [fxLoading, setFxLoading] = useState(false);
+  const [fxRefreshing, setFxRefreshing] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
+  const activeFixtureRequestRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
+    const requestId = activeFixtureRequestRef.current + 1;
+    activeFixtureRequestRef.current = requestId;
 
     async function run() {
-      setFxLoading(true);
+      const hasExistingRows = fxRows.length > 0;
+
+      if (hasExistingRows) {
+        setFxRefreshing(true);
+      } else {
+        setFxLoading(true);
+      }
+
       setFxError(null);
 
       try {
@@ -202,14 +213,26 @@ export default function HomeScreen() {
           to: upcomingWindow.to,
         });
 
-        if (cancelled) return;
+        if (cancelled || activeFixtureRequestRef.current !== requestId) return;
+
         setFxRows(Array.isArray(rows) ? rows : []);
+        setFxError(null);
       } catch (e: any) {
-        if (cancelled) return;
-        setFxError(e?.message ?? "Failed to load fixtures.");
-        setFxRows([]);
+        if (cancelled || activeFixtureRequestRef.current !== requestId) return;
+
+        const message = e?.message ?? "Failed to load fixtures.";
+
+        if ((fxRows?.length ?? 0) === 0) {
+          setFxRows([]);
+          setFxError(message);
+        } else {
+          setFxError(null);
+        }
       } finally {
-        if (!cancelled) setFxLoading(false);
+        if (!cancelled && activeFixtureRequestRef.current === requestId) {
+          setFxLoading(false);
+          setFxRefreshing(false);
+        }
       }
     }
 
@@ -219,6 +242,37 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, [league, upcomingWindow.from, upcomingWindow.to]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function prefetchOtherHomeLeagues() {
+      const targets = homeTopLeagues
+        .filter((l) => l.leagueId !== league.leagueId)
+        .slice(0, 3);
+
+      for (const item of targets) {
+        if (cancelled) return;
+
+        try {
+          await getFixtures({
+            league: item.leagueId,
+            season: item.season,
+            from: upcomingWindow.from,
+            to: upcomingWindow.to,
+          });
+        } catch {
+          // ignore prefetch errors
+        }
+      }
+    }
+
+    prefetchOtherHomeLeagues().catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [homeTopLeagues, league.leagueId, upcomingWindow.from, upcomingWindow.to]);
 
   const fxOrdered = useMemo(() => {
     return (fxRows ?? [])
@@ -472,13 +526,16 @@ export default function HomeScreen() {
 
   const logoSource = useMemo(() => require("@/src/YNAlogo.png"), []);
 
+  const showInitialFixtureLoading = fxLoading && fxRows.length === 0;
+  const showFixtureError = !!fxError && fxRows.length === 0;
+
   return (
     <Background
       imageSource={getBackground("home")}
-      overlayOpacity={0.1}
-      topShadeOpacity={0.34}
-      centerShadeOpacity={0.08}
-      bottomShadeOpacity={0.42}
+      overlayOpacity={0.22}
+      topShadeOpacity={0.44}
+      centerShadeOpacity={0.18}
+      bottomShadeOpacity={0.58}
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
@@ -583,7 +640,9 @@ export default function HomeScreen() {
           </GlassCard>
 
           {!showSearchResults ? (
-            <>
+            <View style={styles.surface}>
+              <View style={styles.surfaceGlow} pointerEvents="none" />
+
               <ContinuePlanning
                 loadedTrips={loadedTrips}
                 nextTrip={nextTrip}
@@ -606,8 +665,8 @@ export default function HomeScreen() {
                 league={league}
                 setLeague={setLeague}
                 upcomingWindow={upcomingWindow}
-                fxLoading={fxLoading}
-                fxError={fxError}
+                fxLoading={showInitialFixtureLoading}
+                fxError={showFixtureError ? fxError : null}
                 featured={featured}
                 list={list}
                 featuredCityImage={featuredCityImage}
@@ -616,7 +675,14 @@ export default function HomeScreen() {
                 goFixturesHub={goFixturesHub}
                 goMatch={goMatch}
               />
-            </>
+
+              {fxRefreshing && fxRows.length > 0 ? (
+                <View style={styles.refreshingBadge}>
+                  <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+                  <Text style={styles.refreshingText}>Refreshing fixtures…</Text>
+                </View>
+              ) : null}
+            </View>
           ) : null}
         </ScrollView>
       </SafeAreaView>
@@ -644,9 +710,9 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 88,
+    height: 82,
     backgroundColor: theme.colors.glowGreen,
-    opacity: 0.22,
+    opacity: 0.16,
   },
 
   heroInner: {
@@ -724,7 +790,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.borderGreenSoft,
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.045)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.045)",
     borderRadius: 18,
     paddingHorizontal: 14,
     minHeight: 56,
@@ -793,7 +859,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: "hidden",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.26)" : "rgba(10,12,14,0.22)",
+      Platform.OS === "android" ? "rgba(10,12,14,0.28)" : "rgba(10,12,14,0.22)",
   },
 
   resultRow: {
@@ -849,6 +915,51 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     fontSize: 22,
     marginTop: -2,
+  },
+
+  surface: {
+    marginTop: -4,
+    paddingTop: 6,
+    paddingBottom: 4,
+    gap: 18,
+    borderRadius: 28,
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(8,10,12,0.34)" : "rgba(8,10,12,0.28)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
+  },
+
+  surfaceGlow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.02)",
+  },
+
+  refreshingBadge: {
+    marginTop: -8,
+    alignSelf: "flex-start",
+    marginLeft: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+  },
+
+  refreshingText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
   },
 
   pressedRow: {
