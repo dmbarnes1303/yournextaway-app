@@ -1,3 +1,5 @@
+import { assertBackendBaseUrl } from "../config/env";
+
 export type FixtureListRow = {
   fixture: {
     id: number;
@@ -35,6 +37,7 @@ type BackendEnvelope<T> = {
   ok?: boolean;
   response?: T;
   error?: string;
+  debug?: string;
   requestId?: string;
 };
 
@@ -44,33 +47,11 @@ function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-function safeUrl(value: unknown): string | null {
-  const raw = clean(value);
-  if (!raw) return null;
-
-  try {
-    return new URL(raw).toString();
-  } catch {
-    return null;
-  }
-}
-
-function getBackendBaseUrl(): string {
-  const raw =
-    clean(process.env.EXPO_PUBLIC_BACKEND_URL) ||
-    clean((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL);
-
-  const safe = safeUrl(raw);
-  return safe ? safe.replace(/\/+$/, "") : "";
-}
-
 function buildUrl(
   path: string,
   params?: Record<string, string | number | undefined | null>
-): string | null {
-  const base = getBackendBaseUrl();
-  if (!base) return null;
-
+): string {
+  const base = assertBackendBaseUrl();
   const url = new URL(`${base}${path}`);
 
   if (params) {
@@ -100,10 +81,6 @@ async function backendFetch<T>(
 ): Promise<T> {
   const url = buildUrl(path, params);
 
-  if (!url) {
-    throw new Error("missing_backend_url");
-  }
-
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
 
@@ -127,7 +104,7 @@ async function backendFetch<T>(
 
     if (!res.ok) {
       const errorText =
-        clean(parsed?.error) || `backend_http_${res.status}`;
+        clean(parsed?.debug) || clean(parsed?.error) || `backend_http_${res.status}`;
       throw new Error(errorText);
     }
 
