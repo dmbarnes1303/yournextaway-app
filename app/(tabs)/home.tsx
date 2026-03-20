@@ -17,7 +17,6 @@ import { useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
@@ -247,9 +246,7 @@ export default function HomeScreen() {
     let cancelled = false;
 
     async function prefetchOtherHomeLeagues() {
-      const targets = homeTopLeagues
-        .filter((l) => l.leagueId !== league.leagueId)
-        .slice(0, 3);
+      const targets = homeTopLeagues.filter((l) => l.leagueId !== league.leagueId).slice(0, 3);
 
       for (const item of targets) {
         if (cancelled) return;
@@ -530,13 +527,7 @@ export default function HomeScreen() {
   const showFixtureError = !!fxError && fxRows.length === 0;
 
   return (
-    <Background
-      imageSource={getBackground("home")}
-      overlayOpacity={0.22}
-      topShadeOpacity={0.44}
-      centerShadeOpacity={0.18}
-      bottomShadeOpacity={0.58}
-    >
+    <Background mode="solid" solidColor="#07090B">
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
@@ -641,8 +632,6 @@ export default function HomeScreen() {
 
           {!showSearchResults ? (
             <View style={styles.surface}>
-              <View style={styles.surfaceGlow} pointerEvents="none" />
-
               <ContinuePlanning
                 loadedTrips={loadedTrips}
                 nextTrip={nextTrip}
@@ -922,22 +911,6 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 4,
     gap: 18,
-    borderRadius: 28,
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(8,10,12,0.34)" : "rgba(8,10,12,0.28)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.04)",
-  },
-
-  surfaceGlow: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 80,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: "rgba(255,255,255,0.02)",
   },
 
   refreshingBadge: {
