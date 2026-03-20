@@ -1,4 +1,4 @@
-const BACKEND = process.env.EXPO_PUBLIC_BACKEND_URL;
+import { assertBackendBaseUrl } from "../config/env";
 
 export type TicketResult = {
   ok: boolean;
@@ -9,6 +9,8 @@ export type TicketResult = {
   title?: string;
   priceText?: string | null;
   reason?: string;
+  error?: string;
+  debug?: string;
 };
 
 export async function resolveTickets(
@@ -16,20 +18,26 @@ export async function resolveTickets(
   awayName: string,
   kickoffIso: string
 ): Promise<TicketResult | null> {
-
   try {
+    const base = assertBackendBaseUrl();
+
     const url =
-      `${BACKEND}/tickets/resolve` +
+      `${base}/tickets/resolve` +
       `?homeName=${encodeURIComponent(homeName)}` +
       `&awayName=${encodeURIComponent(awayName)}` +
       `&kickoffIso=${encodeURIComponent(kickoffIso)}`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
 
     if (!res.ok) return null;
 
     return await res.json();
-
   } catch {
     return null;
   }
