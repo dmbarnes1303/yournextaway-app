@@ -94,12 +94,12 @@ const styles = StyleSheet.create({
 
   top: {
     alignItems: "center",
-    marginTop: 6,
+    marginTop: 30,
   },
 
   logo: {
-    width: 88,
-    height: 88,
+    width: 125,
+    height: 125,
   },
 
   content: {
