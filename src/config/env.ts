@@ -2,8 +2,6 @@ import Constants from "expo-constants";
 
 type Env = {
   backendUrl: string;
-  se365ProxyUrl: string;
-  se365AffiliateId: string;
 };
 
 function clean(value: unknown): string {
@@ -32,21 +30,8 @@ const backendUrl = normalizeUrl(
   extra.EXPO_PUBLIC_BACKEND_URL ?? process.env.EXPO_PUBLIC_BACKEND_URL
 );
 
-const se365ProxyUrl = normalizeUrl(
-  extra.EXPO_PUBLIC_SE365_PROXY_URL ??
-    process.env.EXPO_PUBLIC_SE365_PROXY_URL ??
-    backendUrl
-);
-
-const se365AffiliateId = clean(
-  extra.EXPO_PUBLIC_SE365_AFFILIATE_ID ??
-    process.env.EXPO_PUBLIC_SE365_AFFILIATE_ID
-);
-
 export const ENV: Env = {
   backendUrl,
-  se365ProxyUrl,
-  se365AffiliateId,
 };
 
 export function getBackendBaseUrl(): string {
