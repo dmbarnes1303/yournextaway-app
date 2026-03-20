@@ -1,7 +1,6 @@
-// src/services/walletApi.ts
-console.log("BACKEND URL:", process.env.EXPO_PUBLIC_BACKEND_URL);
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import { assertBackendBaseUrl } from "../config/env";
 
 type WalletListItem = {
   key: string;
@@ -43,6 +42,7 @@ type WalletDeleteResponse = {
 type ErrorLike = {
   ok?: boolean;
   error?: string;
+  debug?: string;
 };
 
 const REQUEST_TIMEOUT_MS = 30000;
@@ -51,48 +51,11 @@ function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-function safeUrl(value: unknown): string | null {
-  const raw = clean(value);
-  if (!raw) return null;
-
-  try {
-    return new URL(raw).toString();
-  } catch {
-    return null;
-  }
-}
-
-function getBackendBaseUrl(): string {
-  const candidates = [
-    process.env.EXPO_PUBLIC_BACKEND_URL,
-    (process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL,
-  ];
-
-  for (const candidate of candidates) {
-    const safe = safeUrl(candidate);
-    if (safe) {
-      return safe.replace(/\/+$/, "");
-    }
-  }
-
-  return "";
-}
-
-function assertConfigured(): string {
-  const base = getBackendBaseUrl();
-
-  if (!base) {
-    throw new Error("Backend URL missing. Set EXPO_PUBLIC_BACKEND_URL.");
-  }
-
-  return base;
-}
-
 function buildUrl(
   path: string,
   params?: Record<string, string | number | undefined | null>
 ): string {
-  const base = assertConfigured();
+  const base = assertBackendBaseUrl();
   const url = new URL(`${base}${path}`);
 
   if (params) {
@@ -112,7 +75,9 @@ function buildHeaders(extra?: Record<string, string>): Record<string, string> {
   };
 }
 
-async function safeJson<T>(res: Response): Promise<T | (ErrorLike & Record<string, unknown>)> {
+async function safeJson<T>(
+  res: Response
+): Promise<T | (ErrorLike & Record<string, unknown>)> {
   const text = await res.text().catch(() => "");
 
   if (!text) {
@@ -132,7 +97,10 @@ async function safeJson<T>(res: Response): Promise<T | (ErrorLike & Record<strin
   }
 }
 
-async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  input: string,
+  init?: RequestInit
+): Promise<Response> {
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
 
@@ -171,10 +139,11 @@ export async function walletList(opts?: {
     headers: buildHeaders(),
   });
 
-  const data = (await safeJson<WalletListResponse>(res)) as Partial<WalletListResponse> & ErrorLike;
+  const data = (await safeJson<WalletListResponse>(res)) as Partial<WalletListResponse> &
+    ErrorLike;
 
   if (!res.ok) {
-    throw new Error(data.error || `Wallet list failed (${res.status})`);
+    throw new Error(data.debug || data.error || `Wallet list failed (${res.status})`);
   }
 
   return {
@@ -201,11 +170,14 @@ export async function walletUpload(opts: {
 }): Promise<WalletUploadResponse> {
   const form = new FormData();
 
-  form.append("file", {
-    uri: opts.fileUri,
-    name: opts.filename,
-    type: opts.mimeType,
-  } as unknown as Blob);
+  form.append(
+    "file",
+    {
+      uri: opts.fileUri,
+      name: opts.filename,
+      type: opts.mimeType,
+    } as any
+  );
 
   if (opts.userId) form.append("userId", opts.userId);
   if (opts.tripId) form.append("tripId", opts.tripId);
@@ -218,16 +190,18 @@ export async function walletUpload(opts: {
     body: form,
   });
 
-  const data = (await safeJson<WalletUploadResponse>(res)) as Partial<WalletUploadResponse> & ErrorLike;
+  const data = (await safeJson<WalletUploadResponse>(res)) as Partial<WalletUploadResponse> &
+    ErrorLike;
 
   if (!res.ok) {
-    throw new Error(data.error || `Wallet upload failed (${res.status})`);
+    throw new Error(data.debug || data.error || `Wallet upload failed (${res.status})`);
   }
 
   return {
     ok: Boolean(data.ok),
     key: clean(data.key),
-    size: typeof data.size === "number" && Number.isFinite(data.size) ? data.size : 0,
+    size:
+      typeof data.size === "number" && Number.isFinite(data.size) ? data.size : 0,
     contentType: clean(data.contentType),
     meta: {
       userId: clean(data.meta?.userId),
@@ -290,10 +264,11 @@ export async function walletDelete(opts: {
     headers: buildHeaders(),
   });
 
-  const data = (await safeJson<WalletDeleteResponse>(res)) as Partial<WalletDeleteResponse> & ErrorLike;
+  const data = (await safeJson<WalletDeleteResponse>(res)) as Partial<WalletDeleteResponse> &
+    ErrorLike;
 
   if (!res.ok) {
-    throw new Error(data.error || `Wallet delete failed (${res.status})`);
+    throw new Error(data.debug || data.error || `Wallet delete failed (${res.status})`);
   }
 
   return {
