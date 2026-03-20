@@ -67,7 +67,10 @@ function getAllowedOrigin(requestOrigin: unknown): string | null {
   return allowList.includes(origin) ? origin : null;
 }
 
-function applyCors(request: { headers: Record<string, unknown> }, reply: any): void {
+function applyCors(
+  request: { headers: Record<string, unknown> },
+  reply: any
+): void {
   const allowedOrigin = getAllowedOrigin(request.headers.origin);
 
   if (allowedOrigin) {
@@ -85,6 +88,11 @@ function applyCors(request: { headers: Record<string, unknown> }, reply: any): v
 function walletWorkerBaseUrl(): string {
   const safe = safeUrl(env.walletWorkerBaseUrl);
   return safe ? safe.replace(/\/+$/, "") : "";
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 async function apiFootballFetch<T>(
@@ -155,10 +163,16 @@ async function walletWorkerFetch(
   const headers = new Headers(init?.headers || {});
   headers.set("x-internal-wallet-key", env.walletWorkerApiKey);
 
-  return fetch(url.toString(), {
-    ...init,
-    headers,
-  });
+  try {
+    return await fetch(url.toString(), {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    throw new Error(
+      `wallet_worker_fetch_failed:${getErrorMessage(error)}:${url.toString()}`
+    );
+  }
 }
 
 app.addHook("onSend", async (request, reply, payload) => {
@@ -219,7 +233,12 @@ app.get("/health", async (request) => {
     requestId: request.id,
     providers: {
       apiFootball: { configured: hasApiFootballConfig() },
-      walletWorker: { configured: hasWalletWorkerConfig() },
+      walletWorker: {
+        configured: hasWalletWorkerConfig(),
+        baseUrl: env.walletWorkerBaseUrl || null,
+        safeBaseUrl: walletWorkerBaseUrl() || null,
+        hasApiKey: Boolean(env.walletWorkerApiKey),
+      },
       footballticketsnet: { configured: hasFtnConfig() },
       sportsevents365: { configured: hasSe365Config() },
       gigsberg: {
@@ -287,6 +306,7 @@ app.get<{
     return {
       ok: false,
       error: "football_fixtures_fetch_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -332,6 +352,7 @@ app.get<{
     return {
       ok: false,
       error: "football_fixture_fetch_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -388,6 +409,7 @@ app.get<{
     return {
       ok: false,
       error: "football_fixtures_by_round_fetch_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -418,6 +440,7 @@ app.get("/football/countries", async (request, reply) => {
     return {
       ok: false,
       error: "football_countries_fetch_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -471,6 +494,7 @@ app.get<{
     return {
       ok: false,
       error: "football_teams_fetch_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -507,7 +531,16 @@ app.get<{
     return text;
   } catch (error) {
     request.log.error(
-      { err: error, prefix, limit, cursor: cursor ?? null },
+      {
+        err: error,
+        prefix,
+        limit,
+        cursor: cursor ?? null,
+        walletWorkerBaseUrl: env.walletWorkerBaseUrl || null,
+        walletWorkerSafeBaseUrl: walletWorkerBaseUrl() || null,
+        hasWalletWorkerConfig: hasWalletWorkerConfig(),
+        hasWalletWorkerApiKey: Boolean(env.walletWorkerApiKey),
+      },
       "Wallet list proxy failed"
     );
 
@@ -515,6 +548,7 @@ app.get<{
     return {
       ok: false,
       error: "wallet_list_proxy_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -570,11 +604,7 @@ app.post("/wallet/upload", async (request, reply) => {
     }
 
     const form = new FormData();
-    form.append(
-      "file",
-      new Blob([fileBuffer], { type: mimeType }),
-      fileName
-    );
+    form.append("file", new Blob([fileBuffer], { type: mimeType }), fileName);
 
     if (userId) form.append("userId", userId);
     if (tripId) form.append("tripId", tripId);
@@ -592,12 +622,22 @@ app.post("/wallet/upload", async (request, reply) => {
     reply.header("Content-Type", "application/json; charset=utf-8");
     return text;
   } catch (error) {
-    request.log.error({ err: error }, "Wallet upload proxy failed");
+    request.log.error(
+      {
+        err: error,
+        walletWorkerBaseUrl: env.walletWorkerBaseUrl || null,
+        walletWorkerSafeBaseUrl: walletWorkerBaseUrl() || null,
+        hasWalletWorkerConfig: hasWalletWorkerConfig(),
+        hasWalletWorkerApiKey: Boolean(env.walletWorkerApiKey),
+      },
+      "Wallet upload proxy failed"
+    );
 
     reply.code(502);
     return {
       ok: false,
       error: "wallet_upload_proxy_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -642,6 +682,7 @@ app.get<{
     return {
       ok: false,
       error: "wallet_file_proxy_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -682,6 +723,7 @@ app.delete<{
     return {
       ok: false,
       error: "wallet_delete_proxy_failed",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
@@ -800,6 +842,7 @@ app.get<{
       checkedProviders: [],
       options: [],
       error: "internal_ticket_resolution_error",
+      debug: getErrorMessage(error),
       requestId: request.id,
     };
   }
