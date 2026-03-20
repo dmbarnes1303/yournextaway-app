@@ -238,7 +238,7 @@ export default function HomeScreen() {
 
   const [searchBuilding, setSearchBuilding] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchBuiltAt, setSearchBuiltAt] = useState<number>(0);
+  const [, setSearchBuiltAt] = useState<number>(0);
   const indexRef = useRef<Awaited<ReturnType<typeof buildSearchIndex>> | null>(null);
   const buildOnceRef = useRef(false);
 
@@ -475,10 +475,10 @@ export default function HomeScreen() {
   return (
     <Background
       imageSource={getBackground("home")}
-      overlayOpacity={0.04}
-      topShadeOpacity={0.38}
-      bottomShadeOpacity={0.48}
-      centerShadeOpacity={0.06}
+      overlayOpacity={0.1}
+      topShadeOpacity={0.34}
+      centerShadeOpacity={0.08}
+      bottomShadeOpacity={0.42}
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
@@ -498,16 +498,14 @@ export default function HomeScreen() {
                   </View>
                 </View>
 
-                <View style={styles.heroTag}>
-                  <Text style={styles.heroTagText}>Football travel, built around the fixture</Text>
+                <View style={styles.heroCopyWrap}>
+                  <Text style={styles.heroEyebrow}>Home</Text>
+                  <Text style={styles.heroTitle}>Search teams, cities or countries</Text>
+                  <Text style={styles.heroSub}>
+                    Jump straight into guides, fixtures and trip planning.
+                  </Text>
                 </View>
               </View>
-
-              <Text style={styles.heroTitle}>Plan your next football trip properly.</Text>
-
-              <Text style={styles.heroSub}>
-                Search by team, city or country, then move straight into fixtures, guides and trip planning.
-              </Text>
 
               <View style={styles.searchBox}>
                 <TextInput
@@ -531,16 +529,11 @@ export default function HomeScreen() {
 
               {!showSearchResults ? (
                 <View style={styles.quickRow}>
-                  <Pressable onPress={goFixturesHub} style={({ pressed }) => [styles.quickPill, pressed && styles.quickPillPressed]}>
+                  <Pressable
+                    onPress={goFixturesHub}
+                    style={({ pressed }) => [styles.quickPill, pressed && styles.quickPillPressed]}
+                  >
                     <Text style={styles.quickPillText}>Next 14 days</Text>
-                  </Pressable>
-
-                  <Pressable onPress={goDiscover} style={({ pressed }) => [styles.quickPillAlt, pressed && styles.quickPillPressed]}>
-                    <Text style={styles.quickPillAltText}>Discover</Text>
-                  </Pressable>
-
-                  <Pressable onPress={goTrips} style={({ pressed }) => [styles.quickPillAlt, pressed && styles.quickPillPressed]}>
-                    <Text style={styles.quickPillAltText}>Trips</Text>
                   </Pressable>
                 </View>
               ) : null}
@@ -651,30 +644,31 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 120,
+    height: 88,
     backgroundColor: theme.colors.glowGreen,
+    opacity: 0.22,
   },
 
   heroInner: {
     padding: 18,
-    gap: 12,
+    gap: 14,
   },
 
   heroTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+    gap: 14,
   },
 
   logoRing: {
-    width: 68,
-    height: 68,
+    width: 64,
+    height: 64,
     borderRadius: 999,
     padding: 2,
     backgroundColor: theme.colors.borderGoldSoft,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
 
   logoWrap: {
@@ -684,63 +678,56 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: theme.colors.borderStrong,
-    backgroundColor: "rgba(0,0,0,0.26)",
+    backgroundColor: "rgba(0,0,0,0.24)",
     alignItems: "center",
     justifyContent: "center",
   },
 
   logo: {
-    width: 54,
-    height: 54,
+    width: 50,
+    height: 50,
     opacity: 0.99,
   },
 
-  heroTag: {
+  heroCopyWrap: {
     flex: 1,
-    alignSelf: "flex-start",
-    borderRadius: theme.borderRadius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.borderGoldSoft,
-    backgroundColor: theme.badge.bgGold,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    gap: 2,
   },
 
-  heroTagText: {
+  heroEyebrow: {
     color: theme.badge.textGold,
     fontSize: 11,
     lineHeight: 15,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.2,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
 
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 30,
-    lineHeight: 36,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.2,
-    maxWidth: "96%",
+    letterSpacing: 0.15,
   },
 
   heroSub: {
     color: theme.colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 19,
     fontWeight: theme.fontWeight.bold,
     opacity: 0.96,
-    maxWidth: "94%",
   },
 
   searchBox: {
-    marginTop: 10,
+    marginTop: 2,
     borderWidth: 1,
     borderColor: theme.colors.borderGreenSoft,
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.045)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.045)",
     borderRadius: 18,
     paddingHorizontal: 14,
-    minHeight: 58,
+    minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -770,9 +757,7 @@ const styles = StyleSheet.create({
   },
 
   quickRow: {
-    marginTop: 2,
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 10,
   },
 
@@ -783,15 +768,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.borderGreenStrong,
     backgroundColor: theme.badge.bgGreen,
-  },
-
-  quickPillAlt: {
-    borderRadius: theme.borderRadius.pill,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    alignSelf: "flex-start",
   },
 
   quickPillPressed: {
@@ -805,14 +782,8 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  quickPillAltText: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-  },
-
   searchResults: {
-    marginTop: 10,
+    marginTop: 2,
     gap: 10,
   },
 
