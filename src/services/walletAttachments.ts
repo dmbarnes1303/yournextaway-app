@@ -21,12 +21,12 @@ type PickerParsed =
 type PickerLike = {
   canceled?: unknown;
   type?: unknown;
-  assets?: Array<{
+  assets?: {
     uri?: unknown;
     name?: unknown;
     mimeType?: unknown;
     size?: unknown;
-  }>;
+  }[];
   uri?: unknown;
   name?: unknown;
   mimeType?: unknown;

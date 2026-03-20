@@ -46,7 +46,7 @@ function normalizeKey(v: unknown): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function joinQuery(parts: Array<string | null | undefined>): string {
+function joinQuery(parts: (string | null | undefined)[]): string {
   const out = parts
     .map((p) => (isNonEmptyString(p) ? p.trim() : ""))
     .filter(Boolean);

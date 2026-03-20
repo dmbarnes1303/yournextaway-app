@@ -25,10 +25,10 @@ export type StadiumParking = {
   tips?: string[];
 
   /** Optional named parking locations */
-  options?: Array<{
+  options?: {
     name: string;
     note?: string;
-  }>;
+  }[];
 };
 
 export type StadiumRecord = {

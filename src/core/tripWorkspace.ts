@@ -242,10 +242,10 @@ export type WorkspaceSnapshot = {
   archived: number;
   sectionTotals: Record<WorkspaceSectionKey, number>;
   sectionActiveTotals: Record<WorkspaceSectionKey, number>;
-  missing: Array<{
+  missing: {
     section: WorkspaceSectionKey;
     reason: string;
-  }>;
+  }[];
 };
 
 export function computeWorkspaceSnapshot(items: SavedItem[]): WorkspaceSnapshot {

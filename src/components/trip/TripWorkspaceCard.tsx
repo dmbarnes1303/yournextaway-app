@@ -213,8 +213,8 @@ export type TripWorkspaceCardProps = {
   noteText: string;
   noteSaving: boolean;
   proofBusyId: string | null;
-  stayBestAreas: Array<{ area: string; notes?: string }>;
-  stayBudgetAreas: Array<{ area: string; notes?: string }>;
+  stayBestAreas: { area: string; notes?: string }[];
+  stayBudgetAreas: { area: string; notes?: string }[];
   transportStops: string[];
 
   onSetActiveSection: (section: WorkspaceSectionKey) => void;
@@ -417,8 +417,8 @@ type SectionContentProps = {
   noteText: string;
   noteSaving: boolean;
   proofBusyId: string | null;
-  stayBestAreas: Array<{ area: string; notes?: string }>;
-  stayBudgetAreas: Array<{ area: string; notes?: string }>;
+  stayBestAreas: { area: string; notes?: string }[];
+  stayBudgetAreas: { area: string; notes?: string }[];
   transportStops: string[];
   onNoteTextChange: (text: string) => void;
   onAddNote: () => void;

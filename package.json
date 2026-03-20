@@ -87,10 +87,11 @@
     "eas-cli": "^14.5.0",
     "eslint": "^8.57.0",
     "eslint-config-expo": "~10.0.0",
+    "eslint-import-resolver-typescript": "^3.6.1",
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-react": "^7.37.4",
     "globals": "^15.14.0",
-    "typescript": "^5.9.3",
+    "typescript": "^5.3.3",
     "webpack-cli": "^6.0.1"
   }
 }

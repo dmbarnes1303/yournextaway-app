@@ -203,7 +203,7 @@ const BIG_CLUB_TOKENS = [
   "besiktas",
 ];
 
-const DERBY_PAIRS: Array<[string[], string[], number]> = [
+const DERBY_PAIRS: [string[], string[], number][] = [
   [["arsenal"], ["tottenham", "spurs"], 4],
   [["barcelona", "barca"], ["real madrid"], 5],
   [["manchester united", "man united"], ["manchester city", "man city"], 4],
@@ -226,7 +226,7 @@ const DERBY_PAIRS: Array<[string[], string[], number]> = [
 // Dumb validator compatibility.
 // The current validation script text-matches [id, number] tuples instead of reading the actual logic.
 // Keep this in sync with football.ts so the script can verify full league coverage.
-const VALIDATION_LEAGUE_MARKERS: Array<[number, number]> = [
+const VALIDATION_LEAGUE_MARKERS: [number, number][] = [
   [2, 1],
   [3, 1],
   [848, 1],

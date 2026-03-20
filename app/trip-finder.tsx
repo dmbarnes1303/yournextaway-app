@@ -425,7 +425,7 @@ export default function TripFinderScreen() {
                     ["easy", "Easy Travel"],
                     ["big", "Big Matches"],
                     ["hidden", "Hidden Gems"],
-                  ] as Array<[FinderMode, string]>).map(([k, label]) => {
+                  ] as [FinderMode, string][]).map(([k, label]) => {
                     const active = mode === k;
                     return (
                       <Pressable

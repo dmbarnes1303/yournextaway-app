@@ -78,7 +78,7 @@ function normalizeVenueKey(input: string | undefined | null): string {
     .replace(/^-|-$/g, "");
 }
 
-function toEntryTokens(parts: Array<string | undefined | null>): string[] {
+function toEntryTokens(parts: (string | undefined | null)[]): string[] {
   const joined = parts.filter(Boolean).join(" ");
   return uniq(tokenizeQuery(joined));
 }

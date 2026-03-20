@@ -68,7 +68,7 @@ export function parseIsoToUtcParts(iso: string) {
 export function buildMonthGrid(year: number, month0: number) {
   const dim = daysInMonthUtc(year, month0);
   const firstW = firstWeekdayUtc(year, month0);
-  const cells: Array<{ iso: string; day: number; inMonth: boolean }> = [];
+  const cells: { iso: string; day: number; inMonth: boolean }[] = [];
 
   for (let i = 0; i < firstW; i++) {
     cells.push({ iso: "", day: 0, inMonth: false });

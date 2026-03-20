@@ -81,7 +81,7 @@ export function getTripHealth(tripId: string): TripHealth {
   let score = 0;
   const missing: string[] = [];
 
-  (Object.keys(progress) as Array<keyof TripProgress>).forEach((key) => {
+  (Object.keys(progress) as (keyof TripProgress)[]).forEach((key) => {
     const state = progress[key];
     const weight = weights[key];
 

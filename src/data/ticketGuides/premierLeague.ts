@@ -54,9 +54,7 @@ function guide(args: {
   };
 }
 
-export const PREMIER_LEAGUE_TICKET_GUIDES: Array<
-  TicketGuide & { aliases?: string[]; officialTicketsUrl?: string }
-> = [
+export const PREMIER_LEAGUE_TICKET_GUIDES: (TicketGuide & { aliases?: string[]; officialTicketsUrl?: string })[] = [
   guide({
     clubName: "AFC Bournemouth",
     officialTicketsUrl: "https://www.afcb.co.uk/tickets",

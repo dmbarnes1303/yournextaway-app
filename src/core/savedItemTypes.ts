@@ -40,7 +40,7 @@ export type SavedItemStatus = "saved" | "pending" | "booked" | "archived";
 /* Constants + guards                                                          */
 /* -------------------------------------------------------------------------- */
 
-export const SAVED_ITEM_TYPES: ReadonlyArray<SavedItemType> = [
+export const SAVED_ITEM_TYPES: readonly SavedItemType[] = [
   "tickets",
   "hotel",
   "flight",
@@ -53,7 +53,7 @@ export const SAVED_ITEM_TYPES: ReadonlyArray<SavedItemType> = [
   "other",
 ] as const;
 
-export const SAVED_ITEM_STATUS: ReadonlyArray<SavedItemStatus> = [
+export const SAVED_ITEM_STATUS: readonly SavedItemStatus[] = [
   "saved",
   "pending",
   "booked",
@@ -145,7 +145,7 @@ export function getSavedItemUiGroupLabel(group: SavedItemUiGroup): string {
 
 export type WalletAttachmentKind = "pdf" | "image" | "file";
 
-export const WALLET_ATTACHMENT_KINDS: ReadonlyArray<WalletAttachmentKind> = [
+export const WALLET_ATTACHMENT_KINDS: readonly WalletAttachmentKind[] = [
   "pdf",
   "image",
   "file",
