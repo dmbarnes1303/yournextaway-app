@@ -2,22 +2,30 @@ import React from "react";
 import { ImageBackground, StyleSheet, View } from "react-native";
 
 type Props = {
-  imageSource: any;
+  imageSource?: any;
+  children: React.ReactNode;
+  mode?: "image" | "solid";
+  solidColor?: string;
   overlayOpacity?: number;
   topShadeOpacity?: number;
   centerShadeOpacity?: number;
   bottomShadeOpacity?: number;
-  children: React.ReactNode;
 };
 
 export default function Background({
   imageSource,
-  overlayOpacity = 0.52,
-  topShadeOpacity = 0.18,
-  centerShadeOpacity = 0,
-  bottomShadeOpacity = 0.26,
   children,
+  mode = "image",
+  solidColor = "#07090B",
+  overlayOpacity = 0.5,
+  topShadeOpacity = 0.16,
+  centerShadeOpacity = 0.06,
+  bottomShadeOpacity = 0.22,
 }: Props) {
+  if (mode === "solid" || !imageSource) {
+    return <View style={[styles.container, { backgroundColor: solidColor }]}>{children}</View>;
+  }
+
   return (
     <ImageBackground source={imageSource} style={styles.container} resizeMode="cover">
       <View
