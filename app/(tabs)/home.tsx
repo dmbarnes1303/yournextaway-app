@@ -536,11 +536,14 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           <GlassCard variant="brand" strength="strong" style={styles.hero} noPadding>
-            <View style={styles.heroGlow} pointerEvents="none" />
+            <View style={styles.heroGoldLine} pointerEvents="none" />
+            <View style={styles.heroGlowLeft} pointerEvents="none" />
+            <View style={styles.heroGlowRight} pointerEvents="none" />
 
             <View style={styles.heroInner}>
               <View style={styles.heroTopRow}>
-                <View style={styles.logoRing}>
+                <View style={styles.logoShell}>
+                  <View style={styles.logoOuterGlow} />
                   <View style={styles.logoWrap}>
                     <Image source={logoSource} style={styles.logo} resizeMode="contain" />
                   </View>
@@ -691,17 +694,45 @@ const styles = StyleSheet.create({
 
   hero: {
     marginTop: theme.spacing.lg,
-    borderRadius: 28,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "rgba(133,255,91,0.18)",
+    backgroundColor: "#07140F",
+    overflow: "hidden",
+    shadowColor: "#00D26A",
+    shadowOpacity: 0.22,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
   },
 
-  heroGlow: {
+  heroGoldLine: {
     position: "absolute",
     top: 0,
-    left: 0,
-    right: 0,
-    height: 82,
-    backgroundColor: theme.colors.glowGreen,
-    opacity: 0.16,
+    left: 20,
+    right: 20,
+    height: 1,
+    backgroundColor: "rgba(245,204,87,0.55)",
+  },
+
+  heroGlowLeft: {
+    position: "absolute",
+    top: -30,
+    left: -20,
+    width: 180,
+    height: 180,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,210,106,0.12)",
+  },
+
+  heroGlowRight: {
+    position: "absolute",
+    top: -40,
+    right: -30,
+    width: 220,
+    height: 220,
+    borderRadius: 999,
+    backgroundColor: "rgba(245,204,87,0.07)",
   },
 
   heroInner: {
@@ -715,46 +746,51 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
-  logoRing: {
-    width: 64,
-    height: 64,
-    borderRadius: 999,
-    padding: 2,
-    backgroundColor: theme.colors.borderGoldSoft,
+  logoShell: {
+    width: 68,
+    height: 68,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
     flexShrink: 0,
   },
 
-  logoWrap: {
-    width: "100%",
-    height: "100%",
+  logoOuterGlow: {
+    position: "absolute",
+    width: 60,
+    height: 60,
     borderRadius: 999,
-    overflow: "hidden",
+    backgroundColor: "rgba(0,210,106,0.10)",
+  },
+
+  logoWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.22)",
     borderWidth: 1,
-    borderColor: theme.colors.borderStrong,
-    backgroundColor: "rgba(0,0,0,0.24)",
+    borderColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
 
   logo: {
-    width: 50,
-    height: 50,
-    opacity: 0.99,
+    width: 52,
+    height: 52,
   },
 
   heroCopyWrap: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
 
   heroEyebrow: {
-    color: theme.badge.textGold,
+    color: "#F5CC57",
     fontSize: 11,
     lineHeight: 15,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
 
@@ -767,19 +803,18 @@ const styles = StyleSheet.create({
   },
 
   heroSub: {
-    color: theme.colors.textSecondary,
+    color: "rgba(234,240,236,0.82)",
     fontSize: 13,
     lineHeight: 19,
     fontWeight: theme.fontWeight.bold,
-    opacity: 0.96,
   },
 
   searchBox: {
     marginTop: 2,
     borderWidth: 1,
-    borderColor: theme.colors.borderGreenSoft,
+    borderColor: "rgba(75,201,115,0.28)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.045)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.03)",
     borderRadius: 18,
     paddingHorizontal: 14,
     minHeight: 56,
@@ -801,7 +836,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: theme.borderRadius.pill,
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
+    borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
@@ -821,8 +856,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: theme.colors.borderGreenStrong,
-    backgroundColor: theme.badge.bgGreen,
+    borderColor: "rgba(102,232,128,0.28)",
+    backgroundColor: "rgba(12,92,44,0.34)",
     alignSelf: "flex-start",
   },
 
@@ -832,7 +867,7 @@ const styles = StyleSheet.create({
   },
 
   quickPillText: {
-    color: theme.badge.textGreen,
+    color: "#88F0A2",
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
@@ -844,11 +879,11 @@ const styles = StyleSheet.create({
 
   resultList: {
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
+    borderColor: "rgba(255,255,255,0.08)",
     borderRadius: 18,
     overflow: "hidden",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.28)" : "rgba(10,12,14,0.22)",
+      Platform.OS === "android" ? "rgba(6,10,8,0.34)" : "rgba(6,10,8,0.30)",
   },
 
   resultRow: {
@@ -858,7 +893,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.dividerSubtle,
+    borderTopColor: "rgba(255,255,255,0.05)",
   },
 
   resultRowFirst: {
@@ -907,8 +942,8 @@ const styles = StyleSheet.create({
   },
 
   surface: {
-    marginTop: -4,
-    paddingTop: 6,
+    marginTop: -2,
+    paddingTop: 4,
     paddingBottom: 4,
     gap: 18,
   },
