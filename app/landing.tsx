@@ -3,8 +3,8 @@ import React from "react";
 import { View, Text, StyleSheet, Image, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 
-import Background from "@/src/components/Background";
 import { theme } from "@/src/constants/theme";
 
 const LOGO = require("@/src/YNAlogo.png");
@@ -21,15 +21,24 @@ export default function Landing() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageSource={HERO} overlayOpacity={0.7}>
+      <View style={styles.container}>
+        <Image source={HERO} style={styles.bgImage} resizeMode="cover" />
+
+        <LinearGradient
+          colors={[
+            "rgba(0,0,0,0.82)",
+            "rgba(0,0,0,0.44)",
+            "rgba(0,0,0,0.90)",
+          ]}
+          locations={[0, 0.46, 1]}
+          style={styles.overlay}
+        />
+
         <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-          
-          {/* Logo */}
           <View style={styles.top}>
             <Image source={LOGO} style={styles.logo} resizeMode="contain" />
           </View>
 
-          {/* Content */}
           <View style={styles.content}>
             <Text style={styles.headline}>
               Your European Football Trip Planner
@@ -42,7 +51,6 @@ export default function Landing() {
             </Text>
           </View>
 
-          {/* CTA */}
           <View style={styles.bottom}>
             <Pressable
               onPress={handleStart}
@@ -50,78 +58,107 @@ export default function Landing() {
                 styles.cta,
                 pressed && styles.pressed,
               ]}
+              android_ripple={{ color: "rgba(255,255,255,0.08)" }}
             >
               <Text style={styles.ctaText}>Start Exploring</Text>
             </Pressable>
           </View>
-
         </SafeAreaView>
-      </Background>
+      </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+
+  bgImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
   safe: {
     flex: 1,
-    justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.lg,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 18,
   },
 
   top: {
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 6,
   },
 
   logo: {
-    width: 100,
-    height: 100,
+    width: 88,
+    height: 88,
   },
 
   content: {
     flex: 1,
     justifyContent: "center",
-    gap: 16,
+    paddingTop: 88,
   },
 
   headline: {
     color: "#FFFFFF",
-    fontSize: 30,
-    lineHeight: 36,
-    fontWeight: "800",
-    letterSpacing: 0.2,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: "900",
+    letterSpacing: -0.5,
+    maxWidth: 340,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
   },
 
   body: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 16,
-    lineHeight: 24,
+    marginTop: 18,
+    color: "rgba(255,255,255,0.88)",
+    fontSize: 17,
+    lineHeight: 26,
     fontWeight: "500",
+    maxWidth: 345,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
   },
 
   bottom: {
-    marginBottom: 10,
+    paddingBottom: 6,
   },
 
   cta: {
-    backgroundColor: "rgba(79,224,138,0.18)",
-    borderColor: "rgba(79,224,138,0.4)",
-    borderWidth: 1,
+    minHeight: 58,
     borderRadius: 18,
-    paddingVertical: 16,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(116,255,181,0.34)",
+    backgroundColor: "rgba(31,133,84,0.30)",
+    shadowColor: "#63ffb0",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
   },
 
   ctaText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "800",
-    letterSpacing: 0.3,
+    fontSize: 17,
+    fontWeight: "900",
+    letterSpacing: 0.2,
   },
 
   pressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
+    opacity: 0.94,
+    transform: [{ scale: 0.985 }],
   },
 });
