@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: "center",
-    paddingTop: 70,
+    paddingTop: 50,
   },
 
   headline: {
@@ -137,14 +137,14 @@ const styles = StyleSheet.create({
   },
 
   cta: {
-    minHeight: 58,
-    borderRadius: 18,
+    minHeight: 60,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(116,255,181,0.5)",
-    backgroundColor: "rgba(79,224,138,0.35)",
-    shadowColor: "#63ffb0",
+    borderWidth: 1.5,
+    borderColor: "rgba(79,224,138,0.5)",
+    backgroundColor: "rgba(20,120,80,0.55)",
+    shadowColor: "#4fe08a",
     shadowOpacity: 0.25,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
@@ -152,9 +152,9 @@ const styles = StyleSheet.create({
 
   ctaText: {
     color: "#FFFFFF",
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "900",
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
 
   pressed: {
