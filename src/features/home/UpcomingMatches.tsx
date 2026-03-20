@@ -359,3 +359,185 @@ const styles = StyleSheet.create({
   blockInner: {
     padding: 14,
     gap: 12,
+  },
+
+  blockKicker: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.5,
+  },
+
+  loadingWrap: {
+    minHeight: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+
+  muted: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  errorWrap: {
+    minHeight: 140,
+    justifyContent: "center",
+  },
+
+  featured: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
+    overflow: "hidden",
+    position: "relative",
+    minHeight: 112,
+  },
+
+  featuredImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+
+  featuredImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(6,8,10,0.58)",
+  },
+
+  featuredTop: {
+    paddingVertical: 15,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  featuredTextWrap: {
+    flex: 1,
+  },
+
+  featuredTitle: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  featuredMeta: {
+    marginTop: 5,
+    color: "rgba(242,244,246,0.86)",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  crestWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  crestImg: {
+    width: 30,
+    height: 30,
+    opacity: 0.96,
+  },
+
+  crestFallback: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+  },
+
+  chev: {
+    color: theme.colors.textTertiary,
+    fontSize: 22,
+    marginTop: -2,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    marginTop: 2,
+  },
+
+  list: {
+    gap: 8,
+  },
+
+  listRow: {
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+
+  listRowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  smallCrests: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+  },
+
+  smallCrest: {
+    width: 18,
+    height: 18,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  smallCrestImg: {
+    width: 14,
+    height: 14,
+    opacity: 0.95,
+  },
+
+  listTitle: {
+    flex: 1,
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  rowChevron: {
+    color: theme.colors.textTertiary,
+    fontSize: 18,
+    marginTop: -1,
+  },
+
+  listMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  pressedRow: {
+    opacity: 0.94,
+  },
+
+  pressedLite: {
+    opacity: 0.9,
+  },
+});
