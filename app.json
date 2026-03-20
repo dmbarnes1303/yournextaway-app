@@ -8,7 +8,11 @@
     "icon": "./assets/images/YNAlogo.png",
     "userInterfaceStyle": "dark",
     "extra": {
-      "EXPO_PUBLIC_BACKEND_URL": "https://yournextaway.onrender.com"
+      "EXPO_PUBLIC_BACKEND_URL": "https://yournextaway.onrender.com",
+      "router": {},
+      "eas": {
+        "projectId": "cb2d14b5-d6d8-451f-b67a-9416e11c6753"
+      }
     },
     "splash": {
       "image": "./assets/images/YNAlogo.png",
