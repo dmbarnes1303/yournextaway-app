@@ -44,6 +44,10 @@ export const env = {
   ),
   apiFootballKey: opt("API_FOOTBALL_KEY", API_FOOTBALL_KEY_FALLBACK),
 
+  // Wallet worker
+  walletWorkerBaseUrl: opt("WALLET_WORKER_BASE_URL", ""),
+  walletWorkerApiKey: opt("WALLET_WORKER_API_KEY", ""),
+
   // FootballTicketNet
   ftnBaseUrl: opt("FTN_BASE_URL", "https://www.footballticketnet.com/api"),
   ftnUsername: opt("FTN_USERNAME", ""),
@@ -71,6 +75,10 @@ export function isProduction(): boolean {
 
 export function hasApiFootballConfig(): boolean {
   return Boolean(env.apiFootballBaseUrl && env.apiFootballKey);
+}
+
+export function hasWalletWorkerConfig(): boolean {
+  return Boolean(env.walletWorkerBaseUrl && env.walletWorkerApiKey);
 }
 
 export function hasFtnConfig(): boolean {
