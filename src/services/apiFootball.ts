@@ -41,7 +41,16 @@ type BackendEnvelope<T> = {
   requestId?: string;
 };
 
-const REQUEST_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 9000;
+const FIXTURE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type FixtureCacheEntry = {
+  at: number;
+  rows: FixtureListRow[];
+};
+
+const fixtureCache = new Map<string, FixtureCacheEntry>();
+const inflightFixtures = new Map<string, Promise<FixtureListRow[]>>();
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -93,8 +102,6 @@ async function backendFetch<T>(
       method: "GET",
       headers: {
         Accept: "application/json",
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
       },
       cache: "no-store",
       signal: controller?.signal,
@@ -124,21 +131,93 @@ async function backendFetch<T>(
   }
 }
 
+function fixtureCacheKey(params: {
+  league: number;
+  season: number;
+  from?: string;
+  to?: string;
+}) {
+  return [
+    `league:${params.league}`,
+    `season:${params.season}`,
+    `from:${params.from ?? ""}`,
+    `to:${params.to ?? ""}`,
+  ].join("|");
+}
+
+function normalizeFixtureRows(rows: unknown): FixtureListRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows.filter((row: any) => {
+    const id = Number(row?.fixture?.id);
+    return Number.isFinite(id) && id > 0;
+  }) as FixtureListRow[];
+}
+
+function getCachedFixtures(key: string): FixtureCacheEntry | null {
+  const cached = fixtureCache.get(key);
+  if (!cached) return null;
+  return cached;
+}
+
+function setCachedFixtures(key: string, rows: FixtureListRow[]) {
+  fixtureCache.set(key, {
+    at: Date.now(),
+    rows,
+  });
+}
+
+async function fetchFixturesNetwork(args: {
+  key: string;
+  league: number;
+  season: number;
+  from?: string;
+  to?: string;
+}): Promise<FixtureListRow[]> {
+  const existing = inflightFixtures.get(args.key);
+  if (existing) return existing;
+
+  const request = backendFetch<FixtureListRow[]>("/football/fixtures", {
+    league: args.league,
+    season: args.season,
+    from: args.from,
+    to: args.to,
+  })
+    .then((rows) => {
+      const normalized = normalizeFixtureRows(rows);
+      setCachedFixtures(args.key, normalized);
+      return normalized;
+    })
+    .finally(() => {
+      inflightFixtures.delete(args.key);
+    });
+
+  inflightFixtures.set(args.key, request);
+  return request;
+}
+
 export async function getFixtures(params: FixturesParams): Promise<FixtureListRow[]> {
   const league = params.league ?? params.leagueId;
   const from = params.from ?? params.fromIso;
   const to = params.to ?? params.toIso;
+  const season = params.season;
 
-  if (!league || !params.season) return [];
+  if (!league || !season) return [];
 
-  const rows = await backendFetch<FixtureListRow[]>("/football/fixtures", {
-    league,
-    season: params.season,
-    from,
-    to,
-  });
+  const key = fixtureCacheKey({ league, season, from, to });
+  const cached = getCachedFixtures(key);
+  const now = Date.now();
 
-  return Array.isArray(rows) ? rows : [];
+  if (cached && now - cached.at <= FIXTURE_CACHE_TTL_MS) {
+    return cached.rows;
+  }
+
+  if (cached) {
+    void fetchFixturesNetwork({ key, league, season, from, to }).catch(() => null);
+    return cached.rows;
+  }
+
+  return fetchFixturesNetwork({ key, league, season, from, to });
 }
 
 export async function getFixtureById(id: number | string): Promise<FixtureListRow | null> {
@@ -161,7 +240,7 @@ export async function getFixturesByRound(opts: {
     round: opts.round,
   });
 
-  return Array.isArray(rows) ? rows : [];
+  return normalizeFixtureRows(rows);
 }
 
 export async function getCountries(): Promise<
