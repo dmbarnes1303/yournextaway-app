@@ -1,4 +1,3 @@
-// src/config/env.ts
 import Constants from "expo-constants";
 
 type Env = {
@@ -7,33 +6,57 @@ type Env = {
   se365AffiliateId: string;
 };
 
-function pickExtra(): any {
-  const cfg: any = (Constants as any).expoConfig ?? (Constants as any).manifest;
-  return cfg?.extra ?? {};
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-function str(v: unknown): string {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+function normalizeUrl(value: unknown): string {
+  const raw = clean(value);
+  if (!raw) return "";
+
+  try {
+    return new URL(raw).toString().replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function pickExtra(): Record<string, unknown> {
+  const cfg: any = (Constants as any).expoConfig ?? (Constants as any).manifest;
+  return (cfg?.extra ?? {}) as Record<string, unknown>;
 }
 
 const extra = pickExtra();
 
-const backendUrl =
-  str(extra.EXPO_PUBLIC_BACKEND_URL) ||
-  str(process.env.EXPO_PUBLIC_BACKEND_URL) ||
-  str((process.env as any)?.EXPO_PUBLIC_BACKEND_BASE_URL);
+const backendUrl = normalizeUrl(
+  extra.EXPO_PUBLIC_BACKEND_URL ?? process.env.EXPO_PUBLIC_BACKEND_URL
+);
 
-const se365ProxyUrl =
-  str(extra.EXPO_PUBLIC_SE365_PROXY_URL) ||
-  str(process.env.EXPO_PUBLIC_SE365_PROXY_URL) ||
-  backendUrl;
+const se365ProxyUrl = normalizeUrl(
+  extra.EXPO_PUBLIC_SE365_PROXY_URL ??
+    process.env.EXPO_PUBLIC_SE365_PROXY_URL ??
+    backendUrl
+);
 
-const se365AffiliateId =
-  str(extra.EXPO_PUBLIC_SE365_AFFILIATE_ID) ||
-  str(process.env.EXPO_PUBLIC_SE365_AFFILIATE_ID);
+const se365AffiliateId = clean(
+  extra.EXPO_PUBLIC_SE365_AFFILIATE_ID ??
+    process.env.EXPO_PUBLIC_SE365_AFFILIATE_ID
+);
 
 export const ENV: Env = {
   backendUrl,
   se365ProxyUrl,
   se365AffiliateId,
 };
+
+export function getBackendBaseUrl(): string {
+  return ENV.backendUrl;
+}
+
+export function assertBackendBaseUrl(): string {
+  if (!ENV.backendUrl) {
+    throw new Error("Missing backend URL. Set EXPO_PUBLIC_BACKEND_URL.");
+  }
+
+  return ENV.backendUrl;
+}
