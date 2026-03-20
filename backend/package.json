@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "rm -rf dist && esbuild src/index.ts --bundle --outdir=dist --platform=node --target=node20 --format=esm --packages=external --sourcemap",
+    "build": "esbuild src/index.ts --bundle --outdir=dist --platform=node --target=node20 --format=esm --packages=external --sourcemap",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.js"
   },
