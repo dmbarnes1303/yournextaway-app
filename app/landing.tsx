@@ -94,24 +94,24 @@ const styles = StyleSheet.create({
 
   top: {
     alignItems: "center",
-    marginTop: 50,
+    marginTop: 40,
   },
 
   logo: {
-    width: 125,
-    height: 125,
+    width: 110,
+    height: 110,
   },
 
   content: {
     flex: 1,
     justifyContent: "center",
-    paddingTop: 88,
+    paddingTop: 70,
   },
 
   headline: {
     color: "#FFFFFF",
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 32,
+    lineHeight: 38,
     fontWeight: "900",
     letterSpacing: -0.5,
     maxWidth: 340,
@@ -142,12 +142,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(116,255,181,0.34)",
-    backgroundColor: "rgba(31,133,84,0.30)",
+    borderColor: "rgba(116,255,181,0.5)",
+    backgroundColor: "rgba(79,224,138,0.35)",
     shadowColor: "#63ffb0",
-    shadowOpacity: 0.16,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
   },
 
   ctaText: {
