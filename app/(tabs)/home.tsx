@@ -140,6 +140,18 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debounced;
 }
 
+function mapFixtureError(message: string | null): string | null {
+  const clean = String(message ?? "").trim().toLowerCase();
+  if (!clean) return null;
+  if (clean.includes("backend_timeout")) {
+    return "Live fixtures took too long to respond. Try again in a moment.";
+  }
+  if (clean.includes("timeout")) {
+    return "Fixture data is taking longer than expected. Try again shortly.";
+  }
+  return message;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -551,114 +563,140 @@ export default function HomeScreen() {
   }, [featured]);
 
   const logoSource = useMemo(() => require("@/src/YNAlogo.png"), []);
+  const homeFixtureError = useMemo(() => mapFixtureError(fxError), [fxError]);
 
   const showInitialFixtureLoading = fxLoading && fxRows.length === 0;
-  const showFixtureError = !!fxError && fxRows.length === 0;
+  const showFixtureError = !!homeFixtureError && fxRows.length === 0;
 
   return (
-    <Background mode="solid" solidColor="#07090B">
+    <Background mode="solid" solidColor="#050708">
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: 28 + insets.bottom }]}
+          contentContainerStyle={[styles.content, { paddingBottom: 30 + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <GlassCard variant="brand" strength="strong" style={styles.hero} noPadding>
-            <View style={styles.heroGoldLine} pointerEvents="none" />
-            <View style={styles.heroGlowLeft} pointerEvents="none" />
-            <View style={styles.heroGlowRight} pointerEvents="none" />
+            <View style={styles.heroRim} pointerEvents="none" />
+            <View style={styles.heroHairline} pointerEvents="none" />
+            <View style={styles.heroRouteArcLeft} pointerEvents="none" />
+            <View style={styles.heroRouteArcRight} pointerEvents="none" />
+            <View style={styles.heroGoldSweep} pointerEvents="none" />
+            <View style={styles.heroGlowBase} pointerEvents="none" />
 
             <View style={styles.heroInner}>
-              <View style={styles.heroTopRow}>
-                <View style={styles.logoShell}>
-                  <View style={styles.logoOuterGlow} />
-                  <View style={styles.logoWrap}>
-                    <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+              <View style={styles.heroTopBand}>
+                <View style={styles.heroSealWrap}>
+                  <View style={styles.heroSealGlow} />
+                  <View style={styles.heroSeal}>
+                    <Image source={logoSource} style={styles.heroSealLogo} resizeMode="contain" />
                   </View>
                 </View>
 
-                <View style={styles.heroCopyWrap}>
-                  <Text style={styles.heroEyebrow}>Home</Text>
+                <View style={styles.heroHeadingWrap}>
+                  <Text style={styles.heroEyebrow}>Home hub</Text>
                   <Text style={styles.heroTitle}>Search teams, cities or countries</Text>
                   <Text style={styles.heroSub}>
-                    Jump straight into guides, fixtures and trip planning.
+                    Build football trips faster with guides, fixtures and planning shortcuts in one place.
                   </Text>
                 </View>
               </View>
 
-              <View style={styles.searchBox}>
-                <TextInput
-                  value={q}
-                  onChangeText={setQ}
-                  placeholder="Search team, city or country"
-                  placeholderTextColor={theme.colors.textTertiary}
-                  style={styles.searchInput}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="search"
-                  onSubmitEditing={() => Keyboard.dismiss()}
-                />
+              <View style={styles.heroDivider} />
 
-                {qNorm.length > 0 ? (
-                  <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
-                    <Text style={styles.clearText}>Clear</Text>
-                  </Pressable>
+              <View style={styles.searchPanel}>
+                <View style={styles.searchLabelRow}>
+                  <Text style={styles.searchLabel}>Quick search</Text>
+                  {!showSearchResults ? (
+                    <Text style={styles.searchHint}>Team • City • Country • Venue</Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.searchBox}>
+                  <TextInput
+                    value={q}
+                    onChangeText={setQ}
+                    placeholder="Search team, city or country"
+                    placeholderTextColor="rgba(224,231,225,0.42)"
+                    style={styles.searchInput}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="search"
+                    onSubmitEditing={() => Keyboard.dismiss()}
+                  />
+
+                  {qNorm.length > 0 ? (
+                    <Pressable onPress={clearSearch} style={styles.clearBtn} hitSlop={10}>
+                      <Text style={styles.clearText}>Clear</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={styles.searchSparkPill}>
+                      <Text style={styles.searchSparkText}>Start here</Text>
+                    </View>
+                  )}
+                </View>
+
+                {!showSearchResults ? (
+                  <View style={styles.quickRow}>
+                    <Pressable
+                      onPress={goFixturesHub}
+                      style={({ pressed }) => [styles.quickPillPrimary, pressed && styles.quickPillPressed]}
+                    >
+                      <Text style={styles.quickPillPrimaryText}>Next 14 days</Text>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={goDiscover}
+                      style={({ pressed }) => [styles.quickPillSecondary, pressed && styles.quickPillPressed]}
+                    >
+                      <Text style={styles.quickPillSecondaryText}>Open Discover</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {showSearchResults ? (
+                  <View style={styles.searchResults}>
+                    {searchBuilding ? (
+                      <View style={styles.centerInline}>
+                        <ActivityIndicator color={theme.colors.accentGold} />
+                        <Text style={styles.muted}>Preparing search…</Text>
+                      </View>
+                    ) : null}
+
+                    {!searchBuilding && searchError ? (
+                      <EmptyState title="Search unavailable" message={searchError} />
+                    ) : null}
+
+                    {!searchBuilding && !searchError ? (
+                      flatSearchResults.length === 0 ? (
+                        <Text style={styles.groupEmpty}>No results.</Text>
+                      ) : (
+                        <View style={styles.resultList}>
+                          {flatSearchResults.map((r, idx) => (
+                            <Pressable
+                              key={`${r.key}-${idx}`}
+                              onPress={() => onPressSearchResult(r)}
+                              style={({ pressed }) => [
+                                styles.resultRow,
+                                idx === 0 ? styles.resultRowFirst : null,
+                                pressed && styles.pressedRow,
+                              ]}
+                              android_ripple={{ color: "rgba(34,197,94,0.08)" }}
+                            >
+                              <View style={styles.resultTextWrap}>
+                                <Text style={styles.resultTitle}>{r.title}</Text>
+                                <Text style={styles.resultMeta}>{resultMeta(r)}</Text>
+                              </View>
+                              <Text style={styles.chev}>›</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      )
+                    ) : null}
+                  </View>
                 ) : null}
               </View>
-
-              {!showSearchResults ? (
-                <View style={styles.quickRow}>
-                  <Pressable
-                    onPress={goFixturesHub}
-                    style={({ pressed }) => [styles.quickPill, pressed && styles.quickPillPressed]}
-                  >
-                    <Text style={styles.quickPillText}>Next 14 days</Text>
-                  </Pressable>
-                </View>
-              ) : null}
-
-              {showSearchResults ? (
-                <View style={styles.searchResults}>
-                  {searchBuilding ? (
-                    <View style={styles.centerInline}>
-                      <ActivityIndicator color={theme.colors.accentGold} />
-                      <Text style={styles.muted}>Preparing search…</Text>
-                    </View>
-                  ) : null}
-
-                  {!searchBuilding && searchError ? (
-                    <EmptyState title="Search unavailable" message={searchError} />
-                  ) : null}
-
-                  {!searchBuilding && !searchError ? (
-                    flatSearchResults.length === 0 ? (
-                      <Text style={styles.groupEmpty}>No results.</Text>
-                    ) : (
-                      <View style={styles.resultList}>
-                        {flatSearchResults.map((r, idx) => (
-                          <Pressable
-                            key={`${r.key}-${idx}`}
-                            onPress={() => onPressSearchResult(r)}
-                            style={({ pressed }) => [
-                              styles.resultRow,
-                              idx === 0 ? styles.resultRowFirst : null,
-                              pressed && styles.pressedRow,
-                            ]}
-                            android_ripple={{ color: "rgba(34,197,94,0.08)" }}
-                          >
-                            <View style={styles.resultTextWrap}>
-                              <Text style={styles.resultTitle}>{r.title}</Text>
-                              <Text style={styles.resultMeta}>{resultMeta(r)}</Text>
-                            </View>
-                            <Text style={styles.chev}>›</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )
-                  ) : null}
-                </View>
-              ) : null}
             </View>
           </GlassCard>
 
@@ -687,7 +725,7 @@ export default function HomeScreen() {
                 setLeague={setLeague}
                 upcomingWindow={upcomingWindow}
                 fxLoading={showInitialFixtureLoading}
-                fxError={showFixtureError ? fxError : null}
+                fxError={showFixtureError ? homeFixtureError : null}
                 featured={featured}
                 list={list}
                 featuredCityImage={featuredCityImage}
@@ -725,43 +763,74 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.lg,
     borderRadius: 30,
     borderWidth: 1,
-    borderColor: "rgba(133,255,91,0.18)",
-    backgroundColor: "#07140F",
+    borderColor: "rgba(134,255,96,0.14)",
+    backgroundColor: "#07110C",
     overflow: "hidden",
     shadowColor: "#00D26A",
-    shadowOpacity: 0.22,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
     elevation: 12,
   },
 
-  heroGoldLine: {
+  heroRim: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
+  },
+
+  heroHairline: {
     position: "absolute",
     top: 0,
-    left: 20,
-    right: 20,
+    left: 18,
+    right: 18,
     height: 1,
-    backgroundColor: "rgba(245,204,87,0.55)",
+    backgroundColor: "rgba(245,204,87,0.50)",
   },
 
-  heroGlowLeft: {
+  heroRouteArcLeft: {
     position: "absolute",
-    top: -30,
-    left: -20,
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,210,106,0.12)",
-  },
-
-  heroGlowRight: {
-    position: "absolute",
-    top: -40,
-    right: -30,
+    top: 36,
+    left: -46,
     width: 220,
     height: 220,
     borderRadius: 999,
-    backgroundColor: "rgba(245,204,87,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(93,255,138,0.10)",
+    transform: [{ rotate: "-16deg" }],
+  },
+
+  heroRouteArcRight: {
+    position: "absolute",
+    top: -28,
+    right: -88,
+    width: 270,
+    height: 270,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(245,204,87,0.10)",
+    transform: [{ rotate: "12deg" }],
+  },
+
+  heroGoldSweep: {
+    position: "absolute",
+    right: -34,
+    top: 82,
+    width: 190,
+    height: 2,
+    backgroundColor: "rgba(245,204,87,0.22)",
+    transform: [{ rotate: "-24deg" }],
+  },
+
+  heroGlowBase: {
+    position: "absolute",
+    left: 26,
+    bottom: -22,
+    width: 200,
+    height: 78,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,210,106,0.07)",
   },
 
   heroInner: {
@@ -769,49 +838,53 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
-  heroTopRow: {
+  heroTopBand: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
   },
 
-  logoShell: {
-    width: 68,
-    height: 68,
+  heroSealWrap: {
+    width: 88,
+    height: 88,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
     flexShrink: 0,
   },
 
-  logoOuterGlow: {
+  heroSealGlow: {
     position: "absolute",
-    width: 60,
-    height: 60,
+    width: 76,
+    height: 76,
     borderRadius: 999,
-    backgroundColor: "rgba(0,210,106,0.10)",
+    backgroundColor: "rgba(97,255,122,0.10)",
   },
 
-  logoWrap: {
-    width: 58,
-    height: 58,
+  heroSeal: {
+    width: 74,
+    height: 74,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.22)",
+    backgroundColor: "rgba(4,7,8,0.70)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.26,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
 
-  logo: {
-    width: 52,
-    height: 52,
+  heroSealLogo: {
+    width: 64,
+    height: 64,
   },
 
-  heroCopyWrap: {
+  heroHeadingWrap: {
     flex: 1,
-    gap: 3,
+    gap: 4,
   },
 
   heroEyebrow: {
@@ -819,34 +892,63 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
   },
 
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 26,
+    lineHeight: 31,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.15,
+    letterSpacing: 0.1,
   },
 
   heroSub: {
-    color: "rgba(234,240,236,0.82)",
+    color: "rgba(235,242,236,0.82)",
     fontSize: 13,
     lineHeight: 19,
     fontWeight: theme.fontWeight.bold,
   },
 
+  heroDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+
+  searchPanel: {
+    gap: 12,
+  },
+
+  searchLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  searchLabel: {
+    color: "rgba(240,244,241,0.92)",
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+
+  searchHint: {
+    color: "rgba(188,197,191,0.68)",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.bold,
+  },
+
   searchBox: {
-    marginTop: 2,
     borderWidth: 1,
-    borderColor: "rgba(75,201,115,0.28)",
+    borderColor: "rgba(85,215,126,0.20)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.03)",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    minHeight: 56,
+      Platform.OS === "android" ? "rgba(4,7,8,0.52)" : "rgba(255,255,255,0.03)",
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    minHeight: 58,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -866,7 +968,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.pill,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.20)",
   },
 
   clearText: {
@@ -875,30 +977,63 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
+  searchSparkPill: {
+    paddingVertical: 7,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(245,204,87,0.16)",
+    backgroundColor: "rgba(245,204,87,0.08)",
+  },
+
+  searchSparkText: {
+    color: "#F5CC57",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
   quickRow: {
     flexDirection: "row",
     gap: 10,
+    flexWrap: "wrap",
   },
 
-  quickPill: {
+  quickPillPrimary: {
     borderRadius: theme.borderRadius.pill,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 11,
+    paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: "rgba(102,232,128,0.28)",
+    borderColor: "rgba(104,241,138,0.26)",
     backgroundColor: "rgba(12,92,44,0.34)",
     alignSelf: "flex-start",
+  },
+
+  quickPillPrimaryText: {
+    color: "#8EF2A5",
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  quickPillSecondary: {
+    borderRadius: theme.borderRadius.pill,
+    paddingVertical: 11,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+    alignSelf: "flex-start",
+  },
+
+  quickPillSecondaryText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
   },
 
   quickPillPressed: {
     opacity: 0.92,
     transform: [{ scale: 0.99 }],
-  },
-
-  quickPillText: {
-    color: "#88F0A2",
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
   },
 
   searchResults: {
