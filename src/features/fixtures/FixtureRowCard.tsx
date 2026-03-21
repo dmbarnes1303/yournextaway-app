@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { memo, useMemo } from "react";
 import { View, Text, StyleSheet, Image, Platform, Pressable } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
@@ -21,6 +21,21 @@ import type { RankedFixtureRow, FixtureRouteCtx } from "./types";
 
 const UEFA_COMPETITION_IDS = new Set([2, 3, 848, 244, 286, 357]);
 
+const LEAGUE_META_BY_ID = new Map(
+  LEAGUES.map((league) => [league.leagueId, league] as const)
+);
+
+type Props = {
+  item: RankedFixtureRow;
+  expanded: boolean;
+  isFollowed: boolean;
+  placeholderIds: Set<string>;
+  onToggleExpanded: () => void;
+  onToggleFollow: () => void;
+  onPressMatch: (fixtureId: string, ctx?: FixtureRouteCtx) => void;
+  onPressBuildTrip: (fixtureId: string, ctx?: FixtureRouteCtx) => void;
+};
+
 function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
@@ -33,8 +48,7 @@ function displayLeagueName(leagueId: number | null, leagueName: string) {
 }
 
 function isEuropeanCompetition(leagueId: number | null) {
-  if (leagueId == null) return false;
-  return UEFA_COMPETITION_IDS.has(leagueId);
+  return leagueId != null && UEFA_COMPETITION_IDS.has(leagueId);
 }
 
 function difficultyTone(difficulty: TicketDifficulty | "unknown") {
@@ -118,7 +132,7 @@ function bookingSummaryLine(params: {
   return `${ticketPart} • ${travelPart} • ${followPart}`;
 }
 
-export default function FixtureRowCard({
+function FixtureRowCardComponent({
   item,
   expanded,
   isFollowed,
@@ -127,94 +141,128 @@ export default function FixtureRowCard({
   onToggleFollow,
   onPressMatch,
   onPressBuildTrip,
-}: {
-  item: RankedFixtureRow;
-  expanded: boolean;
-  isFollowed: boolean;
-  placeholderIds: Set<string>;
-  onToggleExpanded: () => void;
-  onToggleFollow: () => void;
-  onPressMatch: (fixtureId: string, ctx?: FixtureRouteCtx) => void;
-  onPressBuildTrip: (fixtureId: string, ctx?: FixtureRouteCtx) => void;
-}) {
-  const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
+}: Props) {
+  const derived = useMemo(() => {
+    const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
+    if (!fixtureId) return null;
 
-  const home = clean(item?.teams?.home?.name) || "Home";
-  const away = clean(item?.teams?.away?.name) || "Away";
+    const home = clean(item?.teams?.home?.name) || "Home";
+    const away = clean(item?.teams?.away?.name) || "Away";
+    const venue = clean(item?.fixture?.venue?.name);
+    const city = clean(item?.fixture?.venue?.city);
 
-  const venue = clean(item?.fixture?.venue?.name);
-  const city = clean(item?.fixture?.venue?.city);
+    const kickoff = kickoffPresentation(item, placeholderIds);
+    const certainty = kickoff.certainty;
 
-  const kickoff = kickoffPresentation(item, placeholderIds);
-  const certainty = kickoff.certainty;
+    const leagueId = item?.league?.id != null ? Number(item.league.id) : null;
+    const season =
+      (item as any)?.league?.season != null ? Number((item as any).league.season) : null;
 
-  const ctxLeagueId = item?.league?.id != null ? Number(item.league.id) : null;
-  const ctxSeason =
-    (item as any)?.league?.season != null ? Number((item as any).league.season) : null;
+    const rawDifficulty = home ? getTicketDifficultyBadge(home, leagueId) : null;
+    const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
 
-  const rawDifficulty = home ? getTicketDifficultyBadge(home, ctxLeagueId) : null;
-  const difficulty: TicketDifficulty | "unknown" = rawDifficulty ?? "unknown";
+    const leagueMeta = leagueId != null ? LEAGUE_META_BY_ID.get(leagueId) ?? null : null;
+    const leagueCode = leagueMeta?.countryCode || clean((item?.league as any)?.country) || "";
+    const leagueLogo = leagueMeta?.logo ?? null;
+    const leagueName = displayLeagueName(leagueId, clean(item?.league?.name) || "League");
+    const european = isEuropeanCompetition(leagueId);
 
-  const leagueMeta = LEAGUES.find((l) => l.leagueId === ctxLeagueId) ?? null;
-  const leagueCode = leagueMeta?.countryCode || clean((item?.league as any)?.country) || "";
-  const leagueLogo = leagueMeta?.logo ?? null;
-  const leagueName = displayLeagueName(ctxLeagueId, clean(item?.league?.name) || "League");
-  const european = isEuropeanCompetition(ctxLeagueId);
+    const discoverReasons = Array.isArray(item.discoverReasons) ? item.discoverReasons : [];
+    const combinedScore =
+      typeof (item as any)?.breakdown?.combinedScore === "number"
+        ? (item as any).breakdown.combinedScore
+        : null;
 
-  const discoverReasons = Array.isArray(item.discoverReasons) ? item.discoverReasons : [];
-  const combinedScore =
-    typeof (item as any)?.breakdown?.combinedScore === "number"
-      ? (item as any).breakdown.combinedScore
-      : null;
+    const pricing = estimateFixturePricing(item);
+    const tripEstimate = estimatedLabel(pricing.tripLabel, "trip");
+    const ticketEstimate = estimatedLabel(pricing.ticketLabel, "ticket");
 
-  const pricing = useMemo(() => estimateFixturePricing(item), [item]);
-  const tripEstimate = estimatedLabel(pricing.tripLabel, "trip");
-  const ticketEstimate = estimatedLabel(pricing.ticketLabel, "ticket");
+    const startDate = kickoffIsoDateOnly(item?.fixture?.date);
+    const endDate = kickoffIsoDateOnly(item?.fixture?.date);
 
-  const startDate = kickoffIsoDateOnly(item?.fixture?.date);
-  const endDate = kickoffIsoDateOnly(item?.fixture?.date);
+    const flightsUrl = resolveAffiliateUrl("aviasales", {
+      city,
+      startDate,
+      endDate,
+    });
 
-  const flightsUrl = resolveAffiliateUrl("aviasales", {
-    city,
-    startDate,
-    endDate,
-  });
+    const hotelsUrl = resolveAffiliateUrl("expedia", {
+      city,
+      startDate,
+      endDate,
+    });
 
-  const hotelsUrl = resolveAffiliateUrl("expedia", {
-    city,
-    startDate,
-    endDate,
-  });
+    const ticketsUrl = resolveAffiliateUrl("sportsevents365", {
+      city,
+      startDate,
+      endDate,
+    });
 
-  const ticketsUrl = resolveAffiliateUrl("sportsevents365", {
-    city,
-    startDate,
-    endDate,
-  });
+    const hasFlightPartner = Boolean(flightsUrl);
+    const hasHotelPartner = Boolean(hotelsUrl);
+    const hasTicketPartner = Boolean(ticketsUrl);
 
-  const hasFlightPartner = Boolean(flightsUrl);
-  const hasHotelPartner = Boolean(hotelsUrl);
-  const hasTicketPartner = Boolean(ticketsUrl);
+    const tripAngle = tripAngleLabel(item, difficulty);
+    const bookingLine = bookingSummaryLine({
+      difficulty,
+      followed: isFollowed,
+      tripEstimate,
+      ticketEstimate,
+      hasTicketPartner,
+      hasFlightPartner,
+      hasHotelPartner,
+    });
 
-  const tripAngle = tripAngleLabel(item, difficulty);
-  const bookingLine = bookingSummaryLine({
-    difficulty,
-    followed: isFollowed,
-    tripEstimate,
-    ticketEstimate,
-    hasTicketPartner,
-    hasFlightPartner,
-    hasHotelPartner,
-  });
+    const placeLine = cityVenueLine(city, venue);
 
-  const placeLine = cityVenueLine(city, venue);
+    const routeCtx: FixtureRouteCtx = {
+      leagueId,
+      season,
+    };
 
-  const routeCtx: FixtureRouteCtx = {
-    leagueId: ctxLeagueId,
-    season: ctxSeason,
-  };
+    const difficultyLabel =
+      difficulty === "unknown"
+        ? hasTicketPartner
+          ? "Ticket options"
+          : "Ticket route unclear"
+        : `Tickets ${ticketDifficultyLabel(difficulty)}`;
 
-  if (!fixtureId) return null;
+    const expandedTicketLabel =
+      difficulty === "unknown"
+        ? hasTicketPartner
+          ? "Partner options available"
+          : "Needs live checking"
+        : ticketDifficultyLabel(difficulty);
+
+    return {
+      fixtureId,
+      home,
+      away,
+      kickoff,
+      certainty,
+      leagueId,
+      leagueCode,
+      leagueLogo,
+      leagueName,
+      european,
+      discoverReasons,
+      combinedScore,
+      tripEstimate,
+      ticketEstimate,
+      hasFlightPartner,
+      hasHotelPartner,
+      hasTicketPartner,
+      tripAngle,
+      bookingLine,
+      placeLine,
+      routeCtx,
+      difficulty,
+      difficultyLabel,
+      expandedTicketLabel,
+    };
+  }, [item, placeholderIds, isFollowed]);
+
+  if (!derived) return null;
 
   return (
     <View style={styles.rowWrap}>
@@ -222,137 +270,137 @@ export default function FixtureRowCard({
         <View style={styles.rowInner}>
           <View style={styles.headerRow}>
             <View style={styles.leagueCluster}>
-              {leagueLogo ? (
-                <Image source={{ uri: leagueLogo }} style={styles.leagueLogo} resizeMode="contain" />
+              {derived.leagueLogo ? (
+                <Image
+                  source={{ uri: derived.leagueLogo }}
+                  style={styles.leagueLogo}
+                  resizeMode="contain"
+                />
               ) : null}
-              {leagueCode ? <LeagueFlag code={leagueCode} size="sm" /> : null}
+              {derived.leagueCode ? <LeagueFlag code={derived.leagueCode} size="sm" /> : null}
               <Text style={styles.fixtureLeagueText} numberOfLines={1}>
-                {leagueName}
+                {derived.leagueName}
               </Text>
             </View>
 
             <View style={styles.headerRight}>
-              {combinedScore != null ? (
-                <View style={[styles.scorePill, tripScoreTone(combinedScore)]}>
-                  <Text style={styles.scorePillValue}>{combinedScore}</Text>
+              {derived.combinedScore != null ? (
+                <View style={[styles.scorePill, tripScoreTone(derived.combinedScore)]}>
+                  <Text style={styles.scorePillValue}>{derived.combinedScore}</Text>
                 </View>
               ) : null}
-              <FixtureCertaintyBadge state={certainty} variant="compact" />
+              <FixtureCertaintyBadge state={derived.certainty} variant="compact" />
             </View>
           </View>
 
           <Pressable
-            onPress={() => onPressBuildTrip(fixtureId, routeCtx)}
+            onPress={() => onPressBuildTrip(derived.fixtureId, derived.routeCtx)}
             style={({ pressed }) => [styles.mainPressArea, pressed && styles.pressed]}
             android_ripple={{ color: "rgba(255,255,255,0.04)" }}
           >
             <View style={styles.topRow}>
               <View style={styles.teamSide}>
-                <TeamCrest name={home} logo={item?.teams?.home?.logo} />
+                <TeamCrest name={derived.home} logo={item?.teams?.home?.logo} />
                 <Text style={styles.teamName} numberOfLines={2}>
-                  {home}
+                  {derived.home}
                 </Text>
               </View>
 
               <View style={styles.centerCol}>
                 <Text style={styles.kicker}>TRIP ENTRY</Text>
                 <Text style={styles.vs}>vs</Text>
-                <Text style={styles.metaPrimary}>{kickoff.primary}</Text>
+                <Text style={styles.metaPrimary}>{derived.kickoff.primary}</Text>
               </View>
 
               <View style={styles.teamSide}>
-                <TeamCrest name={away} logo={item?.teams?.away?.logo} />
+                <TeamCrest name={derived.away} logo={item?.teams?.away?.logo} />
                 <Text style={styles.teamName} numberOfLines={2}>
-                  {away}
+                  {derived.away}
                 </Text>
               </View>
             </View>
 
             <View style={styles.metaBlock}>
-              {placeLine ? (
+              {derived.placeLine ? (
                 <Text style={styles.metaVenue} numberOfLines={2}>
-                  {placeLine}
+                  {derived.placeLine}
                 </Text>
               ) : null}
 
               <Text style={styles.tripAngleLine} numberOfLines={1}>
-                {tripAngle}
+                {derived.tripAngle}
               </Text>
 
-              {kickoff.secondary ? (
+              {derived.kickoff.secondary ? (
                 <Text style={styles.metaSecondary} numberOfLines={1}>
-                  {kickoff.secondary}
+                  {derived.kickoff.secondary}
                 </Text>
-              ) : european ? (
+              ) : derived.european ? (
                 <Text style={styles.metaSecondary} numberOfLines={1}>
                   European night
                 </Text>
               ) : null}
             </View>
 
-            {tripEstimate || ticketEstimate ? (
+            {derived.tripEstimate || derived.ticketEstimate ? (
               <View style={styles.priceRow}>
-                {tripEstimate ? (
+                {derived.tripEstimate ? (
                   <View style={styles.pricePillStrong}>
-                    <Text style={styles.pricePillStrongText}>{tripEstimate}</Text>
+                    <Text style={styles.pricePillStrongText}>{derived.tripEstimate}</Text>
                   </View>
                 ) : null}
 
-                {ticketEstimate ? (
+                {derived.ticketEstimate ? (
                   <View style={styles.pricePill}>
-                    <Text style={styles.pricePillText}>{ticketEstimate}</Text>
+                    <Text style={styles.pricePillText}>{derived.ticketEstimate}</Text>
                   </View>
                 ) : null}
               </View>
             ) : null}
 
             <View style={styles.signalRow}>
-              <View style={[styles.signalPill, difficultyTone(difficulty)]}>
-                <Text style={[styles.signalText, difficultyTextTone(difficulty)]}>
-                  {difficulty === "unknown"
-                    ? hasTicketPartner
-                      ? "Ticket options"
-                      : "Ticket route unclear"
-                    : `Tickets ${ticketDifficultyLabel(difficulty)}`}
+              <View style={[styles.signalPill, difficultyTone(derived.difficulty)]}>
+                <Text style={[styles.signalText, difficultyTextTone(derived.difficulty)]}>
+                  {derived.difficultyLabel}
                 </Text>
               </View>
 
               <View
                 style={[
                   styles.signalPill,
-                  hasFlightPartner ? styles.signalEasy : styles.signalNeutral,
+                  derived.hasFlightPartner ? styles.signalEasy : styles.signalNeutral,
                 ]}
               >
                 <Text
                   style={[
                     styles.signalText,
-                    hasFlightPartner ? styles.signalTextEasy : styles.signalTextNeutral,
+                    derived.hasFlightPartner ? styles.signalTextEasy : styles.signalTextNeutral,
                   ]}
                 >
-                  {hasFlightPartner ? "Flights linked" : "Flights vary"}
+                  {derived.hasFlightPartner ? "Flights linked" : "Flights vary"}
                 </Text>
               </View>
 
               <View
                 style={[
                   styles.signalPill,
-                  hasHotelPartner ? styles.signalEasy : styles.signalNeutral,
+                  derived.hasHotelPartner ? styles.signalEasy : styles.signalNeutral,
                 ]}
               >
                 <Text
                   style={[
                     styles.signalText,
-                    hasHotelPartner ? styles.signalTextEasy : styles.signalTextNeutral,
+                    derived.hasHotelPartner ? styles.signalTextEasy : styles.signalTextNeutral,
                   ]}
                 >
-                  {hasHotelPartner ? "Hotels linked" : "Hotels vary"}
+                  {derived.hasHotelPartner ? "Hotels linked" : "Hotels vary"}
                 </Text>
               </View>
             </View>
 
             <View style={styles.bookingSummaryBox}>
               <Text style={styles.bookingSummaryText} numberOfLines={2}>
-                {bookingLine}
+                {derived.bookingLine}
               </Text>
             </View>
           </Pressable>
@@ -360,19 +408,19 @@ export default function FixtureRowCard({
           <View style={styles.ctaRow}>
             <Button
               label="Build trip"
-              onPress={() => onPressBuildTrip(fixtureId, routeCtx)}
+              onPress={() => onPressBuildTrip(derived.fixtureId, derived.routeCtx)}
               tone="primary"
               size="sm"
               glow
-              style={{ flex: 1.2 }}
+              style={styles.primaryCta}
             />
 
             <Button
               label="Match"
-              onPress={() => onPressMatch(fixtureId, routeCtx)}
+              onPress={() => onPressMatch(derived.fixtureId, derived.routeCtx)}
               tone="secondary"
               size="sm"
-              style={{ flex: 0.95 }}
+              style={styles.secondaryCta}
             />
 
             <Pressable
@@ -397,37 +445,31 @@ export default function FixtureRowCard({
           {expanded ? (
             <View style={styles.expandArea}>
               <View style={styles.expandGrid}>
-                {combinedScore != null ? (
+                {derived.combinedScore != null ? (
                   <View style={styles.expandCard}>
                     <Text style={styles.expandKicker}>Trip score</Text>
-                    <Text style={styles.expandValue}>{combinedScore}</Text>
+                    <Text style={styles.expandValue}>{derived.combinedScore}</Text>
                   </View>
                 ) : null}
 
                 <View style={styles.expandCard}>
                   <Text style={styles.expandKicker}>Ticket route</Text>
-                  <Text style={styles.expandValueSmall}>
-                    {difficulty === "unknown"
-                      ? hasTicketPartner
-                        ? "Partner options available"
-                        : "Needs live checking"
-                      : ticketDifficultyLabel(difficulty)}
-                  </Text>
+                  <Text style={styles.expandValueSmall}>{derived.expandedTicketLabel}</Text>
                 </View>
 
                 <View style={styles.expandCard}>
                   <Text style={styles.expandKicker}>Price guide</Text>
                   <Text style={styles.expandValueSmall}>
-                    {tripEstimate || ticketEstimate || "Estimated at open"}
+                    {derived.tripEstimate || derived.ticketEstimate || "Estimated at open"}
                   </Text>
                 </View>
               </View>
 
-              {discoverReasons.length > 0 ? (
+              {derived.discoverReasons.length > 0 ? (
                 <View style={styles.reasonBox}>
                   <Text style={styles.reasonTitle}>Why it stands out</Text>
                   <Text style={styles.reasonText}>
-                    {discoverReasons.slice(0, 3).join(" • ")}
+                    {derived.discoverReasons.slice(0, 3).join(" • ")}
                   </Text>
                 </View>
               ) : null}
@@ -445,6 +487,27 @@ export default function FixtureRowCard({
     </View>
   );
 }
+
+function areEqual(prev: Props, next: Props) {
+  const prevId = prev.item?.fixture?.id != null ? String(prev.item.fixture.id) : "";
+  const nextId = next.item?.fixture?.id != null ? String(next.item.fixture.id) : "";
+
+  return (
+    prevId === nextId &&
+    prev.expanded === next.expanded &&
+    prev.isFollowed === next.isFollowed &&
+    prev.placeholderIds === next.placeholderIds &&
+    prev.onToggleExpanded === next.onToggleExpanded &&
+    prev.onToggleFollow === next.onToggleFollow &&
+    prev.onPressMatch === next.onPressMatch &&
+    prev.onPressBuildTrip === next.onPressBuildTrip &&
+    prev.item === next.item
+  );
+}
+
+const FixtureRowCard = memo(FixtureRowCardComponent, areEqual);
+
+export default FixtureRowCard;
 
 const styles = StyleSheet.create({
   rowWrap: {
@@ -734,6 +797,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
+  },
+
+  primaryCta: {
+    flex: 1.2,
+  },
+
+  secondaryCta: {
+    flex: 0.95,
   },
 
   followButton: {
