@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
@@ -48,6 +48,12 @@ import {
 import type { RankedFixtureRow } from "@/src/features/fixtures/types";
 
 const MAX_MULTI_LEAGUES = 10;
+const DEFAULT_FETCH_LEAGUE_LIMIT = 12;
+const DEFAULT_FETCH_CONCURRENCY = 4;
+
+const DEFAULT_PRIORITY_LEAGUE_IDS = new Set<number>([
+  39, 140, 135, 78, 61, 88, 94, 203, 179, 2, 3, 848,
+]);
 
 async function mapLimit<T, R>(
   items: T[],
@@ -67,6 +73,35 @@ async function mapLimit<T, R>(
   const n = Math.max(1, Math.min(limit, items.length));
   await Promise.all(Array.from({ length: n }).map(worker));
   return results;
+}
+
+function sortLeagueDefaults(leagues: LeagueOption[]): LeagueOption[] {
+  const decorated = leagues.map((league, index) => {
+    let score = 0;
+
+    if (DEFAULT_PRIORITY_LEAGUE_IDS.has(league.leagueId)) score += 100;
+    if (league.homeVisible) score += 18;
+    if (league.featured) score += 12;
+    if (league.browseRegion === "featured-europe") score += 8;
+
+    return { league, index, score };
+  });
+
+  return decorated
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((item) => item.league);
+}
+
+function dedupeByFixtureId(rows: RankedFixtureRow[]): RankedFixtureRow[] {
+  const out = new Map<string, RankedFixtureRow>();
+
+  for (const row of rows) {
+    const id = row?.fixture?.id != null ? String(row.fixture.id) : "";
+    if (!id) continue;
+    if (!out.has(id)) out.set(id, row);
+  }
+
+  return Array.from(out.values());
 }
 
 export function useFixturesScreenData() {
@@ -233,15 +268,19 @@ export function useFixturesScreenData() {
     return LEAGUES.filter((l) => set.has(l.leagueId));
   }, [selectedLeagueIds]);
 
+  const defaultFetchLeagues = useMemo(() => {
+    return sortLeagueDefaults(LEAGUES).slice(0, DEFAULT_FETCH_LEAGUE_LIMIT);
+  }, []);
+
   const fetchLeagues = useMemo(() => {
     if (selectedLeagues.length > 0) return selectedLeagues;
-    return LEAGUES;
-  }, [selectedLeagues]);
+    return defaultFetchLeagues;
+  }, [selectedLeagues, defaultFetchLeagues]);
 
   const leagueSubtitle = useMemo(() => {
     if (selectedLeagues.length > 0) return leagueScopeSubtitle(selectedLeagues);
-    return "All competitions";
-  }, [selectedLeagues]);
+    return `Top ${fetchLeagues.length} competitions`;
+  }, [selectedLeagues, fetchLeagues]);
 
   const [activeRegion, setActiveRegion] =
     useState<LeagueBrowseRegion>("featured-europe");
@@ -294,7 +333,6 @@ export function useFixturesScreenData() {
   }, []);
 
   const [query, setQuery] = useState("");
-
   const qNorm = useMemo(() => query.trim().toLowerCase(), [query]);
 
   const followed = useFollowStore((s) => s.followed);
@@ -313,23 +351,33 @@ export function useFixturesScreenData() {
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<RankedFixtureRow[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const activeRequestRef = useRef(0);
 
   const placeholderIds = useMemo(() => computeLikelyPlaceholderTbcIds(rows), [rows]);
 
   const fetchFrom = effectiveRange.from;
   const fetchTo = effectiveRange.to;
 
+  const fetchLeagueKey = useMemo(() => {
+    return fetchLeagues.map((l) => `${l.leagueId}:${l.season}`).join("|");
+  }, [fetchLeagues]);
+
   useEffect(() => {
     let cancelled = false;
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
 
     async function run() {
+      const hasExistingRows = rows.length > 0;
+
       setLoading(true);
       setError(null);
-      setRows([]);
-      setExpandedKey(null);
+      if (!hasExistingRows) {
+        setExpandedKey(null);
+      }
 
       try {
-        const batches = await mapLimit(fetchLeagues, 4, async (l) => {
+        const batches = await mapLimit(fetchLeagues, DEFAULT_FETCH_CONCURRENCY, async (l) => {
           const res = await getFixtures({
             league: l.leagueId,
             season: l.season,
@@ -339,39 +387,45 @@ export function useFixturesScreenData() {
           return Array.isArray(res) ? res : [];
         });
 
-        if (cancelled) return;
+        if (cancelled || activeRequestRef.current !== requestId) return;
 
         const flat = batches.flat().filter((r) => r?.fixture?.id != null);
 
         if (discoverCategory) {
           const scored = buildDiscoverScores(flat);
 
-          const ranked = scored
-            .map((item) => ({
-              fixture: item.fixture,
-              reasons: item.reasons,
-              discoverScore: discoverScoreForCategory(
-                discoverCategory,
-                item,
-                discoverContext
-              ),
-              kickoffIso: String(item.fixture?.fixture?.date ?? ""),
-            }))
-            .sort((a, b) => {
-              if (b.discoverScore !== a.discoverScore) return b.discoverScore - a.discoverScore;
-              return a.kickoffIso.localeCompare(b.kickoffIso);
-            })
-            .map((x) => ({
-              ...(x.fixture as RankedFixtureRow),
-              discoverReasons: x.reasons,
-            }));
+          const ranked = dedupeByFixtureId(
+            scored
+              .map((item) => ({
+                fixture: item.fixture,
+                reasons: item.reasons,
+                discoverScore: discoverScoreForCategory(
+                  discoverCategory,
+                  item,
+                  discoverContext
+                ),
+                kickoffIso: String(item.fixture?.fixture?.date ?? ""),
+              }))
+              .sort((a, b) => {
+                if (b.discoverScore !== a.discoverScore) {
+                  return b.discoverScore - a.discoverScore;
+                }
+                return a.kickoffIso.localeCompare(b.kickoffIso);
+              })
+              .map((x) => ({
+                ...(x.fixture as RankedFixtureRow),
+                discoverReasons: x.reasons,
+              }))
+          );
 
           setRows(ranked);
           return;
         }
 
+        const ranked = dedupeByFixtureId(flat as RankedFixtureRow[]);
+
         if (topPicksMode) {
-          flat.sort((a, b) => {
+          ranked.sort((a, b) => {
             const sa = baseFixtureScore(a);
             const sb = baseFixtureScore(b);
             if (sb !== sa) return sb - sa;
@@ -380,19 +434,25 @@ export function useFixturesScreenData() {
             return da.localeCompare(db);
           });
         } else {
-          flat.sort((a, b) => {
+          ranked.sort((a, b) => {
             const da = String(a?.fixture?.date ?? "");
             const db = String(b?.fixture?.date ?? "");
             return da.localeCompare(db);
           });
         }
 
-        setRows(flat as RankedFixtureRow[]);
+        setRows(ranked);
       } catch (e: any) {
-        if (cancelled) return;
-        setError(e?.message ?? "Failed to load fixtures.");
+        if (cancelled || activeRequestRef.current !== requestId) return;
+        if (rows.length === 0) {
+          setError(e?.message ?? "Failed to load fixtures.");
+        } else {
+          setError(null);
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && activeRequestRef.current === requestId) {
+          setLoading(false);
+        }
       }
     }
 
@@ -401,7 +461,16 @@ export function useFixturesScreenData() {
     return () => {
       cancelled = true;
     };
-  }, [fetchLeagues, fetchFrom, fetchTo, topPicksMode, discoverCategory, discoverContext]);
+  }, [
+    fetchLeagueKey,
+    fetchLeagues,
+    fetchFrom,
+    fetchTo,
+    topPicksMode,
+    discoverCategory,
+    discoverContext,
+    rows.length,
+  ]);
 
   const filtered = useMemo(() => {
     const base = rows;
@@ -594,7 +663,7 @@ export function useFixturesScreenData() {
       const scopePart =
         selectedLeagueIds.length > 0
           ? `${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
-          : "All competitions";
+          : `${fetchLeagues.length} competitions`;
 
       const extras: string[] = [];
 
@@ -621,7 +690,7 @@ export function useFixturesScreenData() {
     }${
       selectedLeagueIds.length > 0
         ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
-        : " • All competitions"
+        : ` • ${fetchLeagues.length} competitions`
     }${topPicksMode ? " • Sorted by rating" : ""}`;
   }, [
     discoverCategory,
@@ -630,6 +699,7 @@ export function useFixturesScreenData() {
     selectedLeagueIds.length,
     topPicksMode,
     discoverContext,
+    fetchLeagues.length,
   ]);
 
   const headerDateLine = useMemo(() => {
@@ -698,4 +768,4 @@ export function useFixturesScreenData() {
     headerDateLine,
     monthLabel,
   };
-               }
+      }
