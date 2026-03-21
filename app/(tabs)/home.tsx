@@ -46,6 +46,8 @@ import ContinuePlanning from "@/src/features/home/ContinuePlanning";
 import UpcomingMatches from "@/src/features/home/UpcomingMatches";
 
 const HOME_TOP_LEAGUE_IDS = new Set<number>([39, 140, 135, 78, 61, 88, 94]);
+const HOME_PREFETCH_LIMIT = 2;
+const HOME_PREFETCH_DELAY_MS = 900;
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
   `https://media.api-sports.io/football/teams/${teamId}.png`;
@@ -161,7 +163,9 @@ export default function HomeScreen() {
       setTrips(s.trips);
     });
 
-    if (!tripsStore.getState().loaded) tripsStore.loadTrips().catch(() => {});
+    if (!tripsStore.getState().loaded) {
+      tripsStore.loadTrips().catch(() => {});
+    }
 
     return unsub;
   }, []);
@@ -187,6 +191,11 @@ export default function HomeScreen() {
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
   const activeFixtureRequestRef = useRef(0);
+  const prefetchedKeysRef = useRef(new Set<string>());
+
+  const fixtureWindowKey = useMemo(() => {
+    return `${league.leagueId}|${league.season}|${upcomingWindow.from}|${upcomingWindow.to}`;
+  }, [league.leagueId, league.season, upcomingWindow.from, upcomingWindow.to]);
 
   useEffect(() => {
     let cancelled = false;
@@ -240,36 +249,56 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [league, upcomingWindow.from, upcomingWindow.to]);
+  }, [fixtureWindowKey]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function prefetchOtherHomeLeagues() {
-      const targets = homeTopLeagues.filter((l) => l.leagueId !== league.leagueId).slice(0, 3);
+    const currentKey = fixtureWindowKey;
+    if (prefetchedKeysRef.current.has(currentKey)) return;
 
-      for (const item of targets) {
-        if (cancelled) return;
+    const timeout = setTimeout(() => {
+      async function prefetchOtherHomeLeagues() {
+        const targets = homeTopLeagues
+          .filter((l) => l.leagueId !== league.leagueId)
+          .slice(0, HOME_PREFETCH_LIMIT);
 
-        try {
-          await getFixtures({
-            league: item.leagueId,
-            season: item.season,
-            from: upcomingWindow.from,
-            to: upcomingWindow.to,
-          });
-        } catch {
-          // ignore prefetch errors
+        await Promise.all(
+          targets.map(async (item) => {
+            if (cancelled) return;
+
+            try {
+              await getFixtures({
+                league: item.leagueId,
+                season: item.season,
+                from: upcomingWindow.from,
+                to: upcomingWindow.to,
+              });
+            } catch {
+              return;
+            }
+          })
+        );
+
+        if (!cancelled) {
+          prefetchedKeysRef.current.add(currentKey);
         }
       }
-    }
 
-    prefetchOtherHomeLeagues().catch(() => null);
+      prefetchOtherHomeLeagues().catch(() => null);
+    }, HOME_PREFETCH_DELAY_MS);
 
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
     };
-  }, [homeTopLeagues, league.leagueId, upcomingWindow.from, upcomingWindow.to]);
+  }, [
+    fixtureWindowKey,
+    homeTopLeagues,
+    league.leagueId,
+    upcomingWindow.from,
+    upcomingWindow.to,
+  ]);
 
   const fxOrdered = useMemo(() => {
     return (fxRows ?? [])
