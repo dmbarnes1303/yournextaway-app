@@ -126,15 +126,12 @@ export default function FixturesScreen() {
     if (!comboMode || comboIdSet.size === 0) return filtered;
 
     return filtered.filter((item) => {
-      const fixtureId =
-        item?.fixture?.id != null ? String(item.fixture.id) : "";
+      const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
       return comboIdSet.has(fixtureId);
     });
   }, [filtered, comboMode, comboIdSet]);
 
-  const derivedTitleText = comboMode
-    ? comboTitle || "Multi-match trip"
-    : titleText;
+  const derivedTitleText = comboMode ? comboTitle || "Multi-match trip" : titleText;
 
   const derivedSubtitleText = comboMode
     ? "Selected fixtures for a stacked football trip."
@@ -202,7 +199,181 @@ export default function FixturesScreen() {
       ? ({ imageUrl: bg } as const)
       : ({ imageSource: bg } as const);
 
-  const hasRows = !loading && !error && visibleRows.length > 0;
+  const hasRows = visibleRows.length > 0;
+  const showInitialLoading = loading && !hasRows;
+  const showInlineRefresh = loading && hasRows;
+  const showHardError = !!error && !hasRows;
+  const showEmpty = !loading && !error && !hasRows;
+
+  const headerComponent = useMemo(() => {
+    return (
+      <View style={styles.headerWrap}>
+        <SectionShell accent={comboMode ? "gold" : "green"}>
+          <FixturesHeader
+            titleText={derivedTitleText}
+            subtitleText={derivedSubtitleText}
+            headerDateLine={derivedHeaderDateLine}
+            query={query}
+            setQuery={setQuery}
+            stripDays={stripDays}
+            isRange={isRange}
+            selectedDay={selectedDay}
+            onTapStripDate={onTapStripDate}
+            selectedLeagueIds={selectedLeagueIds}
+            resetToFeatured={resetToFeatured}
+            selectSingleLeague={selectSingleLeague}
+            activeRegion={activeRegion}
+            setActiveRegion={setActiveRegion}
+            leaguesByRegion={leaguesByRegion}
+            toggleLeague={toggleLeague}
+            selectedLeagues={selectedLeagues}
+            helperLineText={derivedHelperLineText}
+            loading={loading}
+            error={showHardError ? error : null}
+            filteredCount={visibleRows.length}
+            openCalendar={openCalendar}
+          />
+        </SectionShell>
+
+        {showInlineRefresh ? (
+          <View style={styles.refreshRow}>
+            <GlassCard variant="matte" level="default" style={styles.refreshCard}>
+              <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+              <Text style={styles.refreshText}>Refreshing fixtures…</Text>
+            </GlassCard>
+          </View>
+        ) : null}
+
+        {!showInitialLoading && !showHardError ? (
+          <View style={styles.summaryRow}>
+            <GlassCard
+              variant={comboMode ? "gold" : "brand"}
+              level="default"
+              style={styles.summaryCard}
+            >
+              <Text style={styles.summaryKicker}>
+                {comboMode ? "Combo mode" : "Live fixture pool"}
+              </Text>
+              <Text style={styles.summaryTitle}>
+                {visibleRows.length} fixture{visibleRows.length === 1 ? "" : "s"} in view
+              </Text>
+              <Text style={styles.summaryText}>
+                {comboMode
+                  ? "These are the selected matches for a stackable football trip."
+                  : "Filtered, ranked and ready to open into match or trip planning."}
+              </Text>
+            </GlassCard>
+          </View>
+        ) : null}
+      </View>
+    );
+  }, [
+    comboMode,
+    derivedTitleText,
+    derivedSubtitleText,
+    derivedHeaderDateLine,
+    query,
+    setQuery,
+    stripDays,
+    isRange,
+    selectedDay,
+    onTapStripDate,
+    selectedLeagueIds,
+    resetToFeatured,
+    selectSingleLeague,
+    activeRegion,
+    setActiveRegion,
+    leaguesByRegion,
+    toggleLeague,
+    selectedLeagues,
+    derivedHelperLineText,
+    loading,
+    showHardError,
+    error,
+    visibleRows.length,
+    openCalendar,
+    showInlineRefresh,
+    showInitialLoading,
+  ]);
+
+  const emptyComponent = useMemo(() => {
+    if (showInitialLoading) {
+      return (
+        <View style={[styles.content, styles.listWrap]}>
+          <GlassCard variant="brand" level="default" style={styles.loadingCard}>
+            <View style={styles.center}>
+              <ActivityIndicator color={theme.colors.accentGold} />
+              <Text style={styles.loadingTitle}>Loading fixtures</Text>
+              <Text style={styles.loadingText}>
+                Pulling the strongest current match options from the selected range.
+              </Text>
+            </View>
+          </GlassCard>
+        </View>
+      );
+    }
+
+    if (showHardError) {
+      return (
+        <View style={[styles.content, styles.listWrap]}>
+          <GlassCard variant="gold" level="default" style={styles.stateCard}>
+            <EmptyState title="Error" message={error ?? "Failed to load fixtures."} iconName="alert-circle" />
+          </GlassCard>
+        </View>
+      );
+    }
+
+    if (showEmpty) {
+      return (
+        <View style={[styles.content, styles.listWrap]}>
+          <GlassCard variant="matte" level="default" style={styles.stateCard}>
+            <EmptyState
+              title={comboMode ? "No combo fixtures found" : "No matches found"}
+              message={
+                comboMode
+                  ? "This stacked trip no longer matches the current fixture view. Widen the date range or reopen it from Discover."
+                  : "Try another date, another region, or a different league selection."
+              }
+              iconName={comboMode ? "git-compare" : "search"}
+            />
+          </GlassCard>
+        </View>
+      );
+    }
+
+    return null;
+  }, [showInitialLoading, showHardError, showEmpty, error, comboMode]);
+
+  const renderRow = useCallback(
+    ({ item, index }: { item: RankedFixtureRow; index: number }) => {
+      const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
+      const rowKey = `${String(item?.league?.id ?? "L")}-${fixtureId || `row-${index}`}`;
+      const expanded = expandedKey === rowKey;
+      const isFollowed = fixtureId ? followedIdSet.has(fixtureId) : false;
+
+      return (
+        <FixtureRowCard
+          item={item}
+          expanded={expanded}
+          isFollowed={isFollowed}
+          placeholderIds={placeholderIds}
+          onToggleExpanded={() => setExpandedKey(expanded ? null : rowKey)}
+          onToggleFollow={() => onToggleFollowFromRow(item)}
+          onPressMatch={goMatch}
+          onPressBuildTrip={goTripOrBuild}
+        />
+      );
+    },
+    [
+      expandedKey,
+      followedIdSet,
+      placeholderIds,
+      setExpandedKey,
+      onToggleFollowFromRow,
+      goMatch,
+      goTripOrBuild,
+    ]
+  );
 
   return (
     <Background
@@ -214,124 +385,24 @@ export default function FixturesScreen() {
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <FlatList
-          data={loading || error ? [] : visibleRows}
+          data={showHardError || showInitialLoading || showEmpty ? [] : visibleRows}
           keyExtractor={(item, index) => {
-            const fid =
-              item?.fixture?.id != null ? String(item.fixture.id) : `row-${index}`;
+            const fid = item?.fixture?.id != null ? String(item.fixture.id) : `row-${index}`;
             const lid = item?.league?.id != null ? String(item.league.id) : "L";
             return `${lid}-${fid}`;
           }}
-          renderItem={({ item }) => {
-            const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
-            const rowKey = `${String(item?.league?.id ?? "L")}-${fixtureId}`;
-            const expanded = expandedKey === rowKey;
-            const isFollowed = followedIdSet.has(fixtureId);
-
-            return (
-              <FixtureRowCard
-                item={item}
-                expanded={expanded}
-                isFollowed={isFollowed}
-                placeholderIds={placeholderIds}
-                onToggleExpanded={() => setExpandedKey(expanded ? null : rowKey)}
-                onToggleFollow={() => onToggleFollowFromRow(item as RankedFixtureRow)}
-                onPressMatch={goMatch}
-                onPressBuildTrip={goTripOrBuild}
-              />
-            );
-          }}
-          ListHeaderComponent={
-            <View style={styles.headerWrap}>
-              <SectionShell accent={comboMode ? "gold" : "green"}>
-                <FixturesHeader
-                  titleText={derivedTitleText}
-                  subtitleText={derivedSubtitleText}
-                  headerDateLine={derivedHeaderDateLine}
-                  query={query}
-                  setQuery={setQuery}
-                  stripDays={stripDays}
-                  isRange={isRange}
-                  selectedDay={selectedDay}
-                  onTapStripDate={onTapStripDate}
-                  selectedLeagueIds={selectedLeagueIds}
-                  resetToFeatured={resetToFeatured}
-                  selectSingleLeague={selectSingleLeague}
-                  activeRegion={activeRegion}
-                  setActiveRegion={setActiveRegion}
-                  leaguesByRegion={leaguesByRegion}
-                  toggleLeague={toggleLeague}
-                  selectedLeagues={selectedLeagues}
-                  helperLineText={derivedHelperLineText}
-                  loading={loading}
-                  error={error}
-                  filteredCount={visibleRows.length}
-                  openCalendar={openCalendar}
-                />
-              </SectionShell>
-
-              {!loading && !error ? (
-                <View style={styles.summaryRow}>
-                  <GlassCard
-                    variant={comboMode ? "gold" : "brand"}
-                    level="default"
-                    style={styles.summaryCard}
-                  >
-                    <Text style={styles.summaryKicker}>
-                      {comboMode ? "Combo mode" : "Live fixture pool"}
-                    </Text>
-                    <Text style={styles.summaryTitle}>
-                      {visibleRows.length} fixture{visibleRows.length === 1 ? "" : "s"} in view
-                    </Text>
-                    <Text style={styles.summaryText}>
-                      {comboMode
-                        ? "These are the selected matches for a stackable football trip."
-                        : "Filtered, ranked and ready to open into match or trip planning."}
-                    </Text>
-                  </GlassCard>
-                </View>
-              ) : null}
-            </View>
-          }
-          ListEmptyComponent={
-            <View style={[styles.content, styles.listWrap]}>
-              {loading ? (
-                <GlassCard variant="brand" level="default" style={styles.loadingCard}>
-                  <View style={styles.center}>
-                    <ActivityIndicator color={theme.colors.accentGold} />
-                    <Text style={styles.loadingTitle}>Loading fixtures</Text>
-                    <Text style={styles.loadingText}>
-                      Pulling the strongest current match options from the selected range.
-                    </Text>
-                  </View>
-                </GlassCard>
-              ) : null}
-
-              {!loading && error ? (
-                <GlassCard variant="gold" level="default" style={styles.stateCard}>
-                  <EmptyState title="Error" message={error} iconName="alert-circle" />
-                </GlassCard>
-              ) : null}
-
-              {!loading && !error ? (
-                <GlassCard variant="matte" level="default" style={styles.stateCard}>
-                  <EmptyState
-                    title={comboMode ? "No combo fixtures found" : "No matches found"}
-                    message={
-                      comboMode
-                        ? "This stacked trip no longer matches the current fixture view. Widen the date range or reopen it from Discover."
-                        : "Try another date, another region, or a different league selection."
-                    }
-                    iconName={comboMode ? "git-compare" : "search"}
-                  />
-                </GlassCard>
-              ) : null}
-            </View>
-          }
+          renderItem={renderRow}
+          ListHeaderComponent={headerComponent}
+          ListEmptyComponent={emptyComponent}
           ListFooterComponent={hasRows ? <View style={styles.footerSpace} /> : null}
           contentContainerStyle={styles.flatListContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          removeClippedSubviews={false}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews
         />
 
         <FixturesCalendarModal
@@ -430,6 +501,26 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  refreshRow: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+
+  refreshCard: {
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  refreshText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: theme.fontWeight.bold,
   },
 
