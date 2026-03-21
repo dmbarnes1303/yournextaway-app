@@ -1,9 +1,4 @@
-// src/features/discover/discoverPoolBuilder.ts
-
-import {
-  LEAGUES,
-  type LeagueOption,
-} from "@/src/constants/football";
+import { LEAGUES, type LeagueOption } from "@/src/constants/football";
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
 import type { DiscoverCategory } from "./discoverCategories";
 import type { DiscoverTripLength, DiscoverVibe } from "./discoverEngine";
@@ -42,6 +37,11 @@ const HIGH_PULL_CITIES = new Set([
   "split",
   "zagreb",
 ]);
+
+const DEFAULT_MIN_FIXTURES = 48;
+const DEFAULT_MAX_LEAGUE_FETCHES = 12;
+const DEFAULT_BATCH_SIZE = 4;
+const MIN_BATCHES_BEFORE_EARLY_EXIT = 2;
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -103,11 +103,6 @@ function leagueStrengthBucket(leagueId: number | null): number {
   if (STRONG_SECOND_TIER_LEAGUE_IDS.has(leagueId)) return 3;
   if (VALUE_DEPTH_LEAGUE_IDS.has(leagueId)) return 2;
   return 1;
-}
-
-function isEuropeanCompetition(row: FixtureListRow) {
-  const leagueId = getLeagueId(row);
-  return leagueId != null && EUROPEAN_COMPETITION_IDS.has(leagueId);
 }
 
 function isWeekendFixture(row: FixtureListRow) {
@@ -276,6 +271,24 @@ function fixturePoolPriority(row: FixtureListRow, category: DiscoverCategory): n
   return score;
 }
 
+function clampLeagueFetchCount(requested: number | undefined, available: number): number {
+  const base = requested ?? DEFAULT_MAX_LEAGUE_FETCHES;
+  return Math.min(Math.max(1, base), available);
+}
+
+function clampBatchSize(requested: number | undefined): number {
+  const base = requested ?? DEFAULT_BATCH_SIZE;
+  return Math.min(Math.max(1, base), 6);
+}
+
+function sortPool(rows: FixtureListRow[], category: DiscoverCategory): FixtureListRow[] {
+  return rows.sort(
+    (a, b) =>
+      fixturePoolPriority(b, category) - fixturePoolPriority(a, category) ||
+      clean(a?.fixture?.date).localeCompare(clean(b?.fixture?.date))
+  );
+}
+
 export async function fetchDiscoverPool(params: {
   window: ShortcutWindow;
   windowKey: DiscoverWindowKey;
@@ -294,9 +307,9 @@ export async function fetchDiscoverPool(params: {
     tripLength,
     vibes,
     category,
-    minFixtures = 72,
+    minFixtures = DEFAULT_MIN_FIXTURES,
     maxLeagueFetches,
-    batchSize = 6,
+    batchSize,
   } = params;
 
   const seedKey = buildDiscoverSeedKey({
@@ -310,16 +323,18 @@ export async function fetchDiscoverPool(params: {
 
   const seed = createStableSeed(seedKey);
   const preferredLeagues = buildPreferredLeagueOrder(seed, category);
-  const effectiveMaxLeagueFetches = Math.min(
-    Math.max(1, maxLeagueFetches ?? preferredLeagues.length),
+
+  const effectiveMaxLeagueFetches = clampLeagueFetchCount(
+    maxLeagueFetches,
     preferredLeagues.length
   );
 
+  const effectiveBatchSize = clampBatchSize(batchSize);
   const leaguesToFetch = preferredLeagues.slice(0, effectiveMaxLeagueFetches);
   const collected: FixtureListRow[] = [];
 
-  for (let i = 0; i < leaguesToFetch.length; i += batchSize) {
-    const batch = leaguesToFetch.slice(i, i + batchSize);
+  for (let i = 0; i < leaguesToFetch.length; i += effectiveBatchSize) {
+    const batch = leaguesToFetch.slice(i, i + effectiveBatchSize);
 
     const results = await Promise.all(
       batch.map(async (league) => {
@@ -341,16 +356,18 @@ export async function fetchDiscoverPool(params: {
     collected.push(...results.flat());
 
     const usable = dedupeFixtures(collected).filter(hasMinimumFixtureShape);
-    if (usable.length >= minFixtures && i + batchSize >= batchSize * 2) {
+    const batchesCompleted = Math.floor(i / effectiveBatchSize) + 1;
+
+    if (
+      usable.length >= minFixtures &&
+      batchesCompleted >= MIN_BATCHES_BEFORE_EARLY_EXIT
+    ) {
       break;
     }
   }
 
-  return dedupeFixtures(collected)
-    .filter(hasMinimumFixtureShape)
-    .sort(
-      (a, b) =>
-        fixturePoolPriority(b, category) - fixturePoolPriority(a, category) ||
-        clean(a?.fixture?.date).localeCompare(clean(b?.fixture?.date))
-    );
-  }
+  return sortPool(
+    dedupeFixtures(collected).filter(hasMinimumFixtureShape),
+    category
+  );
+}
