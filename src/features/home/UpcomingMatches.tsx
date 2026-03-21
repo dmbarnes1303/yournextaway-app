@@ -130,7 +130,10 @@ export default function UpcomingMatches(props: Props) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Upcoming matches</Text>
+        <View style={styles.sectionTitleWrap}>
+          <Text style={styles.sectionEyebrow}>Live planning</Text>
+          <Text style={styles.sectionTitle}>Upcoming matches</Text>
+        </View>
 
         <Pressable
           onPress={() =>
@@ -163,7 +166,10 @@ export default function UpcomingMatches(props: Props) {
 
           {!fxLoading && fxError ? (
             <View style={styles.errorWrap}>
-              <EmptyState title="Fixtures unavailable" message={fxError} />
+              <EmptyState
+                title="Fixtures unavailable"
+                message={fxError}
+              />
             </View>
           ) : null}
 
@@ -175,7 +181,12 @@ export default function UpcomingMatches(props: Props) {
 
           {!fxLoading && !fxError && featured ? (
             <>
-              <Text style={styles.blockKicker}>Featured pick</Text>
+              <View style={styles.blockTopRow}>
+                <Text style={styles.blockKicker}>Featured match</Text>
+                <View style={styles.blockHintPill}>
+                  <Text style={styles.blockHintPillText}>Best near-term option</Text>
+                </View>
+              </View>
 
               <Pressable
                 onPress={() => goMatch(String(featured.fixture.id))}
@@ -188,6 +199,7 @@ export default function UpcomingMatches(props: Props) {
                   resizeMode="cover"
                 />
                 <View style={styles.featuredImageOverlay} />
+                <View style={styles.featuredGradientFade} />
 
                 <View style={styles.featuredTop}>
                   <CrestSquare row={featured} />
@@ -201,7 +213,9 @@ export default function UpcomingMatches(props: Props) {
                     </Text>
                   </View>
 
-                  <Text style={styles.chev}>›</Text>
+                  <View style={styles.featuredChevronWrap}>
+                    <Text style={styles.chev}>›</Text>
+                  </View>
                 </View>
               </Pressable>
 
@@ -274,24 +288,37 @@ const styles = StyleSheet.create({
 
   sectionHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 10,
   },
 
+  sectionTitleWrap: {
+    gap: 2,
+  },
+
+  sectionEyebrow: {
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+
   sectionTitle: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 24,
+    lineHeight: 28,
     fontWeight: theme.fontWeight.black,
   },
 
   miniPill: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.20)" : "rgba(255,255,255,0.04)",
   },
 
   miniPillText: {
@@ -307,25 +334,29 @@ const styles = StyleSheet.create({
   },
 
   leagueStripItem: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+    width: 66,
+    height: 66,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.03)",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
 
   leagueStripItemActive: {
-    borderColor: "rgba(87,162,56,0.26)",
+    borderColor: "rgba(87,162,56,0.24)",
     backgroundColor: Platform.OS === "android" ? "rgba(87,162,56,0.08)" : "rgba(87,162,56,0.06)",
+    shadowColor: "#00D26A",
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
 
   leagueLogoDisc: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.94)",
     alignItems: "center",
@@ -341,8 +372,8 @@ const styles = StyleSheet.create({
   },
 
   leagueStripLogo: {
-    width: 28,
-    height: 28,
+    width: 29,
+    height: 29,
     opacity: 0.98,
   },
 
@@ -351,9 +382,10 @@ const styles = StyleSheet.create({
   },
 
   block: {
-    borderRadius: 24,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(8,11,14,0.72)",
   },
 
   blockInner: {
@@ -361,15 +393,38 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  blockTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
   blockKicker: {
     color: theme.colors.primary,
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.5,
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
+  },
+
+  blockHintPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+
+  blockHintPillText: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
   },
 
   loadingWrap: {
-    minHeight: 120,
+    minHeight: 132,
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
@@ -382,18 +437,18 @@ const styles = StyleSheet.create({
   },
 
   errorWrap: {
-    minHeight: 140,
+    minHeight: 152,
     justifyContent: "center",
   },
 
   featured: {
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: Platform.OS === "android" ? "rgba(12,14,16,0.22)" : "rgba(12,14,16,0.18)",
     overflow: "hidden",
     position: "relative",
-    minHeight: 112,
+    minHeight: 124,
   },
 
   featuredImage: {
@@ -404,11 +459,16 @@ const styles = StyleSheet.create({
 
   featuredImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(6,8,10,0.58)",
+    backgroundColor: "rgba(7,10,12,0.54)",
+  },
+
+  featuredGradientFade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(7,10,12,0.14)",
   },
 
   featuredTop: {
-    paddingVertical: 15,
+    paddingVertical: 16,
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -421,7 +481,8 @@ const styles = StyleSheet.create({
 
   featuredTitle: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 19,
+    lineHeight: 23,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -434,10 +495,10 @@ const styles = StyleSheet.create({
   },
 
   crestWrap: {
-    width: 46,
-    height: 46,
+    width: 48,
+    height: 48,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.09)",
+    backgroundColor: "rgba(255,255,255,0.10)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     alignItems: "center",
@@ -446,8 +507,8 @@ const styles = StyleSheet.create({
   },
 
   crestImg: {
-    width: 30,
-    height: 30,
+    width: 31,
+    height: 31,
     opacity: 0.96,
   },
 
@@ -458,9 +519,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
+  featuredChevronWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
   chev: {
     color: theme.colors.textTertiary,
-    fontSize: 22,
+    fontSize: 20,
     marginTop: -2,
   },
 
@@ -477,7 +549,7 @@ const styles = StyleSheet.create({
   listRow: {
     paddingVertical: 11,
     paddingHorizontal: 10,
-    borderRadius: 14,
+    borderRadius: 16,
     backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.16)" : "rgba(10,12,14,0.12)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
