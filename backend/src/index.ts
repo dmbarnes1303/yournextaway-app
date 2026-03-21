@@ -35,6 +35,20 @@ type ApiFootballEnvelope<T> = {
   response?: T;
 };
 
+type CacheEntry<T> = {
+  at: number;
+  value: T;
+};
+
+const FIXTURES_CACHE_TTL_MS = 60 * 1000;
+const FIXTURE_CACHE_TTL_MS = 60 * 1000;
+const FIXTURES_BY_ROUND_CACHE_TTL_MS = 60 * 1000;
+const COUNTRIES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const TEAMS_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+
+const memoryCache = new Map<string, CacheEntry<unknown>>();
+const inflightCache = new Map<string, Promise<unknown>>();
+
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -95,6 +109,56 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function makeCacheKey(
+  prefix: string,
+  params?: Record<string, string | number | undefined | null>
+): string {
+  if (!params) return prefix;
+
+  const entries = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${String(value)}`);
+
+  return `${prefix}?${entries.join("&")}`;
+}
+
+function getMemoryCache<T>(key: string, ttlMs: number): T | null {
+  const entry = memoryCache.get(key);
+  if (!entry) return null;
+
+  if (Date.now() - entry.at > ttlMs) {
+    memoryCache.delete(key);
+    return null;
+  }
+
+  return entry.value as T;
+}
+
+function setMemoryCache<T>(key: string, value: T): void {
+  memoryCache.set(key, {
+    at: Date.now(),
+    value,
+  });
+}
+
+async function getOrCreateInflight<T>(
+  key: string,
+  producer: () => Promise<T>
+): Promise<T> {
+  const existing = inflightCache.get(key);
+  if (existing) {
+    return existing as Promise<T>;
+  }
+
+  const promise = producer().finally(() => {
+    inflightCache.delete(key);
+  });
+
+  inflightCache.set(key, promise);
+  return promise;
+}
+
 async function apiFootballFetch<T>(
   path: string,
   params?: Record<string, string | number | undefined | null>
@@ -112,29 +176,66 @@ async function apiFootballFetch<T>(
     }
   }
 
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      "x-apisports-key": env.apiFootballKey,
-    },
-  });
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
 
-  const rawText = await res.text().catch(() => "");
+  const timeout = controller
+    ? setTimeout(() => controller.abort(), env.apiFootballTimeoutMs)
+    : null;
 
-  if (!res.ok) {
-    throw new Error(`api_football_http_${res.status}:${rawText.slice(0, 400)}`);
-  }
-
-  let parsed: ApiFootballEnvelope<T>;
   try {
-    parsed = rawText
-      ? (JSON.parse(rawText) as ApiFootballEnvelope<T>)
-      : ({ response: undefined } as ApiFootballEnvelope<T>);
-  } catch {
-    throw new Error("api_football_bad_json");
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "x-apisports-key": env.apiFootballKey,
+      },
+      signal: controller?.signal,
+    });
+
+    const rawText = await res.text().catch(() => "");
+
+    if (!res.ok) {
+      throw new Error(
+        `api_football_http_${res.status}:${rawText.slice(0, 400)}`
+      );
+    }
+
+    let parsed: ApiFootballEnvelope<T>;
+    try {
+      parsed = rawText
+        ? (JSON.parse(rawText) as ApiFootballEnvelope<T>)
+        : ({ response: undefined } as ApiFootballEnvelope<T>);
+    } catch {
+      throw new Error("api_football_bad_json");
+    }
+
+    return parsed.response as T;
+  } catch (error: any) {
+    if (String(error?.name ?? "") === "AbortError") {
+      throw new Error("api_football_timeout");
+    }
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function apiFootballCachedFetch<T>(
+  cacheKey: string,
+  ttlMs: number,
+  path: string,
+  params?: Record<string, string | number | undefined | null>
+): Promise<T> {
+  const cached = getMemoryCache<T>(cacheKey, ttlMs);
+  if (cached !== null) {
+    return cached;
   }
 
-  return parsed.response as T;
+  return getOrCreateInflight<T>(cacheKey, async () => {
+    const fresh = await apiFootballFetch<T>(path, params);
+    setMemoryCache(cacheKey, fresh);
+    return fresh;
+  });
 }
 
 async function walletWorkerFetch(
@@ -181,9 +282,13 @@ app.addHook("onSend", async (request, reply, payload) => {
 
   if (
     request.url.startsWith("/tickets/resolve") ||
-    request.url.startsWith("/football/")
+    request.url.startsWith("/football/fixtures") ||
+    request.url.startsWith("/football/fixture") ||
+    request.url.startsWith("/football/fixtures/by-round") ||
+    request.url.startsWith("/football/countries") ||
+    request.url.startsWith("/football/teams")
   ) {
-    reply.header("Cache-Control", "public, max-age=60");
+    reply.header("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
   } else {
     reply.header("Cache-Control", "no-store");
   }
@@ -232,7 +337,11 @@ app.get("/health", async (request) => {
     nodeEnv: env.nodeEnv,
     requestId: request.id,
     providers: {
-      apiFootball: { configured: hasApiFootballConfig() },
+      apiFootball: {
+        configured: hasApiFootballConfig(),
+        baseUrl: env.apiFootballBaseUrl,
+        timeoutMs: env.apiFootballTimeoutMs,
+      },
       walletWorker: {
         configured: hasWalletWorkerConfig(),
         baseUrl: env.walletWorkerBaseUrl || null,
@@ -248,6 +357,15 @@ app.get("/health", async (request) => {
     },
     cors: {
       configuredOrigins: env.appCorsOrigins,
+    },
+    caches: {
+      items: memoryCache.size,
+      inflight: inflightCache.size,
+      fixturesTtlMs: FIXTURES_CACHE_TTL_MS,
+      fixtureTtlMs: FIXTURE_CACHE_TTL_MS,
+      fixturesByRoundTtlMs: FIXTURES_BY_ROUND_CACHE_TTL_MS,
+      countriesTtlMs: COUNTRIES_CACHE_TTL_MS,
+      teamsTtlMs: TEAMS_CACHE_TTL_MS,
     },
   };
 });
@@ -283,13 +401,25 @@ app.get<{
     };
   }
 
+  const cacheKey = makeCacheKey("football:fixtures", {
+    league,
+    season,
+    from: from || undefined,
+    to: to || undefined,
+  });
+
   try {
-    const response = await apiFootballFetch<unknown[]>("/fixtures", {
-      league,
-      season,
-      from: from || undefined,
-      to: to || undefined,
-    });
+    const response = await apiFootballCachedFetch<unknown[]>(
+      cacheKey,
+      FIXTURES_CACHE_TTL_MS,
+      "/fixtures",
+      {
+        league,
+        season,
+        from: from || undefined,
+        to: to || undefined,
+      }
+    );
 
     return {
       ok: true,
@@ -337,8 +467,15 @@ app.get<{
     };
   }
 
+  const cacheKey = makeCacheKey("football:fixture", { id });
+
   try {
-    const response = await apiFootballFetch<unknown[]>("/fixtures", { id });
+    const response = await apiFootballCachedFetch<unknown[]>(
+      cacheKey,
+      FIXTURE_CACHE_TTL_MS,
+      "/fixtures",
+      { id }
+    );
 
     return {
       ok: true,
@@ -387,12 +524,23 @@ app.get<{
     };
   }
 
+  const cacheKey = makeCacheKey("football:fixtures:by-round", {
+    league,
+    season,
+    round,
+  });
+
   try {
-    const response = await apiFootballFetch<unknown[]>("/fixtures", {
-      league,
-      season,
-      round,
-    });
+    const response = await apiFootballCachedFetch<unknown[]>(
+      cacheKey,
+      FIXTURES_BY_ROUND_CACHE_TTL_MS,
+      "/fixtures",
+      {
+        league,
+        season,
+        round,
+      }
+    );
 
     return {
       ok: true,
@@ -425,8 +573,14 @@ app.get("/football/countries", async (request, reply) => {
     };
   }
 
+  const cacheKey = "football:countries";
+
   try {
-    const response = await apiFootballFetch<unknown[]>("/countries");
+    const response = await apiFootballCachedFetch<unknown[]>(
+      cacheKey,
+      COUNTRIES_CACHE_TTL_MS,
+      "/countries"
+    );
 
     return {
       ok: true,
@@ -473,11 +627,18 @@ app.get<{
     };
   }
 
+  const cacheKey = makeCacheKey("football:teams", { league, season });
+
   try {
-    const response = await apiFootballFetch<unknown[]>("/teams", {
-      league,
-      season,
-    });
+    const response = await apiFootballCachedFetch<unknown[]>(
+      cacheKey,
+      TEAMS_CACHE_TTL_MS,
+      "/teams",
+      {
+        league,
+        season,
+      }
+    );
 
     return {
       ok: true,
