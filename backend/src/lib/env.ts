@@ -28,8 +28,6 @@ function optList(name: string): string[] {
     .filter(Boolean);
 }
 
-const API_FOOTBALL_KEY_FALLBACK = "7ff4f17bb2968fdbdf4b24b7ec6397b9";
-
 export const env = {
   nodeEnv: opt("NODE_ENV", "development"),
   port: optNumber("PORT", 3000),
@@ -42,7 +40,8 @@ export const env = {
     "API_FOOTBALL_BASE_URL",
     "https://v3.football.api-sports.io"
   ),
-  apiFootballKey: opt("API_FOOTBALL_KEY", API_FOOTBALL_KEY_FALLBACK),
+  apiFootballKey: opt("API_FOOTBALL_KEY", ""),
+  apiFootballTimeoutMs: optNumber("API_FOOTBALL_TIMEOUT_MS", 10000),
 
   // Wallet worker
   walletWorkerBaseUrl: opt("WALLET_WORKER_BASE_URL", ""),
@@ -56,7 +55,7 @@ export const env = {
   ftnAffiliateId: opt("FTN_AFFILIATE_ID", "yournextaway"),
 
   // SportsEvents365
-  se365BaseUrl: opt("SE365_BASE_URL", ""),
+  se365BaseUrl: opt("SE365_BASE_URL", "https://api.sportsevents365.com"),
   se365ApiKey: opt("SE365_API_KEY", ""),
   se365AffiliateId: opt("SE365_AFFILIATE_ID", ""),
 
@@ -75,6 +74,12 @@ export function isProduction(): boolean {
 
 export function hasApiFootballConfig(): boolean {
   return Boolean(env.apiFootballBaseUrl && env.apiFootballKey);
+}
+
+export function requireApiFootballConfig(): void {
+  if (!hasApiFootballConfig()) {
+    throw new Error("Missing required env var: API_FOOTBALL_KEY");
+  }
 }
 
 export function hasWalletWorkerConfig(): boolean {
