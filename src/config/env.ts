@@ -26,14 +26,39 @@ function pickExtra(): Record<string, unknown> {
   return (cfg?.extra ?? {}) as Record<string, unknown>;
 }
 
-function getEnvValue(key: string): string {
+function readBackendUrl(): string {
   const extra = pickExtra();
-  return clean(extra[key] ?? process.env[key]);
+
+  return normalizeUrl(
+    extra.EXPO_PUBLIC_BACKEND_URL ??
+      process.env.EXPO_PUBLIC_BACKEND_URL ??
+      extra.backendUrl
+  );
 }
 
-const backendUrl = normalizeUrl(getEnvValue("EXPO_PUBLIC_BACKEND_URL"));
-const supabaseUrl = normalizeUrl(getEnvValue("EXPO_PUBLIC_SUPABASE_URL"));
-const supabaseAnonKey = getEnvValue("EXPO_PUBLIC_SUPABASE_ANON_KEY");
+function readSupabaseUrl(): string {
+  const extra = pickExtra();
+
+  return normalizeUrl(
+    extra.EXPO_PUBLIC_SUPABASE_URL ??
+      process.env.EXPO_PUBLIC_SUPABASE_URL ??
+      extra.supabaseUrl
+  );
+}
+
+function readSupabaseAnonKey(): string {
+  const extra = pickExtra();
+
+  return clean(
+    extra.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+      extra.supabaseAnonKey
+  );
+}
+
+const backendUrl = readBackendUrl();
+const supabaseUrl = readSupabaseUrl();
+const supabaseAnonKey = readSupabaseAnonKey();
 
 export const ENV: Env = {
   backendUrl,
