@@ -1,7 +1,9 @@
-// src/state/auth.ts
 import { create } from "zustand";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/src/services/supabase";
+import {
+  getSupabaseClient,
+  isSupabaseConfigured,
+} from "@/src/services/supabase";
 
 type AuthState = {
   booted: boolean;
@@ -12,7 +14,6 @@ type AuthState = {
   signInWithMagicLink: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
 
-  // internal
   _unsubscribe?: () => void;
 };
 
@@ -23,35 +24,74 @@ const authStore = create<AuthState>((set, get) => ({
   _unsubscribe: undefined,
 
   init: async () => {
-    // Prevent double-init & listener stacking
     const existingUnsub = get()._unsubscribe;
     if (existingUnsub) return;
 
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      // still mark booted so UI can proceed
-      set({ session: null, user: null, booted: true });
-      throw error;
+    if (!isSupabaseConfigured()) {
+      set({
+        session: null,
+        user: null,
+        booted: true,
+      });
+      return;
     }
 
-    const session = data?.session ?? null;
-    set({ session, user: session?.user ?? null, booted: true });
+    const supabase = getSupabaseClient();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      set({ session: next ?? null, user: next?.user ?? null, booted: true });
-    });
+    try {
+      const { data, error } = await supabase.auth.getSession();
 
-    set({
-      _unsubscribe: () => {
-        sub?.subscription?.unsubscribe();
-        set({ _unsubscribe: undefined });
-      },
-    });
+      if (error) {
+        set({
+          session: null,
+          user: null,
+          booted: true,
+        });
+        throw error;
+      }
+
+      const session = data?.session ?? null;
+
+      set({
+        session,
+        user: session?.user ?? null,
+        booted: true,
+      });
+
+      const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+        set({
+          session: next ?? null,
+          user: next?.user ?? null,
+          booted: true,
+        });
+      });
+
+      set({
+        _unsubscribe: () => {
+          sub?.subscription?.unsubscribe();
+          set({ _unsubscribe: undefined });
+        },
+      });
+    } catch (error) {
+      set({
+        session: null,
+        user: null,
+        booted: true,
+      });
+      throw error;
+    }
   },
 
   signInWithMagicLink: async (email: string) => {
     const e = String(email ?? "").trim();
     if (!e) throw new Error("Email required.");
+    if (!isSupabaseConfigured()) {
+      throw new Error(
+        "Sign-in is not available because Supabase is not configured."
+      );
+    }
+
+    const supabase = getSupabaseClient();
 
     const { error } = await supabase.auth.signInWithOtp({
       email: e,
@@ -65,8 +105,23 @@ const authStore = create<AuthState>((set, get) => ({
     const { _unsubscribe } = get();
     if (_unsubscribe) _unsubscribe();
 
+    if (!isSupabaseConfigured()) {
+      set({
+        session: null,
+        user: null,
+        booted: true,
+      });
+      return;
+    }
+
+    const supabase = getSupabaseClient();
     await supabase.auth.signOut();
-    set({ session: null, user: null, booted: true });
+
+    set({
+      session: null,
+      user: null,
+      booted: true,
+    });
   },
 }));
 
