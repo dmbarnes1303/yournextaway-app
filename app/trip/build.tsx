@@ -1195,5 +1195,929 @@ export default function TripBuildScreen() {
             </GlassCard>
           ) : null}
 
-          
+          {showPickerMode && !prefillLoading && !error ? (
+            <GlassCard level="default">
+              <Text style={styles.h1}>
+                {isEditing ? "Choose another match" : "Choose your match"}
+              </Text>
+              <Text style={styles.hint}>
+                {isEditing
+                  ? "Pick another match to add to this trip."
+                  : "Pick the match you want the whole trip built around."}
+              </Text>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 12 }}
+              >
+                {leagueOptions.map((l) => {
+                  const active = l.leagueId === selectedLeague.leagueId;
+                  return (
+                    <Pressable
+                      key={(l as any).key ?? String(l.leagueId)}
+                      onPress={() => {
+                        setSelectedLeague(l);
+                        setVisibleCount(14);
+                      }}
+                      style={[styles.leaguePill, active && styles.leaguePillActive]}
+                    >
+                      <Text
+                        style={[styles.leaguePillText, active && styles.leaguePillTextActive]}
+                      >
+                        {l.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              <TextInput
+                value={search}
+                onChangeText={(t) => {
+                  setSearch(t);
+                  setVisibleCount(14);
+                }}
+                placeholder="Search team, city, venue or league"
+                placeholderTextColor={theme.colors.textSecondary}
+                style={styles.search}
+              />
+
+              <View style={{ marginTop: 10 }}>
+                {visibleRows.map((r, i) => {
+                  const id = fixtureIdStr(r);
+                  const selected = fixtureIdStr(selectedFixture) === id;
+                  const ranked = visibleRankMap.get(id) ?? null;
+
+                  const home = cleanText(r?.teams?.home?.name) || "Home";
+                  const away = cleanText(r?.teams?.away?.name) || "Away";
+
+                  const certainty = getFixtureCertainty(r, { placeholderIds: placeholderTbcIds });
+                  const kick = isTbcLikeCertainty(certainty)
+                    ? "Kickoff TBC"
+                    : formatUkDateTimeMaybe(r?.fixture?.date) || "Kickoff TBC";
+
+                  const v = cleanText(r?.fixture?.venue?.name);
+                  const c = cleanText(r?.fixture?.venue?.city);
+                  const vc = [v, c].filter(Boolean).join(" • ");
+
+                  const leagueName = cleanText(r?.league?.name);
+                  const leagueFlag = safeUri((r as any)?.league?.flag);
+
+                  const homeLogo = safeUri(r?.teams?.home?.logo);
+                  const awayLogo = safeUri(r?.teams?.away?.logo);
+
+                  return (
+                    <Pressable
+                      key={id || String(i)}
+                      onPress={async () => {
+                        setSelectedFixture(r);
+                        const ids = await computePlaceholderIdsForFixture(r, routeSeason);
+                        setPlaceholderTbcIds(ids);
+                        setError(null);
+                      }}
+                      style={({ pressed }) => [
+                        styles.fxCard,
+                        selected && styles.fxCardSelected,
+                        { opacity: pressed ? 0.9 : 1 },
+                      ]}
+                    >
+                      <View style={styles.fxTop}>
+                        <View style={styles.fxLeft}>
+                          <View style={styles.crestStack}>
+                            {homeLogo ? (
+                              <Image source={{ uri: homeLogo }} style={styles.crest} />
+                            ) : (
+                              <View style={styles.crestFallback} />
+                            )}
+                            {awayLogo ? (
+                              <Image
+                                source={{ uri: awayLogo }}
+                                style={[styles.crest, { marginLeft: -10 }]}
+                              />
+                            ) : (
+                              <View style={[styles.crestFallback, { marginLeft: -10 }]} />
+                            )}
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.fxTitle} numberOfLines={1}>
+                              {home} vs {away}
+                            </Text>
+
+                            <Text style={styles.fxMeta} numberOfLines={1}>
+                              {kick}
+                            </Text>
+
+                            {vc ? (
+                              <Text style={styles.fxMeta2} numberOfLines={1}>
+                                {vc}
+                              </Text>
+                            ) : null}
+
+                            <Text style={styles.fxFlowMeta} numberOfLines={1}>
+                              Save trip, then book around it
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View style={styles.fxRight}>
+                          {ranked ? (
+                            <View
+                              style={[
+                                styles.rowScoreBox,
+                                scoreTone(ranked.breakdown.combinedScore),
+                              ]}
+                            >
+                              <Text style={styles.rowScoreValue}>
+                                {ranked.breakdown.combinedScore}
+                              </Text>
+                            </View>
+                          ) : null}
+                          {leagueFlag ? (
+                            <Image source={{ uri: leagueFlag }} style={styles.flag} />
+                          ) : null}
+                          <Text style={styles.fxLeague} numberOfLines={1}>
+                            {leagueName || "League"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.badgeRow}>
+                        {certainty === "confirmed" ? (
+                          <View style={[styles.badge, styles.badgeConfirmed]}>
+                            <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>
+                              {certaintyLabel(certainty)}
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.badge, styles.badgeTbc]}>
+                            <Text style={[styles.badgeText, styles.badgeTextTbc]}>
+                              {certaintyLabel(certainty)}
+                            </Text>
+                          </View>
+                        )}
+
+                        {weekendHint(r?.fixture?.date) ? (
+                          <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{weekendHint(r?.fixture?.date)}</Text>
+                          </View>
+                        ) : null}
+
+                        {ranked ? (
+                          <View style={styles.badge}>
+                            <Text style={styles.badgeText}>
+                              {difficultyLabel(ranked.breakdown.travelDifficulty)} travel
+                            </Text>
+                          </View>
+                        ) : null}
+
+                        {isEditing && existingMatchIds.includes(String(id).trim()) ? (
+                          <View style={styles.badge}>
+                            <Text style={styles.badgeText}>Already in trip</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {ranked?.breakdown?.reasonLines?.length ? (
+                        <View style={styles.rowReasonBox}>
+                          <Text style={styles.rowReasonText} numberOfLines={2}>
+                            {ranked.breakdown.reasonLines.slice(0, 2).join(" • ")}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      <View style={styles.fxSelectRow}>
+                        <View style={{ flex: 1 }} />
+                        <View style={[styles.selectPill, selected && styles.selectPillActive]}>
+                          <Text
+                            style={[
+                              styles.selectPillText,
+                              selected && styles.selectPillTextActive,
+                            ]}
+                          >
+                            {selected ? "Selected" : "Select"}
+                          </Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {visibleCount < filtered.length ? (
+                <Pressable onPress={() => setVisibleCount((n) => n + 14)} style={styles.moreBtn}>
+                  <Text style={styles.moreText}>Show more</Text>
+                </Pressable>
+              ) : null}
+            </GlassCard>
+          ) : null}
+
+          <Pressable
+            onPress={onSave}
+            disabled={saving || prefillLoading || !selectedFixture}
+            style={[
+              styles.saveBtn,
+              (!selectedFixture || saving || prefillLoading) && { opacity: 0.55 },
+            ]}
+          >
+            <Text style={styles.saveText}>
+              {saving ? "Saving…" : isEditing ? "Update trip" : "Save trip"}
+            </Text>
+            <Text style={styles.saveSub}>
+              {selectedFixture
+                ? isEditing
+                  ? setAsPrimaryOnSave
+                    ? "This match will become the main match for this trip."
+                    : "This match will be added to the trip."
+                  : "This saves the trip so you can sort tickets, travel and hotel next."
+                : "Select a match first"}
+            </Text>
+          </Pressable>
+
+          {error ? <Text style={styles.err}>{error}</Text> : null}
+        </ScrollView>
+      </SafeAreaView>
+    </Background>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* styles                                                                     */
+/* -------------------------------------------------------------------------- */
+
+const styles = StyleSheet.create({
+  headerCard: { padding: theme.spacing.lg },
+
+  bigTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: theme.colors.text,
+    letterSpacing: 0.2,
+  },
+
+  bigSub: {
+    marginTop: 8,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    lineHeight: 18,
+    fontSize: 13,
+  },
+
+  chipRow: { marginTop: 14, flexDirection: "row", gap: 10 },
+
+  chip: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  chipKicker: {
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  chipValue: {
+    marginTop: 4,
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  prefBar: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  prefBarLabel: {
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  prefBarText: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  flowStrip: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.07)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  flowStep: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+
+  flowStepNumber: {
+    color: theme.colors.primary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  flowStepText: {
+    color: theme.colors.text,
+    fontWeight: "800",
+    fontSize: 11,
+    textAlign: "center",
+  },
+
+  flowDivider: {
+    width: 10,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+
+  capBar: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  capText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  h1: {
+    fontSize: theme.fontSize.lg,
+    fontWeight: "900",
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+
+  hint: {
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+
+  muted: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+  },
+
+  teamRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+
+  crestStack: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  crest: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  crestFallback: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  selectedTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 16,
+  },
+
+  selectedMeta: {
+    color: theme.colors.textSecondary,
+    marginTop: 6,
+    fontWeight: "700",
+    fontSize: 13,
+  },
+
+  badgeRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
+  badge: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+  },
+
+  badgeText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  badgeTbc: {
+    borderColor: "rgba(255,200,0,0.22)",
+    backgroundColor: "rgba(255,200,0,0.06)",
+  },
+
+  badgeTextTbc: { color: "rgba(255,220,140,0.92)" },
+
+  badgeConfirmed: {
+    borderColor: "rgba(75,158,57,0.35)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+  },
+
+  badgeTextConfirmed: { color: "rgba(140,255,190,0.92)" },
+
+  intelCard: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+
+  intelTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  intelScoreBox: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  scoreStrong: {
+    borderColor: "rgba(75,158,57,0.35)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+  },
+
+  scoreOkay: {
+    borderColor: "rgba(242,201,76,0.28)",
+    backgroundColor: "rgba(242,201,76,0.10)",
+  },
+
+  scoreWeak: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+
+  intelScoreValue: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 24,
+    lineHeight: 28,
+  },
+
+  intelScoreLabel: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  intelTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  intelSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  intelSubAlt: {
+    marginTop: 4,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  intelPillRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  intelPill: {
+    minWidth: 88,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+
+  intelPillKicker: {
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 10,
+  },
+
+  intelPillValue: {
+    marginTop: 4,
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  reasonBox: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+
+  reasonTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  reasonText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  nextStageBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.07)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+
+  nextStageTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  nextStageText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  nextStageRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  nextStagePill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+
+  nextStagePillText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  primaryRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  primaryTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  primarySub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 14,
+  },
+
+  infoBar: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  infoText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  label: {
+    marginTop: 14,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+  },
+
+  notes: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+    minHeight: 84,
+    textAlignVertical: "top",
+    ...(Platform.OS === "ios" ? { paddingTop: 12 } : null),
+  },
+
+  leaguePill: {
+    marginRight: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+
+  leaguePillActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+
+  leaguePillText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+  },
+
+  leaguePillTextActive: {
+    color: theme.colors.text,
+  },
+
+  search: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+  },
+
+  fxCard: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.20)",
+  },
+
+  fxCardSelected: {
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+
+  fxTop: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+
+  fxLeft: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+
+  fxRight: {
+    width: 96,
+    alignItems: "flex-end",
+  },
+
+  flag: {
+    width: 22,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    marginTop: 6,
+  },
+
+  fxLeague: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 11,
+    textAlign: "right",
+  },
+
+  rowScoreBox: {
+    minWidth: 34,
+    height: 28,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  rowScoreValue: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  fxTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  fxMeta: {
+    color: theme.colors.textSecondary,
+    marginTop: 5,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  fxMeta2: {
+    color: theme.colors.textTertiary,
+    marginTop: 4,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  fxFlowMeta: {
+    color: theme.colors.textTertiary,
+    marginTop: 6,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  rowReasonBox: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+
+  rowReasonText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 15,
+  },
+
+  fxSelectRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  selectPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+
+  selectPillActive: {
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+  },
+
+  selectPillText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  selectPillTextActive: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  moreBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+  },
+
+  moreText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  saveBtn: {
+    marginTop: 2,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(0,0,0,0.30)",
+    alignItems: "center",
+  },
+
+  saveText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  saveSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    textAlign: "center",
+  },
+
+  err: {
+    marginTop: 10,
+    color: "rgba(255,80,80,0.95)",
+    fontWeight: "900",
+  },
+});
 
