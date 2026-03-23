@@ -43,6 +43,7 @@ function fixtureLine(r: FixtureListRow) {
   const venue = r?.fixture?.venue?.name ?? "";
   const city = r?.fixture?.venue?.city ?? "";
   const extra = [venue, city].filter(Boolean).join(" • ");
+
   return {
     fixtureId: r?.fixture?.id ? String(r.fixture.id) : null,
     title: `${home} vs ${away}`,
@@ -60,7 +61,6 @@ export default function StadiumScreen() {
   const venueKey = useMemo(() => normalizeVenueKey(slugRaw ?? ""), [slugRaw]);
   const displayName = useMemo(() => prettyFromSlug(slugRaw ?? ""), [slugRaw]);
 
-  // Rolling window (tomorrow onwards)
   const rolling = useMemo(() => getRollingWindowIso(), []);
   const fromIso = useMemo(() => clampFromIsoToTomorrow(rolling.from), [rolling.from]);
   const toIso = rolling.to;
@@ -116,8 +116,9 @@ export default function StadiumScreen() {
       }
     }
 
-    if (venueKey) run();
-    else {
+    if (venueKey) {
+      run();
+    } else {
       setLoading(false);
       setRows([]);
       setError("Missing stadium.");
@@ -139,8 +140,10 @@ export default function StadiumScreen() {
     } as any);
   }
 
+  const bgSource = getBackground("stadium") ?? getBackground("fixtures");
+
   return (
-    <Background imageUrl={getBackground("stadium") ?? getBackground("fixtures")} overlayOpacity={0.86}>
+    <Background imageSource={bgSource} overlayOpacity={0.86}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -199,7 +202,12 @@ export default function StadiumScreen() {
                     <View key={key} style={styles.fxRow}>
                       <Pressable
                         onPress={() =>
-                          fixtureId ? router.push({ pathname: "/match/[id]", params: { id: fixtureId, from: fromIso, to: toIso } }) : null
+                          fixtureId
+                            ? router.push({
+                                pathname: "/match/[id]",
+                                params: { id: fixtureId, from: fromIso, to: toIso },
+                              } as any)
+                            : null
                         }
                         style={{ flex: 1 }}
                       >
@@ -254,6 +262,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0.6,
   },
+
   title: {
     marginTop: 8,
     color: theme.colors.text,
@@ -261,12 +270,31 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     lineHeight: 30,
   },
-  meta: { marginTop: 10, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
 
-  center: { paddingVertical: 14, alignItems: "center", gap: 10, marginTop: 8 },
-  muted: { color: theme.colors.textSecondary, fontSize: theme.fontSize.sm, lineHeight: 18 },
+  meta: {
+    marginTop: 10,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+  },
 
-  fxList: { marginTop: 10, gap: 10 },
+  center: {
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 10,
+    marginTop: 8,
+  },
+
+  muted: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+    lineHeight: 18,
+  },
+
+  fxList: {
+    marginTop: 10,
+    gap: 10,
+  },
+
   fxRow: {
     flexDirection: "row",
     gap: 10,
@@ -275,8 +303,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255,255,255,0.08)",
   },
-  fxTitle: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.md },
-  fxMeta: { marginTop: 4, color: theme.colors.textSecondary, fontSize: theme.fontSize.sm },
+
+  fxTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: theme.fontSize.md,
+  },
+
+  fxMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.sm,
+  },
 
   planBtn: {
     paddingVertical: 10,
@@ -286,5 +324,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,255,136,0.45)",
     backgroundColor: "rgba(0,0,0,0.22)",
   },
-  planText: { color: theme.colors.text, fontWeight: "900", fontSize: theme.fontSize.xs },
+
+  planText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: theme.fontSize.xs,
+  },
 });
