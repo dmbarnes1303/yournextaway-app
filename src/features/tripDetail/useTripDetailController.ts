@@ -22,6 +22,8 @@ import {
 } from "@/src/services/ticketResolver";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 
+import { getTicketGuide } from "@/src/data/ticketGuides";
+
 import {
   clean,
   defer,
@@ -94,9 +96,15 @@ function getTrackedPartnerErrorMessage(error: unknown): string {
   const raw = clean((error as any)?.message ?? error);
 
   if (!raw) return "This partner link could not be opened right now.";
-  if (raw.includes("tripId is required")) return "Save the trip first before opening booking partners.";
-  if (raw.includes("url is required")) return "This partner link is missing a valid URL.";
-  if (raw.includes("Partner open already in progress")) return "A partner link is already opening. Wait a second and try again.";
+  if (raw.includes("tripId is required")) {
+    return "Save the trip first before opening booking partners.";
+  }
+  if (raw.includes("url is required")) {
+    return "This partner link is missing a valid URL.";
+  }
+  if (raw.includes("Partner open already in progress")) {
+    return "A partner link is already opening. Wait a second and try again.";
+  }
 
   return "This partner link could not be opened right now.";
 }
@@ -129,6 +137,10 @@ function normalizeTrackedPartnerArgs(
       ...(args.metadata ?? {}),
     },
   };
+}
+
+function buildOfficialTicketFallbackMessage(homeName: string) {
+  return `No valid reseller ticket options were found right now. Try ${homeName}'s official ticket page instead.`;
 }
 
 export default function useTripDetailController({
@@ -200,7 +212,10 @@ export default function useTripDetailController({
     const tripId = clean(trip?.id) || clean(activeTripId);
 
     if (!tripId) {
-      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+      Alert.alert(
+        "Save trip first",
+        "Save this trip before booking so we can store it in Wallet."
+      );
       return;
     }
 
@@ -369,10 +384,14 @@ export default function useTripDetailController({
   }
 
   function confirmMarkBooked(item: SavedItem) {
-    Alert.alert("Mark as booked?", "Only do this if you completed the booking and want it in Wallet.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Mark booked", onPress: () => markBookedSmart(item) },
-    ]);
+    Alert.alert(
+      "Mark as booked?",
+      "Only do this if you completed the booking and want it in Wallet.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Mark booked", onPress: () => markBookedSmart(item) },
+      ]
+    );
   }
 
   function confirmMoveToPending(item: SavedItem) {
@@ -487,20 +506,24 @@ export default function useTripDetailController({
       return;
     }
 
-    Alert.alert("Remove this match?", "This only removes it from the trip — it won’t delete Wallet items.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await tripsStore.removeMatchFromTrip(trip.id, mid);
-          } catch {
-            Alert.alert("Couldn’t remove match", "Try again.");
-          }
+    Alert.alert(
+      "Remove this match?",
+      "This only removes it from the trip — it won’t delete Wallet items.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await tripsStore.removeMatchFromTrip(trip.id, mid);
+            } catch {
+              Alert.alert("Couldn’t remove match", "Try again.");
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   }
 
   function openMatchActions(matchId: string) {
@@ -511,7 +534,9 @@ export default function useTripDetailController({
 
     Alert.alert(
       "Match options",
-      isPrimary ? "This is the primary match for the trip." : "Choose what you want to do with this match.",
+      isPrimary
+        ? "This is the primary match for the trip."
+        : "Choose what you want to do with this match.",
       [
         { text: "Cancel", style: "cancel" },
         !isPrimary ? { text: "Set as primary", onPress: () => setPrimaryMatch(mid) } : null,
@@ -568,6 +593,52 @@ export default function useTripDetailController({
     });
   }
 
+  async function openOfficialTicketFallback(args: {
+    mid: string;
+    homeName: string;
+    awayName: string;
+    kickoffIso: string;
+    leagueName?: string;
+    leagueId?: string | number;
+    officialTicketUrl: string;
+  }) {
+    const title = `Official tickets: ${args.homeName} vs ${args.awayName}`;
+
+    Alert.alert(
+      "Official club tickets",
+      buildOfficialTicketFallbackMessage(args.homeName),
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Open official site",
+          onPress: async () => {
+            await openPartnerOrAlert(
+              args.officialTicketUrl,
+              "The club ticket page is not available yet.",
+              {
+                partnerId: "googlemaps" as PartnerId,
+                savedItemType: "tickets",
+                title,
+                metadata: {
+                  fixtureId: args.mid,
+                  leagueId: args.leagueId,
+                  leagueName: args.leagueName,
+                  kickoffIso: args.kickoffIso,
+                  homeName: args.homeName,
+                  awayName: args.awayName,
+                  ticketProvider: "official_club_site",
+                  sourceSurface: "official_ticket_fallback",
+                  sourceSection: "tickets",
+                  officialFallback: true,
+                },
+              }
+            );
+          },
+        },
+      ]
+    );
+  }
+
   function showTicketChoiceAlert(args: {
     mid: string;
     homeName: string;
@@ -619,7 +690,10 @@ export default function useTripDetailController({
     if (!mid) return;
 
     if (!activeTripId) {
-      Alert.alert("Save trip first", "Save this trip before booking so we can store it in Wallet.");
+      Alert.alert(
+        "Save trip first",
+        "Save this trip before booking so we can store it in Wallet."
+      );
       return;
     }
 
@@ -639,7 +713,8 @@ export default function useTripDetailController({
     const homeName = clean((row as any)?.teams?.home?.name ?? (trip as any)?.homeName);
     const awayName = clean((row as any)?.teams?.away?.name ?? (trip as any)?.awayName);
     const kickoffIso = clean((row as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
-    const leagueName = clean((row as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
+    const leagueName =
+      clean((row as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
     const leagueIdRaw = (row as any)?.league?.id ?? (trip as any)?.leagueId;
     const leagueId =
       typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string"
@@ -664,8 +739,23 @@ export default function useTripDetailController({
       });
 
       const options = normalizeTicketOptions(resolved);
+      const homeGuide = getTicketGuide(homeName);
+      const officialTicketUrl = clean(homeGuide?.officialTicketUrl);
 
       if (!resolved?.ok || options.length === 0) {
+        if (officialTicketUrl) {
+          await openOfficialTicketFallback({
+            mid,
+            homeName,
+            awayName,
+            kickoffIso,
+            leagueName,
+            leagueId,
+            officialTicketUrl,
+          });
+          return;
+        }
+
         Alert.alert(
           "Tickets not found",
           ticketResolverFailureMessage(resolved as TicketResolutionResult | null)
@@ -705,7 +795,26 @@ export default function useTripDetailController({
           : undefined,
       });
     } catch {
-      Alert.alert("Tickets unavailable", "Ticket search failed before the partner click was created.");
+      const homeGuide = getTicketGuide(homeName);
+      const officialTicketUrl = clean(homeGuide?.officialTicketUrl);
+
+      if (officialTicketUrl) {
+        await openOfficialTicketFallback({
+          mid,
+          homeName,
+          awayName,
+          kickoffIso,
+          leagueName,
+          leagueId,
+          officialTicketUrl,
+        });
+        return;
+      }
+
+      Alert.alert(
+        "Tickets unavailable",
+        "Ticket search failed before the partner click was created."
+      );
     }
   }
 
@@ -729,4 +838,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-          }
+}
