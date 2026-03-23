@@ -325,6 +325,11 @@ export async function openUntrackedUrl(url: string) {
   }
 }
 
+/**
+ * Use this only for non-commercial/simple utility opens.
+ * For partner flows that should create or reuse SavedItems and support return handling,
+ * use beginPartnerClick instead.
+ */
 export async function openPartnerUrl(url: string) {
   return await openUntrackedUrl(url);
 }
@@ -579,4 +584,4 @@ export function __unsafeResetPartnerClickStateForDevOnly() {
   lastClickLoaded = false;
   returnInFlight = false;
   lastReturnHandledAt = 0;
-}
+          }
