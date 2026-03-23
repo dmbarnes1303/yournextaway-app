@@ -20,6 +20,7 @@ export type BuiltAffiliateLinks = {
   ticketsUrl: string | null;
   experiencesUrl: string | null;
   transportUrl: string | null;
+  omioUrl: string | null;
   insuranceUrl: string | null;
   claimsUrl: string | null;
   mapsUrl: string | null;
@@ -251,6 +252,12 @@ export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffilia
   const passengers = clampInt(args.passengers, 1, 9, 1);
   const cabinClass = normalizeCabinClass(args.cabinClass);
 
+  const omioUrl = buildOmioUrl({
+    city: cityName,
+    startDate,
+    endDate,
+  });
+
   return {
     flightsUrl: buildAviasalesUrl({
       city: cityName,
@@ -276,13 +283,10 @@ export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffilia
       endDate,
     }),
     experiencesUrl: buildGetYourGuideUrl(cityName),
-    transportUrl: buildOmioUrl({
-      city: cityName,
-      startDate,
-      endDate,
-    }),
+    transportUrl: omioUrl,
+    omioUrl,
     insuranceUrl: buildTrackedOnlyUrl(AffiliateConfig.ektaTracked),
     claimsUrl: buildClaimsUrl(),
     mapsUrl: googleMapsSearchUrl(cityName),
   };
-    }
+}
