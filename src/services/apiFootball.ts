@@ -5,7 +5,11 @@ export type FixtureListRow = {
     id: number;
     date: string | null;
     status?: { short?: string | null; long?: string | null };
-    venue?: { name?: string | null; city?: string | null };
+    venue?: {
+      id?: number | null;
+      name?: string | null;
+      city?: string | null;
+    };
   };
   league: {
     id: number;
@@ -23,6 +27,22 @@ export type FixtureListRow = {
   score?: any;
 };
 
+export type TeamRow = {
+  team?: {
+    id?: number | null;
+    name?: string | null;
+    logo?: string | null;
+    country?: string | null;
+  };
+  venue?: {
+    id?: number | null;
+    name?: string | null;
+    city?: string | null;
+  };
+};
+
+export type ApiFootballTeamRow = TeamRow;
+
 type FixturesParams = {
   league?: number;
   leagueId?: number;
@@ -33,12 +53,37 @@ type FixturesParams = {
   toIso?: string;
 };
 
+type FixturesByRoundParams = {
+  league?: number;
+  leagueId?: number;
+  season?: number;
+  round?: string;
+};
+
+type TeamsParams = {
+  league?: number;
+  leagueId?: number;
+  season?: number;
+};
+
 type BackendEnvelope<T> = {
   ok?: boolean;
   response?: T;
   error?: string;
   debug?: string;
   requestId?: string;
+};
+
+type CountryRow = {
+  name: string;
+  code: string;
+  flag: string;
+};
+
+type TeamListItem = {
+  id: number;
+  name: string;
+  logo?: string | null;
 };
 
 const REQUEST_TIMEOUT_MS = 9000;
@@ -56,26 +101,14 @@ type TimedCacheEntry<T> = {
 const fixtureCache = new Map<string, TimedCacheEntry<FixtureListRow[]>>();
 const fixtureDetailCache = new Map<string, TimedCacheEntry<FixtureListRow | null>>();
 const fixturesByRoundCache = new Map<string, TimedCacheEntry<FixtureListRow[]>>();
-const countriesCache = new Map<
-  string,
-  TimedCacheEntry<{ name: string; code: string; flag: string }[]>
->();
-const teamsCache = new Map<
-  string,
-  TimedCacheEntry<{ id: number; name: string; logo?: string | null }[]>
->();
+const countriesCache = new Map<string, TimedCacheEntry<CountryRow[]>>();
+const teamsCache = new Map<string, TimedCacheEntry<TeamListItem[]>>();
 
 const inflightFixtures = new Map<string, Promise<FixtureListRow[]>>();
 const inflightFixtureDetail = new Map<string, Promise<FixtureListRow | null>>();
 const inflightFixturesByRound = new Map<string, Promise<FixtureListRow[]>>();
-const inflightCountries = new Map<
-  string,
-  Promise<{ name: string; code: string; flag: string }[]>
->();
-const inflightTeams = new Map<
-  string,
-  Promise<{ id: number; name: string; logo?: string | null }[]>
->();
+const inflightCountries = new Map<string, Promise<CountryRow[]>>();
+const inflightTeams = new Map<string, Promise<TeamListItem[]>>();
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -150,7 +183,6 @@ async function backendFetch<T>(
     if (String(error?.name ?? "") === "AbortError") {
       throw new Error("backend_timeout");
     }
-
     throw error;
   } finally {
     if (timeout) clearTimeout(timeout);
@@ -218,13 +250,135 @@ function teamsCacheKey(opts: { leagueId: number; season: number }): string {
   return `league:${opts.leagueId}|season:${opts.season}`;
 }
 
+function resolveLeagueId(value: { league?: number; leagueId?: number }): number | null {
+  const raw = value.leagueId ?? value.league;
+  const num = Number(raw);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function resolveSeason(value: { season?: number }): number | null {
+  const num = Number(value.season);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
 function normalizeFixtureRows(rows: unknown): FixtureListRow[] {
   if (!Array.isArray(rows)) return [];
 
-  return rows.filter((row: any) => {
-    const id = Number(row?.fixture?.id);
-    return Number.isFinite(id) && id > 0;
-  }) as FixtureListRow[];
+  return rows
+    .map((row: any) => {
+      const fixtureId = Number(row?.fixture?.id);
+      const leagueId = Number(row?.league?.id);
+      if (!Number.isFinite(fixtureId) || fixtureId <= 0) return null;
+      if (!Number.isFinite(leagueId) || leagueId <= 0) return null;
+
+      const normalized: FixtureListRow = {
+        fixture: {
+          id: fixtureId,
+          date: row?.fixture?.date ?? null,
+          status: row?.fixture?.status
+            ? {
+                short: row?.fixture?.status?.short ?? null,
+                long: row?.fixture?.status?.long ?? null,
+              }
+            : undefined,
+          venue: row?.fixture?.venue
+            ? {
+                id:
+                  row?.fixture?.venue?.id === undefined || row?.fixture?.venue?.id === null
+                    ? null
+                    : Number.isFinite(Number(row?.fixture?.venue?.id))
+                      ? Number(row?.fixture?.venue?.id)
+                      : null,
+                name: row?.fixture?.venue?.name ?? null,
+                city: row?.fixture?.venue?.city ?? null,
+              }
+            : undefined,
+        },
+        league: {
+          id: leagueId,
+          name: row?.league?.name ?? null,
+          season:
+            row?.league?.season === undefined || row?.league?.season === null
+              ? null
+              : Number(row?.league?.season),
+          round: row?.league?.round ?? null,
+          flag: row?.league?.flag ?? null,
+          country: row?.league?.country ?? null,
+        },
+        teams: {
+          home: row?.teams?.home
+            ? {
+                id:
+                  row?.teams?.home?.id === undefined || row?.teams?.home?.id === null
+                    ? undefined
+                    : Number(row?.teams?.home?.id),
+                name: row?.teams?.home?.name ?? null,
+                logo: row?.teams?.home?.logo ?? null,
+              }
+            : undefined,
+          away: row?.teams?.away
+            ? {
+                id:
+                  row?.teams?.away?.id === undefined || row?.teams?.away?.id === null
+                    ? undefined
+                    : Number(row?.teams?.away?.id),
+                name: row?.teams?.away?.name ?? null,
+                logo: row?.teams?.away?.logo ?? null,
+              }
+            : undefined,
+        },
+        goals: row?.goals
+          ? {
+              home:
+                row?.goals?.home === undefined || row?.goals?.home === null
+                  ? null
+                  : Number(row?.goals?.home),
+              away:
+                row?.goals?.away === undefined || row?.goals?.away === null
+                  ? null
+                  : Number(row?.goals?.away),
+            }
+          : undefined,
+        score: row?.score,
+      };
+
+      return normalized;
+    })
+    .filter((row): row is FixtureListRow => row !== null);
+}
+
+function normalizeTeamRows(rows: unknown): TeamRow[] {
+  if (!Array.isArray(rows)) return [];
+
+  return rows
+    .map((row: any) => {
+      const teamId = Number(row?.team?.id);
+      if (!Number.isFinite(teamId) || teamId <= 0) return null;
+
+      const normalized: TeamRow = {
+        team: {
+          id: teamId,
+          name: clean(row?.team?.name) || null,
+          logo: clean(row?.team?.logo) || null,
+          country: clean(row?.team?.country) || null,
+        },
+        venue: row?.venue
+          ? {
+              id:
+                row?.venue?.id === undefined || row?.venue?.id === null
+                  ? null
+                  : Number.isFinite(Number(row?.venue?.id))
+                    ? Number(row?.venue?.id)
+                    : null,
+              name: clean(row?.venue?.name) || null,
+              city: clean(row?.venue?.city) || null,
+            }
+          : undefined,
+      };
+
+      return normalized;
+    })
+    .filter((row): row is TeamRow => row !== null);
 }
 
 async function fetchFixturesNetwork(args: {
@@ -256,7 +410,10 @@ async function fetchFixturesNetwork(args: {
   return request;
 }
 
-async function fetchFixtureByIdNetwork(key: string, id: number | string) {
+async function fetchFixtureByIdNetwork(
+  key: string,
+  id: number | string
+): Promise<FixtureListRow | null> {
   const existing = inflightFixtureDetail.get(key);
   if (existing) return existing;
 
@@ -302,9 +459,7 @@ async function fetchFixturesByRoundNetwork(opts: {
   return request;
 }
 
-async function fetchCountriesNetwork(
-  key: string
-): Promise<{ name: string; code: string; flag: string }[]> {
+async function fetchCountriesNetwork(key: string): Promise<CountryRow[]> {
   const existing = inflightCountries.get(key);
   if (existing) return existing;
 
@@ -330,7 +485,7 @@ async function fetchTeamsNetwork(opts: {
   key: string;
   leagueId: number;
   season: number;
-}): Promise<{ id: number; name: string; logo?: string | null }[]> {
+}): Promise<TeamListItem[]> {
   const existing = inflightTeams.get(opts.key);
   if (existing) return existing;
 
@@ -339,13 +494,22 @@ async function fetchTeamsNetwork(opts: {
     season: opts.season,
   })
     .then((rows) => {
-      const value = (Array.isArray(rows) ? rows : [])
-        .map((r) => ({
-          id: Number(r?.team?.id),
-          name: clean(r?.team?.name),
-          logo: clean(r?.team?.logo) || null,
-        }))
-        .filter((team) => Number.isFinite(team.id) && !!team.name);
+      const normalizedRows = normalizeTeamRows(rows);
+      const value = normalizedRows
+        .map((row) => {
+          const id = Number(row.team?.id);
+          const name = clean(row.team?.name);
+          const logo = clean(row.team?.logo) || null;
+
+          if (!Number.isFinite(id) || id <= 0 || !name) return null;
+
+          return {
+            id,
+            name,
+            logo,
+          };
+        })
+        .filter((team): team is TeamListItem => team !== null);
 
       setTimedCache(teamsCache, opts.key, value);
       return value;
@@ -359,10 +523,10 @@ async function fetchTeamsNetwork(opts: {
 }
 
 export async function getFixtures(params: FixturesParams): Promise<FixtureListRow[]> {
-  const league = params.league ?? params.leagueId;
+  const league = resolveLeagueId(params);
+  const season = resolveSeason(params);
   const from = params.from ?? params.fromIso;
   const to = params.to ?? params.toIso;
-  const season = params.season;
 
   if (!league || !season) return [];
 
@@ -399,14 +563,17 @@ export async function getFixtureById(id: number | string): Promise<FixtureListRo
   return fetchFixtureByIdNetwork(key, id);
 }
 
-export async function getFixturesByRound(opts: {
-  leagueId: number;
-  season: number;
-  round: string;
-}): Promise<FixtureListRow[]> {
-  if (!opts.leagueId || !opts.season || !opts.round) return [];
+export async function getFixturesByRound(
+  opts: FixturesByRoundParams
+): Promise<FixtureListRow[]> {
+  const leagueId = resolveLeagueId(opts);
+  const season = resolveSeason(opts);
+  const round = clean(opts.round);
 
-  const key = fixturesByRoundCacheKey(opts);
+  if (!leagueId || !season || !round) return [];
+
+  const normalizedOpts = { leagueId, season, round };
+  const key = fixturesByRoundCacheKey(normalizedOpts);
   const cached = getTimedCache(
     fixturesByRoundCache,
     key,
@@ -419,16 +586,14 @@ export async function getFixturesByRound(opts: {
 
   const stale = fixturesByRoundCache.get(key);
   if (stale) {
-    void fetchFixturesByRoundNetwork({ key, ...opts }).catch(() => null);
+    void fetchFixturesByRoundNetwork({ key, ...normalizedOpts }).catch(() => null);
     return stale.value;
   }
 
-  return fetchFixturesByRoundNetwork({ key, ...opts });
+  return fetchFixturesByRoundNetwork({ key, ...normalizedOpts });
 }
 
-export async function getCountries(): Promise<
-  { name: string; code: string; flag: string }[]
-> {
+export async function getCountries(): Promise<CountryRow[]> {
   const key = "countries";
   const cached = getTimedCache(countriesCache, key, COUNTRIES_CACHE_TTL_MS);
 
@@ -445,13 +610,14 @@ export async function getCountries(): Promise<
   return fetchCountriesNetwork(key);
 }
 
-export async function getTeams(opts: {
-  leagueId: number;
-  season: number;
-}): Promise<{ id: number; name: string; logo?: string | null }[]> {
-  if (!opts.leagueId || !opts.season) return [];
+export async function getTeams(opts: TeamsParams): Promise<TeamListItem[]> {
+  const leagueId = resolveLeagueId(opts);
+  const season = resolveSeason(opts);
 
-  const key = teamsCacheKey(opts);
+  if (!leagueId || !season) return [];
+
+  const normalizedOpts = { leagueId, season };
+  const key = teamsCacheKey(normalizedOpts);
   const cached = getTimedCache(teamsCache, key, TEAMS_CACHE_TTL_MS);
 
   if (cached) {
@@ -460,9 +626,9 @@ export async function getTeams(opts: {
 
   const stale = teamsCache.get(key);
   if (stale) {
-    void fetchTeamsNetwork({ key, ...opts }).catch(() => null);
+    void fetchTeamsNetwork({ key, ...normalizedOpts }).catch(() => null);
     return stale.value;
   }
 
-  return fetchTeamsNetwork({ key, ...opts });
+  return fetchTeamsNetwork({ key, ...normalizedOpts });
 }
