@@ -1741,4 +1741,356 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
+  reasonBox: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+
+  reasonTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  reasonText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  nextStageBox: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.18)",
+    backgroundColor: "rgba(87,162,56,0.07)",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+
+  nextStageTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  nextStageText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  nextStageRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  nextStagePill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+
+  nextStagePillText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  primaryRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  primaryTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  primarySub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 14,
+  },
+
+  infoBar: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  infoText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  label: {
+    marginTop: 14,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+  },
+
+  notes: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+    minHeight: 84,
+    textAlignVertical: "top",
+    ...(Platform.OS === "ios" ? { paddingTop: 12 } : null),
+  },
+
+  leaguePill: {
+    marginRight: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+
+  leaguePillActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+
+  leaguePillText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+  },
+
+  leaguePillTextActive: {
+    color: theme.colors.text,
+  },
+
+  search: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 12,
+    padding: 12,
+    color: theme.colors.text,
+  },
+
+  fxCard: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.20)",
+  },
+
+  fxCardSelected: {
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+
+  fxTop: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+
+  fxLeft: {
+    flex: 1,
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+  },
+
+  fxRight: {
+    width: 96,
+    alignItems: "flex-end",
+  },
+
+  flag: {
+    width: 22,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    marginTop: 6,
+  },
+
+  fxLeague: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 11,
+    textAlign: "right",
+  },
+
+  rowScoreBox: {
+    minWidth: 34,
+    height: 28,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  rowScoreValue: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  fxTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  fxMeta: {
+    color: theme.colors.textSecondary,
+    marginTop: 5,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  fxMeta2: {
+    color: theme.colors.textTertiary,
+    marginTop: 4,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  fxFlowMeta: {
+    color: theme.colors.textTertiary,
+    marginTop: 6,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  rowReasonBox: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+
+  rowReasonText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 15,
+  },
+
+  fxSelectRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  selectPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+  },
+
+  selectPillActive: {
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(75,158,57,0.10)",
+  },
+
+  selectPillText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  selectPillTextActive: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  moreBtn: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+  },
+
+  moreText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  saveBtn: {
+    marginTop: 2,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(75,158,57,0.55)",
+    backgroundColor: "rgba(0,0,0,0.30)",
+    alignItems: "center",
+  },
+
+  saveText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  saveSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+    textAlign: "center",
+  },
+
+  err: {
+    marginTop: 10,
+    color: "rgba(255,80,80,0.95)",
+    fontWeight: "900",
+  },
+});
+
 
