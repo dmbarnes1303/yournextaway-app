@@ -12,6 +12,10 @@ import type { TicketGuide } from "./types";
  * - No “away end” framing.
  * - Push official channels first.
  * - “marketplace_risk” exists only to warn hard (not a recommendation).
+ *
+ * officialTicketUrl:
+ * - Only include club pages we have actually verified.
+ * - If a club URL has not been verified yet, omit it rather than guessing.
  */
 function makeGuide(g: TicketGuide): TicketGuide {
   return g;
@@ -23,14 +27,18 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "Bayern Munich",
     league: "Bundesliga",
     difficulty: "very_hard",
-    summary: "High demand. Marquee fixtures are extremely competitive—plan early and buy at release.",
+    summary:
+      "High demand. Marquee fixtures are extremely competitive—plan early and buy at release.",
     membershipRequired: true,
     typicalReleaseDaysBefore: { min: 21, max: 90 },
     ukCardUsuallyWorks: true,
     touristFriendly: true,
     methods: ["membership_portal", "official_site", "official_app", "hospitality"],
-    safetyNotes: ["Official/member routes first. Treat open resale as high-risk unless clearly authorized."],
+    safetyNotes: [
+      "Official/member routes first. Treat open resale as high-risk unless clearly authorized.",
+    ],
     notes: ["Expect rapid sell-outs for big opponents and prime dates."],
+    officialTicketUrl: "https://fcbayern.com/en/tickets",
   }),
 
   "borussia-dortmund": makeGuide({
@@ -38,14 +46,18 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "Borussia Dortmund",
     league: "Bundesliga",
     difficulty: "very_hard",
-    summary: "Very high demand. Many matches sell fast; priority windows can matter for the biggest fixtures.",
+    summary:
+      "Very high demand. Many matches sell fast; priority windows can matter for the biggest fixtures.",
     membershipRequired: true,
     typicalReleaseDaysBefore: { min: 21, max: 90 },
     ukCardUsuallyWorks: true,
     touristFriendly: true,
     methods: ["membership_portal", "official_site", "official_app", "hospitality"],
-    safetyNotes: ["Avoid random resale sites. If you miss official windows, use hospitality/authorized routes."],
+    safetyNotes: [
+      "Avoid random resale sites. If you miss official windows, use hospitality/authorized routes.",
+    ],
     notes: ["Buy at release for the best chance on high-demand matches."],
+    officialTicketUrl: "https://www.bvb.de/de/en/tickets.html",
   }),
 
   "rb-leipzig": makeGuide({
@@ -61,6 +73,7 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     methods: ["official_site", "official_app", "hospitality"],
     safetyNotes: ["Stick to official channels."],
     notes: ["Demand varies by opponent and kickoff slot."],
+    officialTicketUrl: "https://rbleipzig.com/en/matches/tickets",
   }),
 
   "bayer-leverkusen": makeGuide({
@@ -68,7 +81,8 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "Bayer Leverkusen",
     league: "Bundesliga",
     difficulty: "hard",
-    summary: "Frequently doable with planning. Demand rises for top opponents and peak dates—buy early.",
+    summary:
+      "Frequently doable with planning. Demand rises for top opponents and peak dates—buy early.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 14, max: 70 },
     ukCardUsuallyWorks: true,
@@ -76,6 +90,7 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     methods: ["official_site", "official_app", "hospitality"],
     safetyNotes: ["Official channels first."],
     notes: ["If you’re travelling on fixed dates, don’t leave purchase late."],
+    officialTicketUrl: "https://www.bayer04.de/en-us/shop/tickets",
   }),
 
   "eintracht-frankfurt": makeGuide({
@@ -83,13 +98,16 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "Eintracht Frankfurt",
     league: "Bundesliga",
     difficulty: "hard",
-    summary: "Strong support and demand. Many fixtures require quick action when sales open.",
+    summary:
+      "Strong support and demand. Many fixtures require quick action when sales open.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 14, max: 70 },
     ukCardUsuallyWorks: true,
     touristFriendly: true,
     methods: ["official_site", "official_app", "hospitality"],
-    safetyNotes: ["Avoid open marketplaces; use official channels or clearly authorized routes."],
+    safetyNotes: [
+      "Avoid open marketplaces; use official channels or clearly authorized routes.",
+    ],
     notes: ["High-profile opponents can sell very quickly."],
   }),
 
@@ -98,7 +116,8 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "VfB Stuttgart",
     league: "Bundesliga",
     difficulty: "hard",
-    summary: "Often doable with planning. Big fixtures and weekends can sell quickly—buy at release.",
+    summary:
+      "Often doable with planning. Big fixtures and weekends can sell quickly—buy at release.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 14, max: 70 },
     ukCardUsuallyWorks: true,
@@ -128,7 +147,8 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "SC Freiburg",
     league: "Bundesliga",
     difficulty: "medium",
-    summary: "Often achievable. Demand rises for big opponents—buy early if travelling.",
+    summary:
+      "Often achievable. Demand rises for big opponents—buy early if travelling.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 10, max: 60 },
     ukCardUsuallyWorks: true,
@@ -143,13 +163,16 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "Union Berlin",
     league: "Bundesliga",
     difficulty: "very_hard",
-    summary: "Small capacity + huge demand. Many fixtures are extremely tough without planning and fast purchase.",
+    summary:
+      "Small capacity + huge demand. Many fixtures are extremely tough without planning and fast purchase.",
     membershipRequired: true,
     typicalReleaseDaysBefore: { min: 21, max: 80 },
     ukCardUsuallyWorks: true,
     touristFriendly: true,
     methods: ["membership_portal", "official_site", "official_app", "hospitality"],
-    safetyNotes: ["If you can’t buy officially, don’t gamble on resale—use authorized routes only."],
+    safetyNotes: [
+      "If you can’t buy officially, don’t gamble on resale—use authorized routes only.",
+    ],
     notes: ["Assume high-demand matches disappear quickly when sales open."],
   }),
 
@@ -158,7 +181,8 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "Werder Bremen",
     league: "Bundesliga",
     difficulty: "medium",
-    summary: "Often achievable with planning. Buy early for top opponents and peak weekends.",
+    summary:
+      "Often achievable with planning. Buy early for top opponents and peak weekends.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 10, max: 60 },
     ukCardUsuallyWorks: true,
@@ -173,7 +197,8 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "Mainz 05",
     league: "Bundesliga",
     difficulty: "easy",
-    summary: "Usually straightforward for many fixtures. Buy earlier for big opponents and peak weekends.",
+    summary:
+      "Usually straightforward for many fixtures. Buy earlier for big opponents and peak weekends.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 7, max: 45 },
     ukCardUsuallyWorks: true,
@@ -218,7 +243,8 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "TSG Hoffenheim",
     league: "Bundesliga",
     difficulty: "easy",
-    summary: "Often straightforward for many fixtures. Plan earlier for big opponents and prime dates.",
+    summary:
+      "Often straightforward for many fixtures. Plan earlier for big opponents and prime dates.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 7, max: 45 },
     ukCardUsuallyWorks: true,
@@ -233,13 +259,16 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "1. FC Köln",
     league: "Bundesliga",
     difficulty: "hard",
-    summary: "Strong demand. Many fixtures can be tough—buy immediately when sales open.",
+    summary:
+      "Strong demand. Many fixtures can be tough—buy immediately when sales open.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 14, max: 70 },
     ukCardUsuallyWorks: true,
     touristFriendly: true,
     methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-    safetyNotes: ["Avoid open marketplaces; use official channels or clearly authorized resale only."],
+    safetyNotes: [
+      "Avoid open marketplaces; use official channels or clearly authorized resale only.",
+    ],
     notes: ["Marquee games can disappear quickly at release."],
   }),
 
@@ -248,7 +277,8 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "Hamburger SV",
     league: "Bundesliga",
     difficulty: "medium",
-    summary: "Often achievable with planning. Demand rises for big opponents—buy early.",
+    summary:
+      "Often achievable with planning. Demand rises for big opponents—buy early.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 10, max: 60 },
     ukCardUsuallyWorks: true,
@@ -263,7 +293,8 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "1. FC Heidenheim",
     league: "Bundesliga",
     difficulty: "medium",
-    summary: "Smaller capacity can mean tighter supply. Buy early for marquee fixtures and peak weekends.",
+    summary:
+      "Smaller capacity can mean tighter supply. Buy early for marquee fixtures and peak weekends.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 10, max: 60 },
     ukCardUsuallyWorks: true,
@@ -278,13 +309,16 @@ const bundesligaTicketGuides: Record<string, TicketGuide> = {
     clubName: "FC St. Pauli",
     league: "Bundesliga",
     difficulty: "hard",
-    summary: "Strong demand. Tickets can go quickly—buy at release, especially for big fixtures.",
+    summary:
+      "Strong demand. Tickets can go quickly—buy at release, especially for big fixtures.",
     membershipRequired: false,
     typicalReleaseDaysBefore: { min: 14, max: 70 },
     ukCardUsuallyWorks: true,
     touristFriendly: true,
     methods: ["official_site", "official_app", "membership_portal", "hospitality"],
-    safetyNotes: ["Avoid open marketplaces. If sold out, use hospitality/authorized routes only."],
+    safetyNotes: [
+      "Avoid open marketplaces. If sold out, use hospitality/authorized routes only.",
+    ],
     notes: ["Demand spikes for high-profile opponents and prime dates."],
   }),
 };
