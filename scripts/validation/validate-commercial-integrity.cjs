@@ -26,15 +26,25 @@ function pass(message) {
 
 function extractLeagueIdsFromFootball() {
   const content = readFileSafe("src/constants/football.ts");
-  return [...new Set([...content.matchAll(/leagueId\s*:\s*(\d+)/g)].map((m) => Number(m[1])))];
+  return [
+    ...new Set(
+      [...content.matchAll(/leagueId\s*:\s*(\d+)/g)].map((m) => Number(m[1]))
+    ),
+  ];
 }
 
 function extractLeagueIdsFromDiscoverPrice() {
   const content = readFileSafe("src/features/discover/discoverPrice.ts");
 
-  const tupleIds = [...content.matchAll(/\[\s*(\d+)\s*,\s*\d+\s*\]/g)].map((m) => Number(m[1]));
-  const objectIds = [...content.matchAll(/\b(\d+)\s*:\s*\{/g)].map((m) => Number(m[1]));
-  const ifIds = [...content.matchAll(/if\s*\(\s*.*?===\s*(\d+)\s*\)/g)].map((m) => Number(m[1]));
+  const tupleIds = [...content.matchAll(/\[\s*(\d+)\s*,\s*\d+\s*\]/g)].map((m) =>
+    Number(m[1])
+  );
+  const objectIds = [...content.matchAll(/\b(\d+)\s*:\s*\{/g)].map((m) =>
+    Number(m[1])
+  );
+  const ifIds = [...content.matchAll(/if\s*\(\s*.*?===\s*(\d+)\s*\)/g)].map((m) =>
+    Number(m[1])
+  );
 
   return [...new Set([...tupleIds, ...objectIds, ...ifIds])];
 }
@@ -73,6 +83,15 @@ function requireOptionalConfigKey(fileContent, keyName) {
   pass(`AffiliateConfig.${keyName} is present.`);
 }
 
+function fixtureRowCardUsesLeagueAwareTicketDifficulty(content) {
+  const derivesLeagueId = /const\s+leagueId\s*=\s*[\s\S]*?;/.test(content);
+  const passesLeagueId = /getTicketDifficultyBadge\s*\(\s*home\s*,\s*leagueId\s*\)/.test(
+    content
+  );
+
+  return derivesLeagueId && passesLeagueId;
+}
+
 console.log("\n=== Validate commercial integrity ===\n");
 
 const footballIds = extractLeagueIdsFromFootball();
@@ -80,7 +99,9 @@ const priceIds = extractLeagueIdsFromDiscoverPrice();
 
 const missingInPrice = footballIds.filter((id) => !priceIds.includes(id));
 if (missingInPrice.length) {
-  fail(`discoverPrice.ts is missing league IDs from football.ts: ${missingInPrice.join(", ")}`);
+  fail(
+    `discoverPrice.ts is missing league IDs from football.ts: ${missingInPrice.join(", ")}`
+  );
 } else {
   pass("discoverPrice.ts covers every league ID found in football.ts.");
 }
@@ -98,7 +119,9 @@ const partnersContent = readFileSafe("src/constants/partners.ts");
 ].forEach((key) => requireNonEmptyConfigKey(partnersContent, key));
 
 if (/safetywingTracked\s*:/m.test(partnersContent)) {
-  fail("AffiliateConfig still contains safetywingTracked. SafetyWing should be removed if not live.");
+  fail(
+    "AffiliateConfig still contains safetywingTracked. SafetyWing should be removed if not live."
+  );
 } else {
   pass("AffiliateConfig no longer contains stale SafetyWing config.");
 }
@@ -116,7 +139,9 @@ if (/safetywingTracked\s*:/m.test(partnersContent)) {
 const partnerRegistry = readFileSafe("src/services/partnerRegistry.ts");
 const affiliateLinks = readFileSafe("src/services/affiliateLinks.ts");
 const fixtureRowCard = readFileSafe("src/features/fixtures/FixtureRowCard.tsx");
-const discoverFixtureCard = readFileSafe("src/features/discover/components/DiscoverFixtureCard.tsx");
+const discoverFixtureCard = readFileSafe(
+  "src/features/discover/components/DiscoverFixtureCard.tsx"
+);
 const ticketGuidesIndex = readFileSafe("src/data/ticketGuides/index.ts");
 
 if (/google\.com\/search/i.test(partnerRegistry)) {
@@ -138,15 +163,21 @@ if (/safetywingTracked/i.test(affiliateLinks)) {
 }
 
 if (!/resolveAffiliateUrl\s*\(/.test(fixtureRowCard)) {
-  fail("FixtureRowCard.tsx is not resolving affiliate availability through resolveAffiliateUrl().");
+  fail(
+    "FixtureRowCard.tsx is not resolving affiliate availability through resolveAffiliateUrl()."
+  );
 } else {
   pass("FixtureRowCard.tsx uses resolveAffiliateUrl().");
 }
 
-if (!/getTicketDifficultyBadge\s*\(\s*home\s*,\s*ctxLeagueId\s*\)/.test(fixtureRowCard)) {
-  fail("FixtureRowCard.tsx is not passing leagueId into getTicketDifficultyBadge(home, ctxLeagueId).");
+if (!fixtureRowCardUsesLeagueAwareTicketDifficulty(fixtureRowCard)) {
+  fail(
+    "FixtureRowCard.tsx is not deriving leagueId and passing it into getTicketDifficultyBadge(home, leagueId)."
+  );
 } else {
-  pass("FixtureRowCard.tsx uses league fallback ticket difficulty correctly.");
+  pass(
+    "FixtureRowCard.tsx derives leagueId and uses it in getTicketDifficultyBadge()."
+  );
 }
 
 if (/Flights prefilled/.test(fixtureRowCard)) {
