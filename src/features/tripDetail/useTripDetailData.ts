@@ -22,7 +22,7 @@ import {
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import { getTripHealth, getTripProgress } from "@/src/services/tripProgress";
-import { resolveAffiliateUrl } from "@/src/services/partnerLinks";
+import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 import { buildLogisticsSnippet, getMatchdayLogistics } from "@/src/data/matchdayLogistics";
 import rankTrips from "@/src/features/tripFinder/rankTrips";
 import type { RankedTrip } from "@/src/features/tripFinder/types";
@@ -96,6 +96,41 @@ function getPrimaryKickoffIso(
   return clean((primaryFixture as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
 }
 
+function addDays(ymd: string | null, offset: number): string | null {
+  const raw = clean(ymd);
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+
+  const d = new Date(`${raw}T12:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return null;
+
+  d.setUTCDate(d.getUTCDate() + offset);
+
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+
+  return `${y}-${m}-${day}`;
+}
+
+function getBookingWindow(args: {
+  trip: Trip | null;
+  primaryKickoffIso: string | null;
+}) {
+  const kickoffDate = getIsoDateOnly(args.primaryKickoffIso);
+  const tripStart = clean(args.trip?.startDate) || null;
+  const tripEnd = clean(args.trip?.endDate) || null;
+
+  // Match-centred defaults:
+  // hotel and transport should anchor around the actual game, not the wider fixture browser range.
+  const matchStart = addDays(kickoffDate, -1);
+  const matchEnd = addDays(kickoffDate, 1);
+
+  return {
+    startDate: matchStart || tripStart,
+    endDate: matchEnd || tripEnd,
+  };
+}
+
 function normalizeAreas(raw: any): GuidanceArea[] {
   const arr = Array.isArray(raw) ? raw : [];
 
@@ -125,25 +160,33 @@ function buildAffiliateUrls(args: {
   trip: Trip | null;
   cityName: string;
   originIata: string;
+  primaryKickoffIso: string | null;
 }): AffiliateUrls | null {
-  const { trip, cityName, originIata } = args;
+  const { trip, cityName, originIata, primaryKickoffIso } = args;
 
   if (!trip || !clean(cityName) || cityName === "Trip") return null;
 
-  const ctx = {
+  const bookingWindow = getBookingWindow({
+    trip,
+    primaryKickoffIso,
+  });
+
+  const built = buildAffiliateLinks({
     city: clean(cityName),
-    startDate: trip.startDate || null,
-    endDate: trip.endDate || null,
+    startDate: bookingWindow.startDate,
+    endDate: bookingWindow.endDate,
     originIata: cleanUpper3(originIata, "LON"),
-  };
+    passengers: 1,
+    cabinClass: "economy",
+  });
 
   return {
-    flightsUrl: resolveAffiliateUrl("aviasales", ctx) || "",
-    hotelsUrl: resolveAffiliateUrl("expedia", ctx) || "",
-    omioUrl: resolveAffiliateUrl("omio", ctx) || "",
-    transfersUrl: resolveAffiliateUrl("kiwitaxi", ctx) || "",
-    experiencesUrl: resolveAffiliateUrl("getyourguide", ctx) || "",
-    mapsUrl: buildMapsSearchUrl(`${ctx.city} travel`),
+    flightsUrl: built.flightsUrl || "",
+    hotelsUrl: built.hotelsUrl || "",
+    omioUrl: built.omioUrl || built.transportUrl || "",
+    transfersUrl: built.transfersUrl || "",
+    experiencesUrl: built.experiencesUrl || "",
+    mapsUrl: built.mapsUrl || buildMapsSearchUrl(`${clean(cityName)} travel`),
   };
 }
 
@@ -429,14 +472,6 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     return getPrimaryLeagueId(trip, primaryFixture);
   }, [trip, primaryFixture]);
 
-  const affiliateUrls = useMemo(() => {
-    return buildAffiliateUrls({
-      trip,
-      cityName,
-      originIata,
-    });
-  }, [trip, cityName, originIata]);
-
   const primaryHomeName = useMemo(() => {
     return getPrimaryHomeName(trip, primaryFixture);
   }, [trip, primaryFixture]);
@@ -448,6 +483,15 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
   const primaryKickoffIso = useMemo(() => {
     return getPrimaryKickoffIso(trip, primaryFixture);
   }, [trip, primaryFixture]);
+
+  const affiliateUrls = useMemo(() => {
+    return buildAffiliateUrls({
+      trip,
+      cityName,
+      originIata,
+      primaryKickoffIso,
+    });
+  }, [trip, cityName, originIata, primaryKickoffIso]);
 
   const kickoffMeta = useMemo(() => {
     return formatKickoffMeta(primaryFixture, trip);
