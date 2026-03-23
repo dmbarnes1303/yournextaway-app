@@ -67,6 +67,8 @@ export default function PlanTripBlock({
 
   if (!links) return null;
 
+  const transportUrl = links.transportUrl ?? links.omioUrl ?? null;
+
   return (
     <GlassCard style={styles.card}>
       <Text style={styles.title}>{title ?? "Book this trip"}</Text>
@@ -83,8 +85,8 @@ export default function PlanTripBlock({
           <Text style={styles.btnText}>Flights</Text>
         </Pressable>
 
-        <Pressable style={styles.btn} onPress={() => openUrl(links.trainsUrl)}>
-          <Text style={styles.btnText}>Trains</Text>
+        <Pressable style={styles.btn} onPress={() => openUrl(transportUrl)}>
+          <Text style={styles.btnText}>Transport</Text>
         </Pressable>
 
         <Pressable style={styles.btn} onPress={() => openUrl(links.experiencesUrl)}>
