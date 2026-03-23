@@ -1,5 +1,5 @@
 import { Alert } from "react-native";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 
@@ -7,6 +7,7 @@ import type { PartnerId } from "@/src/core/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { NextAction } from "@/src/components/NextBestActionCard";
 import type { TripProgressItem } from "@/src/components/TripProgressStrip";
+import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
 
 import {
   cleanUpper3,
@@ -87,7 +88,7 @@ type Params = {
   isPro: boolean;
   kickoffTbc: boolean;
   controller: Controller;
-  setActiveWorkspaceSection: (section: string) => Promise<void> | void;
+  setActiveWorkspaceSection: (section: WorkspaceSectionKey) => Promise<void> | void;
 
   bookingPriceBoard?: BookingPriceBoard | null;
   ticketsPriceFrom?: string | null;
@@ -143,10 +144,7 @@ function ticketButtonSubtitle(args: {
 }) {
   const { primaryTicketItem, ticketState, ticketsPriceFrom } = args;
 
-  if (ticketState === "booked") {
-    return "Ticket booked";
-  }
-
+  if (ticketState === "booked") return "Ticket booked";
   if (ticketState === "saved" || ticketState === "pending") {
     return smartButtonSubtitle(primaryTicketItem, "Ticket option saved");
   }
@@ -207,16 +205,14 @@ export default function useTripDetailViewModel({
   const hasTransport = isStarted(transportState);
   const hasThings = isStarted(thingsState);
 
-  const [tripCount, setTripCount] = useState(
-  tripsStore.getState().trips?.length ?? 0
-);
+  const [tripCount, setTripCount] = useState(tripsStore.getState().trips?.length ?? 0);
 
-useEffect(() => {
-  const unsub = tripsStore.subscribe((s) => {
-    setTripCount(s.trips?.length ?? 0);
-  });
-  return unsub;
-}, []);
+  useEffect(() => {
+    const unsub = tripsStore.subscribe((s) => {
+      setTripCount(s.trips?.length ?? 0);
+    });
+    return unsub;
+  }, []);
 
   const loading = useMemo(
     () => Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded)),
@@ -241,11 +237,7 @@ useEffect(() => {
   );
 
   const buildMeta = useCallback(
-    (
-      sourceSurface: SourceSurface,
-      sourceSection: SourceSection,
-      extra?: Record<string, any>
-    ): Record<string, any> => ({
+    (sourceSurface: SourceSurface, sourceSection: SourceSection, extra?: Record<string, any>) => ({
       ...baseMeta,
       sourceSurface,
       sourceSection,
@@ -318,13 +310,7 @@ useEffect(() => {
             }),
           },
     }),
-    [
-      affiliateUrls?.omioUrl,
-      affiliateUrls?.transfersUrl,
-      cityName,
-      buildMeta,
-      transfersPriceFrom,
-    ]
+    [affiliateUrls?.omioUrl, affiliateUrls?.transfersUrl, cityName, buildMeta, transfersPriceFrom]
   );
 
   const thingsAction = useMemo<PartnerActionBundle>(
@@ -346,26 +332,24 @@ useEffect(() => {
   );
 
   const openFlights = useCallback(
-    (sourceSurface: SourceSurface = "unknown") => {
-      return controller.openPartnerOrAlert(flightAction.url, flightAction.message, {
+    (sourceSurface: SourceSurface = "unknown") =>
+      controller.openPartnerOrAlert(flightAction.url, flightAction.message, {
         ...flightAction.config,
         metadata: buildMeta(sourceSurface, "travel", {
           ...(flightAction.config.metadata ?? {}),
         }),
-      });
-    },
+      }),
     [controller, flightAction, buildMeta]
   );
 
   const openHotels = useCallback(
-    (sourceSurface: SourceSurface = "unknown") => {
-      return controller.openPartnerOrAlert(hotelAction.url, hotelAction.message, {
+    (sourceSurface: SourceSurface = "unknown") =>
+      controller.openPartnerOrAlert(hotelAction.url, hotelAction.message, {
         ...hotelAction.config,
         metadata: buildMeta(sourceSurface, "stay", {
           ...(hotelAction.config.metadata ?? {}),
         }),
-      });
-    },
+      }),
     [controller, hotelAction, buildMeta]
   );
 
@@ -384,19 +368,19 @@ useEffect(() => {
   );
 
   const openThings = useCallback(
-    (sourceSurface: SourceSurface = "unknown") => {
-      return controller.openPartnerOrAlert(thingsAction.url, thingsAction.message, {
+    (sourceSurface: SourceSurface = "unknown") =>
+      controller.openPartnerOrAlert(thingsAction.url, thingsAction.message, {
         ...thingsAction.config,
         metadata: buildMeta(sourceSurface, "things", {
           ...(thingsAction.config.metadata ?? {}),
         }),
-      });
-    },
+      }),
     [controller, thingsAction, buildMeta]
   );
 
   const openTickets = useCallback(
     (sourceSurface: SourceSurface = "unknown") => {
+      void sourceSurface;
       if (!hasMatch || !primaryMatchId) {
         Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
         return;
@@ -434,55 +418,35 @@ useEffect(() => {
     return Math.max(0, Math.min(100, score));
   }, [ticketState, flightState, hotelState, transportState, thingsState]);
 
-  const nextIncompleteStep = useMemo(() => {
-    return (
+  const nextIncompleteStep = useMemo(
+    () =>
       bookingSteps
         .slice()
         .sort((a, b) => stepPriorityScore(a.key) - stepPriorityScore(b.key))
-        .find((step) => !step.complete && step.state !== "booked") ?? null
-    );
-  }, [bookingSteps]);
+        .find((step) => !step.complete && step.state !== "booked") ?? null,
+    [bookingSteps]
+  );
 
   const progressItems = useMemo<TripProgressItem[]>(
     () => [
-      {
-        key: "tickets",
-        label: "Tickets",
-        state: ticketState,
-        onPress: () => openTickets("progress_strip"),
-      },
-      {
-        key: "flight",
-        label: "Flights",
-        state: flightState,
-        onPress: () => openFlights("progress_strip"),
-      },
-      {
-        key: "hotel",
-        label: "Hotel",
-        state: hotelState,
-        onPress: () => openHotels("progress_strip"),
-      },
+      { key: "tickets", label: "Tickets", state: ticketState, onPress: () => openTickets("progress_strip") },
+      { key: "flight", label: "Flights", state: flightState, onPress: () => openFlights("progress_strip") },
+      { key: "hotel", label: "Hotel", state: hotelState, onPress: () => openHotels("progress_strip") },
       {
         key: "transfer",
         label: affiliateUrls?.omioUrl ? "Rail/Bus" : "Transfer",
         state: transportState,
         onPress: () => openTransport("progress_strip"),
       },
-      {
-        key: "things",
-        label: "Things",
-        state: thingsState,
-        onPress: () => openThings("progress_strip"),
-      },
+      { key: "things", label: "Things", state: thingsState, onPress: () => openThings("progress_strip") },
     ],
     [
       affiliateUrls?.omioUrl,
+      openTickets,
       openFlights,
       openHotels,
-      openThings,
-      openTickets,
       openTransport,
+      openThings,
       ticketState,
       flightState,
       hotelState,
@@ -498,10 +462,7 @@ useEffect(() => {
         body: "No primary match means no proper trip flow. Pick the match first, then everything else becomes specific and prefilled.",
         cta: "Add a match",
         onPress: () => {
-          Alert.alert(
-            "Add a match first",
-            "Use the Matches card to add or select the primary fixture for this trip."
-          );
+          Alert.alert("Add a match first", "Use the Matches card to add or select the primary fixture for this trip.");
         },
         badge: "Blocked",
       };
@@ -511,9 +472,7 @@ useEffect(() => {
       return {
         title: "Book tickets first",
         body: "Tickets are the anchor. Until the seat is sorted, flights and hotels are premature.",
-        cta: cleanPriceLabel(ticketsPriceFrom)
-          ? `Compare tickets • ${ticketsPriceFrom}`
-          : "Compare tickets",
+        cta: cleanPriceLabel(ticketsPriceFrom) ? `Compare tickets • ${ticketsPriceFrom}` : "Compare tickets",
         onPress: () => openTickets("next_best_action"),
         badge: "Priority",
       };
@@ -523,9 +482,7 @@ useEffect(() => {
       return {
         title: "Kickoff not confirmed — use flexible travel",
         body: "You’ve started correctly with tickets. Now keep flights flexible because hard-booking travel against a moving kickoff is reckless.",
-        cta: cleanPriceLabel(flightsPriceFrom)
-          ? `View flights • ${flightsPriceFrom}`
-          : "View flights",
+        cta: cleanPriceLabel(flightsPriceFrom) ? `View flights • ${flightsPriceFrom}` : "View flights",
         onPress: () => openFlights("next_best_action"),
         secondaryCta: "Open tickets",
         onSecondaryPress: () => openTickets("next_best_action"),
@@ -538,9 +495,7 @@ useEffect(() => {
       return {
         title: "Add flights next",
         body: "The trip is not real until transport in and out is covered.",
-        cta: cleanPriceLabel(flightsPriceFrom)
-          ? `View flights • ${flightsPriceFrom}`
-          : "View flights",
+        cta: cleanPriceLabel(flightsPriceFrom) ? `View flights • ${flightsPriceFrom}` : "View flights",
         onPress: () => openFlights("next_best_action"),
       };
     }
@@ -549,17 +504,12 @@ useEffect(() => {
       return {
         title: "Lock the hotel",
         body: "A bad hotel choice ruins matchday logistics. Book the stay after tickets and flights, not before.",
-        cta: cleanPriceLabel(hotelsPriceFrom)
-          ? `View hotels • ${hotelsPriceFrom}`
-          : "View hotels",
+        cta: cleanPriceLabel(hotelsPriceFrom) ? `View hotels • ${hotelsPriceFrom}` : "View hotels",
         onPress: () => openHotels("next_best_action"),
         secondaryCta: "Stay guidance",
         onSecondaryPress: () => {
           void setActiveWorkspaceSection("stay");
-          Alert.alert(
-            "Stay guidance",
-            "Use the stay section and guidance card to avoid booking in a useless area."
-          );
+          Alert.alert("Stay guidance", "Use the stay section and guidance card to avoid booking in a useless area.");
         },
       };
     }
@@ -581,9 +531,7 @@ useEffect(() => {
       return {
         title: "Add extras only if they improve the trip",
         body: "Core trip is covered. Extras should earn their place, not bloat the plan.",
-        cta: cleanPriceLabel(experiencesPriceFrom)
-          ? `View activities • ${experiencesPriceFrom}`
-          : "View activities",
+        cta: cleanPriceLabel(experiencesPriceFrom) ? `View activities • ${experiencesPriceFrom}` : "View activities",
         onPress: () => openThings("next_best_action"),
         badge: "Optional",
       };
@@ -637,11 +585,7 @@ useEffect(() => {
     if (!hasTickets && primaryMatchId) {
       add(
         "Tickets",
-        ticketButtonSubtitle({
-          primaryTicketItem,
-          ticketState,
-          ticketsPriceFrom,
-        }),
+        ticketButtonSubtitle({ primaryTicketItem, ticketState, ticketsPriceFrom }),
         () => openTickets("smart_booking"),
         "primary",
         ticketProviderFromItem(primaryTicketItem)
@@ -796,9 +740,7 @@ useEffect(() => {
   }, [hasMatch, hasTickets, hasFlight, hasHotel, hasTransport]);
 
   const commercialSummaryLine = useMemo(() => {
-    if (cleanPriceLabel(tripPriceFrom)) {
-      return `${tripPriceFrom} total for core trip`;
-    }
+    if (cleanPriceLabel(tripPriceFrom)) return `${tripPriceFrom} total for core trip`;
 
     const parts = [ticketsPriceFrom, flightsPriceFrom, hotelsPriceFrom]
       .map((x) => cleanPriceLabel(x))
