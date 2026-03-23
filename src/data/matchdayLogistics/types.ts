@@ -12,10 +12,18 @@ export type LogisticsStop = {
   type?: string;
 };
 
+export type ParkingOption = {
+  name?: string;
+  location?: string;
+  notes?: string;
+  prebookRecommended?: boolean;
+  official?: boolean;
+};
+
 export type MatchdayLogistics = {
   // identity
-  homeTeamName?: string; // optional - helps matching
-  clubName?: string; // optional - helps matching
+  homeTeamName?: string;
+  clubName?: string;
   league?: string;
   country?: string;
 
@@ -34,5 +42,12 @@ export type MatchdayLogistics = {
   transport?: {
     primaryStops?: LogisticsStop[];
     tips?: string[];
+  };
+
+  // driving / parking guidance
+  parking?: {
+    options?: ParkingOption[];
+    tips?: string[];
+    notes?: string[];
   };
 };
