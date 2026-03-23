@@ -112,8 +112,28 @@ export function isTransportSavedItemType(type: SavedItemType): boolean {
 }
 
 export function getSavedItemUiGroup(type: SavedItemType): SavedItemUiGroup {
-  if (isTransportSavedItemType(type)) return "transport";
-  return type;
+  switch (type) {
+    case "tickets":
+      return "tickets";
+    case "hotel":
+      return "hotel";
+    case "flight":
+      return "flight";
+    case "train":
+    case "transfer":
+      return "transport";
+    case "things":
+      return "things";
+    case "insurance":
+      return "insurance";
+    case "claim":
+      return "claim";
+    case "note":
+      return "note";
+    case "other":
+    default:
+      return "other";
+  }
 }
 
 export function getSavedItemUiGroupLabel(group: SavedItemUiGroup): string {
