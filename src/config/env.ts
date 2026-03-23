@@ -1,7 +1,9 @@
 import Constants from "expo-constants";
 
-type Env = {
+export type Env = {
   backendUrl: string;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 };
 
 function clean(value: unknown): string {
@@ -24,14 +26,19 @@ function pickExtra(): Record<string, unknown> {
   return (cfg?.extra ?? {}) as Record<string, unknown>;
 }
 
-const extra = pickExtra();
+function getEnvValue(key: string): string {
+  const extra = pickExtra();
+  return clean(extra[key] ?? process.env[key]);
+}
 
-const backendUrl = normalizeUrl(
-  extra.EXPO_PUBLIC_BACKEND_URL ?? process.env.EXPO_PUBLIC_BACKEND_URL
-);
+const backendUrl = normalizeUrl(getEnvValue("EXPO_PUBLIC_BACKEND_URL"));
+const supabaseUrl = normalizeUrl(getEnvValue("EXPO_PUBLIC_SUPABASE_URL"));
+const supabaseAnonKey = getEnvValue("EXPO_PUBLIC_SUPABASE_ANON_KEY");
 
 export const ENV: Env = {
   backendUrl,
+  supabaseUrl,
+  supabaseAnonKey,
 };
 
 export function getBackendBaseUrl(): string {
@@ -44,4 +51,8 @@ export function assertBackendBaseUrl(): string {
   }
 
   return ENV.backendUrl;
+}
+
+export function isSupabaseEnvConfigured(): boolean {
+  return Boolean(ENV.supabaseUrl && ENV.supabaseAnonKey);
 }
