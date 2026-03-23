@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import { readJson, writeJson } from "@/src/state/persist";
-import { makeId } from "@/src/core/id";
+import { makeSavedItemId } from "@/src/core/id";
 import type {
   SavedItem,
   SavedItemStatus,
@@ -18,7 +18,12 @@ import { deleteAttachmentFile } from "@/src/services/walletAttachments";
 
 const STORAGE_KEY = "yna_saved_items_v1";
 
-const VALID_STATUS: ReadonlySet<SavedItemStatus> = new Set(["saved", "pending", "booked", "archived"]);
+const VALID_STATUS: ReadonlySet<SavedItemStatus> = new Set([
+  "saved",
+  "pending",
+  "booked",
+  "archived",
+]);
 
 function now() {
   return Date.now();
@@ -62,7 +67,9 @@ function normalizeAttachment(raw: any): WalletAttachment | null {
   if (!id || !uri) return null;
 
   const createdAt =
-    Number.isFinite(Number(raw.createdAt)) && Number(raw.createdAt) > 0 ? Number(raw.createdAt) : now();
+    Number.isFinite(Number(raw.createdAt)) && Number(raw.createdAt) > 0
+      ? Number(raw.createdAt)
+      : now();
 
   return {
     id,
@@ -105,10 +112,14 @@ function cleanLoadedItem(raw: any): SavedItem | null {
   if (!status || !VALID_STATUS.has(status)) return null;
 
   const createdAt =
-    Number.isFinite(Number(raw.createdAt)) && Number(raw.createdAt) > 0 ? Number(raw.createdAt) : now();
+    Number.isFinite(Number(raw.createdAt)) && Number(raw.createdAt) > 0
+      ? Number(raw.createdAt)
+      : now();
 
   const updatedAt =
-    Number.isFinite(Number(raw.updatedAt)) && Number(raw.updatedAt) > 0 ? Number(raw.updatedAt) : createdAt;
+    Number.isFinite(Number(raw.updatedAt)) && Number(raw.updatedAt) > 0
+      ? Number(raw.updatedAt)
+      : createdAt;
 
   const title = cleanString(raw.title);
   if (!title) return null;
@@ -268,7 +279,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
         : defaultPriceTextForType(type);
 
     const item: SavedItem = {
-      id: makeId(),
+      id: makeSavedItemId(),
       tripId: cleanOptionalString(args.tripId),
       type,
       status,
@@ -536,7 +547,10 @@ const savedItemsStore = {
     await useSavedItemsStore.getState().clearTrip(tripId, opts);
   },
 
-  clearOrphans: async (validTripIds: string[], opts?: { deleteAttachmentFiles?: boolean }) => {
+  clearOrphans: async (
+    validTripIds: string[],
+    opts?: { deleteAttachmentFiles?: boolean }
+  ) => {
     await useSavedItemsStore.getState().clearOrphans(validTripIds, opts);
   },
 
