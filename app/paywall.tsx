@@ -6,7 +6,7 @@ import { Stack, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
-import { getBackgroundSource } from "@/src/constants/backgrounds";
+import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 export default function PaywallScreen() {
@@ -18,9 +18,8 @@ export default function PaywallScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <Background imageSource={getBackgroundSource("home")} overlayOpacity={0.86}>
+      <Background imageSource={getBackground("paywall")} overlayOpacity={0.86}>
         <SafeAreaView style={styles.container} edges={["top"]}>
-          {/* HEADER */}
           <View style={styles.header}>
             <Pressable
               onPress={close}
@@ -34,13 +33,12 @@ export default function PaywallScreen() {
             <Text style={styles.title}>Upgrade your planning.</Text>
             <Text style={styles.sub}>
               Premium will unlock faster planning, smarter defaults, and deeper tools
-              — without taking away the core free experience.
+              without taking away the core free experience.
             </Text>
           </View>
 
-          {/* BODY */}
           <View style={styles.body}>
-            <GlassCard strength="default" style={styles.card}>
+            <GlassCard style={styles.card} level="default">
               <Text style={styles.sectionTitle}>What Premium will unlock</Text>
 
               <View style={styles.list}>
@@ -59,7 +57,7 @@ export default function PaywallScreen() {
               </View>
             </GlassCard>
 
-            <GlassCard strength="subtle" style={styles.card}>
+            <GlassCard style={styles.card} level="subtle">
               <Text style={styles.sectionTitle}>Status</Text>
               <Text style={styles.status}>
                 Premium is not live yet. It will be added once the core experience
