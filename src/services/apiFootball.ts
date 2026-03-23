@@ -86,7 +86,7 @@ type TeamListItem = {
   logo?: string | null;
 };
 
-const REQUEST_TIMEOUT_MS = 9000;
+const REQUEST_TIMEOUT_MS = 20000;
 const FIXTURE_CACHE_TTL_MS = 5 * 60 * 1000;
 const FIXTURE_DETAIL_CACHE_TTL_MS = 2 * 60 * 1000;
 const COUNTRIES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
