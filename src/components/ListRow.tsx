@@ -1,6 +1,5 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-
 import { theme } from "@/src/constants/theme";
 
 type Props = {
@@ -12,7 +11,7 @@ type Props = {
 export default function ListRow({ title, value, subtitle }: Props) {
   return (
     <View style={styles.row}>
-      <View style={{ flex: 1 }}>
+      <View style={styles.content}>
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
@@ -26,8 +25,12 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
     gap: 10,
+    paddingVertical: 12,
+  },
+
+  content: {
+    flex: 1,
   },
 
   title: {
