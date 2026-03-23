@@ -22,10 +22,20 @@ export type ParkingOption = {
 
 export type ParkingAvailability = "easy" | "medium" | "hard" | "very_hard";
 
+export type FoodDrinkType =
+  | "stadium"
+  | "pub"
+  | "bar"
+  | "restaurant"
+  | "cafe"
+  | "fast_food"
+  | "mixed"
+  | "food";
+
 export type FoodDrinkItem = {
   name: string;
   notes?: string;
-  type?: "stadium" | "pub" | "bar" | "restaurant" | "cafe" | "fast_food" | "mixed";
+  type?: FoodDrinkType;
 };
 
 export type MatchdayLogistics = {
@@ -58,4 +68,6 @@ export type MatchdayLogistics = {
   };
 
   foodDrink?: FoodDrinkItem[];
+
+  arrivalTips?: string[];
 };
