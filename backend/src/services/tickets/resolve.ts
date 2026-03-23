@@ -1,5 +1,4 @@
 // backend/src/services/tickets/resolve.ts
-import { env } from "../../lib/env.js";
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
@@ -177,7 +176,6 @@ function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean 
     const parsed = new URL(raw);
     const host = parsed.hostname.toLowerCase();
     const allowedRoots = PROVIDER_HOST_ALLOWLIST[provider] ?? [];
-
     return allowedRoots.some((root) => host === root || host.endsWith(`.${root}`));
   } catch {
     return false;
@@ -378,90 +376,6 @@ function buildResolution(
   };
 }
 
-function encodeQuery(input: TicketResolveInput): string {
-  const home = clean(input.homeName);
-  const away = clean(input.awayName);
-  const league = clean(input.leagueName);
-
-  return league ? `${home} vs ${away} ${league}` : `${home} vs ${away}`;
-}
-
-function buildGuaranteedFallbackCandidates(
-  input: TicketResolveInput,
-  existingCandidates: TicketCandidate[]
-): TicketCandidate[] {
-  const query = encodeQuery(input);
-  if (!query) return [];
-
-  const existingProviders = new Set(existingCandidates.map((x) => x.provider));
-  const out: TicketCandidate[] = [];
-
-  if (!existingProviders.has("sportsevents365")) {
-    const se365Url = new URL("https://www.sportsevents365.com/events/search");
-    se365Url.searchParams.set("q", query);
-
-    const aid = clean(env.se365AffiliateId);
-    if (aid) {
-      if (aid.includes("=")) {
-        const [k, v] = aid.split("=");
-        if (k && v) se365Url.searchParams.set(k, v);
-      } else {
-        se365Url.searchParams.set("a_aid", aid);
-      }
-    }
-
-    out.push({
-      provider: "sportsevents365",
-      exact: false,
-      score: 26,
-      url: se365Url.toString(),
-      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
-      priceText: null,
-      reason: "search_fallback",
-    });
-  }
-
-  if (!existingProviders.has("gigsberg")) {
-    const gigsbergUrl = new URL("https://www.gigsberg.com/search");
-    gigsbergUrl.searchParams.set("query", query);
-
-    const aff = clean(env.gigsbergAffiliateId);
-    if (aff) gigsbergUrl.searchParams.set("aff", aff);
-
-    out.push({
-      provider: "gigsberg",
-      exact: false,
-      score: 25,
-      url: gigsbergUrl.toString(),
-      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
-      priceText: null,
-      reason: "search_fallback",
-    });
-  }
-
-  if (!existingProviders.has("footballticketsnet")) {
-    const ftnUrl = new URL("https://www.footballticketnet.com/search");
-    ftnUrl.searchParams.set("q", query);
-
-    const aid = clean(env.ftnAffiliateId);
-    if (aid) {
-      ftnUrl.searchParams.set("aid", aid);
-    }
-
-    out.push({
-      provider: "footballticketsnet",
-      exact: false,
-      score: 24,
-      url: ftnUrl.toString(),
-      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
-      priceText: null,
-      reason: "search_fallback",
-    });
-  }
-
-  return out;
-}
-
 async function runProvider(
   provider: TicketProviderId,
   fn: () => Promise<TicketCandidate | null>
@@ -538,7 +452,6 @@ export async function resolveTicket(
   ];
 
   const settled = await Promise.allSettled(providerPromises);
-
   const candidates: TicketCandidate[] = [];
 
   const providerOrder: TicketProviderId[] = [
@@ -556,6 +469,7 @@ export async function resolveTicket(
         provider,
         candidate: summarizeCandidate(result.value),
       });
+
       if (result.value) {
         candidates.push(result.value);
       }
@@ -568,16 +482,6 @@ export async function resolveTicket(
             : String(result.reason),
       });
     }
-  }
-
-  const fallbackCandidates = buildGuaranteedFallbackCandidates(input, candidates);
-
-  if (fallbackCandidates.length > 0) {
-    console.log("[tickets] adding guaranteed public fallbacks", {
-      count: fallbackCandidates.length,
-      fallbacks: fallbackCandidates.map(summarizeCandidate),
-    });
-    candidates.push(...fallbackCandidates);
   }
 
   const result = buildResolution(candidates, checkedProviders);
@@ -611,4 +515,4 @@ export async function resolveTicket(
   }
 
   return result;
-                }
+}
