@@ -19,7 +19,9 @@ type BadgeCfg = {
 };
 
 function alpha(hex: string, a: number) {
-  const h = hex.replace("#", "");
+  const h = String(hex ?? "").replace("#", "");
+  if (h.length !== 6) return `rgba(255,255,255,${Math.max(0, Math.min(1, a))})`;
+
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
@@ -52,7 +54,7 @@ function cfg(state: FixtureCertaintyState): BadgeCfg {
     }
 
     case "changed": {
-      const c = theme.colors.accentBlue;
+      const c = theme.colors.info;
       return {
         label: "Date changed",
         fg: alpha(c, 0.95),
@@ -91,7 +93,10 @@ export default function FixtureCertaintyBadge({ state, style, variant = "default
       ]}
     >
       <View style={[styles.dot, compact && styles.dotCompact, { backgroundColor: c.dot }]} />
-      <Text style={[styles.text, compact && styles.textCompact, { color: c.fg }]} numberOfLines={1}>
+      <Text
+        style={[styles.text, compact && styles.textCompact, { color: c.fg }]}
+        numberOfLines={1}
+      >
         {c.label}
       </Text>
     </View>
