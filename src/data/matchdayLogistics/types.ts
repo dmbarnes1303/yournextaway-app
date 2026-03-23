@@ -20,6 +20,8 @@ export type ParkingOption = {
   official?: boolean;
 };
 
+export type ParkingAvailability = "easy" | "medium" | "hard" | "very_hard";
+
 export type MatchdayLogistics = {
   // identity
   homeTeamName?: string;
@@ -46,6 +48,7 @@ export type MatchdayLogistics = {
 
   // driving / parking guidance
   parking?: {
+    availability?: ParkingAvailability;
     options?: ParkingOption[];
     tips?: string[];
     notes?: string[];
