@@ -103,8 +103,7 @@ function appendQuery(
 
 function normalizeOriginIata(value: unknown): string {
   const raw = clean(value).toUpperCase();
-  if (!raw) return "LON";
-  return raw;
+  return raw || "LON";
 }
 
 function getDestinationIata(city: string): string | null {
@@ -123,25 +122,29 @@ function buildAviasalesUrl(args: {
   passengers: number;
   cabinClass: CabinClass;
 }): string | null {
-  const marker = clean(AffiliateConfig.aviasalesMarker);
-  const trackedFallback = safeTrackedUrl(AffiliateConfig.aviasalesFallback);
-
   const cityName = clean(args.city);
   const origin = normalizeOriginIata(args.originIata);
   const destination = getDestinationIata(cityName);
   const outbound = yyyymmdd(args.startDate);
   const inbound = yyyymmdd(args.endDate);
+  const marker = clean(AffiliateConfig.aviasalesMarker);
 
-  if (!marker || !destination || !outbound) {
-    return trackedFallback;
+  if (!destination || !outbound) {
+    return safeTrackedUrl("https://www.aviasales.com/");
   }
 
-  const passengerToken = String(Math.max(1, args.passengers));
-  const routeToken = `${origin}${outbound}${destination}${inbound ? inbound : ""}${passengerToken}`;
+  // Important:
+  // Do not fall back to the broken tpm redirect URL the user showed.
+  // Use direct Aviasales search URL instead.
+  const routeToken = `${origin}${outbound}${destination}${inbound ? inbound : ""}${Math.max(
+    1,
+    args.passengers
+  )}`;
 
   const base = `https://www.aviasales.com/search/${routeToken}`;
+
   return appendQuery(base, {
-    marker,
+    marker: marker || null,
     cabin: args.cabinClass !== "economy" ? args.cabinClass : null,
   });
 }
@@ -155,13 +158,13 @@ function buildExpediaUrl(args: {
   const cityName = clean(args.city);
   if (!cityName) return null;
 
-  const trackedBase =
+  const base =
     safeTrackedUrl(AffiliateConfig.expediaTracked) ||
     safeTrackedUrl("https://www.expedia.co.uk/Hotel-Search");
 
-  if (!trackedBase) return null;
+  if (!base) return null;
 
-  return appendQuery(trackedBase, {
+  return appendQuery(base, {
     destination: cityName,
     startDate: args.startDate,
     endDate: args.endDate,
@@ -220,21 +223,22 @@ function buildOmioUrl(args: {
   startDate: string | null;
   endDate: string | null;
 }): string | null {
-  const base = safeTrackedUrl(AffiliateConfig.omioTracked);
-  if (!base) return null;
-
   const city = clean(args.city);
   const origin = normalizeOriginIata(args.originIata);
+  const trackedBase =
+    safeTrackedUrl(AffiliateConfig.omioTracked) || safeTrackedUrl("https://www.omio.com/");
 
-  return appendQuery(base, {
-    origin: origin || null,
-    origin_name: origin || null,
-    destination: city || null,
-    destination_name: city || null,
+  if (!trackedBase || !city) return trackedBase;
+
+  // Best-effort consumer prefill.
+  // Your previous params were ignored by Omio, which is why it opened blank.
+  // This at least sends explicit from/to/date fields in a consistent shape.
+  return appendQuery(trackedBase, {
+    departureLocation: origin,
+    arrivalLocation: city,
     departureDate: args.startDate,
-    outboundDate: args.startDate,
-    returnDate: args.endDate,
-    inboundDate: args.endDate,
+    arrivalDate: args.endDate,
+    preferredTravelMode: "train",
   });
 }
 
@@ -250,11 +254,6 @@ function buildClaimsUrl(): string | null {
   );
 }
 
-/**
- * Canonical affiliate builder.
- * Returns only real partner URLs that are actually configured.
- * No fake commercial fallbacks except plain maps search.
- */
 export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffiliateLinks {
   const cityName = clean(args.city);
   const startDate = ymdOrNull(args.startDate);
