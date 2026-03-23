@@ -16,16 +16,17 @@ type Props = {
   title?: string;
 };
 
-function safeCity(v: any) {
+function cleanCity(v: unknown): string {
   const s = String(v ?? "").trim();
   return s || "";
 }
 
-async function openUrl(url?: string) {
+async function openUrl(url?: string | null) {
   if (!url) {
     Alert.alert("Missing link", "No link available for this action yet.");
     return;
   }
+
   try {
     await openPartnerUrl(url);
   } catch {
@@ -33,8 +34,13 @@ async function openUrl(url?: string) {
   }
 }
 
-export default function PlanTripBlock({ city, startDate, endDate, title }: Props) {
-  const cityName = useMemo(() => safeCity(city), [city]);
+export default function PlanTripBlock({
+  city,
+  startDate,
+  endDate,
+  title,
+}: Props) {
+  const cityName = useMemo(() => cleanCity(city), [city]);
 
   const originIata = useMemo(() => {
     try {
@@ -46,12 +52,17 @@ export default function PlanTripBlock({ city, startDate, endDate, title }: Props
 
   const links = useMemo(() => {
     if (!cityName) return null;
-    return buildAffiliateLinks({
-      city: cityName,
-      startDate,
-      endDate,
-      originIata,
-    });
+
+    try {
+      return buildAffiliateLinks({
+        city: cityName,
+        startDate,
+        endDate,
+        originIata,
+      });
+    } catch {
+      return null;
+    }
   }, [cityName, startDate, endDate, originIata]);
 
   if (!links) return null;
@@ -59,7 +70,9 @@ export default function PlanTripBlock({ city, startDate, endDate, title }: Props
   return (
     <GlassCard style={styles.card}>
       <Text style={styles.title}>{title ?? "Book this trip"}</Text>
-      <Text style={styles.subtitle}>These open partner search pages for {cityName}.</Text>
+      <Text style={styles.subtitle}>
+        These open partner search pages for {cityName}.
+      </Text>
 
       <View style={styles.grid}>
         <Pressable style={styles.btn} onPress={() => openUrl(links.hotelsUrl)}>
@@ -79,7 +92,7 @@ export default function PlanTripBlock({ city, startDate, endDate, title }: Props
         </Pressable>
       </View>
 
-      <Pressable onPress={() => openUrl(links.mapsUrl)} style={{ marginTop: 10 }}>
+      <Pressable onPress={() => openUrl(links.mapsUrl)} style={styles.mapsWrap}>
         <Text style={styles.maps}>Open maps search</Text>
       </Pressable>
     </GlassCard>
@@ -87,24 +100,30 @@ export default function PlanTripBlock({ city, startDate, endDate, title }: Props
 }
 
 const styles = StyleSheet.create({
-  card: { padding: theme.spacing.lg },
+  card: {
+    padding: theme.spacing.lg,
+  },
+
   title: {
     color: theme.colors.text,
     fontWeight: theme.fontWeight.black,
     fontSize: theme.fontSize.md,
   },
+
   subtitle: {
     marginTop: 6,
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.bold,
   },
+
   grid: {
     marginTop: 12,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
+
   btn: {
     width: "48%",
     borderWidth: 1,
@@ -115,7 +134,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     backgroundColor: "rgba(0,0,0,0.18)",
   },
-  btnText: { color: theme.colors.text, fontWeight: theme.fontWeight.black },
+
+  btnText: {
+    color: theme.colors.text,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  mapsWrap: {
+    marginTop: 10,
+  },
+
   maps: {
     color: theme.colors.textSecondary,
     textAlign: "center",
