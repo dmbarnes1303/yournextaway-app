@@ -1,22 +1,10 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
-const rawSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const rawSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-const supabaseUrl =
-  typeof rawSupabaseUrl === "string" && rawSupabaseUrl.trim().length > 0
-    ? rawSupabaseUrl.trim()
-    : null;
-
-const supabaseAnonKey =
-  typeof rawSupabaseAnonKey === "string" && rawSupabaseAnonKey.trim().length > 0
-    ? rawSupabaseAnonKey.trim()
-    : null;
+import { ENV, isSupabaseEnvConfigured } from "@/src/config/env";
 
 let supabaseInstance: SupabaseClient | null = null;
 
-if (supabaseUrl && supabaseAnonKey) {
-  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+if (isSupabaseEnvConfigured()) {
+  supabaseInstance = createClient(ENV.supabaseUrl, ENV.supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
