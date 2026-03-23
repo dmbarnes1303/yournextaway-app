@@ -806,3 +806,693 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
   );
 });
 
+type WorkspaceTabsProps = {
+  sectionOrder: WorkspaceSectionKey[];
+  activeSection: WorkspaceSectionKey;
+  sectionActiveTotals: Record<WorkspaceSectionKey, number>;
+  onSetActiveSection: (section: WorkspaceSectionKey) => void;
+};
+
+const WorkspaceTabs = memo(function WorkspaceTabs({
+  sectionOrder,
+  activeSection,
+  sectionActiveTotals,
+  onSetActiveSection,
+}: WorkspaceTabsProps) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.workspaceTabsRow}
+    >
+      {sectionOrder.map((sectionKey) => {
+        const total = sectionActiveTotals[sectionKey] ?? 0;
+        const selected = activeSection === sectionKey;
+
+        return (
+          <Pressable
+            key={sectionKey}
+            onPress={() => onSetActiveSection(sectionKey)}
+            style={[styles.workspaceTab, selected && styles.workspaceTabActive]}
+          >
+            <Text style={[styles.workspaceTabTitle, selected && styles.workspaceTabTitleActive]}>
+              {sectionTitle(sectionKey)}
+            </Text>
+            <Text style={[styles.workspaceTabSub, selected && styles.workspaceTabSubActive]}>
+              {sectionStateLabel(sectionKey, total)}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+});
+
+type WorkspaceSectionCardProps = {
+  sectionKey: WorkspaceSectionKey;
+  workspace: TripWorkspace | null;
+  activeSection: WorkspaceSectionKey;
+  total: number;
+  children: React.ReactNode;
+  onToggleSection: (section: WorkspaceSectionKey) => void;
+};
+
+const WorkspaceSectionCard = memo(function WorkspaceSectionCard({
+  sectionKey,
+  workspace,
+  activeSection,
+  total,
+  children,
+  onToggleSection,
+}: WorkspaceSectionCardProps) {
+  const section = WORKSPACE_SECTIONS[sectionKey];
+  const collapsed = Boolean(workspace?.collapsed?.[sectionKey]);
+  const selected = activeSection === sectionKey;
+
+  if (!selected) return null;
+
+  return (
+    <View style={styles.workspaceSection}>
+      <Pressable onPress={() => onToggleSection(sectionKey)} style={styles.workspaceSectionHeader}>
+        <View style={styles.flexOne}>
+          <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
+          <Text style={styles.workspaceSectionSub}>{sectionLead(sectionKey)}</Text>
+        </View>
+
+        <View style={styles.workspaceHeaderRight}>
+          <View style={styles.workspaceCountPill}>
+            <Text style={styles.workspaceCountText}>{total}</Text>
+          </View>
+          <Text style={styles.chev}>{collapsed ? "›" : "⌄"}</Text>
+        </View>
+      </Pressable>
+
+      {!collapsed ? <View style={styles.sectionContentWrap}>{children}</View> : null}
+    </View>
+  );
+});
+
+const WorkspaceSummaryStrip = memo(function WorkspaceSummaryStrip({
+  snapshot,
+}: {
+  snapshot: TripWorkspaceCardProps["workspaceSnapshot"];
+}) {
+  const summary = useMemo(() => {
+    const totals = snapshot.sectionActiveTotals;
+    return [
+      `Tickets ${totals.tickets ?? 0}`,
+      `Travel ${totals.travel ?? 0}`,
+      `Stay ${totals.stay ?? 0}`,
+      `Transfers ${totals.transfers ?? 0}`,
+      `Things ${totals.things ?? 0}`,
+    ];
+  }, [snapshot]);
+
+  return (
+    <View style={styles.summaryStrip}>
+      <Text style={styles.summaryStripTitle}>Workspace snapshot</Text>
+      <Text style={styles.summaryStripText}>{summary.join(" • ")}</Text>
+    </View>
+  );
+});
+
+export default function TripWorkspaceCard({
+  workspaceSnapshot,
+  workspace,
+  sectionOrder,
+  activeSection,
+  groupedBySection,
+  primaryMatchId,
+  affiliateUrls,
+  cityName,
+  originIata,
+  tripStartDate,
+  tripEndDate,
+  noteText,
+  noteSaving,
+  proofBusyId,
+  stayBestAreas,
+  stayBudgetAreas,
+  transportStops,
+  onSetActiveSection,
+  onToggleSection,
+  onNoteTextChange,
+  onAddNote,
+  onOpenTicketsForPrimaryMatch,
+  onOpenSavedItem,
+  onOpenNoteActions,
+  onConfirmMarkBooked,
+  onAddProofForBookedItem,
+  onViewWallet,
+  onConfirmMoveToPending,
+  onConfirmArchive,
+  onOpenPartner,
+  getLivePriceLine,
+  getTicketProviderFromItem,
+}: TripWorkspaceCardProps) {
+  return (
+    <GlassCard style={styles.card}>
+      <View style={styles.sectionTitleRow}>
+        <Text style={styles.sectionTitle}>Workspace</Text>
+        <Text style={styles.sectionSub}>{workspaceSnapshot.activeTotal} active items</Text>
+      </View>
+
+      <WorkspaceSummaryStrip snapshot={workspaceSnapshot} />
+
+      <WorkspaceTabs
+        sectionOrder={sectionOrder}
+        activeSection={activeSection}
+        sectionActiveTotals={workspaceSnapshot.sectionActiveTotals}
+        onSetActiveSection={onSetActiveSection}
+      />
+
+      <View style={styles.sectionStack}>
+        {sectionOrder.map((sectionKey) => {
+          const total = workspaceSnapshot.sectionActiveTotals[sectionKey] ?? 0;
+          const items = groupedBySection[sectionKey] ?? [];
+
+          return (
+            <WorkspaceSectionCard
+              key={sectionKey}
+              sectionKey={sectionKey}
+              workspace={workspace}
+              activeSection={activeSection}
+              total={total}
+              onToggleSection={onToggleSection}
+            >
+              <SectionContent
+                sectionKey={sectionKey}
+                items={items}
+                primaryMatchId={primaryMatchId}
+                affiliateUrls={affiliateUrls}
+                cityName={cityName}
+                originIata={originIata}
+                tripStartDate={tripStartDate}
+                tripEndDate={tripEndDate}
+                noteText={noteText}
+                noteSaving={noteSaving}
+                proofBusyId={proofBusyId}
+                stayBestAreas={stayBestAreas}
+                stayBudgetAreas={stayBudgetAreas}
+                transportStops={transportStops}
+                onNoteTextChange={onNoteTextChange}
+                onAddNote={onAddNote}
+                onOpenTicketsForPrimaryMatch={onOpenTicketsForPrimaryMatch}
+                onOpenSavedItem={onOpenSavedItem}
+                onOpenNoteActions={onOpenNoteActions}
+                onConfirmMarkBooked={onConfirmMarkBooked}
+                onAddProofForBookedItem={onAddProofForBookedItem}
+                onViewWallet={onViewWallet}
+                onConfirmMoveToPending={onConfirmMoveToPending}
+                onConfirmArchive={onConfirmArchive}
+                onOpenPartner={onOpenPartner}
+                getLivePriceLine={getLivePriceLine}
+                getTicketProviderFromItem={getTicketProviderFromItem}
+              />
+            </WorkspaceSectionCard>
+          );
+        })}
+      </View>
+    </GlassCard>
+  );
+}
+
+const styles = StyleSheet.create({
+  flexOne: { flex: 1 },
+
+  card: {
+    padding: theme.spacing.lg,
+  },
+
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  sectionTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+
+  sectionSub: {
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  summaryStrip: {
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.18)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  summaryStripTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  summaryStripText: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  providerBadgeWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  providerBadgeWrapLabeled: {
+    maxWidth: 180,
+  },
+
+  providerBadgeCircle: {
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  providerBadgeCircleText: {
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+
+  providerBadgeLabel: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  workspaceTabsRow: {
+    paddingRight: 8,
+    gap: 10,
+  },
+
+  workspaceTab: {
+    minWidth: 114,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  workspaceTabActive: {
+    borderColor: "rgba(0,255,136,0.45)",
+    backgroundColor: "rgba(0,0,0,0.24)",
+  },
+
+  workspaceTabTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  workspaceTabTitleActive: {
+    color: theme.colors.text,
+  },
+
+  workspaceTabSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+  },
+
+  workspaceTabSubActive: {
+    color: theme.colors.textTertiary,
+  },
+
+  sectionStack: {
+    gap: 10,
+  },
+
+  workspaceSection: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 16,
+    padding: 12,
+  },
+
+  workspaceSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  workspaceHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  workspaceCountPill: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+
+  workspaceCountText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  workspaceSectionTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  workspaceSectionSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  sectionContentWrap: {
+    marginTop: 10,
+  },
+
+  sectionCta: {
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.22)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+
+  sectionCtaTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  sectionCtaBody: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  sectionActionRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  smallActionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+
+  smallActionBtnPrimary: {
+    borderColor: "rgba(0,255,136,0.35)",
+  },
+
+  smallActionBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  guidanceMiniBox: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(0,0,0,0.14)",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    gap: 6,
+  },
+
+  guidanceMiniTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  guidanceMiniLine: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  listGap: {
+    gap: 10,
+  },
+
+  itemRow: {
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+
+  itemToneNeutral: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  itemTonePending: {
+    borderColor: "rgba(255,200,80,0.24)",
+    backgroundColor: "rgba(255,200,80,0.07)",
+  },
+
+  itemToneSaved: {
+    borderColor: "rgba(0,255,136,0.18)",
+    backgroundColor: "rgba(0,255,136,0.05)",
+  },
+
+  itemToneBooked: {
+    borderColor: "rgba(120,170,255,0.20)",
+    backgroundColor: "rgba(120,170,255,0.06)",
+  },
+
+  itemToneWarn: {
+    borderColor: "rgba(255,200,80,0.28)",
+    backgroundColor: "rgba(255,200,80,0.08)",
+  },
+
+  itemMain: {
+    flex: 1,
+  },
+
+  itemTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  itemTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    flexShrink: 1,
+    paddingRight: 6,
+  },
+
+  itemMetaRow: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  itemMeta: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    flex: 1,
+  },
+
+  itemHintLine: {
+    marginTop: 5,
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  livePriceLine: {
+    marginTop: 6,
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  paidLine: {
+    marginTop: 6,
+    color: "rgba(242,244,246,0.92)",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  proofLine: {
+    marginTop: 6,
+    color: "rgba(160,195,255,1)",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  proofLineMissing: {
+    color: "rgba(255,200,80,1)",
+  },
+
+  itemActions: {
+    gap: 8,
+    alignItems: "flex-end",
+  },
+
+  smallBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+
+  smallBtnPrimary: {
+    borderColor: "rgba(0,255,136,0.35)",
+  },
+
+  smallBtnDisabled: {
+    opacity: 0.65,
+  },
+
+  smallBtnDanger: {
+    borderColor: "rgba(255,80,80,0.35)",
+  },
+
+  smallBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  badge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+
+  badgeText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 11,
+  },
+
+  badgePending: {
+    borderColor: "rgba(255,200,80,0.40)",
+    backgroundColor: "rgba(255,200,80,0.10)",
+  },
+
+  badgeSaved: {
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,255,136,0.08)",
+  },
+
+  badgeBooked: {
+    borderColor: "rgba(120,170,255,0.45)",
+    backgroundColor: "rgba(120,170,255,0.10)",
+  },
+
+  badgeArchived: {
+    borderColor: "rgba(255,255,255,0.18)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+
+  noteBox: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+
+  noteBoxTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  noteBoxSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  noteInput: {
+    minHeight: 80,
+    color: theme.colors.text,
+    textAlignVertical: "top",
+    fontWeight: "800",
+    marginTop: 10,
+    ...(Platform.OS === "ios" ? { paddingTop: 10 } : null),
+  },
+
+  noteSaveBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0,255,136,0.55)",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  noteSaveBtnDisabled: {
+    opacity: 0.7,
+  },
+
+  noteSaveText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  noteListWrap: {
+    marginTop: 10,
+  },
+
+  noteEmptyWrap: {
+    marginTop: 10,
+  },
+
+  chev: {
+    color: theme.colors.textSecondary,
+    fontSize: 22,
+    marginTop: -2,
+  },
+});
