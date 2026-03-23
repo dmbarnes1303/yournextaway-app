@@ -1,8 +1,10 @@
-import React from "react";
-import { ImageBackground, StyleSheet, View } from "react-native";
+// src/components/Background.tsx
+import React, { useMemo } from "react";
+import { ImageBackground, StyleSheet, View, type ImageSourcePropType } from "react-native";
 
 type Props = {
-  imageSource?: any;
+  imageSource?: ImageSourcePropType;
+  imageUrl?: string | null;
   children: React.ReactNode;
   mode?: "image" | "solid";
   solidColor?: string;
@@ -14,6 +16,7 @@ type Props = {
 
 export default function Background({
   imageSource,
+  imageUrl,
   children,
   mode = "image",
   solidColor = "#07090B",
@@ -22,12 +25,18 @@ export default function Background({
   centerShadeOpacity = 0.06,
   bottomShadeOpacity = 0.22,
 }: Props) {
-  if (mode === "solid" || !imageSource) {
+  const resolvedSource = useMemo<ImageSourcePropType | undefined>(() => {
+    const cleanUrl = typeof imageUrl === "string" ? imageUrl.trim() : "";
+    if (cleanUrl) return { uri: cleanUrl };
+    return imageSource;
+  }, [imageSource, imageUrl]);
+
+  if (mode === "solid" || !resolvedSource) {
     return <View style={[styles.container, { backgroundColor: solidColor }]}>{children}</View>;
   }
 
   return (
-    <ImageBackground source={imageSource} style={styles.container} resizeMode="cover">
+    <ImageBackground source={resolvedSource} style={styles.container} resizeMode="cover">
       <View
         pointerEvents="none"
         style={[styles.baseOverlay, { backgroundColor: `rgba(0,0,0,${overlayOpacity})` }]}
