@@ -42,12 +42,12 @@ export type TicketGuide = {
 
   /**
    * How far before kickoff tickets typically appear (range).
-   * Use this as an “expectation setter”, not a promise.
+   * Use this as an expectation setter, not a promise.
    */
   typicalReleaseDaysBefore?: { min: number; max: number };
 
   /**
-   * Whether UK cards commonly work (Phase 1: user asked this explicitly).
+   * Whether UK cards commonly work.
    * If unknown, omit.
    */
   ukCardUsuallyWorks?: boolean;
@@ -63,7 +63,7 @@ export type TicketGuide = {
 
   /**
    * Safety guidance: keep this strict.
-   * “authorized_reseller” is okay; “marketplace_risk” means warn hard.
+   * "authorized_reseller" is okay; "marketplace_risk" means warn hard.
    */
   safetyNotes?: string[];
 
@@ -71,4 +71,10 @@ export type TicketGuide = {
    * Extra bullet notes: membership tiers, ID checks, pickup rules, etc.
    */
   notes?: string[];
+
+  /**
+   * Official club ticket page.
+   * This is the critical fallback when reseller / affiliate inventory is unavailable.
+   */
+  officialTicketUrl?: string;
 };
