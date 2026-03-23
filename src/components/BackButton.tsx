@@ -1,15 +1,14 @@
-
 // src/components/BackButton.tsx
 import React, { useCallback } from "react";
 import { Pressable, Text, StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { useNavigation } from "@react-navigation/native";
 import { theme } from "@/src/constants/theme";
 
 type Props = {
-  fallbackHref?: string; // where to go if there's no back history
+  fallbackHref?: Href;
   label?: string;
-  hardHref?: string; // long-press escape hatch
+  hardHref?: Href;
 };
 
 export default function BackButton({
@@ -22,22 +21,18 @@ export default function BackButton({
 
   const goBackSafe = useCallback(() => {
     try {
-      // React Navigation is the source of truth for back-stack on native.
-      // Expo Router's router.canGoBack() can be flaky with replace/push flows.
-      // @ts-expect-error -- navigation typing depends on container; safe at runtime
-      if (navigation?.canGoBack?.() === true) {
-        // @ts-expect-error -- navigation typing depends on container; safe at runtime
+      if (typeof navigation?.canGoBack === "function" && navigation.canGoBack()) {
         navigation.goBack();
         return;
       }
     } catch {
-      // fall through
+      // fall through to replace
     }
 
     try {
       router.replace(fallbackHref);
     } catch {
-      // If this fails, there's nothing else sane to do.
+      // nothing else sensible to do
     }
   }, [navigation, router, fallbackHref]);
 
