@@ -84,6 +84,53 @@ function inferSourceSectionFromSavedItemType(type?: SavedItemType): SourceSectio
   }
 }
 
+function safeSourceSurface(value: unknown): SourceSurface {
+  const v = clean(value);
+  if (!v) return "unknown";
+  return v as SourceSurface;
+}
+
+function getTrackedPartnerErrorMessage(error: unknown): string {
+  const raw = clean((error as any)?.message ?? error);
+
+  if (!raw) return "This partner link could not be opened right now.";
+  if (raw.includes("tripId is required")) return "Save the trip first before opening booking partners.";
+  if (raw.includes("url is required")) return "This partner link is missing a valid URL.";
+  if (raw.includes("Partner open already in progress")) return "A partner link is already opening. Wait a second and try again.";
+
+  return "This partner link could not be opened right now.";
+}
+
+function normalizeTrackedPartnerArgs(
+  args: TrackedPartnerArgs,
+  context: {
+    tripId: string | null;
+    cityName: string;
+    trip: Trip | null;
+  },
+  sourceSurface: SourceSurface
+): TrackedPartnerArgs {
+  const sourceSection =
+    (clean(args.metadata?.sourceSection) as SourceSection) ||
+    inferSourceSectionFromSavedItemType(args.savedItemType);
+
+  return {
+    ...args,
+    url: clean(args.url),
+    title: clean(args.title),
+    metadata: {
+      tripId: context.tripId,
+      city: context.cityName,
+      startDate: context.trip?.startDate ?? null,
+      endDate: context.trip?.endDate ?? null,
+      primaryMatchId: clean((context.trip as any)?.fixtureIdPrimary) || null,
+      sourceSurface,
+      sourceSection,
+      ...(args.metadata ?? {}),
+    },
+  };
+}
+
 export default function useTripDetailController({
   trip,
   activeTripId,
@@ -136,37 +183,17 @@ export default function useTripDetailController({
   }
 
   async function openUntracked(url?: string | null) {
-    if (!url) return;
+    const nextUrl = clean(url);
+    if (!nextUrl) {
+      Alert.alert("Missing link", "No valid link is available here yet.");
+      return;
+    }
 
     try {
-      await openUntrackedUrl(url);
+      await openUntrackedUrl(nextUrl);
     } catch {
-      Alert.alert("Couldn’t open link");
+      Alert.alert("Couldn’t open link", "Try again in a moment.");
     }
-  }
-
-  function withTrackingContext(
-    args: TrackedPartnerArgs,
-    sourceSurface: SourceSurface = "unknown"
-  ): TrackedPartnerArgs {
-    const tripId = clean(trip?.id) || clean(activeTripId) || null;
-    const sourceSection =
-      (clean(args.metadata?.sourceSection) as SourceSection) ||
-      inferSourceSectionFromSavedItemType(args.savedItemType);
-
-    return {
-      ...args,
-      metadata: {
-        tripId,
-        city: cityName,
-        startDate: trip?.startDate ?? null,
-        endDate: trip?.endDate ?? null,
-        primaryMatchId: clean((trip as any)?.fixtureIdPrimary) || null,
-        sourceSurface,
-        sourceSection,
-        ...(args.metadata ?? {}),
-      },
-    };
   }
 
   async function openTrackedPartner(args: TrackedPartnerArgs) {
@@ -177,12 +204,22 @@ export default function useTripDetailController({
       return;
     }
 
-    if (args.partnerId === ("googlemaps" as any)) {
-      await openUntracked(args.url);
+    const rawUrl = clean(args.url);
+    if (!rawUrl) {
+      Alert.alert("Missing link", "This booking link is not ready yet.");
       return;
     }
 
-    const enriched = withTrackingContext(args, (args.metadata?.sourceSurface as SourceSurface) || "unknown");
+    if (args.partnerId === ("googlemaps" as any)) {
+      await openUntracked(rawUrl);
+      return;
+    }
+
+    const enriched = normalizeTrackedPartnerArgs(
+      args,
+      { tripId, cityName, trip },
+      safeSourceSurface(args.metadata?.sourceSurface)
+    );
 
     try {
       await beginPartnerClick({
@@ -198,9 +235,11 @@ export default function useTripDetailController({
         ? sectionForSavedItemType(enriched.savedItemType)
         : undefined;
 
-      if (nextSection) void setActiveWorkspaceSection(nextSection);
-    } catch {
-      await openUntracked(enriched.url);
+      if (nextSection) {
+        void setActiveWorkspaceSection(nextSection);
+      }
+    } catch (error) {
+      Alert.alert("Partner link failed", getTrackedPartnerErrorMessage(error));
     }
   }
 
@@ -214,14 +253,15 @@ export default function useTripDetailController({
       metadata?: Record<string, any>;
     }
   ) {
-    if (!url) {
+    const nextUrl = clean(url);
+    if (!nextUrl) {
       Alert.alert("Not ready", message);
       return;
     }
 
     return openTrackedPartner({
       partnerId: config.partnerId,
-      url,
+      url: nextUrl,
       savedItemType: config.savedItemType,
       title: config.title,
       metadata: config.metadata,
@@ -229,25 +269,26 @@ export default function useTripDetailController({
   }
 
   async function openSavedItem(item: SavedItem) {
-    if (!item.partnerUrl) {
+    const partnerUrl = clean(item.partnerUrl);
+    if (!partnerUrl) {
       Alert.alert(item.title || "Notes", clean(item.metadata?.text) || "No details saved.");
       return;
     }
 
     if (item.status === "booked" || item.status === "archived") {
-      await openUntracked(item.partnerUrl);
+      await openUntracked(partnerUrl);
       return;
     }
 
     const partnerId = clean(item.partnerId);
     if (!partnerId || partnerId === "googlemaps") {
-      await openUntracked(item.partnerUrl);
+      await openUntracked(partnerUrl);
       return;
     }
 
     const tripId = clean(item.tripId) || clean(trip?.id) || clean(activeTripId);
     if (!tripId) {
-      await openUntracked(item.partnerUrl);
+      Alert.alert("Save trip first", "Save the trip before opening tracked booking items.");
       return;
     }
 
@@ -255,7 +296,7 @@ export default function useTripDetailController({
       await beginPartnerClick({
         tripId,
         partnerId: partnerId as PartnerId,
-        url: item.partnerUrl,
+        url: partnerUrl,
         savedItemType: item.type,
         title: item.title,
         metadata: {
@@ -269,8 +310,8 @@ export default function useTripDetailController({
       });
 
       void setActiveWorkspaceSection(sectionForSavedItemType(item.type));
-    } catch {
-      await openUntracked(item.partnerUrl);
+    } catch (error) {
+      Alert.alert("Couldn’t open booking item", getTrackedPartnerErrorMessage(error));
     }
   }
 
@@ -395,7 +436,8 @@ export default function useTripDetailController({
     const homeName = clean((row as any)?.teams?.home?.name) || undefined;
     const awayName = clean((row as any)?.teams?.away?.name) || undefined;
     const leagueName = clean((row as any)?.league?.name) || undefined;
-    const leagueId = typeof (row as any)?.league?.id === "number" ? (row as any).league.id : undefined;
+    const leagueId =
+      typeof (row as any)?.league?.id === "number" ? (row as any).league.id : undefined;
     const kickoffIso = clean((row as any)?.fixture?.date) || undefined;
     const venueName = clean((row as any)?.fixture?.venue?.name) || undefined;
     const venueCity = clean((row as any)?.fixture?.venue?.city) || undefined;
@@ -490,8 +532,17 @@ export default function useTripDetailController({
     checkedProviders?: string[];
     optionCount?: number;
   }) {
+    let partnerId: PartnerId;
+
+    try {
+      partnerId = mapTicketProviderToPartnerId(args.option.provider);
+    } catch {
+      Alert.alert("Provider unsupported", "This ticket provider is not mapped yet.");
+      return;
+    }
+
     await openTrackedPartner({
-      partnerId: mapTicketProviderToPartnerId(args.option.provider),
+      partnerId,
       url: args.option.url,
       title: args.option.title || `Tickets: ${args.homeName} vs ${args.awayName}`,
       savedItemType: "tickets",
@@ -535,7 +586,9 @@ export default function useTripDetailController({
       top
         .map(
           (option, index) =>
-            `${index + 1}. ${clean(option.provider)}${clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""}`
+            `${index + 1}. ${clean(option.provider)}${
+              clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""
+            }`
         )
         .join("\n"),
       [
@@ -571,7 +624,12 @@ export default function useTripDetailController({
     }
 
     const existing = ticketsByMatchId[mid];
-    if (existing && existing.type === "tickets" && existing.status !== "archived" && existing.partnerUrl) {
+    if (
+      existing &&
+      existing.type === "tickets" &&
+      existing.status !== "archived" &&
+      existing.partnerUrl
+    ) {
       await openSavedItem(existing);
       return;
     }
@@ -583,7 +641,10 @@ export default function useTripDetailController({
     const kickoffIso = clean((row as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
     const leagueName = clean((row as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
     const leagueIdRaw = (row as any)?.league?.id ?? (trip as any)?.leagueId;
-    const leagueId = typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string" ? leagueIdRaw : undefined;
+    const leagueId =
+      typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string"
+        ? leagueIdRaw
+        : undefined;
 
     if (!homeName || !awayName || !kickoffIso) {
       Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
@@ -605,7 +666,10 @@ export default function useTripDetailController({
       const options = normalizeTicketOptions(resolved);
 
       if (!resolved?.ok || options.length === 0) {
-        Alert.alert("Tickets not found", ticketResolverFailureMessage(resolved as TicketResolutionResult | null));
+        Alert.alert(
+          "Tickets not found",
+          ticketResolverFailureMessage(resolved as TicketResolutionResult | null)
+        );
         return;
       }
 
@@ -619,7 +683,9 @@ export default function useTripDetailController({
           leagueId,
           dateIso,
           option: options[0],
-          checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
+          checkedProviders: Array.isArray(resolved.checkedProviders)
+            ? resolved.checkedProviders
+            : undefined,
           optionCount: options.length,
         });
         return;
@@ -634,7 +700,9 @@ export default function useTripDetailController({
         leagueId,
         dateIso,
         options,
-        checkedProviders: Array.isArray(resolved.checkedProviders) ? resolved.checkedProviders : undefined,
+        checkedProviders: Array.isArray(resolved.checkedProviders)
+          ? resolved.checkedProviders
+          : undefined,
       });
     } catch {
       Alert.alert("Tickets unavailable", "Ticket search failed before the partner click was created.");
@@ -661,4 +729,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-}
+          }
