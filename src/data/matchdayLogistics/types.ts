@@ -45,6 +45,7 @@ export type MatchdayLogistics = {
   parking?: {
     availability?: ParkingAvailability;
     summary?: string;
+    officialLots?: string[];
     options?: ParkingOption[];
     tips?: string[];
     notes?: string[];
