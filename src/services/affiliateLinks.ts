@@ -54,15 +54,6 @@ function yyyymmdd(value: string | null): string | null {
   return value.replace(/-/g, "");
 }
 
-function slugCity(city: string): string {
-  return clean(city)
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-");
-}
-
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -72,26 +63,10 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
 
 function normalizeCabinClass(value: unknown): CabinClass {
   const raw = clean(value).toLowerCase();
-
   if (raw === "premium") return "premium";
   if (raw === "business") return "business";
   if (raw === "first") return "first";
   return "economy";
-}
-
-function appendQuery(
-  base: string,
-  params: Record<string, string | null | undefined>
-): string {
-  const safeBase = clean(base);
-  if (!safeBase) return "";
-
-  const entries = Object.entries(params).filter(([, v]) => clean(v));
-  if (!entries.length) return safeBase;
-
-  const joiner = safeBase.includes("?") ? "&" : "?";
-  const qs = entries.map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
-  return `${safeBase}${joiner}${qs}`;
 }
 
 function safeTrackedUrl(value: unknown): string | null {
@@ -111,6 +86,35 @@ function googleMapsSearchUrl(query: string): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
 }
 
+function appendQuery(
+  base: string,
+  params: Record<string, string | null | undefined>
+): string {
+  const safeBase = clean(base);
+  if (!safeBase) return "";
+
+  const entries = Object.entries(params).filter(([, value]) => clean(value));
+  if (!entries.length) return safeBase;
+
+  const joiner = safeBase.includes("?") ? "&" : "?";
+  const qs = entries.map(([key, value]) => `${enc(key)}=${enc(value)}`).join("&");
+  return `${safeBase}${joiner}${qs}`;
+}
+
+function normalizeOriginIata(value: unknown): string {
+  const raw = clean(value).toUpperCase();
+  if (!raw) return "LON";
+  return raw;
+}
+
+function getDestinationIata(city: string): string | null {
+  const cityName = clean(city);
+  if (!cityName) return null;
+
+  const code = clean(getIataCityCodeForCity(cityName)).toUpperCase();
+  return code || null;
+}
+
 function buildAviasalesUrl(args: {
   city: string;
   originIata: string;
@@ -123,23 +127,23 @@ function buildAviasalesUrl(args: {
   const trackedFallback = safeTrackedUrl(AffiliateConfig.aviasalesFallback);
 
   const cityName = clean(args.city);
-  const origin = clean(args.originIata) || "LON";
-  const destination = cityName ? getIataCityCodeForCity(cityName) : null;
+  const origin = normalizeOriginIata(args.originIata);
+  const destination = getDestinationIata(cityName);
   const outbound = yyyymmdd(args.startDate);
   const inbound = yyyymmdd(args.endDate);
 
-  if (marker && destination && outbound) {
-    const routeToken = `${origin}${destination}${outbound}1`;
-    const base = `https://www.aviasales.com/search/${routeToken}?marker=${enc(marker)}`;
-
-    return appendQuery(base, {
-      return_date: inbound,
-      adults: args.passengers > 1 ? String(args.passengers) : null,
-      cabin: args.cabinClass !== "economy" ? args.cabinClass : null,
-    });
+  if (!marker || !destination || !outbound) {
+    return trackedFallback;
   }
 
-  return trackedFallback;
+  const passengerToken = String(Math.max(1, args.passengers));
+  const routeToken = `${origin}${outbound}${destination}${inbound ? inbound : ""}${passengerToken}`;
+
+  const base = `https://www.aviasales.com/search/${routeToken}`;
+  return appendQuery(base, {
+    marker,
+    cabin: args.cabinClass !== "economy" ? args.cabinClass : null,
+  });
 }
 
 function buildExpediaUrl(args: {
@@ -149,17 +153,20 @@ function buildExpediaUrl(args: {
   passengers: number;
 }): string | null {
   const cityName = clean(args.city);
-  const token = clean(AffiliateConfig.expediaToken);
+  if (!cityName) return null;
 
-  if (!cityName || !token) return null;
+  const trackedBase =
+    safeTrackedUrl(AffiliateConfig.expediaTracked) ||
+    safeTrackedUrl("https://www.expedia.co.uk/Hotel-Search");
 
-  const slug = slugCity(cityName);
-  const base = `https://expedia.com/affiliates/hotel-search-${slug}.${token}`;
+  if (!trackedBase) return null;
 
-  return appendQuery(base, {
+  return appendQuery(trackedBase, {
+    destination: cityName,
     startDate: args.startDate,
     endDate: args.endDate,
-    adults: String(args.passengers),
+    rooms: "1",
+    adults: String(Math.max(1, args.passengers)),
   });
 }
 
@@ -209,6 +216,7 @@ function buildGetYourGuideUrl(city: string): string | null {
 
 function buildOmioUrl(args: {
   city: string;
+  originIata: string;
   startDate: string | null;
   endDate: string | null;
 }): string | null {
@@ -216,14 +224,17 @@ function buildOmioUrl(args: {
   if (!base) return null;
 
   const city = clean(args.city);
+  const origin = normalizeOriginIata(args.originIata);
 
   return appendQuery(base, {
+    origin: origin || null,
+    origin_name: origin || null,
     destination: city || null,
     destination_name: city || null,
-    outboundDate: args.startDate,
     departureDate: args.startDate,
-    inboundDate: args.endDate,
+    outboundDate: args.startDate,
     returnDate: args.endDate,
+    inboundDate: args.endDate,
   });
 }
 
@@ -242,18 +253,19 @@ function buildClaimsUrl(): string | null {
 /**
  * Canonical affiliate builder.
  * Returns only real partner URLs that are actually configured.
- * No fake Google commercial fallbacks.
+ * No fake commercial fallbacks except plain maps search.
  */
 export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffiliateLinks {
   const cityName = clean(args.city);
   const startDate = ymdOrNull(args.startDate);
   const endDate = ymdOrNull(args.endDate);
-  const originIata = clean(args.originIata) || "LON";
+  const originIata = normalizeOriginIata(args.originIata);
   const passengers = clampInt(args.passengers, 1, 9, 1);
   const cabinClass = normalizeCabinClass(args.cabinClass);
 
   const omioUrl = buildOmioUrl({
     city: cityName,
+    originIata,
     startDate,
     endDate,
   });
