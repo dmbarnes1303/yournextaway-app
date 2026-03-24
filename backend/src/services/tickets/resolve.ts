@@ -1,4 +1,4 @@
-// backend/src/services/tickets/resolve.ts
+import { env } from "../../lib/env.js";
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
@@ -300,6 +300,17 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
   return Array.from(map.values());
 }
 
+function parsePriceAmount(priceText?: string | null): number | null {
+  const raw = clean(priceText);
+  if (!raw) return null;
+
+  const match = raw.match(/(\d{1,3}(?:[,\d]{0,})(?:\.\d{1,2})?)/);
+  if (!match) return null;
+
+  const value = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(value) ? value : null;
+}
+
 function reasonRank(reason: TicketCandidate["reason"]): number {
   if (reason === "exact_event") return 1;
   if (reason === "partial_match") return 2;
@@ -315,13 +326,16 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
     const aReasonRank = reasonRank(a.reason);
     const bReasonRank = reasonRank(b.reason);
 
-    if (aReasonRank !== bReasonRank) {
-      return aReasonRank - bReasonRank;
+    if (aReasonRank !== bReasonRank) return aReasonRank - bReasonRank;
+
+    const aPrice = parsePriceAmount(a.priceText);
+    const bPrice = parsePriceAmount(b.priceText);
+
+    if (aPrice != null && bPrice != null && Math.abs(a.score - b.score) <= 12) {
+      if (aPrice !== bPrice) return aPrice - bPrice;
     }
 
-    if (b.score !== a.score) {
-      return b.score - a.score;
-    }
+    if (b.score !== a.score) return b.score - a.score;
 
     const aHasPrice = Boolean(clean(a.priceText));
     const bHasPrice = Boolean(clean(b.priceText));
@@ -336,6 +350,7 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 function filterFallbacks(candidates: TicketCandidate[]): TicketCandidate[] {
   return candidates.filter((candidate) => {
     if (candidate.reason === "exact_event") return true;
+    if (candidate.reason === "partial_match") return true;
     return candidate.score >= MIN_FALLBACK_SCORE;
   });
 }
@@ -419,7 +434,6 @@ export async function resolveTicket(
     });
   } else {
     const cached = getCache(cacheKey);
-
     if (cached) {
       console.log("[tickets] cache hit", {
         key: cacheKey,
@@ -452,8 +466,8 @@ export async function resolveTicket(
   ];
 
   const settled = await Promise.allSettled(providerPromises);
-  const candidates: TicketCandidate[] = [];
 
+  const candidates: TicketCandidate[] = [];
   const providerOrder: TicketProviderId[] = [
     "footballticketsnet",
     "sportsevents365",
@@ -469,10 +483,7 @@ export async function resolveTicket(
         provider,
         candidate: summarizeCandidate(result.value),
       });
-
-      if (result.value) {
-        candidates.push(result.value);
-      }
+      if (result.value) candidates.push(result.value);
     } else {
       console.log("[tickets] provider promise rejected", {
         provider,
@@ -515,4 +526,4 @@ export async function resolveTicket(
   }
 
   return result;
-}
+        }
