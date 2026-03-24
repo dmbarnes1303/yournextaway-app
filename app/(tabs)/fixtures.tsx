@@ -37,22 +37,22 @@ function getCsvParamSet(value: unknown) {
   );
 }
 
-function SectionShell({
+function Surface({
   children,
-  accent = "neutral",
+  tone = "neutral",
 }: {
   children: React.ReactNode;
-  accent?: "green" | "gold" | "neutral";
+  tone?: "green" | "gold" | "neutral";
 }) {
   return (
     <View
       style={[
-        styles.sectionShell,
-        accent === "green"
-          ? styles.sectionShellGreen
-          : accent === "gold"
-            ? styles.sectionShellGold
-            : styles.sectionShellNeutral,
+        styles.surface,
+        tone === "green"
+          ? styles.surfaceGreen
+          : tone === "gold"
+            ? styles.surfaceGold
+            : styles.surfaceNeutral,
       ]}
     >
       {children}
@@ -208,7 +208,7 @@ export default function FixturesScreen() {
   const headerComponent = useMemo(() => {
     return (
       <View style={styles.headerWrap}>
-        <SectionShell accent={comboMode ? "gold" : "green"}>
+        <Surface tone={comboMode ? "gold" : "green"}>
           <FixturesHeader
             titleText={derivedTitleText}
             subtitleText={derivedSubtitleText}
@@ -233,13 +233,13 @@ export default function FixturesScreen() {
             filteredCount={visibleRows.length}
             openCalendar={openCalendar}
           />
-        </SectionShell>
+        </Surface>
 
         {showInlineRefresh ? (
           <View style={styles.refreshRow}>
             <GlassCard variant="matte" level="default" style={styles.refreshCard}>
               <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-              <Text style={styles.refreshText}>Refreshing fixtures…</Text>
+              <Text style={styles.refreshText}>Refreshing live fixtures…</Text>
             </GlassCard>
           </View>
         ) : null}
@@ -251,7 +251,7 @@ export default function FixturesScreen() {
               level="default"
               style={styles.summaryCard}
             >
-              <Text style={styles.summaryKicker}>
+              <Text style={styles.summaryEyebrow}>
                 {comboMode ? "Combo mode" : "Live fixture pool"}
               </Text>
               <Text style={styles.summaryTitle}>
@@ -302,6 +302,7 @@ export default function FixturesScreen() {
         <View style={[styles.content, styles.listWrap]}>
           <GlassCard variant="brand" level="default" style={styles.loadingCard}>
             <View style={styles.center}>
+              <Text style={styles.loadingEyebrow}>Live scan</Text>
               <ActivityIndicator color={theme.colors.accentGold} />
               <Text style={styles.loadingTitle}>Loading fixtures</Text>
               <Text style={styles.loadingText}>
@@ -317,7 +318,11 @@ export default function FixturesScreen() {
       return (
         <View style={[styles.content, styles.listWrap]}>
           <GlassCard variant="gold" level="default" style={styles.stateCard}>
-            <EmptyState title="Error" message={error ?? "Failed to load fixtures."} iconName="alert-circle" />
+            <EmptyState
+              title="Fixtures unavailable"
+              message={error ?? "Failed to load fixtures."}
+              iconName="alert-circle"
+            />
           </GlassCard>
         </View>
       );
@@ -449,24 +454,25 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  sectionShell: {
+  surface: {
     marginHorizontal: theme.spacing.lg,
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 12,
     borderWidth: 1,
+    overflow: "hidden",
   },
 
-  sectionShellGreen: {
+  surfaceGreen: {
     borderColor: theme.colors.borderGreenSoft,
-    backgroundColor: "rgba(34,197,94,0.035)",
+    backgroundColor: "rgba(34,197,94,0.03)",
   },
 
-  sectionShellGold: {
+  surfaceGold: {
     borderColor: theme.colors.borderGoldSoft,
     backgroundColor: "rgba(250,204,21,0.04)",
   },
 
-  sectionShellNeutral: {
+  surfaceNeutral: {
     borderColor: theme.colors.borderSubtle,
     backgroundColor: "rgba(255,255,255,0.02)",
   },
@@ -477,16 +483,16 @@ const styles = StyleSheet.create({
 
   summaryCard: {
     gap: 6,
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: 22,
+    padding: 15,
   },
 
-  summaryKicker: {
+  summaryEyebrow: {
     color: theme.colors.textSecondary,
     fontSize: 11,
     lineHeight: 14,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.25,
+    letterSpacing: 0.35,
     textTransform: "uppercase",
   },
 
@@ -509,7 +515,7 @@ const styles = StyleSheet.create({
   },
 
   refreshCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: "row",
@@ -525,12 +531,12 @@ const styles = StyleSheet.create({
   },
 
   loadingCard: {
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 18,
   },
 
   stateCard: {
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 12,
   },
 
@@ -538,6 +544,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
     gap: 10,
+  },
+
+  loadingEyebrow: {
+    color: "#8EF2A5",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.65,
+    textTransform: "uppercase",
   },
 
   loadingTitle: {
@@ -557,6 +572,6 @@ const styles = StyleSheet.create({
   },
 
   footerSpace: {
-    height: 6,
+    height: 8,
   },
 });
