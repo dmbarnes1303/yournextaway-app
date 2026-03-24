@@ -77,24 +77,6 @@ function norm(v: unknown): string {
   return clean(v).toLowerCase();
 }
 
-function uniqueStrings(values: string[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-
-  for (const value of values) {
-    const v = clean(value);
-    if (!v) continue;
-
-    const key = v.toLowerCase();
-    if (seen.has(key)) continue;
-
-    seen.add(key);
-    out.push(v);
-  }
-
-  return out;
-}
-
 function safeDate(v?: string | null): Date | null {
   const s = clean(v);
   if (!s) return null;
@@ -105,6 +87,51 @@ function safeDate(v?: string | null): Date | null {
 
 function absDays(a: Date, b: Date): number {
   return Math.floor(Math.abs(a.getTime() - b.getTime()) / 86400000);
+}
+
+function formatYmd(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const copy = new Date(date.getTime());
+  copy.setUTCDate(copy.getUTCDate() + days);
+  return copy;
+}
+
+function buildDateWindow(kickoffIso: string): { dateFrom?: string; dateTo?: string } {
+  const kickoff = safeDate(kickoffIso);
+  if (!kickoff) return {};
+
+  return {
+    dateFrom: formatYmd(addDays(kickoff, -2)),
+    dateTo: formatYmd(addDays(kickoff, 2)),
+  };
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const value of values) {
+    const trimmed = clean(value);
+    if (!trimmed) continue;
+
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    out.push(trimmed);
+  }
+
+  return out;
+}
+
+function eventId(ev: GigsbergEvent): string {
+  return clean(ev.id);
 }
 
 function eventName(ev: GigsbergEvent): string {
@@ -144,7 +171,7 @@ function listingEventId(listing: GigsbergListing): string {
 }
 
 function numberFromUnknown(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
 
   const raw = clean(v);
   if (!raw) return null;
@@ -181,27 +208,10 @@ function listingPriceText(listing: GigsbergListing): string | null {
   return currency || null;
 }
 
-function formatYmd(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const copy = new Date(date.getTime());
-  copy.setUTCDate(copy.getUTCDate() + days);
-  return copy;
-}
-
-function buildDateWindow(kickoffIso: string): { dateFrom?: string; dateTo?: string } {
-  const kickoff = safeDate(kickoffIso);
-  if (!kickoff) return {};
-
-  return {
-    dateFrom: formatYmd(addDays(kickoff, -2)),
-    dateTo: formatYmd(addDays(kickoff, 2)),
-  };
+function buildApiUrl(path: string): string {
+  const base = env.gigsbergBaseUrl.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${normalizedPath}`;
 }
 
 function buildPublicSearchUrl(input: TicketResolveInput): string | null {
@@ -223,7 +233,7 @@ function buildPublicSearchUrl(input: TicketResolveInput): string | null {
   return url.toString();
 }
 
-function buildListingUrl(eventNameValue: string): string {
+function buildEventSearchUrl(eventNameValue: string): string {
   const url = new URL("https://www.gigsberg.com/search");
   url.searchParams.set("query", eventNameValue);
 
@@ -235,39 +245,20 @@ function buildListingUrl(eventNameValue: string): string {
   return url.toString();
 }
 
-function buildApiUrl(path: string): string {
-  const base = env.gigsbergBaseUrl.replace(/\/+$/, "");
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${base}${normalizedPath}`;
-}
-
 function buildEventSearchNames(input: TicketResolveInput): string[] {
-  const rawHome = clean(input.homeName);
-  const rawAway = clean(input.awayName);
   const preferredHome = getPreferredTeamName(input.homeName);
   const preferredAway = getPreferredTeamName(input.awayName);
+  const rawHome = clean(input.homeName);
+  const rawAway = clean(input.awayName);
 
   return uniqueStrings([
-    `${preferredHome} ${preferredAway}`,
-    `${preferredAway} ${preferredHome}`,
     `${preferredHome} vs ${preferredAway}`,
-    `${preferredAway} vs ${preferredHome}`,
-    `${rawHome} ${rawAway}`,
-    `${rawAway} ${rawHome}`,
+    `${preferredHome} ${preferredAway}`,
     `${rawHome} vs ${rawAway}`,
-    `${rawAway} vs ${rawHome}`,
+    `${rawHome} ${rawAway}`,
     preferredHome,
     preferredAway,
-    rawHome,
-    rawAway,
   ]);
-}
-
-function containsTeamsLoose(name: string, homeVariants: string[], awayVariants: string[]): boolean {
-  const n = norm(name);
-  const hasHome = homeVariants.some((home) => n.includes(norm(home)));
-  const hasAway = awayVariants.some((away) => n.includes(norm(away)));
-  return hasHome && hasAway;
 }
 
 function textContainsVariant(name: string, variant: string): boolean {
@@ -310,6 +301,17 @@ function isBadVariant(name: string): boolean {
   return false;
 }
 
+function containsTeamsLoose(
+  name: string,
+  homeVariants: string[],
+  awayVariants: string[]
+): boolean {
+  const n = norm(name);
+  const hasHome = homeVariants.some((home) => n.includes(norm(home)));
+  const hasAway = awayVariants.some((away) => n.includes(norm(away)));
+  return hasHome && hasAway;
+}
+
 function exactNameMatch(ev: GigsbergEvent, input: TicketResolveInput): boolean {
   const name = eventName(ev);
   if (!name || isBadVariant(name)) return false;
@@ -330,7 +332,7 @@ function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): number {
   const awayVariants = expandTeamAliases(input.awayName);
 
   if (name && containsTeamsLoose(name, homeVariants, awayVariants)) {
-    score += 62;
+    score += 65;
   }
 
   if (name && isBadVariant(name)) {
@@ -359,7 +361,11 @@ function isStrongEnoughEvent(score: number): boolean {
   return score >= 55;
 }
 
-function isExactEvent(ev: GigsbergEvent, input: TicketResolveInput, score: number): boolean {
+function isExactEvent(
+  ev: GigsbergEvent,
+  input: TicketResolveInput,
+  score: number
+): boolean {
   const kickoff = safeDate(input.kickoffIso);
   const evDt = safeDate(eventDate(ev));
 
@@ -401,7 +407,7 @@ function scoreListing(listing: GigsbergListing): number {
 
 function summarizeEvent(ev: GigsbergEvent) {
   return {
-    id: clean(ev.id) || null,
+    id: eventId(ev) || null,
     name: eventName(ev) || null,
     date: eventDate(ev) || null,
     venue: eventVenue(ev) || null,
@@ -425,9 +431,12 @@ function summarizeListing(listing: GigsbergListing) {
 }
 
 function eventDedupKey(ev: GigsbergEvent): string {
-  return [clean(ev.id), eventName(ev), eventDate(ev), eventVenue(ev)]
-    .join("|")
-    .toLowerCase();
+  return [
+    eventId(ev),
+    eventName(ev),
+    eventDate(ev),
+    eventVenue(ev),
+  ].join("|").toLowerCase();
 }
 
 function dedupeEvents(events: GigsbergEvent[]): GigsbergEvent[] {
@@ -514,12 +523,10 @@ async function tryEventEndpoint(
   if (dateWindow.dateTo) url.searchParams.set("date_to", dateWindow.dateTo);
   url.searchParams.set("page", "1");
   url.searchParams.set("per_page", String(EVENTS_PER_PAGE));
-  url.searchParams.set("sort_by", "id");
-  url.searchParams.set("sort_order", "desc");
 
   console.log("[Gigsberg] events request start", {
-    requestUrl: url.toString(),
     endpointPath: path,
+    requestUrl: url.toString(),
     searchName,
     homeName: clean(input.homeName),
     awayName: clean(input.awayName),
@@ -539,8 +546,6 @@ async function tryEventEndpoint(
     });
     return [];
   }
-
-  console.log("[Gigsberg DEBUG] raw events payload", response.body);
 
   if (!response.ok) {
     console.log("[Gigsberg] events non-200 response", {
@@ -576,11 +581,6 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
 
       if (events.length > 0) {
         allEvents.push(...events);
-
-        const deduped = dedupeEvents(allEvents);
-        if (deduped.length >= 10) {
-          return deduped;
-        }
       }
     }
 
@@ -594,7 +594,6 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
 
 async function tryListingsEndpoint(path: string, eventId: string): Promise<GigsbergListing[]> {
   const url = buildApiUrl(path);
-
   const body = {
     event_id: Number.isFinite(Number(eventId)) ? Number(eventId) : eventId,
     currency_code: "EUR",
@@ -624,8 +623,6 @@ async function tryListingsEndpoint(path: string, eventId: string): Promise<Gigsb
     });
     return [];
   }
-
-  console.log("[Gigsberg DEBUG] raw listings payload", response.body);
 
   if (!response.ok) {
     console.log("[Gigsberg] listings non-200 response", {
@@ -713,14 +710,19 @@ export async function resolveGigsbergCandidate(
     .filter((x) => isStrongEnoughEvent(x.score))
     .sort((a, b) => b.score - a.score);
 
+  console.log("[Gigsberg] scored events", {
+    totalEvents: events.length,
+    strongEvents: scoredEvents.length,
+    top: scoredEvents.slice(0, 5).map((x) => ({
+      ...summarizeEvent(x.ev),
+      score: x.score,
+    })),
+  });
+
   if (!scoredEvents.length) {
     const fallbackUrl = buildPublicSearchUrl(input);
 
     console.log("[Gigsberg] events found but no strong match", {
-      sample: events.slice(0, 5).map((ev) => ({
-        ...summarizeEvent(ev),
-        score: scoreEvent(ev, input),
-      })),
       fallbackUrl,
     });
 
@@ -738,7 +740,7 @@ export async function resolveGigsbergCandidate(
   }
 
   const bestEvent = scoredEvents[0];
-  const bestEventId = clean(bestEvent.ev.id);
+  const bestEventId = eventId(bestEvent.ev);
   const bestEventName = eventName(bestEvent.ev);
   const exact = isExactEvent(bestEvent.ev, input, bestEvent.score);
 
@@ -770,7 +772,7 @@ export async function resolveGigsbergCandidate(
   const listings = await searchListingsForEvent(bestEventId);
 
   if (!listings.length) {
-    const fallbackUrl = buildListingUrl(bestEventName || `${homeName} vs ${awayName}`);
+    const fallbackUrl = buildEventSearchUrl(bestEventName || `${homeName} vs ${awayName}`);
 
     console.log("[Gigsberg] matched event but no listings, using event fallback", {
       bestEvent: {
@@ -800,7 +802,7 @@ export async function resolveGigsbergCandidate(
     .sort((a, b) => b.score - a.score);
 
   const bestListing = scoredListings[0];
-  const listingUrl = buildListingUrl(bestEventName || `${homeName} vs ${awayName}`);
+  const listingUrl = buildEventSearchUrl(bestEventName || `${homeName} vs ${awayName}`);
   const combinedScore = Math.min(
     100,
     bestEvent.score + Math.min(18, bestListing?.score ?? 0)
@@ -831,4 +833,4 @@ export async function resolveGigsbergCandidate(
     priceText: bestListing ? listingPriceText(bestListing.listing) : null,
     reason: exact ? "exact_event" : "partial_match",
   };
-      }
+        }
