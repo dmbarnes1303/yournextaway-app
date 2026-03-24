@@ -50,16 +50,9 @@ import {
 import rankTrips from "@/src/features/tripFinder/rankTrips";
 import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
 
-/* -------------------------------------------------------------------------- */
-/* config                                                                     */
-/* -------------------------------------------------------------------------- */
-
 const FREE_TRIP_CAP = 5;
 const WINDOW_DAYS = 90;
-
-/* -------------------------------------------------------------------------- */
-/* helpers                                                                    */
-/* -------------------------------------------------------------------------- */
+const LOAD_MORE_STEP = 12;
 
 function paramString(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
@@ -290,9 +283,9 @@ function prefVibeLabel(v: string) {
 
 function scoreTone(score?: number | null) {
   const value = typeof score === "number" ? score : 0;
-  if (value >= 78) return styles.scoreStrong;
-  if (value >= 62) return styles.scoreOkay;
-  return styles.scoreWeak;
+  if (value >= 78) return "strong";
+  if (value >= 62) return "okay";
+  return "weak";
 }
 
 function bookingReadinessLabel(row: RankedTrip | null) {
@@ -308,19 +301,15 @@ function selectedFlowSummary(isEditing: boolean, setAsPrimaryOnSave: boolean) {
       : "This match will be added to the trip.";
   }
 
-  return "Save this match as a trip, then sort tickets, flights, hotel and extras around it.";
+  return "Save this match first. Tickets, stay and travel come next.";
 }
 
 function buildPageSubtitle(isEditing: boolean, matchCount: number) {
   if (isEditing) {
     return `Update trip dates or add another match. Current matches: ${matchCount}.`;
   }
-  return "Choose the match you want to build the trip around.";
+  return "Pick the match you want to build the trip around.";
 }
-
-/* -------------------------------------------------------------------------- */
-/* screen                                                                     */
-/* -------------------------------------------------------------------------- */
 
 export default function TripBuildScreen() {
   const router = useRouter();
@@ -366,7 +355,7 @@ export default function TripBuildScreen() {
   const [placeholderTbcIds, setPlaceholderTbcIds] = useState<Set<string>>(new Set());
 
   const [search, setSearch] = useState("");
-  const [visibleCount, setVisibleCount] = useState(14);
+  const [visibleCount, setVisibleCount] = useState(LOAD_MORE_STEP);
 
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
@@ -390,20 +379,6 @@ export default function TripBuildScreen() {
   const [existingPrimaryId, setExistingPrimaryId] = useState<string | null>(null);
 
   const [setAsPrimaryOnSave, setSetAsPrimaryOnSave] = useState(false);
-
-  useEffect(() => {
-    if (isIsoDateOnly(routeTo)) return;
-    if (endTouched) return;
-
-    const d = parseIsoToDate(startIso);
-    if (!d) return;
-    const d2 = new Date(d);
-    d2.setDate(d2.getDate() + 2);
-    const y = d2.getFullYear();
-    const m = String(d2.getMonth() + 1).padStart(2, "0");
-    const day = String(d2.getDate()).padStart(2, "0");
-    setEndIso(`${y}-${m}-${day}`);
-  }, [startIso, endTouched, routeTo]);
 
   const setNotesIfEmpty = useCallback((text: string) => {
     const t = cleanText(text);
@@ -429,6 +404,20 @@ export default function TripBuildScreen() {
     const opt = findLeagueOptionByLeagueId(routeLeagueId, routeSeason);
     return opt ?? ALL_LEAGUES;
   });
+
+  useEffect(() => {
+    if (isIsoDateOnly(routeTo)) return;
+    if (endTouched) return;
+
+    const d = parseIsoToDate(startIso);
+    if (!d) return;
+    const d2 = new Date(d);
+    d2.setDate(d2.getDate() + 2);
+    const y = d2.getFullYear();
+    const m = String(d2.getMonth() + 1).padStart(2, "0");
+    const day = String(d2.getDate()).padStart(2, "0");
+    setEndIso(`${y}-${m}-${day}`);
+  }, [startIso, endTouched, routeTo]);
 
   useEffect(() => {
     if (isPrefilledFlow) return;
@@ -721,7 +710,7 @@ export default function TripBuildScreen() {
     return null;
   }, [startIso, endIso]);
 
-  const onSave = useCallback(async () => {
+const onSave = useCallback(async () => {
     if (!selectedFixture?.fixture?.id) {
       setError("Select a match first.");
       return;
@@ -916,7 +905,7 @@ export default function TripBuildScreen() {
   const selectedFlowLine = selectedFlowSummary(isEditing, setAsPrimaryOnSave);
 
   return (
-    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.84}>
       <Stack.Screen
         options={{
           headerShown: true,
@@ -938,20 +927,20 @@ export default function TripBuildScreen() {
           showsVerticalScrollIndicator={false}
         >
           <GlassCard style={styles.headerCard} level="subtle">
-            <Text style={styles.bigTitle}>{isEditing ? "Edit trip" : "Build a trip"}</Text>
+            <Text style={styles.bigTitle}>{isEditing ? "Edit trip" : "Build your trip"}</Text>
             <Text style={styles.bigSub}>
               {buildPageSubtitle(isEditing, existingMatchIds.length)}
             </Text>
 
             <View style={styles.chipRow}>
-              <View style={styles.chip}>
-                <Text style={styles.chipKicker}>Trip dates</Text>
-                <Text style={styles.chipValue}>{dateWindowLabel}</Text>
+              <View style={styles.summaryChip}>
+                <Text style={styles.summaryChipKicker}>Trip dates</Text>
+                <Text style={styles.summaryChipValue}>{dateWindowLabel}</Text>
               </View>
 
-              <View style={styles.chip}>
-                <Text style={styles.chipKicker}>League filter</Text>
-                <Text style={styles.chipValue} numberOfLines={1}>
+              <View style={styles.summaryChip}>
+                <Text style={styles.summaryChipKicker}>League filter</Text>
+                <Text style={styles.summaryChipValue} numberOfLines={1}>
                   {selectedLeagueLabel}
                 </Text>
               </View>
@@ -959,7 +948,7 @@ export default function TripBuildScreen() {
 
             {discoverSummary.length > 0 ? (
               <View style={styles.prefBar}>
-                <Text style={styles.prefBarLabel}>Starting from your discover setup</Text>
+                <Text style={styles.prefBarLabel}>Starting from Discover</Text>
                 <Text style={styles.prefBarText}>{discoverSummary.join(" • ")}</Text>
               </View>
             ) : null}
@@ -1004,7 +993,7 @@ export default function TripBuildScreen() {
           ) : null}
 
           {!prefillLoading && selectedFixture ? (
-            <GlassCard level="default">
+            <GlassCard level="default" style={styles.selectedCard}>
               <Text style={styles.h1}>Selected match</Text>
 
               <View style={styles.teamRow}>
@@ -1077,7 +1066,11 @@ export default function TripBuildScreen() {
                     <View
                       style={[
                         styles.intelScoreBox,
-                        scoreTone(selectedRankedTrip.breakdown.combinedScore),
+                        scoreTone(selectedRankedTrip.breakdown.combinedScore) === "strong"
+                          ? styles.scoreStrong
+                          : scoreTone(selectedRankedTrip.breakdown.combinedScore) === "okay"
+                            ? styles.scoreOkay
+                            : styles.scoreWeak,
                       ]}
                     >
                       <Text style={styles.intelScoreValue}>
@@ -1087,7 +1080,7 @@ export default function TripBuildScreen() {
                     </View>
 
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.intelTitle}>How this looks as a trip</Text>
+                      <Text style={styles.intelTitle}>Trip fit</Text>
                       <Text style={styles.intelSub}>
                         {difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)} travel •{" "}
                         {selectedRankedTrip.city ||
@@ -1119,18 +1112,12 @@ export default function TripBuildScreen() {
                         {selectedRankedTrip.breakdown.travelDifficultyScore}
                       </Text>
                     </View>
-                    <View style={styles.intelPill}>
-                      <Text style={styles.intelPillKicker}>Difficulty</Text>
-                      <Text style={styles.intelPillValue}>
-                        {difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)}
-                      </Text>
-                    </View>
                   </View>
 
                   {selectedRankedTrip.breakdown.reasonLines?.length ? (
                     <View style={styles.reasonBox}>
-                      <Text style={styles.reasonTitle}>Why it scores well</Text>
-                      {selectedRankedTrip.breakdown.reasonLines.slice(0, 4).map((line, idx) => (
+                      <Text style={styles.reasonTitle}>Why this works</Text>
+                      {selectedRankedTrip.breakdown.reasonLines.slice(0, 3).map((line, idx) => (
                         <Text key={`${line}-${idx}`} style={styles.reasonText}>
                           • {line}
                         </Text>
@@ -1141,7 +1128,7 @@ export default function TripBuildScreen() {
               ) : null}
 
               <View style={styles.nextStageBox}>
-                <Text style={styles.nextStageTitle}>After you save</Text>
+                <Text style={styles.nextStageTitle}>What happens next</Text>
                 <Text style={styles.nextStageText}>{selectedFlowLine}</Text>
 
                 <View style={styles.nextStageRow}>
@@ -1149,10 +1136,10 @@ export default function TripBuildScreen() {
                     <Text style={styles.nextStagePillText}>Tickets</Text>
                   </View>
                   <View style={styles.nextStagePill}>
-                    <Text style={styles.nextStagePillText}>Flights</Text>
+                    <Text style={styles.nextStagePillText}>Stay</Text>
                   </View>
                   <View style={styles.nextStagePill}>
-                    <Text style={styles.nextStagePillText}>Hotels</Text>
+                    <Text style={styles.nextStagePillText}>Travel</Text>
                   </View>
                   <View style={styles.nextStagePill}>
                     <Text style={styles.nextStagePillText}>Wallet</Text>
@@ -1176,9 +1163,7 @@ export default function TripBuildScreen() {
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
                     Prefilled stay area:{" "}
-                    <Text style={{ fontWeight: "900", color: theme.colors.text }}>
-                      {routeCityArea}
-                    </Text>
+                    <Text style={styles.infoTextStrong}>{routeCityArea}</Text>
                   </Text>
                 </View>
               ) : null}
@@ -1218,7 +1203,7 @@ export default function TripBuildScreen() {
                       key={(l as any).key ?? String(l.leagueId)}
                       onPress={() => {
                         setSelectedLeague(l);
-                        setVisibleCount(14);
+                        setVisibleCount(LOAD_MORE_STEP);
                       }}
                       style={[styles.leaguePill, active && styles.leaguePillActive]}
                     >
@@ -1236,7 +1221,7 @@ export default function TripBuildScreen() {
                 value={search}
                 onChangeText={(t) => {
                   setSearch(t);
-                  setVisibleCount(14);
+                  setVisibleCount(LOAD_MORE_STEP);
                 }}
                 placeholder="Search team, city, venue or league"
                 placeholderTextColor={theme.colors.textSecondary}
@@ -1326,7 +1311,11 @@ export default function TripBuildScreen() {
                             <View
                               style={[
                                 styles.rowScoreBox,
-                                scoreTone(ranked.breakdown.combinedScore),
+                                scoreTone(ranked.breakdown.combinedScore) === "strong"
+                                  ? styles.scoreStrong
+                                  : scoreTone(ranked.breakdown.combinedScore) === "okay"
+                                    ? styles.scoreOkay
+                                    : styles.scoreWeak,
                               ]}
                             >
                               <Text style={styles.rowScoreValue}>
@@ -1406,14 +1395,17 @@ export default function TripBuildScreen() {
               </View>
 
               {visibleCount < filtered.length ? (
-                <Pressable onPress={() => setVisibleCount((n) => n + 14)} style={styles.moreBtn}>
+                <Pressable
+                  onPress={() => setVisibleCount((n) => n + LOAD_MORE_STEP)}
+                  style={styles.moreBtn}
+                >
                   <Text style={styles.moreText}>Show more</Text>
                 </Pressable>
               ) : null}
             </GlassCard>
-          ) : null}
+          ) : null
 
-          <Pressable
+            <Pressable
             onPress={onSave}
             disabled={saving || prefillLoading || !selectedFixture}
             style={[
@@ -1430,7 +1422,7 @@ export default function TripBuildScreen() {
                   ? setAsPrimaryOnSave
                     ? "This match will become the main match for this trip."
                     : "This match will be added to the trip."
-                  : "This saves the trip so you can sort tickets, travel and hotel next."
+                  : "This saves the trip so you can sort tickets, stay and travel next."
                 : "Select a match first"}
             </Text>
           </Pressable>
@@ -1442,15 +1434,14 @@ export default function TripBuildScreen() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* styles                                                                     */
-/* -------------------------------------------------------------------------- */
-
 const styles = StyleSheet.create({
-  headerCard: { padding: theme.spacing.lg },
+  headerCard: {
+    padding: theme.spacing.lg,
+    borderRadius: 28,
+  },
 
   bigTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "900",
     color: theme.colors.text,
     letterSpacing: 0.2,
@@ -1464,11 +1455,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  chipRow: { marginTop: 14, flexDirection: "row", gap: 10 },
+  chipRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
 
-  chip: {
+  summaryChip: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
@@ -1476,13 +1471,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
 
-  chipKicker: {
+  summaryChipKicker: {
     color: theme.colors.textTertiary,
     fontWeight: "900",
     fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
 
-  chipValue: {
+  summaryChipValue: {
     marginTop: 4,
     color: theme.colors.text,
     fontWeight: "900",
@@ -1491,7 +1488,7 @@ const styles = StyleSheet.create({
 
   prefBar: {
     marginTop: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.16)",
@@ -1503,6 +1500,8 @@ const styles = StyleSheet.create({
     color: theme.colors.textTertiary,
     fontWeight: "900",
     fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
 
   prefBarText: {
@@ -1515,7 +1514,7 @@ const styles = StyleSheet.create({
 
   flowStrip: {
     marginTop: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(87,162,56,0.18)",
     backgroundColor: "rgba(87,162,56,0.07)",
@@ -1553,7 +1552,7 @@ const styles = StyleSheet.create({
 
   capBar: {
     marginTop: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.16)",
@@ -1568,7 +1567,7 @@ const styles = StyleSheet.create({
   },
 
   h1: {
-    fontSize: theme.fontSize.lg,
+    fontSize: 18,
     fontWeight: "900",
     color: theme.colors.text,
     marginBottom: 8,
@@ -1581,11 +1580,19 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  center: { paddingVertical: 14, alignItems: "center", gap: 10 },
+  center: {
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 10,
+  },
 
   muted: {
     color: theme.colors.textSecondary,
     fontWeight: "800",
+  },
+
+  selectedCard: {
+    borderRadius: 24,
   },
 
   teamRow: {
@@ -1600,8 +1607,8 @@ const styles = StyleSheet.create({
   },
 
   crest: {
-    width: 30,
-    height: 30,
+    width: 34,
+    height: 34,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
@@ -1609,8 +1616,8 @@ const styles = StyleSheet.create({
   },
 
   crestFallback: {
-    width: 30,
-    height: 30,
+    width: 34,
+    height: 34,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
@@ -1620,7 +1627,7 @@ const styles = StyleSheet.create({
   selectedTitle: {
     color: theme.colors.text,
     fontWeight: "900",
-    fontSize: 16,
+    fontSize: 17,
   },
 
   selectedMeta: {
@@ -1657,18 +1664,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,200,0,0.06)",
   },
 
-  badgeTextTbc: { color: "rgba(255,220,140,0.92)" },
+  badgeTextTbc: {
+    color: "rgba(255,220,140,0.92)",
+  },
 
   badgeConfirmed: {
     borderColor: "rgba(75,158,57,0.35)",
     backgroundColor: "rgba(75,158,57,0.10)",
   },
 
-  badgeTextConfirmed: { color: "rgba(140,255,190,0.92)" },
+  badgeTextConfirmed: {
+    color: "rgba(140,255,190,0.92)",
+  },
 
   intelCard: {
     marginTop: 14,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
@@ -1682,9 +1693,9 @@ const styles = StyleSheet.create({
   },
 
   intelScoreBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 18,
+    width: 76,
+    height: 76,
+    borderRadius: 20,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
@@ -1771,7 +1782,7 @@ const styles = StyleSheet.create({
 
   reasonBox: {
     marginTop: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor: "rgba(0,0,0,0.14)",
@@ -1795,7 +1806,7 @@ const styles = StyleSheet.create({
 
   nextStageBox: {
     marginTop: 12,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(87,162,56,0.18)",
     backgroundColor: "rgba(87,162,56,0.07)",
@@ -1867,7 +1878,7 @@ const styles = StyleSheet.create({
 
   infoBar: {
     marginTop: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor: "rgba(0,0,0,0.18)",
@@ -1882,6 +1893,11 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
+  infoTextStrong: {
+    fontWeight: "900",
+    color: theme.colors.text,
+  },
+
   label: {
     marginTop: 14,
     color: theme.colors.textSecondary,
@@ -1893,7 +1909,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.25)",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
     color: theme.colors.text,
     minHeight: 84,
@@ -1930,7 +1946,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.25)",
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 12,
     color: theme.colors.text,
   },
@@ -1938,7 +1954,7 @@ const styles = StyleSheet.create({
   fxCard: {
     marginTop: 10,
     padding: 12,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.20)",
@@ -2079,7 +2095,7 @@ const styles = StyleSheet.create({
   moreBtn: {
     marginTop: 12,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: theme.colors.border,
     alignItems: "center",
@@ -2092,8 +2108,8 @@ const styles = StyleSheet.create({
 
   saveBtn: {
     marginTop: 2,
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingVertical: 15,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(75,158,57,0.55)",
     backgroundColor: "rgba(0,0,0,0.30)",
@@ -2112,6 +2128,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 11,
     textAlign: "center",
+    paddingHorizontal: 18,
   },
 
   err: {
@@ -2120,4 +2137,3 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
-
