@@ -435,7 +435,7 @@ export default function TripBuildScreen() {
     if (routeCity) setNotesIfEmpty(`City: ${routeCity}`);
   }, [routeCity, setNotesIfEmpty]);
 
-  useEffect(() => {
+useEffect(() => {
     if (!routeTripId) return;
 
     let cancelled = false;
@@ -710,7 +710,7 @@ export default function TripBuildScreen() {
     return null;
   }, [startIso, endIso]);
 
-const onSave = useCallback(async () => {
+  const onSave = useCallback(async () => {
     if (!selectedFixture?.fixture?.id) {
       setError("Select a match first.");
       return;
@@ -780,7 +780,10 @@ const onSave = useCallback(async () => {
 
       const existingId = findExistingTripIdForFixture(fixtureId);
       if (existingId) {
-        Alert.alert("Trip already exists", "You already have a trip for this match — opening it now.");
+        Alert.alert(
+          "Trip already exists",
+          "You already have a trip for this match — opening it now."
+        );
         router.replace({ pathname: "/trip/[id]", params: { id: existingId } } as any);
         return;
       }
@@ -873,7 +876,6 @@ const onSave = useCallback(async () => {
   }, [startIso, endIso]);
 
   const headerTitle = useMemo(() => (isEditing ? "Edit trip" : "Plan trip"), [isEditing]);
-
   const selectedLeagueLabel = useMemo(() => {
     if (selectedLeague.leagueId === 0) return "All leagues";
     return selectedLeague.label;
@@ -1162,8 +1164,7 @@ const onSave = useCallback(async () => {
               {routeCityArea ? (
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
-                    Prefilled stay area:{" "}
-                    <Text style={styles.infoTextStrong}>{routeCityArea}</Text>
+                    Prefilled stay area: <Text style={styles.infoTextStrong}>{routeCityArea}</Text>
                   </Text>
                 </View>
               ) : null}
@@ -1323,9 +1324,11 @@ const onSave = useCallback(async () => {
                               </Text>
                             </View>
                           ) : null}
+
                           {leagueFlag ? (
                             <Image source={{ uri: leagueFlag }} style={styles.flag} />
                           ) : null}
+
                           <Text style={styles.fxLeague} numberOfLines={1}>
                             {leagueName || "League"}
                           </Text>
@@ -1403,9 +1406,9 @@ const onSave = useCallback(async () => {
                 </Pressable>
               ) : null}
             </GlassCard>
-          ) : null
+          ) : null}
 
-            <Pressable
+          <Pressable
             onPress={onSave}
             disabled={saving || prefillLoading || !selectedFixture}
             style={[
