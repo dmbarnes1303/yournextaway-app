@@ -47,6 +47,7 @@ import UpcomingMatches from "@/src/features/home/UpcomingMatches";
 const HOME_TOP_LEAGUE_IDS = new Set<number>([39, 140, 135, 78, 61, 88, 94]);
 const HOME_PREFETCH_LIMIT = 2;
 const HOME_PREFETCH_DELAY_MS = 900;
+const HOME_MATCH_WINDOW_DAYS = 45;
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
   `https://media.api-sports.io/football/teams/${teamId}.png`;
@@ -59,6 +60,113 @@ type TripIdea = {
   title: string;
   hook: string;
 };
+
+const MARQUEE_TEAM_TERMS = [
+  "arsenal",
+  "aston villa",
+  "atletico",
+  "atlético",
+  "ajax",
+  "bayern",
+  "benfica",
+  "borussia dortmund",
+  "barcelona",
+  "celtic",
+  "chelsea",
+  "dortmund",
+  "fenerbahce",
+  "fenerbahçe",
+  "galatasaray",
+  "inter",
+  "juventus",
+  "lazio",
+  "liverpool",
+  "manchester city",
+  "manchester united",
+  "milan",
+  "napoli",
+  "newcastle",
+  "olympiacos",
+  "porto",
+  "psg",
+  "paris saint-germain",
+  "real madrid",
+  "roma",
+  "rangers",
+  "sl benfica",
+  "sporting",
+  "tottenham",
+  "tottenham hotspur",
+  "west ham",
+];
+
+const DESTINATION_CITY_TERMS = [
+  "amsterdam",
+  "barcelona",
+  "benfica",
+  "berlin",
+  "bilbao",
+  "dortmund",
+  "florence",
+  "glasgow",
+  "istanbul",
+  "lisbon",
+  "liverpool",
+  "london",
+  "madrid",
+  "manchester",
+  "milan",
+  "munich",
+  "naples",
+  "napoli",
+  "porto",
+  "prague",
+  "rome",
+  "san sebastian",
+  "seville",
+  "turin",
+  "valencia",
+  "vienna",
+];
+
+const ICONIC_VENUE_TERMS = [
+  "allianz arena",
+  "anfield",
+  "bernabeu",
+  "camp nou",
+  "celtic park",
+  "emet",
+  "emirates",
+  "estadio da luz",
+  "ibrox",
+  "johan cruijff arena",
+  "mestalla",
+  "old trafford",
+  "olympico",
+  "san siro",
+  "signal iduna park",
+  "stamford bridge",
+  "tottenham hotspur stadium",
+  "wanda metropolitano",
+  "wembley",
+];
+
+const RIVALRY_PATTERNS: Array<readonly [string, string]> = [
+  ["arsenal", "tottenham"],
+  ["barcelona", "real madrid"],
+  ["bayern", "dortmund"],
+  ["celtic", "rangers"],
+  ["chelsea", "arsenal"],
+  ["chelsea", "tottenham"],
+  ["everton", "liverpool"],
+  ["inter", "milan"],
+  ["lazio", "roma"],
+  ["manchester city", "manchester united"],
+  ["newcastle", "sunderland"],
+  ["real madrid", "atletico"],
+  ["roma", "napoli"],
+  ["tottenham", "west ham"],
+];
 
 function titleFromSlug(s: string) {
   const clean = String(s ?? "").trim();
@@ -106,30 +214,82 @@ function splitSearchBuckets(results: SearchResult[]) {
   return { teams, cities, venues, countries, leagues };
 }
 
+function includesAny(text: string, terms: readonly string[]) {
+  return terms.some((term) => text.includes(term));
+}
+
+function hasRivalryBoost(home: string, away: string) {
+  const h = home.toLowerCase();
+  const a = away.toLowerCase();
+
+  return RIVALRY_PATTERNS.some(([x, y]) => {
+    return (h.includes(x) && a.includes(y)) || (h.includes(y) && a.includes(x));
+  });
+}
+
+function leagueBaseScore(leagueId?: number | null) {
+  if (leagueId === 39) return 130;
+  if (leagueId === 140) return 116;
+  if (leagueId === 135) return 112;
+  if (leagueId === 78) return 104;
+  if (leagueId === 61) return 98;
+  if (leagueId === 88) return 92;
+  if (leagueId === 94) return 90;
+  return 68;
+}
+
+function kickoffTimingScore(dt: Date) {
+  const day = dt.getDay();
+  const hr = dt.getHours();
+
+  let s = 0;
+
+  if (day === 6) s += 22;
+  else if (day === 0) s += 18;
+  else if (day === 5) s += 14;
+  else if (day === 3 || day === 2) s += 6;
+  else if (day === 1 || day === 4) s += 2;
+
+  if (day === 6 && hr >= 14 && hr <= 20) s += 12;
+  else if (day === 0 && hr >= 13 && hr <= 19) s += 9;
+  else if (day === 5 && hr >= 18 && hr <= 21) s += 8;
+  else if (hr >= 17 && hr <= 21) s += 7;
+  else if (hr >= 12 && hr <= 16) s += 3;
+
+  return s;
+}
+
 function scoreFixture(r: FixtureListRow): number {
   let s = 0;
 
   const leagueId = r?.league?.id;
-  if (leagueId === 39) s += 120;
-  else if (leagueId === 140) s += 105;
-  else if (leagueId === 135) s += 100;
-  else if (leagueId === 78) s += 95;
-  else if (leagueId === 61) s += 90;
-  else if (leagueId === 88) s += 82;
-  else if (leagueId === 94) s += 80;
-  else s += 60;
-
+  const home = String(r?.teams?.home?.name ?? "").trim();
+  const away = String(r?.teams?.away?.name ?? "").trim();
   const venue = String(r?.fixture?.venue?.name ?? "").trim();
   const city = String(r?.fixture?.venue?.city ?? "").trim();
+
+  const combinedTeams = `${home} ${away}`.toLowerCase();
+  const combinedLocation = `${venue} ${city}`.toLowerCase();
+
+  s += leagueBaseScore(leagueId);
+
   if (venue) s += 10;
-  if (city) s += 6;
+  if (city) s += 8;
+
+  if (includesAny(combinedTeams, MARQUEE_TEAM_TERMS)) s += 18;
+  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 16;
+  if (includesAny(combinedLocation, ICONIC_VENUE_TERMS)) s += 14;
+
+  if (hasRivalryBoost(home, away)) s += 26;
 
   const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
   if (dt && !Number.isNaN(dt.getTime())) {
-    const day = dt.getDay();
-    if (day === 5 || day === 6 || day === 0) s += 12;
-    const hr = dt.getHours();
-    if (hr >= 17 && hr <= 21) s += 8;
+    s += kickoffTimingScore(dt);
+  }
+
+  if (home && away) {
+    const longNames = (home.length >= 8 ? 1 : 0) + (away.length >= 8 ? 1 : 0);
+    if (longNames === 2) s += 4;
   }
 
   return s;
@@ -193,7 +353,7 @@ export default function HomeScreen() {
   const [league, setLeague] = useState<LeagueOption>(homeTopLeagues[0] ?? LEAGUES[0]);
 
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
-  const upcomingWindow = useMemo(() => windowFromTomorrowIso(14), []);
+  const upcomingWindow = useMemo(() => windowFromTomorrowIso(HOME_MATCH_WINDOW_DAYS), []);
 
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
@@ -440,7 +600,7 @@ export default function HomeScreen() {
   }, [router]);
 
   const goFixturesHub = useCallback(() => {
-    goFixtures({ window: windowFromTomorrowIso(14) });
+    goFixtures({ window: windowFromTomorrowIso(HOME_MATCH_WINDOW_DAYS) });
   }, [goFixtures]);
 
   const goMatch = useCallback(
@@ -668,7 +828,7 @@ export default function HomeScreen() {
                 </View>
 
                 <Text style={styles.heroSecondaryLink}>
-                  {featured ? "View match" : "See what’s on"} ›
+                  {featured ? "Open match guide" : "See what’s on"} ›
                 </Text>
               </View>
             </View>
@@ -701,7 +861,7 @@ export default function HomeScreen() {
                   onPress={goFixturesHub}
                   style={({ pressed }) => [styles.commandChipPrimary, pressed && styles.pressedChip]}
                 >
-                  <Text style={styles.commandChipPrimaryText}>Next 14 days</Text>
+                  <Text style={styles.commandChipPrimaryText}>Next 45 days</Text>
                 </Pressable>
 
                 <Pressable
@@ -801,7 +961,7 @@ export default function HomeScreen() {
               {fxRefreshing && fxRows.length > 0 ? (
                 <View style={styles.refreshingBadge}>
                   <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                  <Text style={styles.refreshingText}>Refreshing fixtures…</Text>
+                  <Text style={styles.refreshingText}>Refreshing best upcoming matches…</Text>
                 </View>
               ) : null}
 
