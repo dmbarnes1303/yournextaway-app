@@ -43,7 +43,10 @@ const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
 };
 
 const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
-  footballticketsnet: ["footballticketnet.com", "www.footballticketnet.com"],
+  footballticketsnet: [
+    "footballticketsnet.com",
+    "www.footballticketsnet.com",
+  ],
   sportsevents365: ["sportsevents365.com", "www.sportsevents365.com"],
   gigsberg: ["gigsberg.com", "www.gigsberg.com"],
 };
@@ -186,7 +189,15 @@ function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean 
 function sanitizeCandidate(candidate: TicketCandidate | null): TicketCandidate | null {
   if (!candidate) return null;
   if (!clean(candidate.url) || !clean(candidate.title)) return null;
-  if (!isAllowedProviderUrl(candidate.provider, candidate.url)) return null;
+
+  if (!isAllowedProviderUrl(candidate.provider, candidate.url)) {
+    console.log("[tickets] rejected by host allowlist", {
+      provider: candidate.provider,
+      url: candidate.url,
+    });
+    return null;
+  }
+
   return candidate;
 }
 
@@ -392,70 +403,6 @@ function buildResolution(
   };
 }
 
-function encodeQuery(input: TicketResolveInput): string {
-  const home = clean(input.homeName);
-  const away = clean(input.awayName);
-  const league = clean(input.leagueName);
-
-  return league ? `${home} vs ${away} ${league}` : `${home} vs ${away}`;
-}
-
-function buildGuaranteedFallbackCandidates(
-  input: TicketResolveInput,
-  existingCandidates: TicketCandidate[]
-): TicketCandidate[] {
-  const query = encodeQuery(input);
-  if (!query) return [];
-
-  const existingProviders = new Set(existingCandidates.map((x) => x.provider));
-  const out: TicketCandidate[] = [];
-
-  if (!existingProviders.has("sportsevents365")) {
-    const se365Url = new URL("https://www.sportsevents365.com/events/search");
-    se365Url.searchParams.set("q", query);
-
-    const aid = clean(env.se365AffiliateId);
-    if (aid) {
-      if (aid.includes("=")) {
-        const [k, v] = aid.split("=");
-        if (k && v) se365Url.searchParams.set(k, v);
-      } else {
-        se365Url.searchParams.set("a_aid", aid);
-      }
-    }
-
-    out.push({
-      provider: "sportsevents365",
-      exact: false,
-      score: 24,
-      url: se365Url.toString(),
-      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
-      priceText: null,
-      reason: "search_fallback",
-    });
-  }
-
-  if (!existingProviders.has("gigsberg")) {
-    const gigsbergUrl = new URL("https://www.gigsberg.com/search");
-    gigsbergUrl.searchParams.set("query", query);
-
-    const aff = clean(env.gigsbergAffiliateId);
-    if (aff) gigsbergUrl.searchParams.set("aff", aff);
-
-    out.push({
-      provider: "gigsberg",
-      exact: false,
-      score: 22,
-      url: gigsbergUrl.toString(),
-      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
-      priceText: null,
-      reason: "search_fallback",
-    });
-  }
-
-  return out;
-}
-
 async function runProvider(
   provider: TicketProviderId,
   fn: () => Promise<TicketCandidate | null>
@@ -560,21 +507,6 @@ export async function resolveTicket(
     }
   }
 
-  const fallbackCandidates = buildGuaranteedFallbackCandidates(input, candidates);
-
-  if (fallbackCandidates.length > 0) {
-    console.log("[tickets] adding guaranteed fallback candidates", {
-      count: fallbackCandidates.length,
-      fallbacks: fallbackCandidates.map(summarizeCandidate),
-    });
-    candidates.push(...fallbackCandidates);
-  }
-
-  console.log("[tickets] raw candidates before resolution", {
-    count: candidates.length,
-    candidates: candidates.map(summarizeCandidate),
-  });
-
   const result = buildResolution(candidates, checkedProviders);
 
   if (result.ok) {
@@ -599,6 +531,7 @@ export async function resolveTicket(
       checkedProviders,
       input: summarizeInput(input),
       debugNoCache,
+      providerStats: PROVIDER_STATS,
     });
   }
 
