@@ -1,4 +1,3 @@
-import { env } from "../../lib/env.js";
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
@@ -31,15 +30,32 @@ type TimedResult<T> = {
 };
 
 const CACHE = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 1000 * 60 * 10;
-const PROVIDER_TIMEOUT_MS = 3500;
-const MAX_RETURNED_OPTIONS = 3;
+const CACHE_TTL_MS = 1000 * 60 * 5;
+
+/**
+ * This MUST be longer than the slowest provider fetch timeout.
+ * FTN = 6000
+ * SE365 = 6000
+ * Gigsberg = 6500
+ *
+ * Give them room, otherwise resolve.ts kills them before they finish.
+ */
+const PROVIDER_TIMEOUT_MS = 9000;
+
+/**
+ * Show all partners we support, not an arbitrary truncated subset.
+ */
+const MAX_RETURNED_OPTIONS = 4;
+
+/**
+ * Search fallback score floor.
+ */
 const MIN_FALLBACK_SCORE = 20;
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
-  footballticketsnet: 1,
-  sportsevents365: 2,
-  gigsberg: 3,
+  sportsevents365: 1,
+  gigsberg: 2,
+  footballticketsnet: 3,
 };
 
 const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
@@ -164,7 +180,7 @@ function summarizeCandidate(candidate: TicketCandidate | null) {
     reason: candidate.reason,
     title: candidate.title,
     priceText: candidate.priceText ?? null,
-    hasUrl: Boolean(clean(candidate.url)),
+    url: clean(candidate.url) || null,
   };
 }
 
@@ -287,6 +303,19 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
       continue;
     }
 
+    const candidatePrice = parsePriceAmount(candidate.priceText);
+    const existingPrice = parsePriceAmount(existing.priceText);
+
+    if (
+      candidate.score === existing.score &&
+      candidatePrice != null &&
+      existingPrice != null &&
+      candidatePrice < existingPrice
+    ) {
+      map.set(key, candidate);
+      continue;
+    }
+
     if (candidate.score === existing.score) {
       const currentRank = PROVIDER_PRIORITY[candidate.provider] ?? 99;
       const existingRank = PROVIDER_PRIORITY[existing.provider] ?? 99;
@@ -326,16 +355,24 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
     const aReasonRank = reasonRank(a.reason);
     const bReasonRank = reasonRank(b.reason);
 
-    if (aReasonRank !== bReasonRank) return aReasonRank - bReasonRank;
+    if (aReasonRank !== bReasonRank) {
+      return aReasonRank - bReasonRank;
+    }
 
     const aPrice = parsePriceAmount(a.priceText);
     const bPrice = parsePriceAmount(b.priceText);
 
-    if (aPrice != null && bPrice != null && Math.abs(a.score - b.score) <= 12) {
+    /**
+     * If both are in roughly the same confidence band, cheaper should win.
+     * This is what users actually care about.
+     */
+    if (aPrice != null && bPrice != null && Math.abs(a.score - b.score) <= 15) {
       if (aPrice !== bPrice) return aPrice - bPrice;
     }
 
-    if (b.score !== a.score) return b.score - a.score;
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
 
     const aHasPrice = Boolean(clean(a.priceText));
     const bHasPrice = Boolean(clean(b.priceText));
@@ -483,7 +520,9 @@ export async function resolveTicket(
         provider,
         candidate: summarizeCandidate(result.value),
       });
-      if (result.value) candidates.push(result.value);
+      if (result.value) {
+        candidates.push(result.value);
+      }
     } else {
       console.log("[tickets] provider promise rejected", {
         provider,
@@ -518,6 +557,7 @@ export async function resolveTicket(
       checkedProviders,
       input: summarizeInput(input),
       debugNoCache,
+      providerStats: PROVIDER_STATS,
     });
   }
 
