@@ -1,4 +1,3 @@
-import { env } from "../../lib/env.js";
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
@@ -44,6 +43,8 @@ const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
 
 const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
   footballticketsnet: [
+    "footballticketnet.com",
+    "www.footballticketnet.com",
     "footballticketsnet.com",
     "www.footballticketsnet.com",
   ],
@@ -180,6 +181,7 @@ function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean 
     const parsed = new URL(raw);
     const host = parsed.hostname.toLowerCase();
     const allowedRoots = PROVIDER_HOST_ALLOWLIST[provider] ?? [];
+
     return allowedRoots.some((root) => host === root || host.endsWith(`.${root}`));
   } catch {
     return false;
@@ -205,7 +207,7 @@ function recordProviderCall(
   provider: TicketProviderId,
   outcome: "success" | "null" | "timeout" | "error",
   durationMs: number
-) {
+): void {
   const stats = PROVIDER_STATS[provider];
   stats.calls += 1;
   stats.lastDurationMs = durationMs;
@@ -495,7 +497,10 @@ export async function resolveTicket(
         provider,
         candidate: summarizeCandidate(result.value),
       });
-      if (result.value) candidates.push(result.value);
+
+      if (result.value) {
+        candidates.push(result.value);
+      }
     } else {
       console.log("[tickets] provider promise rejected", {
         provider,
