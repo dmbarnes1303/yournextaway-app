@@ -6,7 +6,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -14,12 +13,8 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import TripProgressStrip from "@/src/components/TripProgressStrip";
 import NextBestActionCard from "@/src/components/NextBestActionCard";
-import TripHealthScore from "@/src/components/TripHealthScore";
 import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
-import TripWorkspaceCard from "@/src/components/trip/TripWorkspaceCard";
-import TripStayGuidanceCard from "@/src/components/trip/TripStayGuidanceCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -30,14 +25,13 @@ import preferencesStore from "@/src/state/preferences";
 import tripWorkspaceStore from "@/src/state/tripWorkspace";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
-import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
+import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
 import {
   DEFAULT_SECTION_ORDER,
   computeWorkspaceSnapshot,
   groupSavedItemsBySection,
 } from "@/src/core/tripWorkspace";
 
-import { getIataCityCodeForCity, debugCityKey } from "@/src/data/iataCityCodes";
 import storage from "@/src/services/storage";
 
 import useTripDetailController from "@/src/features/tripDetail/useTripDetailController";
@@ -56,48 +50,31 @@ import {
   tripStatus,
 } from "@/src/features/tripDetail/helpers";
 
-declare const __DEV__: boolean;
-const DEV = typeof __DEV__ === "boolean" ? __DEV__ : false;
-
 const PLAN_STORAGE_KEY = "yna:plan";
 
-function heroStatusTone(status: string) {
-  const value = String(status ?? "").trim().toLowerCase();
+/* -------------------------------------------------------------------------- */
+/* helpers                                                                    */
+/* -------------------------------------------------------------------------- */
 
-  if (value === "upcoming") return styles.statusPillUpcoming;
-  if (value === "in progress") return styles.statusPillLive;
-  if (value === "completed") return styles.statusPillComplete;
-  return styles.statusPillUpcoming;
-}
-
-function completionTone(value: number) {
-  if (value >= 85) return styles.completionStrong;
-  if (value >= 55) return styles.completionMid;
-  return styles.completionSoft;
-}
-
-function formatCoreCompleteLabel(count?: number | null) {
-  const value = typeof count === "number" ? count : 0;
-  return `${value}/4 key steps done`;
+function statusLabel(status: string) {
+  const v = String(status ?? "").toLowerCase();
+  if (v === "completed") return "Completed";
+  if (v === "in progress") return "In progress";
+  return "Upcoming";
 }
 
 function nextStepLabel(stepKey?: string | null) {
-  const v = String(stepKey ?? "").trim();
-  if (v === "tickets") return "Next: Tickets";
-  if (v === "flight") return "Next: Flights";
-  if (v === "hotel") return "Next: Hotel";
-  if (v === "transfer") return "Next: Transport";
-  if (v === "things") return "Next: Extras";
-  return "Trip basics complete";
+  if (stepKey === "tickets") return "Add tickets";
+  if (stepKey === "flight") return "Check travel";
+  if (stepKey === "hotel") return "Find a stay";
+  if (stepKey === "transfer") return "Sort transport";
+  if (stepKey === "things") return "Add extras";
+  return "Continue planning";
 }
 
-function statusLabel(status: string) {
-  const value = String(status ?? "").trim().toLowerCase();
-  if (value === "upcoming") return "Upcoming";
-  if (value === "in progress") return "In progress";
-  if (value === "completed") return "Completed";
-  return "Upcoming";
-}
+/* -------------------------------------------------------------------------- */
+/* screen                                                                     */
+/* -------------------------------------------------------------------------- */
 
 export default function TripDetailScreen() {
   const params = useLocalSearchParams();
@@ -111,49 +88,37 @@ export default function TripDetailScreen() {
   const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
   const [allSavedItems, setAllSavedItems] = useState<SavedItem[]>([]);
 
-  const [workspaceLoaded, setWorkspaceLoaded] = useState(tripWorkspaceStore.getState().loaded);
-  const [workspace, setWorkspace] = useState<TripWorkspace | null>(null);
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(
+    tripWorkspaceStore.getState().loaded
+  );
 
-  const [noteText, setNoteText] = useState("");
-  const [noteSaving, setNoteSaving] = useState(false);
-
-  const [originLoaded, setOriginLoaded] = useState<boolean>(preferencesStore.getState().loaded);
-  const [originIata, setOriginIata] = useState<string>(preferencesStore.getPreferredOriginIata());
+  const [originLoaded, setOriginLoaded] = useState(
+    preferencesStore.getState().loaded
+  );
+  const [originIata, setOriginIata] = useState(
+    preferencesStore.getPreferredOriginIata()
+  );
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
-  const [proofBusyId, setProofBusyId] = useState<string | null>(null);
-  const [devWarnedCityKey, setDevWarnedCityKey] = useState<string | null>(null);
-
   const isPro = plan === "premium";
 
-  useEffect(() => {
-    let mounted = true;
+  /* -------------------------------------------------------------------------- */
+  /* load plan                                                                  */
+  /* -------------------------------------------------------------------------- */
 
+  useEffect(() => {
     (async () => {
       try {
         const value = await storage.getString(PLAN_STORAGE_KEY);
-        if (!mounted) return;
-
-        if (value === "free" || value === "premium" || value === "not_set") {
-          setPlan(value);
-          return;
-        }
-
-        if (value === "Free Plan") {
-          setPlan("free");
-          return;
-        }
-
-        if (value === "Premium Plan") {
-          setPlan("premium");
-        }
+        if (value === "premium") setPlan("premium");
+        else if (value === "free") setPlan("free");
       } catch {}
     })();
-
-    return () => {
-      mounted = false;
-    };
   }, []);
+
+  /* -------------------------------------------------------------------------- */
+  /* stores                                                                     */
+  /* -------------------------------------------------------------------------- */
 
   useEffect(() => {
     const sync = () => {
@@ -191,33 +156,7 @@ export default function TripDetailScreen() {
 
   useEffect(() => {
     const sync = () => {
-      const state = tripWorkspaceStore.getState();
-      setWorkspaceLoaded(state.loaded);
-      setWorkspace(routeTripId ? state.workspaces[routeTripId] ?? null : null);
-    };
-
-    const unsub = tripWorkspaceStore.subscribe(sync);
-    sync();
-
-    if (!tripWorkspaceStore.getState().loaded) {
-      tripWorkspaceStore.loadWorkspaces().finally(sync);
-    }
-
-    return () => unsub();
-  }, [routeTripId]);
-
-  useEffect(() => {
-    if (routeTripId && workspaceLoaded) {
-      tripWorkspaceStore.ensureWorkspace(routeTripId);
-    }
-  }, [routeTripId, workspaceLoaded]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const sync = () => {
       const state = preferencesStore.getState();
-      if (!mounted) return;
       setOriginLoaded(Boolean(state.loaded));
       setOriginIata(cleanUpper3(state.preferredOriginIata, "LON"));
     };
@@ -229,13 +168,12 @@ export default function TripDetailScreen() {
       preferencesStore.load().finally(sync);
     }
 
-    return () => {
-      mounted = false;
-      try {
-        unsub();
-      } catch {}
-    };
+    return () => unsub();
   }, []);
+
+  /* -------------------------------------------------------------------------- */
+  /* derived                                                                    */
+  /* -------------------------------------------------------------------------- */
 
   const activeTripId = useMemo(
     () => clean(trip?.id) || clean(routeTripId) || null,
@@ -247,34 +185,15 @@ export default function TripDetailScreen() {
     return allSavedItems.filter((x) => clean(x.tripId) === activeTripId);
   }, [allSavedItems, activeTripId]);
 
-  const groupedBySection = useMemo(() => groupSavedItemsBySection(savedItems), [savedItems]);
-  const workspaceSnapshot = useMemo(() => computeWorkspaceSnapshot(savedItems), [savedItems]);
-
-  const sectionOrder = useMemo<WorkspaceSectionKey[]>(
-    () => workspace?.sectionOrder ?? [...DEFAULT_SECTION_ORDER],
-    [workspace]
+  const groupedBySection = useMemo(
+    () => groupSavedItemsBySection(savedItems),
+    [savedItems]
   );
 
-  const activeSection = useMemo<WorkspaceSectionKey>(
-    () => workspace?.activeSection ?? sectionOrder[0] ?? "tickets",
-    [workspace?.activeSection, sectionOrder]
+  const workspaceSnapshot = useMemo(
+    () => computeWorkspaceSnapshot(savedItems),
+    [savedItems]
   );
-
-  async function setActiveWorkspaceSection(section: WorkspaceSectionKey) {
-    const id = clean(activeTripId);
-    if (!id) return;
-    try {
-      await tripWorkspaceStore.setActiveSection(id, section);
-    } catch {}
-  }
-
-  async function toggleWorkspaceSection(section: WorkspaceSectionKey) {
-    const id = clean(activeTripId);
-    if (!id) return;
-    try {
-      await tripWorkspaceStore.toggleCollapsed(id, section);
-    } catch {}
-  }
 
   const data = useTripDetailData({
     trip,
@@ -289,11 +208,6 @@ export default function TripDetailScreen() {
     primaryLeagueId: data.primaryLeagueId,
     fixturesById: data.fixturesById,
     ticketsByMatchId: data.ticketsByMatchId,
-    noteText,
-    setNoteText,
-    setNoteSaving,
-    setProofBusyId,
-    setActiveWorkspaceSection,
   });
 
   const vm = useTripDetailViewModel({
@@ -308,252 +222,109 @@ export default function TripDetailScreen() {
     progress: data.progress,
     readiness: data.readiness,
     pending: savedItems.filter((x) => x.status === "pending"),
-    saved: savedItems.filter((x) => x.status === "saved" && x.type !== "note"),
+    saved: savedItems.filter((x) => x.status === "saved"),
     booked: savedItems.filter((x) => x.status === "booked"),
     primaryMatchId: data.primaryMatchId,
     primaryTicketItem: data.primaryTicketItem,
     isPro,
     kickoffTbc: data.kickoffMeta.tbc,
     controller,
-    setActiveWorkspaceSection,
   });
 
   const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
 
-  useEffect(() => {
-    if (!DEV) return;
-
-    const city = clean(data.cityName);
-    if (!city || city === "Trip") return;
-
-    const code = getIataCityCodeForCity(city);
-    if (code) return;
-
-    const key = debugCityKey(city);
-    if (!key || devWarnedCityKey === key) return;
-
-    setDevWarnedCityKey(key);
-
-    Alert.alert(
-      "Missing IATA mapping (dev)",
-      `City: ${city}\n\nNormalized key:\n${key}\n\nAdd it to src/data/iataCityCodes.ts`,
-      [{ text: "OK" }],
-      { cancelable: true }
-    );
-  }, [data.cityName, devWarnedCityKey]);
+  /* -------------------------------------------------------------------------- */
+  /* render                                                                     */
+  /* -------------------------------------------------------------------------- */
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: "Trip",
-          headerTransparent: true,
-          headerTintColor: theme.colors.text,
-        }}
-      />
+      <Stack.Screen options={{ headerShown: true, title: "Trip" }} />
 
-      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+      <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
         <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: theme.spacing.xxl + insets.bottom },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingTop: 100,
+            paddingHorizontal: theme.spacing.lg,
+            paddingBottom: theme.spacing.xxl + insets.bottom,
+            gap: theme.spacing.lg,
+          }}
         >
-          {!routeTripId ? (
-            <GlassCard style={styles.card}>
-              <EmptyState title="Missing trip id" message="No trip id provided." />
+          {!trip ? (
+            <GlassCard>
+              <EmptyState title="Trip not found" message="No trip available." />
             </GlassCard>
-          ) : null}
-
-          {vm.loading ? (
-            <GlassCard style={styles.card}>
-              <View style={styles.center}>
-                <ActivityIndicator />
-                <Text style={styles.muted}>Loading trip…</Text>
-              </View>
-            </GlassCard>
-          ) : null}
-
-          {!vm.loading && routeTripId && tripsLoaded && savedLoaded && workspaceLoaded && !trip ? (
-            <GlassCard style={styles.card}>
-              <EmptyState
-                title="Trip not found"
-                message="This trip doesn’t exist on this device."
-              />
-            </GlassCard>
-          ) : null}
-
-          {trip ? (
+          ) : (
             <>
-              <GlassCard style={styles.hero}>
-                <Text style={styles.kicker}>YOUR TRIP</Text>
-                <Text style={styles.cityTitle}>{data.cityName}</Text>
-                <Text style={styles.heroMeta}>{summaryLine(trip)}</Text>
-                <Text style={styles.heroMetaSmall}>{data.kickoffMeta.line}</Text>
+              {/* ---------------- HERO ---------------- */}
 
-                <View style={styles.heroTopRow}>
-                  <View style={[styles.statusPill, heroStatusTone(status)]}>
-                    <Text style={styles.statusText}>{statusLabel(status)}</Text>
-                  </View>
+              <GlassCard>
+                <Text style={styles.city}>{data.cityName}</Text>
+                <Text style={styles.meta}>{summaryLine(trip)}</Text>
 
-                  <Pressable onPress={controller.onViewWallet} style={styles.walletBtn}>
-                    <Text style={styles.walletBtnText}>Wallet</Text>
+                <View style={styles.heroRow}>
+                  <Text style={styles.status}>{statusLabel(status)}</Text>
+                  <Pressable onPress={controller.onViewWallet}>
+                    <Text style={styles.wallet}>Wallet</Text>
                   </Pressable>
                 </View>
 
-                <View style={styles.funnelCard}>
-                  <View style={styles.funnelTopRow}>
-                    <View
-                      style={[
-                        styles.completionScoreBox,
-                        completionTone(vm.tripCompletionPct ?? 0),
-                      ]}
-                    >
-                      <Text style={styles.completionScoreValue}>
-                        {vm.tripCompletionPct ?? 0}%
-                      </Text>
-                      <Text style={styles.completionScoreLabel}>Complete</Text>
-                    </View>
-
-                    <View style={styles.funnelCopyWrap}>
-                      <Text style={styles.funnelTitle}>Trip progress</Text>
-                      <Text style={styles.funnelSub}>{vm.completionSummary}</Text>
-                      <Text style={styles.funnelSubAlt}>
-                        {formatCoreCompleteLabel(vm.completeCoreCount)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.funnelBadgeRow}>
-                    <View style={styles.funnelBadge}>
-                      <Text style={styles.funnelBadgeText}>
-                        {nextStepLabel(vm.nextIncompleteStep?.key)}
-                      </Text>
-                    </View>
-
-                    {vm.commercialSummaryLine ? (
-                      <View style={styles.funnelBadge}>
-                        <Text style={styles.funnelBadgeText}>
-                          {vm.commercialSummaryLine}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
+                <View style={styles.progressBox}>
+                  <Text style={styles.progressText}>
+                    {vm.tripCompletionPct ?? 0}% ready
+                  </Text>
+                  <Text style={styles.nextText}>
+                    {nextStepLabel(vm.nextIncompleteStep?.key)}
+                  </Text>
                 </View>
-
-                {vm.showHeroBanners ? (
-                  <View style={styles.bannersRow}>
-                    {vm.heroBannerCounts.pending > 0 ? (
-                      <View style={styles.pendingBanner}>
-                        <Text style={styles.pendingText}>
-                          {vm.heroBannerCounts.pending} pending booking
-                          {vm.heroBannerCounts.pending === 1 ? "" : "s"}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {vm.heroBannerCounts.saved > 0 ? (
-                      <View style={styles.savedBanner}>
-                        <Text style={styles.savedText}>
-                          {vm.heroBannerCounts.saved} saved item
-                          {vm.heroBannerCounts.saved === 1 ? "" : "s"}
-                        </Text>
-                      </View>
-                    ) : null}
-
-                    {vm.heroBannerCounts.booked > 0 ? (
-                      <View style={styles.bookedBanner}>
-                        <Text style={styles.bookedText}>
-                          {vm.heroBannerCounts.booked} booked item
-                          {vm.heroBannerCounts.booked === 1 ? "" : "s"} in Wallet
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
 
                 <View style={styles.heroActions}>
-                  <Pressable
-                    onPress={controller.onEditTrip}
-                    style={[styles.btn, styles.btnPrimary]}
-                  >
-                    <Text style={styles.btnPrimaryText}>Edit trip</Text>
+                  <Pressable style={styles.primaryBtn} onPress={controller.onEditTrip}>
+                    <Text style={styles.primaryBtnText}>Continue planning</Text>
                   </Pressable>
-
-                  {!isPro ? (
-                    <Pressable
-                      onPress={controller.onUpgradePress}
-                      style={[styles.btn, styles.btnSecondary]}
-                    >
-                      <Text style={styles.btnSecondaryText}>Go Pro</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-
-                {!originLoaded ? (
-                  <Text style={styles.mutedInline}>Loading departure airport…</Text>
-                ) : null}
-
-                <View style={styles.heroBottomStack}>
-                  <TripProgressStrip items={vm.progressItems} />
-                  <NextBestActionCard
-                    action={vm.nextAction}
-                    isPro={isPro}
-                    onUpgradePress={controller.onUpgradePress}
-                  />
-                  <TripHealthScore
-                    score={vm.readiness.score}
-                    missing={vm.readiness.missing}
-                    isPro={isPro}
-                    capHint={vm.capHint}
-                  />
                 </View>
               </GlassCard>
 
-              {data.affiliateUrls ? (
-                <GlassCard style={styles.card}>
-                  <View style={styles.sectionTitleRow}>
-                    <Text style={styles.sectionTitle}>Book this trip</Text>
-                    <Text style={styles.sectionSub}>Prices and partner links</Text>
-                  </View>
+              {/* ---------------- NEXT ACTION ---------------- */}
 
-                  {vm.commercialSummaryLine ? (
-                    <View style={styles.smartSummaryBar}>
-                      <Text style={styles.smartSummaryText}>
-                        {vm.commercialSummaryLine}
-                      </Text>
-                    </View>
-                  ) : null}
+              <NextBestActionCard
+                action={vm.nextAction}
+                isPro={isPro}
+                onUpgradePress={controller.onUpgradePress}
+              />
 
-                  <View style={styles.smartGrid}>
-                    {vm.smartBookButtons.map((button, index) => (
+              {/* ---------------- PLANNING RAIL ---------------- */}
+
+              <GlassCard>
+                <Text style={styles.sectionTitle}>Plan your trip</Text>
+
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {[
+                    { key: "tickets", label: "Tickets" },
+                    { key: "hotel", label: "Stay" },
+                    { key: "flight", label: "Travel" },
+                    { key: "things", label: "Extras" },
+                  ].map((item) => {
+                    const count =
+                      groupedBySection[item.key as WorkspaceSectionKey]?.length || 0;
+
+                    return (
                       <Pressable
-                        key={`${button.title}-${index}`}
-                        style={[
-                          styles.smartBtn,
-                          button.kind === "primary" && styles.smartBtnPrimary,
-                        ]}
-                        onPress={button.onPress}
+                        key={item.key}
+                        style={styles.railCard}
+                        onPress={() => controller.onOpenSection?.(item.key)}
                       >
-                        <View style={styles.smartBtnTop}>
-                          <Text style={styles.smartBtnText}>{button.title}</Text>
-                        </View>
-                        <Text style={styles.smartBtnSub}>{button.sub}</Text>
+                        <Text style={styles.railTitle}>{item.label}</Text>
+                        <Text style={styles.railSub}>
+                          {count > 0 ? `${count} added` : "Not added"}
+                        </Text>
                       </Pressable>
-                    ))}
-                  </View>
+                    );
+                  })}
+                </ScrollView>
+              </GlassCard>
 
-                  <Pressable
-                    onPress={() => controller.openUntracked(data.affiliateUrls?.mapsUrl)}
-                  >
-                    <Text style={styles.mapsInline}>Open in Maps</Text>
-                  </Pressable>
-                </GlassCard>
-              ) : null}
+              {/* ---------------- MATCHES ---------------- */}
 
               <TripMatchesCard
                 trip={trip}
@@ -572,57 +343,112 @@ export default function TripDetailScreen() {
                 getLivePriceLine={livePriceLine}
               />
 
-              <TripWorkspaceCard
-                workspaceSnapshot={workspaceSnapshot}
-                workspace={workspace}
-                sectionOrder={sectionOrder}
-                activeSection={activeSection}
-                groupedBySection={groupedBySection}
-                primaryMatchId={data.primaryMatchId}
-                affiliateUrls={data.affiliateUrls}
-                cityName={data.cityName}
-                originIata={cleanUpper3(originIata, "LON")}
-                tripStartDate={trip.startDate}
-                tripEndDate={trip.endDate}
-                noteText={noteText}
-                noteSaving={noteSaving}
-                proofBusyId={proofBusyId}
-                stayBestAreas={data.stayBestAreas}
-                stayBudgetAreas={data.stayBudgetAreas}
-                transportStops={data.transportStops}
-                onSetActiveSection={setActiveWorkspaceSection}
-                onToggleSection={toggleWorkspaceSection}
-                onNoteTextChange={setNoteText}
-                onAddNote={controller.addNote}
-                onOpenTicketsForPrimaryMatch={() => {
-                  if (data.primaryMatchId) controller.openTicketsForMatch(data.primaryMatchId);
-                }}
-                onOpenSavedItem={controller.openSavedItem}
-                onOpenNoteActions={controller.openNoteActions}
-                onConfirmMarkBooked={controller.confirmMarkBooked}
-                onAddProofForBookedItem={controller.addProofForBookedItem}
-                onViewWallet={controller.onViewWallet}
-                onConfirmMoveToPending={controller.confirmMoveToPending}
-                onConfirmArchive={controller.confirmArchive}
-                onOpenPartner={controller.openTrackedPartner}
-                getLivePriceLine={livePriceLine}
-                getTicketProviderFromItem={ticketProviderFromItem}
-              />
+              {/* ---------------- WORKSPACE ---------------- */}
 
-              <TripStayGuidanceCard
-                stadiumName={data.stadiumName}
-                stadiumCity={data.stadiumCity}
-                logisticsSnippet={data.primaryLogisticsSnippet}
-                bestAreas={data.stayBestAreas}
-                budgetAreas={data.stayBudgetAreas}
-                transportStops={data.transportStops}
-                transportTips={data.transportTips}
-                lateTransportNote={data.lateTransportNote}
-                stadiumMapsUrl={data.stadiumMapsUrl}
-                openUrl={controller.openUntracked}
-              />
+              <GlassCard>
+                <Text style={styles.sectionTitle}>Workspace</Text>
+                <Text style={styles.sectionSub}>
+                  Keep everything for this trip in one place.
+                </Text>
+
+                <View style={styles.workspaceGrid}>
+                  {[
+                    {
+                      title: "Pending",
+                      value: savedItems.filter((x) => x.status === "pending").length,
+                    },
+                    {
+                      title: "Saved",
+                      value: savedItems.filter((x) => x.status === "saved").length,
+                    },
+                    {
+                      title: "Booked",
+                      value: savedItems.filter((x) => x.status === "booked").length,
+                    },
+                    {
+                      title: "Complete",
+                      value: `${vm.tripCompletionPct ?? 0}%`,
+                    },
+                  ].map((item) => (
+                    <View key={item.title} style={styles.workspaceStat}>
+                      <Text style={styles.workspaceStatValue}>{item.value}</Text>
+                      <Text style={styles.workspaceStatLabel}>{item.title}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {vm.commercialSummaryLine ? (
+                  <View style={styles.summaryBar}>
+                    <Text style={styles.summaryBarText}>{vm.commercialSummaryLine}</Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.workspaceActions}>
+                  <Pressable
+                    style={styles.secondaryBtn}
+                    onPress={controller.onViewWallet}
+                  >
+                    <Text style={styles.secondaryBtnText}>Open wallet</Text>
+                  </Pressable>
+
+                  {!isPro ? (
+                    <Pressable
+                      style={styles.secondaryBtn}
+                      onPress={controller.onUpgradePress}
+                    >
+                      <Text style={styles.secondaryBtnText}>Upgrade to Pro</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </GlassCard>
+
+              {/* ---------------- STAY GUIDANCE ---------------- */}
+
+              <GlassCard>
+                <Text style={styles.sectionTitle}>Stay guidance</Text>
+                <Text style={styles.sectionSub}>
+                  Quick local help for where to base yourself.
+                </Text>
+
+                {data.stayBestAreas?.length || data.stayBudgetAreas?.length ? (
+                  <View style={styles.guidanceList}>
+                    {data.stayBestAreas?.slice(0, 2).map((area: any, index: number) => (
+                      <View key={`best-${index}`} style={styles.guidanceRow}>
+                        <Text style={styles.guidanceLabel}>Best area</Text>
+                        <Text style={styles.guidanceText}>
+                          {typeof area === "string" ? area : area?.area || area?.name || "Area"}
+                        </Text>
+                      </View>
+                    ))}
+
+                    {data.stayBudgetAreas?.slice(0, 1).map((area: any, index: number) => (
+                      <View key={`budget-${index}`} style={styles.guidanceRow}>
+                        <Text style={styles.guidanceLabel}>Budget pick</Text>
+                        <Text style={styles.guidanceText}>
+                          {typeof area === "string" ? area : area?.area || area?.name || "Area"}
+                        </Text>
+                      </View>
+                    ))}
+
+                    {data.transportStops?.slice(0, 1).map((stop: any, index: number) => (
+                      <View key={`stop-${index}`} style={styles.guidanceRow}>
+                        <Text style={styles.guidanceLabel}>Useful stop</Text>
+                        <Text style={styles.guidanceText}>
+                          {typeof stop === "string" ? stop : stop?.name || stop?.label || "Transport"}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.emptyMini}>
+                    <Text style={styles.emptyMiniText}>
+                      Local stay guidance will appear here when available.
+                    </Text>
+                  </View>
+                )}
+              </GlassCard>
             </>
-          ) : null}
+          )}
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -630,311 +456,155 @@ export default function TripDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
-  scroll: { flex: 1 },
-
-  content: {
-    paddingTop: 100,
-    paddingHorizontal: theme.spacing.lg,
-    gap: theme.spacing.lg,
-  },
-
-  card: { padding: theme.spacing.lg },
-
-  center: {
-    alignItems: "center",
-    gap: 10,
-  },
-
-  muted: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-  },
-
-  mutedInline: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    fontWeight: "800",
-  },
-
-  hero: { padding: theme.spacing.lg },
-
-  kicker: {
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: theme.fontSize.xs,
-    letterSpacing: 0.7,
-  },
-
-  cityTitle: {
-    marginTop: 6,
+  city: {
     color: theme.colors.text,
-    fontSize: theme.fontSize.xl,
     fontWeight: "900",
+    fontSize: 28,
+    lineHeight: 32,
   },
 
-  heroMeta: {
+  meta: {
     marginTop: 6,
     color: theme.colors.textSecondary,
     fontWeight: "800",
+    fontSize: 13,
   },
 
-  heroMetaSmall: {
-    marginTop: 6,
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  heroTopRow: {
-    marginTop: 10,
+  heroRow: {
+    marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
   },
 
-  statusPill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  statusPillUpcoming: {
-    borderColor: "rgba(0,255,136,0.4)",
-  },
-
-  statusPillLive: {
-    borderColor: "rgba(255,200,80,0.45)",
-  },
-
-  statusPillComplete: {
-    borderColor: "rgba(120,170,255,0.45)",
-  },
-
-  statusText: {
-    color: theme.colors.text,
+  status: {
+    color: theme.colors.primary,
     fontWeight: "900",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 
-  walletBtn: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-
-  walletBtnText: {
-    color: theme.colors.text,
+  wallet: {
+    color: theme.colors.textSecondary,
     fontWeight: "900",
     fontSize: 12,
   },
 
-  funnelCard: {
-    marginTop: 12,
+  progressBox: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-    gap: 10,
+    backgroundColor: "rgba(0,0,0,0.16)",
+    gap: 4,
   },
 
-  funnelTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  completionScoreBox: {
-    width: 84,
-    height: 84,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  completionStrong: {
-    borderColor: "rgba(0,255,136,0.40)",
-    backgroundColor: "rgba(0,255,136,0.10)",
-  },
-
-  completionMid: {
-    borderColor: "rgba(255,200,80,0.35)",
-    backgroundColor: "rgba(255,200,80,0.10)",
-  },
-
-  completionSoft: {
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-
-  completionScoreValue: {
+  progressText: {
     color: theme.colors.text,
     fontWeight: "900",
-    fontSize: 24,
-    lineHeight: 28,
+    fontSize: 22,
+    lineHeight: 26,
   },
 
-  completionScoreLabel: {
-    marginTop: 2,
-    color: theme.colors.textSecondary,
-    fontWeight: "900",
-    fontSize: 10,
-  },
-
-  funnelCopyWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  funnelTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 15,
-  },
-
-  funnelSub: {
-    marginTop: 6,
+  nextText: {
     color: theme.colors.textSecondary,
     fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  funnelSubAlt: {
-    marginTop: 4,
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  funnelBadgeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-
-  funnelBadge: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-
-  funnelBadgeText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  bannersRow: {
-    marginTop: 12,
-    gap: 10,
-  },
-
-  pendingBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,200,80,0.15)",
-  },
-
-  pendingText: {
-    color: "rgba(255,200,80,1)",
-    fontWeight: "900",
-  },
-
-  savedBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,255,136,0.10)",
-  },
-
-  savedText: {
-    color: "rgba(0,255,136,1)",
-    fontWeight: "900",
-  },
-
-  bookedBanner: {
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: "rgba(120,170,255,0.14)",
-  },
-
-  bookedText: {
-    color: "rgba(160,195,255,1)",
-    fontWeight: "900",
+    fontSize: 13,
   },
 
   heroActions: {
-    marginTop: 12,
-    flexDirection: "row",
-    gap: 10,
-  },
-
-  heroBottomStack: {
     marginTop: 14,
     gap: 10,
   },
 
-  btn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
+  primaryBtn: {
+    paddingVertical: 13,
+    borderRadius: 14,
     alignItems: "center",
     borderWidth: 1,
-  },
-
-  btnPrimary: {
-    borderColor: "rgba(0,255,136,0.6)",
+    borderColor: "rgba(0,255,136,0.50)",
     backgroundColor: "rgba(0,0,0,0.22)",
   },
 
-  btnPrimaryText: {
+  primaryBtnText: {
     color: theme.colors.text,
     fontWeight: "900",
-  },
-
-  btnSecondary: {
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-  },
-
-  btnSecondaryText: {
-    color: theme.colors.textSecondary,
-    fontWeight: "900",
-  },
-
-  sectionTitleRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: 12,
+    fontSize: 14,
   },
 
   sectionTitle: {
     color: theme.colors.text,
     fontWeight: "900",
-    marginBottom: 8,
+    fontSize: 17,
+    marginBottom: 6,
   },
 
   sectionSub: {
-    color: theme.colors.textTertiary,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+
+  railCard: {
+    width: 148,
+    marginRight: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+
+  railTitle: {
+    color: theme.colors.text,
     fontWeight: "900",
+    fontSize: 14,
+  },
+
+  railSub: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
     fontSize: 12,
   },
 
-  smartSummaryBar: {
-    marginBottom: 10,
+  workspaceGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  workspaceStat: {
+    width: "47%",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+
+  workspaceStatValue: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 20,
+    lineHeight: 24,
+  },
+
+  workspaceStatLabel: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  summaryBar: {
+    marginTop: 12,
     borderWidth: 1,
     borderColor: "rgba(0,255,136,0.18)",
     backgroundColor: "rgba(0,0,0,0.16)",
@@ -943,58 +613,75 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
 
-  smartSummaryText: {
+  summaryBarText: {
     color: theme.colors.textSecondary,
-    fontWeight: "900",
+    fontWeight: "800",
     fontSize: 12,
     lineHeight: 16,
   },
 
-  smartGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  workspaceActions: {
+    marginTop: 12,
     gap: 10,
   },
 
-  smartBtn: {
-    width: "48%",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    borderRadius: 12,
+  secondaryBtn: {
     paddingVertical: 12,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(0,0,0,0.16)",
   },
 
-  smartBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.22)",
-  },
-
-  smartBtnTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-
-  smartBtnText: {
-    color: theme.colors.text,
+  secondaryBtnText: {
+    color: theme.colors.textSecondary,
     fontWeight: "900",
+    fontSize: 13,
   },
 
-  smartBtnSub: {
+  guidanceList: {
+    gap: 10,
+  },
+
+  guidanceRow: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+
+  guidanceLabel: {
+    color: theme.colors.textTertiary,
+    fontWeight: "900",
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+
+  guidanceText: {
     marginTop: 4,
+    color: theme.colors.text,
+    fontWeight: "800",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  emptyMini: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(0,0,0,0.16)",
+  },
+
+  emptyMiniText: {
     color: theme.colors.textSecondary,
     fontWeight: "800",
-    fontSize: 12,
-    textAlign: "left",
-  },
-
-  mapsInline: {
-    marginTop: 10,
-    color: theme.colors.textSecondary,
-    textAlign: "center",
-    fontWeight: "900",
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
