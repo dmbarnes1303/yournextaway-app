@@ -46,11 +46,11 @@ type Props = {
   primaryLeagueId?: number;
   fixturesById: Record<string, FixtureListRow>;
   ticketsByMatchId: Record<string, SavedItem | null>;
-  noteText: string;
-  setNoteText: SetState<string>;
-  setNoteSaving: SetState<boolean>;
-  setProofBusyId: SetState<string | null>;
-  setActiveWorkspaceSection: (section: WorkspaceSectionKey) => Promise<void> | void;
+  noteText?: string;
+  setNoteText?: SetState<string>;
+  setNoteSaving?: SetState<boolean>;
+  setProofBusyId?: SetState<string | null>;
+  setActiveWorkspaceSection?: (section: WorkspaceSectionKey) => Promise<void> | void;
 };
 
 type TrackedPartnerArgs = {
@@ -150,11 +150,11 @@ export default function useTripDetailController({
   primaryLeagueId,
   fixturesById,
   ticketsByMatchId,
-  noteText,
-  setNoteText,
-  setNoteSaving,
-  setProofBusyId,
-  setActiveWorkspaceSection,
+  noteText = "",
+  setNoteText = () => {},
+  setNoteSaving = () => {},
+  setProofBusyId = () => {},
+  setActiveWorkspaceSection = () => {},
 }: Props) {
   const router = useRouter();
 
@@ -189,9 +189,41 @@ export default function useTripDetailController({
   function onUpgradePress() {
     Alert.alert(
       "Go Pro",
-      "Pro removes caps and adds automation (timeline + alerts). Hook up paywall later — this is the placeholder entry point.",
+      "Pro removes caps and adds automation later. This is the placeholder entry point.",
       [{ text: "OK" }]
     );
+  }
+
+  async function onOpenSection(section: WorkspaceSectionKey | string) {
+    const next = clean(section) as WorkspaceSectionKey;
+    if (!next) return;
+
+    try {
+      await setActiveWorkspaceSection(next);
+    } catch {}
+
+    if (next === "tickets") {
+      const primaryMatchId = clean((trip as any)?.fixtureIdPrimary);
+      if (primaryMatchId) {
+        await openTicketsForMatch(primaryMatchId);
+      }
+      return;
+    }
+
+    if (next === "stay") {
+      Alert.alert("Stay", "Hotel and stay options belong here next.");
+      return;
+    }
+
+    if (next === "travel") {
+      Alert.alert("Travel", "Flights, trains and transfer planning belong here next.");
+      return;
+    }
+
+    if (next === "things") {
+      Alert.alert("Extras", "Things to do and add-ons belong here.");
+      return;
+    }
   }
 
   async function openUntracked(url?: string | null) {
@@ -375,7 +407,7 @@ export default function useTripDetailController({
   function confirmArchive(item: SavedItem) {
     Alert.alert(
       "Archive this item?",
-      "Archived items are hidden from the trip workspace. You can restore them later (Phase 2).",
+      "Archived items are hidden from the trip workspace.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
@@ -508,7 +540,7 @@ export default function useTripDetailController({
 
     Alert.alert(
       "Remove this match?",
-      "This only removes it from the trip — it won’t delete Wallet items.",
+      "This only removes it from the trip.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -823,6 +855,7 @@ export default function useTripDetailController({
     onAddMatch,
     onViewWallet,
     onUpgradePress,
+    onOpenSection,
     openUntracked,
     openTrackedPartner,
     openPartnerOrAlert,
