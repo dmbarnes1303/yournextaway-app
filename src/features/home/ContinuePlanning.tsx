@@ -9,7 +9,6 @@ import {
   Platform,
 } from "react-native";
 
-import GlassCard from "@/src/components/GlassCard";
 import { theme } from "@/src/constants/theme";
 import type { Trip } from "@/src/state/trips";
 
@@ -28,6 +27,18 @@ type Props = {
   onOpenTrip: (tripId: string) => void;
 };
 
+function getTripSignal(nextTrip: Trip | null) {
+  if (!nextTrip) return "Ready when you are";
+
+  const savedCount = Array.isArray((nextTrip as any)?.matchIds)
+    ? (nextTrip as any).matchIds.length
+    : 0;
+
+  if (savedCount > 1) return `${savedCount} matches saved`;
+  if (savedCount === 1) return "1 match saved";
+  return "Workspace live";
+}
+
 export default function ContinuePlanning(props: Props) {
   const {
     loadedTrips,
@@ -44,148 +55,148 @@ export default function ContinuePlanning(props: Props) {
     onOpenTrip,
   } = props;
 
+  const signal = getTripSignal(nextTrip);
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <View style={styles.sectionTitleWrap}>
-          <Text style={styles.sectionEyebrow}>Workspace</Text>
-          <Text style={styles.sectionTitle}>Continue planning</Text>
-        </View>
+        <Text style={styles.sectionTitle}>Continue planning</Text>
 
         <Pressable
           onPress={goTrips}
-          style={({ pressed }) => [styles.miniPill, pressed && styles.pressedLite]}
+          style={({ pressed }) => [styles.headerAction, pressed && styles.pressedLite]}
+          hitSlop={10}
         >
-          <Text style={styles.miniPillText}>All trips</Text>
+          <Text style={styles.headerActionText}>All trips ›</Text>
         </Pressable>
       </View>
 
-      <GlassCard strength="default" style={styles.block} noPadding>
-        <View style={styles.blockInner}>
-          {!loadedTrips ? (
-            <View style={styles.center}>
-              <ActivityIndicator />
-              <Text style={styles.muted}>Loading trips…</Text>
-            </View>
-          ) : null}
+      {!loadedTrips ? (
+        <View style={styles.loadingCard}>
+          <ActivityIndicator color={theme.colors.textSecondary} />
+          <Text style={styles.loadingText}>Loading trips…</Text>
+        </View>
+      ) : null}
 
-          {loadedTrips && !nextTrip ? (
-            <View style={styles.emptyShell}>
-              <View style={styles.emptyHeaderRow}>
-                <Text style={styles.emptyEyebrow}>Trip workspace</Text>
-                <View style={styles.emptyStatusPill}>
-                  <Text style={styles.emptyStatusPillText}>Nothing active</Text>
-                </View>
+      {loadedTrips && !nextTrip ? (
+        <View style={styles.emptyCard}>
+          <Image
+            source={{ uri: nextTripCityImage }}
+            style={styles.emptyImage}
+            resizeMode="cover"
+          />
+          <View style={styles.emptyImageShade} pointerEvents="none" />
+          <View style={styles.emptyBottomFade} pointerEvents="none" />
+          <View style={styles.emptyGlow} pointerEvents="none" />
+
+          <View style={styles.emptyContent}>
+            <Text style={styles.emptyTag}>Trip workspace</Text>
+            <Text style={styles.emptyTitle}>Start your first football trip</Text>
+            <Text style={styles.emptyMeta}>
+              Pick a city, fixture or date window and build the whole weekend in one place.
+            </Text>
+
+            <View style={styles.emptyActions}>
+              <Pressable
+                onPress={goDiscover}
+                style={({ pressed }) => [styles.primaryAction, pressed && styles.pressedRow]}
+                android_ripple={{ color: "rgba(87,162,56,0.08)" }}
+              >
+                <Text style={styles.primaryActionText}>Explore cities</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={goFixturesHub}
+                style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressedRow]}
+                android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+              >
+                <Text style={styles.secondaryActionText}>Browse fixtures</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {loadedTrips && nextTrip ? (
+        <Pressable
+          onPress={() => onOpenTrip(String(nextTrip.id))}
+          style={({ pressed }) => [styles.tripCard, pressed && styles.pressedCard]}
+          android_ripple={{ color: "rgba(255,255,255,0.05)" }}
+        >
+          <Image
+            source={{ uri: nextTripCityImage }}
+            style={styles.tripImage}
+            resizeMode="cover"
+          />
+          <View style={styles.tripImageOverlay} pointerEvents="none" />
+          <View style={styles.tripBottomFade} pointerEvents="none" />
+          <View style={styles.tripGlow} pointerEvents="none" />
+
+          <View style={styles.tripTopMeta}>
+            <Text style={styles.tripTag}>Next trip workspace</Text>
+
+            <View style={styles.tripStatusRow}>
+              <View style={styles.tripSignalPill}>
+                <Text style={styles.tripSignalPillText}>{signal}</Text>
               </View>
 
-              <Text style={styles.emptyTitle}>No trip in progress</Text>
-              <Text style={styles.emptyMeta}>
-                Start from Discover for inspiration or jump straight into upcoming fixtures when you already know the date window.
+              <View style={styles.tripStatusPill}>
+                <Text style={styles.tripStatusPillText}>In progress</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.tripContent}>
+            <View style={styles.tripTitleRow}>
+              {nextTripFlagUrl ? (
+                <Image source={{ uri: nextTripFlagUrl }} style={styles.tripFlag} />
+              ) : null}
+
+              <Text style={styles.tripTitle} numberOfLines={1}>
+                {nextTripCityTitle || "Trip"}
               </Text>
 
-              <View style={styles.emptyActions}>
-                <Pressable
-                  onPress={goDiscover}
-                  style={({ pressed }) => [styles.primaryAction, pressed && styles.pressedRow]}
-                  android_ripple={{ color: "rgba(87,162,56,0.08)" }}
-                >
-                  <Text style={styles.primaryActionText}>Open Discover</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={goFixturesHub}
-                  style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressedRow]}
-                  android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                >
-                  <Text style={styles.secondaryActionText}>Browse fixtures</Text>
-                </Pressable>
-              </View>
+              {typeof nextTripTeamId === "number" ? (
+                <View style={styles.tripCrestWrap}>
+                  <Image
+                    source={{ uri: apiSportsTeamLogo(nextTripTeamId) }}
+                    style={styles.tripCrest}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : null}
             </View>
-          ) : null}
 
-          {loadedTrips && nextTrip ? (
-            <Pressable
-              onPress={() => onOpenTrip(String(nextTrip.id))}
-              style={({ pressed }) => [styles.tripCard, pressed && styles.pressedRow]}
-              android_ripple={{ color: "rgba(255,255,255,0.05)" }}
-            >
-              <Image
-                source={{ uri: nextTripCityImage }}
-                style={styles.tripImage}
-                resizeMode="cover"
-              />
-              <View style={styles.tripImageOverlay} />
-              <View style={styles.tripDarkFade} />
+            <Text style={styles.tripMeta}>{tripSummaryLine(nextTrip)}</Text>
 
-              <View style={styles.tripTopMeta}>
-                <Text style={styles.tripEyebrow}>Next trip workspace</Text>
-                <View style={styles.tripStatusPill}>
-                  <Text style={styles.tripStatusPillText}>In progress</Text>
-                </View>
+            <Text style={styles.tripHint}>
+              Matches, travel links, bookings and notes all kept together.
+            </Text>
+
+            <View style={styles.tripFooter}>
+              <View style={styles.tripFooterCta}>
+                <Text style={styles.tripFooterCtaText}>Open workspace</Text>
               </View>
 
-              <View style={styles.tripContent}>
-                <View style={styles.tripTitleRow}>
-                  {nextTripFlagUrl ? (
-                    <Image source={{ uri: nextTripFlagUrl }} style={styles.tripFlag} />
-                  ) : null}
-
-                  <Text style={styles.tripTitle} numberOfLines={1}>
-                    {nextTripCityTitle || "Trip"}
-                  </Text>
-
-                  {typeof nextTripTeamId === "number" ? (
-                    <View style={styles.tripCrestWrap}>
-                      <Image
-                        source={{ uri: apiSportsTeamLogo(nextTripTeamId) }}
-                        style={styles.tripCrest}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  ) : null}
-                </View>
-
-                <Text style={styles.tripMeta}>{tripSummaryLine(nextTrip)}</Text>
-
-                <Text style={styles.tripHint}>
-                  Matches, travel links, bookings and notes all kept together.
-                </Text>
-
-                <View style={styles.inlineLinkRow}>
-                  <Text style={styles.inlineLink}>Continue trip</Text>
-                  <Text style={styles.inlineChevron}>›</Text>
-                </View>
-              </View>
-            </Pressable>
-          ) : null}
-        </View>
-      </GlassCard>
+              <Text style={styles.tripFooterLink}>Continue trip ›</Text>
+            </View>
+          </View>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   section: {
-    gap: 10,
+    gap: 12,
   },
 
   sectionHeader: {
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
-    gap: 10,
-  },
-
-  sectionTitleWrap: {
-    gap: 2,
-  },
-
-  sectionEyebrow: {
-    color: theme.colors.textTertiary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.7,
-    textTransform: "uppercase",
+    gap: 12,
   },
 
   sectionTitle: {
@@ -195,113 +206,114 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  miniPill: {
-    paddingVertical: 9,
-    paddingHorizontal: 13,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.20)" : "rgba(255,255,255,0.04)",
+  headerAction: {
+    paddingVertical: 6,
+    paddingHorizontal: 2,
   },
 
-  miniPillText: {
+  headerActionText: {
     color: theme.colors.textSecondary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
 
-  block: {
+  loadingCard: {
+    minHeight: 168,
     borderRadius: 26,
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(9,12,14,0.52)" : "rgba(255,255,255,0.04)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    backgroundColor: "rgba(8,11,14,0.72)",
-  },
-
-  blockInner: {
-    padding: 14,
-    gap: 12,
-  },
-
-  center: {
-    paddingVertical: 18,
+    borderColor: "rgba(255,255,255,0.05)",
     alignItems: "center",
+    justifyContent: "center",
     gap: 10,
   },
 
-  muted: {
+  loadingText: {
     color: theme.colors.textSecondary,
     fontSize: 13,
     fontWeight: theme.fontWeight.bold,
   },
 
-  emptyShell: {
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,13,16,0.24)" : "rgba(10,13,16,0.18)",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 8,
+  emptyCard: {
+    minHeight: 214,
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: "#0A0F12",
   },
 
-  emptyHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
+  emptyImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
   },
 
-  emptyEyebrow: {
-    color: theme.colors.primary,
+  emptyImageShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(6,9,12,0.60)",
+  },
+
+  emptyBottomFade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(5,7,9,0.24)",
+  },
+
+  emptyGlow: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    bottom: -14,
+    height: 68,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,210,106,0.08)",
+  },
+
+  emptyContent: {
+    flex: 1,
+    justifyContent: "flex-end",
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    gap: 7,
+  },
+
+  emptyTag: {
+    color: "#8EF2A5",
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
 
-  emptyStatusPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-  },
-
-  emptyStatusPillText: {
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-  },
-
   emptyTitle: {
-    color: theme.colors.text,
-    fontSize: 20,
-    lineHeight: 24,
+    color: "#FFFFFF",
+    fontSize: 26,
+    lineHeight: 31,
     fontWeight: theme.fontWeight.black,
+    maxWidth: "88%",
   },
 
   emptyMeta: {
-    color: theme.colors.textSecondary,
+    color: "rgba(232,239,234,0.84)",
     fontSize: 13,
     lineHeight: 19,
     fontWeight: theme.fontWeight.bold,
+    maxWidth: "92%",
   },
 
   emptyActions: {
+    marginTop: 8,
     flexDirection: "row",
     gap: 10,
     flexWrap: "wrap",
-    marginTop: 6,
   },
 
   primaryAction: {
     minHeight: 42,
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     borderRadius: 14,
+    backgroundColor: "rgba(18,103,49,0.30)",
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.24)",
-    backgroundColor: "rgba(87,162,56,0.10)",
+    borderColor: "rgba(104,241,138,0.20)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -314,11 +326,10 @@ const styles = StyleSheet.create({
 
   secondaryAction: {
     minHeight: 42,
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.03)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -330,13 +341,11 @@ const styles = StyleSheet.create({
   },
 
   tripCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    minHeight: 224,
+    borderRadius: 28,
     overflow: "hidden",
-    minHeight: 194,
     position: "relative",
-    backgroundColor: "#0B1014",
+    backgroundColor: "#0A0F12",
   },
 
   tripImage: {
@@ -347,38 +356,67 @@ const styles = StyleSheet.create({
 
   tripImageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(7,11,14,0.36)",
+    backgroundColor: "rgba(6,10,12,0.38)",
   },
 
-  tripDarkFade: {
+  tripBottomFade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,7,9,0.32)",
+    backgroundColor: "rgba(5,7,9,0.28)",
+  },
+
+  tripGlow: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    bottom: -14,
+    height: 72,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,210,106,0.10)",
   },
 
   tripTopMeta: {
-    paddingHorizontal: 15,
-    paddingTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 15,
     gap: 10,
   },
 
-  tripEyebrow: {
-    color: "rgba(244,247,245,0.84)",
+  tripTag: {
+    color: "rgba(244,247,245,0.82)",
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.55,
     textTransform: "uppercase",
   },
 
+  tripStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+
+  tripSignalPill: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(245,204,87,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(245,204,87,0.18)",
+  },
+
+  tripSignalPillText: {
+    color: "#F5CC57",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
   tripStatusPill: {
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.22)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.22)",
   },
 
   tripStatusPillText: {
@@ -390,8 +428,8 @@ const styles = StyleSheet.create({
   tripContent: {
     flex: 1,
     justifyContent: "flex-end",
-    paddingHorizontal: 15,
-    paddingBottom: 15,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     gap: 7,
   },
 
@@ -411,20 +449,18 @@ const styles = StyleSheet.create({
   tripTitle: {
     flex: 1,
     color: "#FFFFFF",
-    fontSize: 28,
-    lineHeight: 32,
+    fontSize: 30,
+    lineHeight: 34,
     fontWeight: theme.fontWeight.black,
   },
 
   tripCrestWrap: {
-    width: 28,
-    height: 28,
+    width: 30,
+    height: 30,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
     overflow: "hidden",
   },
 
@@ -448,27 +484,45 @@ const styles = StyleSheet.create({
     maxWidth: "90%",
   },
 
-  inlineLinkRow: {
-    marginTop: 4,
+  tripFooter: {
+    marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
   },
 
-  inlineLink: {
+  tripFooterCta: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(18,103,49,0.28)",
+    borderWidth: 1,
+    borderColor: "rgba(104,241,138,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  tripFooterCtaText: {
     color: "#8EF2A5",
     fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
 
-  inlineChevron: {
-    color: "rgba(255,255,255,0.74)",
-    fontSize: 18,
-    marginTop: -1,
+  tripFooterLink: {
+    color: "rgba(255,255,255,0.80)",
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
   },
 
   pressedRow: {
     opacity: 0.95,
+  },
+
+  pressedCard: {
+    opacity: 0.97,
+    transform: [{ scale: 0.995 }],
   },
 
   pressedLite: {
