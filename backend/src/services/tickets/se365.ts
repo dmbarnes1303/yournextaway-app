@@ -9,54 +9,60 @@ type Se365Event = {
   event_name?: string;
   title?: string;
   eventTitle?: string;
-  url?: string;
-  event_url?: string;
-  eventUrl?: string;
   startDate?: string;
   start_date?: string;
   date?: string;
   event_date?: string;
   eventDate?: string;
-  localDate?: string;
-  country?: string;
-  city?: string;
-  venue?: string;
-  category?: string;
-  categoryName?: string;
+  venue?: {
+    name?: string;
+    city?: string;
+    country?: string;
+  };
+  category?: {
+    id?: number | string;
+    name?: string;
+  };
+  url?: string;
+  event_url?: string;
+  eventUrl?: string;
 };
 
-type Se365Ticket = {
+type Se365EventsResponse = {
+  events?: Se365Event[];
+  data?: Se365Event[];
+  items?: Se365Event[];
+  response?: Se365Event[];
+  results?: Se365Event[];
+};
+
+type Se365TicketItem = {
   id?: number | string;
   ticketId?: number | string;
-  eventId?: number | string;
-  event_id?: number | string;
-  price?: number | string;
   minPrice?: number | string;
   min_price?: number | string;
   lowestPrice?: number | string;
   lowest_price?: number | string;
-  quantity?: number | string;
-  qty?: number | string;
-  section?: string;
-  block?: string;
-  category?: string;
+  price?: number | string;
+  priceTotal?: number | string;
+  price_total?: number | string;
+  pricePerTicket?: number | string;
+  price_per_ticket?: number | string;
   currency?: string;
   currencyCode?: string;
-  split?: string;
-  splitType?: string;
-  ticketUrl?: string;
+  currency_code?: string;
   url?: string;
+  event_url?: string;
+  eventUrl?: string;
 };
 
-type Se365Envelope =
-  | {
-      data?: unknown;
-      events?: unknown;
-      items?: unknown;
-      response?: unknown;
-      results?: unknown;
-    }
-  | null;
+type Se365TicketsResponse = {
+  tickets?: Se365TicketItem[];
+  data?: Se365TicketItem[];
+  items?: Se365TicketItem[];
+  response?: Se365TicketItem[];
+  results?: Se365TicketItem[];
+};
 
 const SE365_FETCH_TIMEOUT_MS = 7000;
 const SE365_FALLBACK_SCORE = 24;
@@ -81,16 +87,6 @@ function absDays(a: Date, b: Date): number {
   return Math.floor(Math.abs(a.getTime() - b.getTime()) / 86400000);
 }
 
-function numberFromUnknown(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-
-  const raw = clean(v);
-  if (!raw) return null;
-
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function eventId(ev: Se365Event): string {
   return clean(ev.id) || clean(ev.eventId);
 }
@@ -110,56 +106,33 @@ function eventDate(ev: Se365Event): string {
     clean(ev.start_date) ||
     clean(ev.date) ||
     clean(ev.event_date) ||
-    clean(ev.eventDate) ||
-    clean(ev.localDate)
+    clean(ev.eventDate)
   );
 }
 
-function ticketId(ticket: Se365Ticket): string {
-  return clean(ticket.id) || clean(ticket.ticketId);
+function eventUrl(ev: Se365Event): string {
+  return clean(ev.url) || clean(ev.event_url) || clean(ev.eventUrl);
 }
 
-function ticketEventId(ticket: Se365Ticket): string {
-  return clean(ticket.eventId) || clean(ticket.event_id);
+function eventVenueName(ev: Se365Event): string {
+  return clean(ev.venue?.name);
 }
 
-function ticketPriceValue(ticket: Se365Ticket): number | null {
-  return (
-    numberFromUnknown(ticket.minPrice) ??
-    numberFromUnknown(ticket.min_price) ??
-    numberFromUnknown(ticket.lowestPrice) ??
-    numberFromUnknown(ticket.lowest_price) ??
-    numberFromUnknown(ticket.price) ??
-    null
-  );
+function eventVenueCity(ev: Se365Event): string {
+  return clean(ev.venue?.city);
 }
 
-function ticketCurrency(ticket: Se365Ticket): string {
-  return clean(ticket.currencyCode) || clean(ticket.currency);
+function eventVenueCountry(ev: Se365Event): string {
+  return clean(ev.venue?.country);
 }
 
-function ticketPriceText(ticket: Se365Ticket): string | null {
-  const value = ticketPriceValue(ticket);
-  const currency = ticketCurrency(ticket);
-
-  if (value == null && !currency) return null;
-  if (value != null && currency) return `${value} ${currency}`.trim();
-  if (value != null) return String(value);
-  return currency || null;
-}
-
-function ticketQuantity(ticket: Se365Ticket): number | null {
-  return numberFromUnknown(ticket.quantity) ?? numberFromUnknown(ticket.qty);
-}
-
-function ticketSection(ticket: Se365Ticket): string {
-  return clean(ticket.section) || clean(ticket.block) || clean(ticket.category);
+function eventCategoryName(ev: Se365Event): string {
+  return clean(ev.category?.name);
 }
 
 function appendAffiliate(url: string): string {
   const base = clean(url);
   if (!base) return "";
-
   if (/\ba_aid=/.test(base)) return base;
 
   const affiliateId = clean(env.se365AffiliateId);
@@ -172,6 +145,206 @@ function appendAffiliate(url: string): string {
   }
 
   return `${base}${joiner}a_aid=${encodeURIComponent(affiliateId)}`;
+}
+
+function numberFromUnknown(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+
+  const raw = clean(v);
+  if (!raw) return null;
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function ticketPriceNumber(ticket: Se365TicketItem): number | null {
+  return (
+    numberFromUnknown(ticket.minPrice) ??
+    numberFromUnknown(ticket.min_price) ??
+    numberFromUnknown(ticket.lowestPrice) ??
+    numberFromUnknown(ticket.lowest_price) ??
+    numberFromUnknown(ticket.pricePerTicket) ??
+    numberFromUnknown(ticket.price_per_ticket) ??
+    numberFromUnknown(ticket.price) ??
+    numberFromUnknown(ticket.priceTotal) ??
+    numberFromUnknown(ticket.price_total) ??
+    null
+  );
+}
+
+function ticketCurrency(ticket: Se365TicketItem): string {
+  return (
+    clean(ticket.currencyCode) ||
+    clean(ticket.currency_code) ||
+    clean(ticket.currency)
+  );
+}
+
+function ticketPriceText(ticket: Se365TicketItem): string | null {
+  const price = ticketPriceNumber(ticket);
+  const currency = ticketCurrency(ticket);
+
+  if (price == null && !currency) return null;
+  if (price != null && currency) return `${price} ${currency}`.trim();
+  if (price != null) return String(price);
+  return currency || null;
+}
+
+function ticketUrl(ticket: Se365TicketItem): string {
+  return clean(ticket.url) || clean(ticket.event_url) || clean(ticket.eventUrl);
+}
+
+function containsTeamsLoose(
+  name: string,
+  homeVariants: string[],
+  awayVariants: string[]
+): boolean {
+  const n = norm(name);
+  const hasHome = homeVariants.some((home) => n.includes(norm(home)));
+  const hasAway = awayVariants.some((away) => n.includes(norm(away)));
+  return hasHome && hasAway;
+}
+
+function textContainsVariant(name: string, variant: string): boolean {
+  const haystack = ` ${norm(name)} `;
+  const needle = ` ${norm(variant)} `;
+  return haystack.includes(needle);
+}
+
+function isBadVariant(name: string): boolean {
+  const variants = [
+    "women",
+    "women's",
+    "ladies",
+    "female",
+    "feminine",
+    "femeni",
+    "femenino",
+    "feminino",
+    "u17",
+    "u18",
+    "u19",
+    "u20",
+    "u21",
+    "u23",
+    "youth",
+    "academy",
+    "b team",
+    "reserves",
+    "reserve",
+    "legends",
+  ];
+
+  for (const variant of variants) {
+    if (textContainsVariant(name, variant)) return true;
+  }
+
+  const n = norm(name);
+  if (/(^|[\s-])ii($|[\s-])/.test(n)) return true;
+  if (/(^|[\s-])b($|[\s-])/.test(n)) return true;
+
+  return false;
+}
+
+function scoreEvent(ev: Se365Event, input: TicketResolveInput): number {
+  let score = 0;
+
+  const name = eventName(ev);
+  const homeVariants = expandTeamAliases(input.homeName);
+  const awayVariants = expandTeamAliases(input.awayName);
+
+  if (name && containsTeamsLoose(name, homeVariants, awayVariants)) {
+    score += 62;
+  }
+
+  if (name && isBadVariant(name)) {
+    score -= 1000;
+  }
+
+  const kickoff = safeDate(input.kickoffIso);
+  const evDt = safeDate(eventDate(ev));
+
+  if (kickoff && evDt) {
+    const diff = absDays(kickoff, evDt);
+    if (diff === 0) score += 25;
+    else if (diff === 1) score += 15;
+    else if (diff === 2) score += 8;
+    else if (diff > 2) score -= 1000;
+  }
+
+  if (eventVenueName(ev)) score += 2;
+  if (eventVenueCity(ev)) score += 1;
+  if (eventVenueCountry(ev)) score += 1;
+
+  const category = norm(eventCategoryName(ev));
+  if (category.includes("football")) score += 5;
+  if (eventUrl(ev)) score += 3;
+
+  return score;
+}
+
+function isStrongEnough(score: number): boolean {
+  return score >= 55;
+}
+
+function isExactEvent(
+  ev: Se365Event,
+  input: TicketResolveInput,
+  score: number
+): boolean {
+  const name = eventName(ev);
+  const homeVariants = expandTeamAliases(input.homeName);
+  const awayVariants = expandTeamAliases(input.awayName);
+
+  if (!name || isBadVariant(name)) return false;
+  if (!containsTeamsLoose(name, homeVariants, awayVariants)) return false;
+
+  const kickoff = safeDate(input.kickoffIso);
+  const evDt = safeDate(eventDate(ev));
+  if (!kickoff || !evDt) return false;
+
+  return absDays(kickoff, evDt) === 0 && score >= 85;
+}
+
+function summarizeEvent(ev: Se365Event) {
+  return {
+    id: eventId(ev) || null,
+    name: eventName(ev) || null,
+    date: eventDate(ev) || null,
+    venue: eventVenueName(ev) || null,
+    city: eventVenueCity(ev) || null,
+    country: eventVenueCountry(ev) || null,
+    category: eventCategoryName(ev) || null,
+    url: eventUrl(ev) || null,
+  };
+}
+
+function summarizeTicket(ticket: Se365TicketItem) {
+  return {
+    id: clean(ticket.id) || clean(ticket.ticketId) || null,
+    priceText: ticketPriceText(ticket),
+    url: ticketUrl(ticket) || null,
+  };
+}
+
+function extractEvents(json: Se365EventsResponse | null): Se365Event[] {
+  if (!json) return [];
+  if (Array.isArray(json.events)) return json.events;
+  if (Array.isArray(json.data)) return json.data;
+  if (Array.isArray(json.items)) return json.items;
+  if (Array.isArray(json.response)) return json.response;
+  if (Array.isArray(json.results)) return json.results;
+  return [];
+}
+
+function extractTickets(json: Se365TicketsResponse | null): Se365TicketItem[] {
+  if (!json) return [];
+  if (Array.isArray(json.tickets)) return json.tickets;
+  if (Array.isArray(json.data)) return json.data;
+  if (Array.isArray(json.items)) return json.items;
+  if (Array.isArray(json.response)) return json.response;
+  if (Array.isArray(json.results)) return json.results;
+  return [];
 }
 
 function buildTrackedSearchFallback(input: TicketResolveInput): string | null {
@@ -221,321 +394,174 @@ function buildRequestHeaders(): Record<string, string> {
   return headers;
 }
 
-function buildApiUrl(path: string): URL {
+function buildEventsUrl(page: number): string {
   const base = env.se365BaseUrl.replace(/\/+$/, "");
-  return new URL(`${base}${path}`);
+  const url = new URL(
+    `${base}/events/event-type/${encodeURIComponent(FOOTBALL_EVENT_TYPE_ID)}`
+  );
+
+  if (clean(env.se365ApiKey)) {
+    url.searchParams.set("apiKey", clean(env.se365ApiKey));
+  }
+
+  url.searchParams.set("page", String(page));
+  return url.toString();
 }
 
-async function fetchJson(url: URL): Promise<unknown | null> {
+function buildTicketsUrl(eventIdValue: string): string {
+  const base = env.se365BaseUrl.replace(/\/+$/, "");
+  const url = new URL(`${base}/tickets/${encodeURIComponent(eventIdValue)}`);
+
+  if (clean(env.se365ApiKey)) {
+    url.searchParams.set("apiKey", clean(env.se365ApiKey));
+  }
+
+  return url.toString();
+}
+
+async function fetchJson<T>(url: string): Promise<{
+  ok: boolean;
+  status: number;
+  text: string;
+  json: T | null;
+}> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SE365_FETCH_TIMEOUT_MS);
 
   try {
-    const res = await fetch(url.toString(), {
+    const res = await fetch(url, {
       method: "GET",
       headers: buildRequestHeaders(),
       signal: controller.signal,
     });
 
-    const body = await res.text();
-
-    if (!res.ok) {
-      console.log("[SE365] non-200 response", {
-        url: url.toString(),
-        status: res.status,
-        body: body.slice(0, 500),
-      });
-      return null;
-    }
+    const text = await res.text().catch(() => "");
+    let json: T | null = null;
 
     try {
-      return body ? JSON.parse(body) : null;
+      json = text ? (JSON.parse(text) as T) : null;
     } catch {
-      console.log("[SE365] invalid JSON response", {
-        url: url.toString(),
-        body: body.slice(0, 500),
-      });
-      return null;
+      json = null;
     }
-  } catch (error) {
-    console.log("[SE365] fetch error", {
-      url: url.toString(),
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return null;
+
+    return {
+      ok: res.ok,
+      status: res.status,
+      text,
+      json,
+    };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function arrayFromUnknown(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
+async function fetchEventsPage(page: number): Promise<Se365Event[]> {
+  const url = buildEventsUrl(page);
 
-function extractEvents(payload: unknown): Se365Event[] {
-  if (!payload || typeof payload !== "object") return [];
+  try {
+    const result = await fetchJson<Se365EventsResponse>(url);
 
-  const root = payload as Record<string, unknown>;
+    if (!result.ok) {
+      console.log("[SE365] events non-200 response", {
+        url,
+        status: result.status,
+        body: result.text.slice(0, 500),
+      });
+      return [];
+    }
 
-  const direct =
-    arrayFromUnknown(root.events) ||
-    arrayFromUnknown(root.items) ||
-    arrayFromUnknown(root.response) ||
-    arrayFromUnknown(root.results) ||
-    arrayFromUnknown(root.data);
+    const events = extractEvents(result.json);
 
-  if (direct.length) {
-    return direct as Se365Event[];
+    console.log("[SE365] events page result", {
+      page,
+      url,
+      count: events.length,
+      sample: events.slice(0, 3).map(summarizeEvent),
+    });
+
+    return events;
+  } catch (error) {
+    console.log("[SE365] events fetch error", {
+      page,
+      url,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return [];
   }
+}
 
-  const data = root.data;
-  if (data && typeof data === "object") {
-    const nested = data as Record<string, unknown>;
+async function fetchTicketsForEvent(eventIdValue: string): Promise<Se365TicketItem[]> {
+  const url = buildTicketsUrl(eventIdValue);
 
-    if (Array.isArray(nested.events)) return nested.events as Se365Event[];
-    if (Array.isArray(nested.items)) return nested.items as Se365Event[];
-    if (Array.isArray(nested.response)) return nested.response as Se365Event[];
-    if (Array.isArray(nested.results)) return nested.results as Se365Event[];
+  try {
+    const result = await fetchJson<Se365TicketsResponse>(url);
+
+    if (!result.ok) {
+      console.log("[SE365] tickets non-200 response", {
+        eventId: eventIdValue,
+        url,
+        status: result.status,
+        body: result.text.slice(0, 500),
+      });
+      return [];
+    }
+
+    const tickets = extractTickets(result.json);
+
+    console.log("[SE365] tickets result", {
+      eventId: eventIdValue,
+      url,
+      count: tickets.length,
+      sample: tickets.slice(0, 5).map(summarizeTicket),
+    });
+
+    return tickets;
+  } catch (error) {
+    console.log("[SE365] tickets fetch error", {
+      eventId: eventIdValue,
+      url,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return [];
   }
-
-  return [];
 }
 
-function extractTickets(payload: unknown): Se365Ticket[] {
-  if (!payload || typeof payload !== "object") return [];
+function chooseBestTicket(tickets: Se365TicketItem[]): Se365TicketItem | null {
+  if (!tickets.length) return null;
 
-  const root = payload as Record<string, unknown>;
+  const sorted = [...tickets].sort((a, b) => {
+    const aPrice = ticketPriceNumber(a);
+    const bPrice = ticketPriceNumber(b);
 
-  if (Array.isArray(root.tickets)) return root.tickets as Se365Ticket[];
-  if (Array.isArray(root.items)) return root.items as Se365Ticket[];
-  if (Array.isArray(root.response)) return root.response as Se365Ticket[];
-  if (Array.isArray(root.results)) return root.results as Se365Ticket[];
-  if (Array.isArray(root.data)) return root.data as Se365Ticket[];
+    if (aPrice != null && bPrice != null && aPrice !== bPrice) {
+      return aPrice - bPrice;
+    }
 
-  const data = root.data;
-  if (data && typeof data === "object") {
-    const nested = data as Record<string, unknown>;
+    if (aPrice != null && bPrice == null) return -1;
+    if (aPrice == null && bPrice != null) return 1;
 
-    if (Array.isArray(nested.tickets)) return nested.tickets as Se365Ticket[];
-    if (Array.isArray(nested.items)) return nested.items as Se365Ticket[];
-    if (Array.isArray(nested.response)) return nested.response as Se365Ticket[];
-    if (Array.isArray(nested.results)) return nested.results as Se365Ticket[];
-  }
+    const aHasUrl = Boolean(ticketUrl(a));
+    const bHasUrl = Boolean(ticketUrl(b));
 
-  return [];
-}
+    if (aHasUrl && !bHasUrl) return -1;
+    if (!aHasUrl && bHasUrl) return 1;
 
-function textContainsVariant(name: string, variant: string): boolean {
-  const haystack = ` ${norm(name)} `;
-  const needle = ` ${norm(variant)} `;
-  return haystack.includes(needle);
-}
+    return 0;
+  });
 
-function isBadVariant(name: string): boolean {
-  const variants = [
-    "women",
-    "women's",
-    "ladies",
-    "female",
-    "feminine",
-    "femenino",
-    "feminino",
-    "u17",
-    "u18",
-    "u19",
-    "u20",
-    "u21",
-    "u23",
-    "youth",
-    "academy",
-    "b team",
-    "reserves",
-    "reserve",
-    "legends",
-  ];
-
-  for (const variant of variants) {
-    if (textContainsVariant(name, variant)) return true;
-  }
-
-  const n = norm(name);
-  if (/(^|[\s-])ii($|[\s-])/.test(n)) return true;
-  if (/(^|[\s-])b($|[\s-])/.test(n)) return true;
-
-  return false;
-}
-
-function containsTeamsLoose(
-  name: string,
-  homeVariants: string[],
-  awayVariants: string[]
-): boolean {
-  const n = norm(name);
-  const hasHome = homeVariants.some((home) => n.includes(norm(home)));
-  const hasAway = awayVariants.some((away) => n.includes(norm(away)));
-  return hasHome && hasAway;
-}
-
-function scoreEvent(ev: Se365Event, input: TicketResolveInput): number {
-  let score = 0;
-
-  const name = eventName(ev);
-  const kickoff = safeDate(input.kickoffIso);
-  const evDt = safeDate(eventDate(ev));
-  const homeVariants = expandTeamAliases(input.homeName);
-  const awayVariants = expandTeamAliases(input.awayName);
-
-  if (name && containsTeamsLoose(name, homeVariants, awayVariants)) {
-    score += 65;
-  }
-
-  if (name && isBadVariant(name)) {
-    score -= 1000;
-  }
-
-  if (kickoff && evDt) {
-    const diff = absDays(kickoff, evDt);
-    if (diff === 0) score += 25;
-    else if (diff === 1) score += 15;
-    else if (diff === 2) score += 8;
-    else if (diff > 2) score -= 1000;
-  }
-
-  if (clean(ev.venue)) score += 2;
-  if (clean(ev.city)) score += 1;
-  if (clean(ev.country)) score += 1;
-
-  return score;
-}
-
-function isStrongEnoughEvent(score: number): boolean {
-  return score >= 55;
-}
-
-function isExactEvent(
-  ev: Se365Event,
-  input: TicketResolveInput,
-  score: number
-): boolean {
-  const name = eventName(ev);
-  if (!name || isBadVariant(name)) return false;
-
-  const kickoff = safeDate(input.kickoffIso);
-  const evDt = safeDate(eventDate(ev));
-
-  if (!kickoff || !evDt) return false;
-  if (!containsTeamsLoose(name, expandTeamAliases(input.homeName), expandTeamAliases(input.awayName))) {
-    return false;
-  }
-
-  return absDays(kickoff, evDt) === 0 && score >= 85;
-}
-
-function scoreTicket(ticket: Se365Ticket): number {
-  let score = 0;
-
-  const price = ticketPriceValue(ticket);
-  const qty = ticketQuantity(ticket);
-  const section = ticketSection(ticket);
-  const split = clean(ticket.split) || clean(ticket.splitType);
-
-  if (ticketId(ticket)) score += 5;
-  if (ticketEventId(ticket)) score += 5;
-  if (price != null) score += 10;
-  if (qty != null) {
-    if (qty >= 2) score += 10;
-    else if (qty === 1) score += 5;
-  }
-  if (section) score += 4;
-  if (split) {
-    score += 2;
-    if (norm(split).includes("avoid")) score -= 3;
-  }
-
-  return score;
-}
-
-function summarizeEvent(ev: Se365Event) {
-  return {
-    id: eventId(ev) || null,
-    name: eventName(ev) || null,
-    date: eventDate(ev) || null,
-    city: clean(ev.city) || null,
-    venue: clean(ev.venue) || null,
-  };
-}
-
-function summarizeTicket(ticket: Se365Ticket) {
-  return {
-    id: ticketId(ticket) || null,
-    eventId: ticketEventId(ticket) || null,
-    priceText: ticketPriceText(ticket),
-    quantity: ticketQuantity(ticket),
-    section: ticketSection(ticket) || null,
-  };
+  return sorted[0] ?? null;
 }
 
 function dedupeEvents(events: Se365Event[]): Se365Event[] {
   const map = new Map<string, Se365Event>();
 
   for (const ev of events) {
-    const key = [
-      eventId(ev),
-      eventName(ev),
-      eventDate(ev),
-      clean(ev.venue),
-      clean(ev.city),
-    ]
-      .join("|")
-      .toLowerCase();
-
+    const key = `${eventId(ev)}|${eventName(ev)}|${eventDate(ev)}`.toLowerCase();
     if (!key.replace(/\|/g, "")) continue;
     if (!map.has(key)) map.set(key, ev);
   }
 
   return Array.from(map.values());
-}
-
-function buildEventUrl(): URL {
-  const url = buildApiUrl(`/events/event-type/${FOOTBALL_EVENT_TYPE_ID}`);
-  url.searchParams.set("apiKey", clean(env.se365ApiKey));
-  return url;
-}
-
-function buildTicketsUrl(eventIdValue: string): URL {
-  const url = buildApiUrl(`/tickets/${encodeURIComponent(eventIdValue)}`);
-  url.searchParams.set("apiKey", clean(env.se365ApiKey));
-  url.searchParams.set("page", "1");
-  return url;
-}
-
-async function fetchFootballEvents(): Promise<Se365Event[]> {
-  const url = buildEventUrl();
-  const payload = await fetchJson(url);
-  const events = extractEvents(payload);
-
-  console.log("[SE365] events response", {
-    url: url.toString(),
-    count: events.length,
-    sample: events.slice(0, 5).map(summarizeEvent),
-  });
-
-  return events;
-}
-
-async function fetchTicketsForEvent(eventIdValue: string): Promise<Se365Ticket[]> {
-  const url = buildTicketsUrl(eventIdValue);
-  const payload = await fetchJson(url);
-  const tickets = extractTickets(payload);
-
-  console.log("[SE365] tickets response", {
-    url: url.toString(),
-    eventId: eventIdValue,
-    count: tickets.length,
-    sample: tickets.slice(0, 5).map(summarizeTicket),
-  });
-
-  return tickets;
 }
 
 export async function resolveSe365Candidate(
@@ -560,44 +586,38 @@ export async function resolveSe365Candidate(
     leagueId: clean(input.leagueId) || null,
   });
 
-  const events = dedupeEvents(await fetchFootballEvents());
+  const allEvents: Se365Event[] = [];
 
-  if (!events.length) {
-    const fallbackUrl = buildTrackedSearchFallback(input);
-    console.log("[SE365] no events from API, using fallback", { fallbackUrl });
-
-    if (!fallbackUrl) return null;
-
-    return {
-      provider: "sportsevents365",
-      exact: false,
-      score: SE365_FALLBACK_SCORE,
-      url: fallbackUrl,
-      title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
-      priceText: null,
-      reason: "search_fallback",
-    };
+  for (const page of [1, 2, 3]) {
+    const pageEvents = await fetchEventsPage(page);
+    if (!pageEvents.length) continue;
+    allEvents.push(...pageEvents);
   }
 
-  const scoredEvents = events
+  const deduped = dedupeEvents(allEvents);
+
+  const scored = deduped
     .map((ev) => ({
       ev,
       score: scoreEvent(ev, input),
     }))
-    .filter((x) => isStrongEnoughEvent(x.score))
+    .filter((x) => isStrongEnough(x.score))
     .sort((a, b) => b.score - a.score);
 
   console.log("[SE365] scored events", {
-    total: events.length,
-    strongCount: scoredEvents.length,
-    top: scoredEvents.slice(0, 5).map((x) => ({
+    totalFetched: allEvents.length,
+    dedupedCount: deduped.length,
+    strongCount: scored.length,
+    top: scored.slice(0, 5).map((x) => ({
       ...summarizeEvent(x.ev),
       score: x.score,
     })),
   });
 
-  if (!scoredEvents.length) {
+  if (!scored.length) {
     const fallbackUrl = buildTrackedSearchFallback(input);
+    console.log("[SE365] no strong API match, using fallback", { fallbackUrl });
+
     if (!fallbackUrl) return null;
 
     return {
@@ -611,12 +631,13 @@ export async function resolveSe365Candidate(
     };
   }
 
-  const bestEvent = scoredEvents[0];
+  const bestEvent = scored[0];
   const bestEventId = eventId(bestEvent.ev);
   const exact = isExactEvent(bestEvent.ev, input, bestEvent.score);
 
   if (!bestEventId) {
     const fallbackUrl = buildTrackedSearchFallback(input);
+
     console.log("[SE365] best event missing id, using fallback", {
       bestEvent: {
         ...summarizeEvent(bestEvent.ev),
@@ -631,7 +652,7 @@ export async function resolveSe365Candidate(
     return {
       provider: "sportsevents365",
       exact: false,
-      score: Math.max(SE365_FALLBACK_SCORE, bestEvent.score - 15),
+      score: Math.max(SE365_FALLBACK_SCORE, bestEvent.score - 20),
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
@@ -640,83 +661,48 @@ export async function resolveSe365Candidate(
   }
 
   const tickets = await fetchTicketsForEvent(bestEventId);
+  const bestTicket = chooseBestTicket(tickets);
 
-  if (!tickets.length) {
-    const fallbackUrl = buildTrackedSearchFallback(input);
-    console.log("[SE365] matched event but no tickets, using fallback", {
+  let resolvedUrl =
+    ticketUrl(bestTicket ?? {}) ||
+    eventUrl(bestEvent.ev) ||
+    buildTrackedSearchFallback(input) ||
+    "";
+
+  if (!resolvedUrl) {
+    console.log("[SE365] no usable URL after event/tickets lookup", {
       bestEvent: {
         ...summarizeEvent(bestEvent.ev),
         score: bestEvent.score,
         exact,
       },
-      fallbackUrl,
+      bestTicket: bestTicket ? summarizeTicket(bestTicket) : null,
     });
-
-    if (!fallbackUrl) return null;
-
-    return {
-      provider: "sportsevents365",
-      exact,
-      score: exact ? bestEvent.score : Math.max(SE365_FALLBACK_SCORE, bestEvent.score - 10),
-      url: fallbackUrl,
-      title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
-      priceText: null,
-      reason: exact ? "partial_match" : "search_fallback",
-    };
+    return null;
   }
 
-  const scoredTickets = tickets
-    .map((ticket) => ({
-      ticket,
-      score: scoreTicket(ticket),
-    }))
-    .sort((a, b) => {
-      const aPrice = ticketPriceValue(a.ticket);
-      const bPrice = ticketPriceValue(b.ticket);
+  resolvedUrl = appendAffiliate(resolvedUrl);
 
-      if (aPrice != null && bPrice != null && aPrice !== bPrice) {
-        return aPrice - bPrice;
-      }
-
-      return b.score - a.score;
-    });
-
-  const bestTicket = scoredTickets[0];
-  const combinedScore = Math.min(
-    100,
-    bestEvent.score + Math.min(18, bestTicket?.score ?? 0)
-  );
-
-  const fallbackPublicUrl = buildTrackedSearchFallback(input);
-  const finalUrl = fallbackPublicUrl ? appendAffiliate(fallbackPublicUrl) : "";
+  const priceText = bestTicket ? ticketPriceText(bestTicket) : null;
 
   console.log("[SE365] matched event/ticket", {
     event: {
       ...summarizeEvent(bestEvent.ev),
-      eventScore: bestEvent.score,
+      score: bestEvent.score,
       exact,
     },
-    ticket: bestTicket
-      ? {
-          ...summarizeTicket(bestTicket.ticket),
-          ticketScore: bestTicket.score,
-        }
-      : null,
-    combinedScore,
-    resolvedUrl: finalUrl,
+    ticket: bestTicket ? summarizeTicket(bestTicket) : null,
+    resolvedUrl,
+    priceText,
   });
-
-  if (!finalUrl) {
-    return null;
-  }
 
   return {
     provider: "sportsevents365",
     exact,
-    score: combinedScore,
-    url: finalUrl,
+    score: bestTicket ? Math.min(100, bestEvent.score + 6) : bestEvent.score,
+    url: resolvedUrl,
     title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
-    priceText: bestTicket ? ticketPriceText(bestTicket.ticket) : null,
+    priceText,
     reason: exact ? "exact_event" : "partial_match",
   };
-    }
+}
