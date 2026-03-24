@@ -57,6 +57,9 @@ export const env = {
   // SportsEvents365
   se365BaseUrl: opt("SE365_BASE_URL", "https://api.sportsevents365.com"),
   se365ApiKey: opt("SE365_API_KEY", ""),
+  se365ApiPassword: opt("SE365_API_PASSWORD", ""),
+  se365HttpUsername: opt("SE365_HTTP_USERNAME", ""),
+  se365HttpSource: opt("SE365_HTTP_SOURCE", ""),
   se365AffiliateId: opt("SE365_AFFILIATE_ID", ""),
 
   // Gigsberg
@@ -96,7 +99,15 @@ export function hasFtnConfig(): boolean {
 }
 
 export function hasSe365Config(): boolean {
-  return Boolean(env.se365BaseUrl && env.se365ApiKey);
+  return Boolean(
+    env.se365BaseUrl &&
+      (
+        env.se365ApiKey ||
+        env.se365ApiPassword ||
+        env.se365HttpUsername ||
+        env.se365HttpSource
+      )
+  );
 }
 
 export function hasGigsbergConfig(): boolean {
