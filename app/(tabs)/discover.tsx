@@ -46,22 +46,25 @@ function SectionSpacer() {
   return <View style={styles.sectionSpacer} />;
 }
 
-function SectionShell({
+function Surface({
   children,
-  accent = "neutral",
+  tone = "neutral",
+  padded = true,
 }: {
   children: React.ReactNode;
-  accent?: "green" | "gold" | "neutral";
+  tone?: "green" | "gold" | "neutral";
+  padded?: boolean;
 }) {
   return (
     <View
       style={[
-        styles.sectionShell,
-        accent === "green"
-          ? styles.sectionShellGreen
-          : accent === "gold"
-            ? styles.sectionShellGold
-            : styles.sectionShellNeutral,
+        styles.surface,
+        padded && styles.surfacePadded,
+        tone === "green"
+          ? styles.surfaceGreen
+          : tone === "gold"
+            ? styles.surfaceGold
+            : styles.surfaceNeutral,
       ]}
     >
       {children}
@@ -121,10 +124,10 @@ export default function DiscoverScreen() {
   return (
     <Background
       imageSource={getBackground("explore")}
-      overlayOpacity={0.05}
-      topShadeOpacity={0.32}
+      overlayOpacity={0.04}
+      topShadeOpacity={0.34}
       bottomShadeOpacity={0.42}
-      centerShadeOpacity={0.05}
+      centerShadeOpacity={0.04}
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
@@ -173,7 +176,7 @@ export default function DiscoverScreen() {
             onToggleVibe={toggleVibe}
           />
 
-          <SectionShell accent="green">
+          <Surface tone="green">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Fast ways in"
@@ -181,11 +184,11 @@ export default function DiscoverScreen() {
               />
               <DiscoverQuickSparks sparks={QUICK_SPARKS} onPressSpark={applyQuickSpark} />
             </View>
-          </SectionShell>
+          </Surface>
 
           <SectionSpacer />
 
-          <SectionShell accent="green">
+          <Surface tone="green">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Best live options"
@@ -194,13 +197,17 @@ export default function DiscoverScreen() {
 
               {loadingLive ? (
                 <GlassCard style={styles.stateCard} variant="brand" level="default">
+                  <Text style={styles.stateEyebrow}>Live scan</Text>
                   <Text style={styles.stateTitle}>Loading live routes</Text>
                   <Text style={styles.stateText}>
                     Pulling the strongest current football-trip options across your selected window.
                   </Text>
                 </GlassCard>
               ) : liveError ? (
-                <EmptyState title="Live previews unavailable" message={liveError} />
+                <GlassCard style={styles.stateCard} variant="matte" level="default">
+                  <Text style={styles.stateEyebrowMuted}>Live data</Text>
+                  <EmptyState title="Live previews unavailable" message={liveError} />
+                </GlassCard>
               ) : hasLiveRows ? (
                 <ScrollView
                   horizontal
@@ -235,11 +242,11 @@ export default function DiscoverScreen() {
                 </GlassCard>
               )}
             </View>
-          </SectionShell>
+          </Surface>
 
           <SectionSpacer />
 
-          <SectionShell accent="gold">
+          <Surface tone="gold">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Trending trips"
@@ -277,11 +284,11 @@ export default function DiscoverScreen() {
                 </GlassCard>
               )}
             </View>
-          </SectionShell>
+          </Surface>
 
           <SectionSpacer />
 
-          <SectionShell accent="neutral">
+          <Surface tone="neutral">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Multi-match trips"
@@ -309,11 +316,11 @@ export default function DiscoverScreen() {
                 </GlassCard>
               )}
             </View>
-          </SectionShell>
+          </Surface>
 
           <SectionSpacer />
 
-          <SectionShell accent="green">
+          <Surface tone="green">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Start from a mood"
@@ -324,11 +331,11 @@ export default function DiscoverScreen() {
                 onPressPreset={applyPreset}
               />
             </View>
-          </SectionShell>
+          </Surface>
 
           <SectionSpacer />
 
-          <SectionShell accent="gold">
+          <Surface tone="gold">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Best browse route"
@@ -356,11 +363,11 @@ export default function DiscoverScreen() {
                 </View>
               </View>
             </View>
-          </SectionShell>
+          </Surface>
 
           <SectionSpacer />
 
-          <SectionShell accent="neutral">
+          <Surface tone="neutral">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Specialist browse angles"
@@ -382,11 +389,11 @@ export default function DiscoverScreen() {
                 ))}
               </ScrollView>
             </View>
-          </SectionShell>
+          </Surface>
 
           <SectionSpacer />
 
-          <SectionShell accent="gold">
+          <Surface tone="gold">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Need one good answer?"
@@ -398,7 +405,7 @@ export default function DiscoverScreen() {
                 onPress={goRandomTrip}
               />
             </View>
-          </SectionShell>
+          </Surface>
 
           <View style={styles.bottomActionWrap}>
             <GlassCard variant="brand" level="strong" style={styles.bottomActionCard}>
@@ -432,7 +439,7 @@ const styles = StyleSheet.create({
 
   content: {
     paddingHorizontal: theme.spacing.lg,
-    gap: 18,
+    gap: 16,
   },
 
   section: {
@@ -443,25 +450,31 @@ const styles = StyleSheet.create({
     height: 2,
   },
 
-  sectionShell: {
-    borderRadius: 22,
-    padding: 12,
+  surface: {
+    borderRadius: 26,
+    overflow: "hidden",
+  },
+
+  surfacePadded: {
+    padding: 14,
+  },
+
+  surfaceGreen: {
     borderWidth: 1,
-  },
-
-  sectionShellGreen: {
     borderColor: theme.colors.borderGreenSoft,
-    backgroundColor: "rgba(34,197,94,0.035)",
+    backgroundColor: "rgba(34,197,94,0.03)",
   },
 
-  sectionShellGold: {
+  surfaceGold: {
+    borderWidth: 1,
     borderColor: theme.colors.borderGoldSoft,
-    backgroundColor: "rgba(250,204,21,0.035)",
+    backgroundColor: "rgba(250,204,21,0.03)",
   },
 
-  sectionShellNeutral: {
+  surfaceNeutral: {
+    borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.02)",
+    backgroundColor: "rgba(255,255,255,0.025)",
   },
 
   liveRow: {
@@ -475,7 +488,7 @@ const styles = StyleSheet.create({
   },
 
   bestFitBlock: {
-    gap: 10,
+    gap: 12,
   },
 
   primaryGrid: {
@@ -491,15 +504,33 @@ const styles = StyleSheet.create({
   },
 
   stateCard: {
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 16,
     gap: 8,
   },
 
   stateCardThin: {
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 14,
     gap: 6,
+  },
+
+  stateEyebrow: {
+    color: "#8EF2A5",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.65,
+    textTransform: "uppercase",
+  },
+
+  stateEyebrowMuted: {
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.65,
+    textTransform: "uppercase",
   },
 
   stateTitle: {
@@ -517,19 +548,19 @@ const styles = StyleSheet.create({
   },
 
   bottomActionWrap: {
-    paddingTop: 4,
+    paddingTop: 6,
   },
 
   bottomActionCard: {
     gap: 12,
-    padding: 16,
-    borderRadius: 22,
+    padding: 18,
+    borderRadius: 24,
   },
 
   bottomActionTitle: {
     color: theme.colors.text,
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 17,
+    lineHeight: 21,
     fontWeight: theme.fontWeight.black,
   },
 
