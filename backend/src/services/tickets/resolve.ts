@@ -1,3 +1,4 @@
+import { env } from "../../lib/env.js";
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
@@ -30,32 +31,15 @@ type TimedResult<T> = {
 };
 
 const CACHE = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 1000 * 60 * 5;
-
-/**
- * This MUST be longer than the slowest provider fetch timeout.
- * FTN = 6000
- * SE365 = 6000
- * Gigsberg = 6500
- *
- * Give them room, otherwise resolve.ts kills them before they finish.
- */
-const PROVIDER_TIMEOUT_MS = 9000;
-
-/**
- * Show all partners we support, not an arbitrary truncated subset.
- */
-const MAX_RETURNED_OPTIONS = 4;
-
-/**
- * Search fallback score floor.
- */
-const MIN_FALLBACK_SCORE = 20;
+const CACHE_TTL_MS = 1000 * 60 * 10;
+const PROVIDER_TIMEOUT_MS = 4500;
+const MAX_RETURNED_OPTIONS = 3;
+const MIN_FALLBACK_SCORE = 10;
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
-  sportsevents365: 1,
-  gigsberg: 2,
-  footballticketsnet: 3,
+  footballticketsnet: 1,
+  sportsevents365: 2,
+  gigsberg: 3,
 };
 
 const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
@@ -180,6 +164,7 @@ function summarizeCandidate(candidate: TicketCandidate | null) {
     reason: candidate.reason,
     title: candidate.title,
     priceText: candidate.priceText ?? null,
+    hasUrl: Boolean(clean(candidate.url)),
     url: clean(candidate.url) || null,
   };
 }
@@ -303,19 +288,6 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
       continue;
     }
 
-    const candidatePrice = parsePriceAmount(candidate.priceText);
-    const existingPrice = parsePriceAmount(existing.priceText);
-
-    if (
-      candidate.score === existing.score &&
-      candidatePrice != null &&
-      existingPrice != null &&
-      candidatePrice < existingPrice
-    ) {
-      map.set(key, candidate);
-      continue;
-    }
-
     if (candidate.score === existing.score) {
       const currentRank = PROVIDER_PRIORITY[candidate.provider] ?? 99;
       const existingRank = PROVIDER_PRIORITY[existing.provider] ?? 99;
@@ -355,24 +327,16 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
     const aReasonRank = reasonRank(a.reason);
     const bReasonRank = reasonRank(b.reason);
 
-    if (aReasonRank !== bReasonRank) {
-      return aReasonRank - bReasonRank;
-    }
+    if (aReasonRank !== bReasonRank) return aReasonRank - bReasonRank;
 
     const aPrice = parsePriceAmount(a.priceText);
     const bPrice = parsePriceAmount(b.priceText);
 
-    /**
-     * If both are in roughly the same confidence band, cheaper should win.
-     * This is what users actually care about.
-     */
-    if (aPrice != null && bPrice != null && Math.abs(a.score - b.score) <= 15) {
+    if (aPrice != null && bPrice != null && Math.abs(a.score - b.score) <= 12) {
       if (aPrice !== bPrice) return aPrice - bPrice;
     }
 
-    if (b.score !== a.score) {
-      return b.score - a.score;
-    }
+    if (b.score !== a.score) return b.score - a.score;
 
     const aHasPrice = Boolean(clean(a.priceText));
     const bHasPrice = Boolean(clean(b.priceText));
@@ -426,6 +390,70 @@ function buildResolution(
       reason: candidate.reason,
     })),
   };
+}
+
+function encodeQuery(input: TicketResolveInput): string {
+  const home = clean(input.homeName);
+  const away = clean(input.awayName);
+  const league = clean(input.leagueName);
+
+  return league ? `${home} vs ${away} ${league}` : `${home} vs ${away}`;
+}
+
+function buildGuaranteedFallbackCandidates(
+  input: TicketResolveInput,
+  existingCandidates: TicketCandidate[]
+): TicketCandidate[] {
+  const query = encodeQuery(input);
+  if (!query) return [];
+
+  const existingProviders = new Set(existingCandidates.map((x) => x.provider));
+  const out: TicketCandidate[] = [];
+
+  if (!existingProviders.has("sportsevents365")) {
+    const se365Url = new URL("https://www.sportsevents365.com/events/search");
+    se365Url.searchParams.set("q", query);
+
+    const aid = clean(env.se365AffiliateId);
+    if (aid) {
+      if (aid.includes("=")) {
+        const [k, v] = aid.split("=");
+        if (k && v) se365Url.searchParams.set(k, v);
+      } else {
+        se365Url.searchParams.set("a_aid", aid);
+      }
+    }
+
+    out.push({
+      provider: "sportsevents365",
+      exact: false,
+      score: 24,
+      url: se365Url.toString(),
+      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
+      priceText: null,
+      reason: "search_fallback",
+    });
+  }
+
+  if (!existingProviders.has("gigsberg")) {
+    const gigsbergUrl = new URL("https://www.gigsberg.com/search");
+    gigsbergUrl.searchParams.set("query", query);
+
+    const aff = clean(env.gigsbergAffiliateId);
+    if (aff) gigsbergUrl.searchParams.set("aff", aff);
+
+    out.push({
+      provider: "gigsberg",
+      exact: false,
+      score: 22,
+      url: gigsbergUrl.toString(),
+      title: `Tickets: ${clean(input.homeName)} vs ${clean(input.awayName)}`,
+      priceText: null,
+      reason: "search_fallback",
+    });
+  }
+
+  return out;
 }
 
 async function runProvider(
@@ -520,9 +548,7 @@ export async function resolveTicket(
         provider,
         candidate: summarizeCandidate(result.value),
       });
-      if (result.value) {
-        candidates.push(result.value);
-      }
+      if (result.value) candidates.push(result.value);
     } else {
       console.log("[tickets] provider promise rejected", {
         provider,
@@ -533,6 +559,21 @@ export async function resolveTicket(
       });
     }
   }
+
+  const fallbackCandidates = buildGuaranteedFallbackCandidates(input, candidates);
+
+  if (fallbackCandidates.length > 0) {
+    console.log("[tickets] adding guaranteed fallback candidates", {
+      count: fallbackCandidates.length,
+      fallbacks: fallbackCandidates.map(summarizeCandidate),
+    });
+    candidates.push(...fallbackCandidates);
+  }
+
+  console.log("[tickets] raw candidates before resolution", {
+    count: candidates.length,
+    candidates: candidates.map(summarizeCandidate),
+  });
 
   const result = buildResolution(candidates, checkedProviders);
 
@@ -549,6 +590,7 @@ export async function resolveTicket(
         score: option.score,
         exact: option.exact,
         priceText: option.priceText ?? null,
+        url: option.url,
       })),
       debugNoCache,
     });
@@ -557,7 +599,6 @@ export async function resolveTicket(
       checkedProviders,
       input: summarizeInput(input),
       debugNoCache,
-      providerStats: PROVIDER_STATS,
     });
   }
 
@@ -566,4 +607,4 @@ export async function resolveTicket(
   }
 
   return result;
-        }
+}
