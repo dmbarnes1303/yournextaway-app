@@ -39,6 +39,16 @@ import {
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>;
 
+type AffiliateUrls = {
+  ticketsUrl?: string | null;
+  hotelUrl?: string | null;
+  flightsUrl?: string | null;
+  trainsUrl?: string | null;
+  transfersUrl?: string | null;
+  thingsUrl?: string | null;
+  mapsUrl?: string | null;
+} | null;
+
 type Props = {
   trip: Trip | null;
   activeTripId: string | null;
@@ -46,6 +56,7 @@ type Props = {
   primaryLeagueId?: number;
   fixturesById: Record<string, FixtureListRow>;
   ticketsByMatchId: Record<string, SavedItem | null>;
+  affiliateUrls?: AffiliateUrls;
   noteText?: string;
   setNoteText?: SetState<string>;
   setNoteSaving?: SetState<boolean>;
@@ -150,6 +161,7 @@ export default function useTripDetailController({
   primaryLeagueId,
   fixturesById,
   ticketsByMatchId,
+  affiliateUrls = null,
   noteText = "",
   setNoteText = () => {},
   setNoteSaving = () => {},
@@ -202,26 +214,118 @@ export default function useTripDetailController({
       await setActiveWorkspaceSection(next);
     } catch {}
 
+    const tripId = clean(trip?.id) || clean(activeTripId);
+    if (!tripId) {
+      Alert.alert("Save trip first", "Save this trip before booking.");
+      return;
+    }
+
     if (next === "tickets") {
       const primaryMatchId = clean((trip as any)?.fixtureIdPrimary);
       if (primaryMatchId) {
         await openTicketsForMatch(primaryMatchId);
+      } else {
+        Alert.alert("Tickets not ready", "No primary match is attached to this trip yet.");
       }
       return;
     }
 
     if (next === "stay") {
-      Alert.alert("Stay", "Hotel and stay options belong here next.");
+      const url = clean(affiliateUrls?.hotelUrl);
+      if (!url) {
+        Alert.alert("Hotels not ready", "No hotel search available yet.");
+        return;
+      }
+
+      await openTrackedPartner({
+        partnerId: "expedia" as PartnerId,
+        url,
+        savedItemType: "hotel",
+        title: `Stays in ${cityName}`,
+        metadata: {
+          sourceSurface: "planning_rail",
+          sourceSection: "stay",
+        },
+      });
       return;
     }
 
     if (next === "travel") {
-      Alert.alert("Travel", "Flights, trains and transfer planning belong here next.");
+      const url = clean(affiliateUrls?.flightsUrl || affiliateUrls?.trainsUrl || affiliateUrls?.transfersUrl);
+      if (!url) {
+        Alert.alert("Travel not ready", "No travel search available yet.");
+        return;
+      }
+
+      const partnerId: PartnerId = clean(affiliateUrls?.flightsUrl)
+        ? ("aviasales" as PartnerId)
+        : clean(affiliateUrls?.trainsUrl)
+          ? ("omio" as PartnerId)
+          : ("kiwitaxi" as PartnerId);
+
+      const itemType: SavedItemType = clean(affiliateUrls?.flightsUrl)
+        ? "flight"
+        : clean(affiliateUrls?.trainsUrl)
+          ? "train"
+          : "transfer";
+
+      const title =
+        itemType === "flight"
+          ? `Flights to ${cityName}`
+          : itemType === "train"
+            ? `Trains to ${cityName}`
+            : `Transfers in ${cityName}`;
+
+      await openTrackedPartner({
+        partnerId,
+        url,
+        savedItemType: itemType,
+        title,
+        metadata: {
+          sourceSurface: "planning_rail",
+          sourceSection: "travel",
+        },
+      });
       return;
     }
 
     if (next === "things") {
-      Alert.alert("Extras", "Things to do and add-ons belong here.");
+      const url = clean(affiliateUrls?.thingsUrl);
+      if (!url) {
+        Alert.alert("Experiences not ready", "No activities available yet.");
+        return;
+      }
+
+      await openTrackedPartner({
+        partnerId: "getyourguide" as PartnerId,
+        url,
+        savedItemType: "things",
+        title: `Things to do in ${cityName}`,
+        metadata: {
+          sourceSurface: "planning_rail",
+          sourceSection: "things",
+        },
+      });
+      return;
+    }
+
+    if (next === "transfers") {
+      const url = clean(affiliateUrls?.transfersUrl);
+      if (!url) {
+        Alert.alert("Transfers not ready", "No transfer booking link is available yet.");
+        return;
+      }
+
+      await openTrackedPartner({
+        partnerId: "kiwitaxi" as PartnerId,
+        url,
+        savedItemType: "transfer",
+        title: `Transfers in ${cityName}`,
+        metadata: {
+          sourceSurface: "planning_rail",
+          sourceSection: "transfers",
+        },
+      });
       return;
     }
   }
@@ -871,4 +975,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-}
+  }
