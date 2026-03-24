@@ -533,6 +533,13 @@ async function fetchTicketsForEvent(eventIdValue: string): Promise<Se365Ticket[]
 export async function resolveSe365Candidate(
   input: TicketResolveInput
 ): Promise<TicketCandidate | null> {
+  console.log("[SE365 CONFIG CHECK]", {
+  hasSe365Config: hasSe365Config(),
+  apiKey: env.se365ApiKey,
+  baseUrl: env.se365BaseUrl,
+  username: env.se365HttpUsername,
+  password: env.se365ApiPassword,
+});
   if (!hasSe365Config()) {
     console.log("[SE365] skipped: missing config");
     return null;
