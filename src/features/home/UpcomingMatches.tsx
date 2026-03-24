@@ -130,7 +130,7 @@ export default function UpcomingMatches(props: Props) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Upcoming matches</Text>
+        <Text style={styles.sectionTitle}>Best Upcoming Matches</Text>
 
         <Pressable
           onPress={() =>
@@ -156,8 +156,11 @@ export default function UpcomingMatches(props: Props) {
       <View style={styles.panel}>
         {fxLoading ? (
           <View style={styles.stateCard}>
+            <View style={styles.stateBadge}>
+              <Text style={styles.stateBadgeText}>Live scan</Text>
+            </View>
             <ActivityIndicator color={theme.colors.textSecondary} />
-            <Text style={styles.stateText}>Loading fixtures…</Text>
+            <Text style={styles.stateText}>Checking the best upcoming fixtures…</Text>
           </View>
         ) : null}
 
@@ -166,24 +169,24 @@ export default function UpcomingMatches(props: Props) {
             <View style={styles.stateBadge}>
               <Text style={styles.stateBadgeText}>Live data</Text>
             </View>
-            <EmptyState
-              title="Fixtures unavailable"
-              message={fxError}
-            />
+            <EmptyState title="Fixtures unavailable" message={fxError} />
           </View>
         ) : null}
 
         {!fxLoading && !fxError && !featured ? (
           <View style={styles.stateCard}>
-            <EmptyState title="No fixtures found" message="Try another league." />
+            <EmptyState
+              title="No fixtures found"
+              message="Try another league or open the full fixtures view."
+            />
           </View>
         ) : null}
 
         {!fxLoading && !fxError && featured ? (
           <>
             <View style={styles.panelTopRow}>
-              <Text style={styles.panelTag}>Top match pick</Text>
-              <Text style={styles.panelHint}>Best near-term option</Text>
+              <Text style={styles.panelTag}>Top pick</Text>
+              <Text style={styles.panelHint}>Best trip-worthy option</Text>
             </View>
 
             <Pressable
@@ -237,7 +240,7 @@ export default function UpcomingMatches(props: Props) {
 
             {list.length > 0 ? (
               <View style={styles.listWrap}>
-                <Text style={styles.listLabel}>More this week</Text>
+                <Text style={styles.listLabel}>More strong picks</Text>
 
                 <View style={styles.list}>
                   {list.map((r, idx) => {
