@@ -69,13 +69,13 @@ export const env = {
   gigsbergApiKey: opt("GIGSBERG_API_KEY", ""),
   gigsbergAffiliateId: opt("GIGSBERG_AFFILIATE_ID", "yournextaway"),
 
-  // ✅ AVIASALES (FLIGHTS)
+  // Aviasales / Travelpayouts flights
   aviasalesBaseUrl: opt(
     "AVIASALES_BASE_URL",
     "https://api.travelpayouts.com"
   ),
   aviasalesToken: opt("AVIASALES_TOKEN", ""),
-  aviasalesMarker: opt("AVIASALES_MARKER", ""), // affiliate ID
+  aviasalesMarker: opt("AVIASALES_MARKER", ""),
 };
 
 export function isProduction(): boolean {
@@ -84,6 +84,12 @@ export function isProduction(): boolean {
 
 export function hasApiFootballConfig(): boolean {
   return Boolean(env.apiFootballBaseUrl && env.apiFootballKey);
+}
+
+export function requireApiFootballConfig(): void {
+  if (!hasApiFootballConfig()) {
+    throw new Error("Missing required env var: API_FOOTBALL_KEY");
+  }
 }
 
 export function hasWalletWorkerConfig(): boolean {
@@ -119,7 +125,6 @@ export function hasGigsbergConfig(): boolean {
   );
 }
 
-// ✅ NEW
 export function hasAviasalesConfig(): boolean {
   return Boolean(
     env.aviasalesBaseUrl &&
