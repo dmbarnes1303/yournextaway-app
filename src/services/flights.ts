@@ -35,10 +35,107 @@ export type FlightSearchResult = {
   error?: string;
 };
 
+type BackendFlightOffer = {
+  origin?: string;
+  destination?: string;
+  departureAt?: string | null;
+  returnAt?: string | null;
+  airline?: string | null;
+  flightNumber?: string | null;
+  transfers?: number | null;
+  returnTransfers?: number | null;
+  duration?: number | null;
+  durationTo?: number | null;
+  durationBack?: number | null;
+  price?: number | null;
+  currency?: string | null;
+  link?: string | null;
+  expiresAt?: string | null;
+  searchAt?: string | null;
+  gate?: string | null;
+  foundVia?: "prices_for_dates";
+};
+
+type BackendFlightSearchResult = {
+  ok?: boolean;
+  offers?: BackendFlightOffer[];
+  cheapest?: BackendFlightOffer | null;
+  cached?: boolean;
+  fromCacheAgeMs?: number | null;
+  error?: string;
+};
+
 /* ---------------- helpers ---------------- */
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function upper(value: unknown): string {
+  return clean(value).toUpperCase();
+}
+
+function safeNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function safePositiveInt(value: unknown, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.floor(n);
+}
+
+function safeUrl(value: unknown): string {
+  const raw = clean(value);
+  if (!raw) return "";
+
+  try {
+    return new URL(raw).toString();
+  } catch {
+    return "";
+  }
+}
+
+function safeIso(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return null;
+
+  return d.toISOString();
+}
+
+function addMinutes(iso: string | null, minutes: number | null): string | null {
+  if (!iso) return null;
+  if (minutes == null || !Number.isFinite(minutes)) return null;
+
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+
+  d.setMinutes(d.getMinutes() + minutes);
+  return d.toISOString();
+}
+
+function buildOfferId(input: {
+  origin: string;
+  destination: string;
+  departureTime: string | null;
+  returnDepartureTime: string | null;
+  airline: string;
+  flightNumber: string | null;
+  price: number;
+}): string {
+  return [
+    input.origin,
+    input.destination,
+    input.departureTime ?? "",
+    input.returnDepartureTime ?? "",
+    input.airline,
+    input.flightNumber ?? "",
+    String(input.price),
+  ].join("|");
 }
 
 function buildUrl(params: {
@@ -51,26 +148,143 @@ function buildUrl(params: {
   direct?: boolean;
   limit?: number;
   page?: number;
+  market?: string;
 }) {
   const base = getBackendBaseUrl();
   if (!base) return null;
 
+  const originIata = upper(params.originIata);
+  const destinationIata = upper(params.destinationIata);
+  const departureDate = clean(params.departureDate);
+
+  if (!originIata || !destinationIata || !departureDate) return null;
+
   const qs = new URLSearchParams({
-    originIata: clean(params.originIata),
-    destinationIata: clean(params.destinationIata),
-    departureDate: clean(params.departureDate),
+    originIata,
+    destinationIata,
+    departureDate,
   });
 
   if (params.returnDate) qs.set("returnDate", clean(params.returnDate));
-  if (params.currency) qs.set("currency", clean(params.currency));
+  if (params.currency) qs.set("currency", upper(params.currency));
   if (params.oneWay) qs.set("oneWay", "1");
   if (params.direct) qs.set("direct", "1");
-  if (params.limit) qs.set("limit", String(params.limit));
-  if (params.page) qs.set("page", String(params.page));
-
-  qs.set("_ts", String(Date.now())); // bust cache if needed
+  if (params.limit) qs.set("limit", String(safePositiveInt(params.limit, 10)));
+  if (params.page) qs.set("page", String(safePositiveInt(params.page, 1)));
+  if (params.market) qs.set("market", clean(params.market));
 
   return `${base}/flights/search?${qs.toString()}`;
+}
+
+function normalizeOffer(input: BackendFlightOffer | null | undefined): FlightOffer | null {
+  if (!input) return null;
+
+  const origin = upper(input.origin);
+  const destination = upper(input.destination);
+  const price = safeNumber(input.price);
+  const currency = upper(input.currency) || "GBP";
+  const airline = clean(input.airline) || "Unknown airline";
+  const flightNumber = clean(input.flightNumber) || null;
+  const deepLink = safeUrl(input.link);
+
+  const departureTime = safeIso(input.departureAt);
+  const returnDepartureTime = safeIso(input.returnAt);
+
+  const durationTo = safeNumber(input.durationTo);
+  const durationBack = safeNumber(input.durationBack);
+  const duration = safeNumber(input.duration);
+
+  const arrivalTime =
+    addMinutes(departureTime, durationTo ?? duration) ?? departureTime;
+  const returnArrivalTime =
+    addMinutes(returnDepartureTime, durationBack) ?? returnDepartureTime;
+
+  const stopsRaw = safeNumber(input.transfers);
+  const stops = stopsRaw == null ? undefined : Math.max(0, Math.floor(stopsRaw));
+
+  const durationMinutes =
+    duration != null
+      ? Math.max(0, Math.floor(duration))
+      : durationTo != null
+      ? Math.max(0, Math.floor(durationTo))
+      : null;
+
+  if (!origin || !destination || price == null || !departureTime || !deepLink) {
+    return null;
+  }
+
+  return {
+    id: buildOfferId({
+      origin,
+      destination,
+      departureTime,
+      returnDepartureTime,
+      airline,
+      flightNumber,
+      price,
+    }),
+    price,
+    currency,
+    origin,
+    destination,
+    departureTime,
+    arrivalTime: arrivalTime ?? departureTime,
+    returnDepartureTime,
+    returnArrivalTime,
+    airline,
+    flightNumber,
+    deepLink,
+    provider: "aviasales",
+    durationMinutes,
+    stops,
+  };
+}
+
+function sortOffers(a: FlightOffer, b: FlightOffer): number {
+  if (a.price !== b.price) return a.price - b.price;
+
+  const aStops = typeof a.stops === "number" ? a.stops : Number.POSITIVE_INFINITY;
+  const bStops = typeof b.stops === "number" ? b.stops : Number.POSITIVE_INFINITY;
+  if (aStops !== bStops) return aStops - bStops;
+
+  return a.departureTime.localeCompare(b.departureTime);
+}
+
+function normalizeSearchResult(parsed: BackendFlightSearchResult | null): FlightSearchResult {
+  if (!parsed) {
+    return {
+      ok: false,
+      offers: [],
+      cheapest: null,
+      cached: false,
+      fromCacheAgeMs: null,
+      error: "empty_response",
+    };
+  }
+
+  const offers = Array.isArray(parsed.offers)
+    ? parsed.offers
+        .map((offer) => normalizeOffer(offer))
+        .filter((offer): offer is FlightOffer => offer !== null)
+        .sort(sortOffers)
+    : [];
+
+  const cheapest =
+    normalizeOffer(parsed.cheapest) ??
+    offers[0] ??
+    null;
+
+  return {
+    ok: Boolean(parsed.ok),
+    offers,
+    cheapest,
+    cached: Boolean(parsed.cached),
+    fromCacheAgeMs:
+      typeof parsed.fromCacheAgeMs === "number" && Number.isFinite(parsed.fromCacheAgeMs)
+        ? parsed.fromCacheAgeMs
+        : null,
+    error: clean(parsed.error) || undefined,
+  };
 }
 
 /* ---------------- main function ---------------- */
@@ -85,6 +299,7 @@ export async function searchFlights(params: {
   direct?: boolean;
   limit?: number;
   page?: number;
+  market?: string;
 }): Promise<FlightSearchResult> {
   const url = buildUrl(params);
 
@@ -109,11 +324,10 @@ export async function searchFlights(params: {
     });
 
     const raw = await res.text();
-
-    let parsed: FlightSearchResult | null = null;
+    let parsed: BackendFlightSearchResult | null = null;
 
     try {
-      parsed = JSON.parse(raw);
+      parsed = JSON.parse(raw) as BackendFlightSearchResult;
     } catch {
       return {
         ok: false,
@@ -125,27 +339,18 @@ export async function searchFlights(params: {
       };
     }
 
-    if (!parsed) {
-      return {
-        ok: false,
-        offers: [],
-        cheapest: null,
-        cached: false,
-        fromCacheAgeMs: null,
-        error: "empty_response",
-      };
-    }
+    const normalized = normalizeSearchResult(parsed);
 
     if (!res.ok) {
       return {
-        ...parsed,
+        ...normalized,
         ok: false,
-        error: parsed.error || `http_${res.status}`,
+        error: normalized.error || `http_${res.status}`,
       };
     }
 
-    return parsed;
-  } catch (e: any) {
+    return normalized;
+  } catch {
     return {
       ok: false,
       offers: [],
@@ -155,4 +360,23 @@ export async function searchFlights(params: {
       error: "network_error",
     };
   }
+}
+
+export async function getCheapestFlight(params: {
+  originIata: string;
+  destinationIata: string;
+  departureDate: string;
+  returnDate?: string | null;
+  currency?: string;
+  oneWay?: boolean;
+  direct?: boolean;
+  market?: string;
+}): Promise<FlightOffer | null> {
+  const result = await searchFlights({
+    ...params,
+    limit: 10,
+    page: 1,
+  });
+
+  return result.ok ? result.cheapest : null;
 }
