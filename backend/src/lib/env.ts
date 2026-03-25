@@ -50,7 +50,6 @@ export const env = {
   // FootballTicketNet
   ftnBaseUrl: opt("FTN_BASE_URL", "https://www.footballticketnet.com/api"),
   ftnUsername: opt("FTN_USERNAME", ""),
-  ftnSecretName: opt("FTN_SECRET_NAME", ""),
   ftnAffiliateSecret: opt("FTN_AFFILIATE_SECRET", ""),
   ftnAffiliateId: opt("FTN_AFFILIATE_ID", "yournextaway"),
 
@@ -69,6 +68,14 @@ export const env = {
   ),
   gigsbergApiKey: opt("GIGSBERG_API_KEY", ""),
   gigsbergAffiliateId: opt("GIGSBERG_AFFILIATE_ID", "yournextaway"),
+
+  // ✅ AVIASALES (FLIGHTS)
+  aviasalesBaseUrl: opt(
+    "AVIASALES_BASE_URL",
+    "https://api.travelpayouts.com"
+  ),
+  aviasalesToken: opt("AVIASALES_TOKEN", ""),
+  aviasalesMarker: opt("AVIASALES_MARKER", ""), // affiliate ID
 };
 
 export function isProduction(): boolean {
@@ -77,12 +84,6 @@ export function isProduction(): boolean {
 
 export function hasApiFootballConfig(): boolean {
   return Boolean(env.apiFootballBaseUrl && env.apiFootballKey);
-}
-
-export function requireApiFootballConfig(): void {
-  if (!hasApiFootballConfig()) {
-    throw new Error("Missing required env var: API_FOOTBALL_KEY");
-  }
 }
 
 export function hasWalletWorkerConfig(): boolean {
@@ -115,6 +116,15 @@ export function hasGigsbergConfig(): boolean {
     env.gigsbergBaseUrl &&
       env.gigsbergApiKey &&
       env.gigsbergAffiliateId
+  );
+}
+
+// ✅ NEW
+export function hasAviasalesConfig(): boolean {
+  return Boolean(
+    env.aviasalesBaseUrl &&
+      env.aviasalesToken &&
+      env.aviasalesMarker
   );
 }
 
