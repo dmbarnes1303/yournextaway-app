@@ -1,12 +1,11 @@
 // src/constants/partners.ts
 // Affiliate configuration + lightweight tracked partner registry.
-// This file is intentionally limited to:
-// 1) tracked config values
-// 2) lightweight registry metadata
-// 3) simple safe partner URL builders
 //
-// Canonical partner identity / aliases live elsewhere.
-// This file should not pretend Google search is a real affiliate layer.
+// Rules:
+// - Keep this file focused on partner config and lightweight URL builders.
+// - Do not put football airport resolution logic in here.
+// - Do not rely on broken redirect links when a stable generic fallback is better.
+// - Live search/deeplink generation belongs in higher-level services when needed.
 
 export type PartnerCategory =
   | "tickets"
@@ -36,27 +35,33 @@ export type Partner = {
 };
 
 export const AffiliateConfig = {
+  // Flights
   aviasalesMarker: "700937",
-  aviasalesFallback: "https://aviasales.tpm.lv/VYu40Vnv",
 
+  // Stays
+  // Prefer a real tracked URL if Expedia gives you one.
+  // Keep token fallback for the current setup.
+  expediaTracked: "",
   expediaToken: "HQeXTbR",
 
+  // Transfers / transport
   kiwitaxiTracked: "https://kiwitaxi.tpm.lv/oFUnzcw9",
-
-  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
-
-  getyourguidePartnerId: "MAQJIREP",
-
+  welcomepickupsTracked: "",
   omioTracked: "https://omio.sjv.io/KBjDon",
 
-  // SafetyWing removed until a real tracked setup exists again.
-  ektaTracked: "",
+  // Tickets
+  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=69834e80ec9d3",
+
+  // Experiences
+  getyourguidePartnerId: "MAQJIREP",
   klookTracked: "",
   tiqetsTracked: "",
   wegotripTracked: "https://wegotrip.tpm.lv/2TmC2jxD",
+
+  // Insurance / claims
+  ektaTracked: "",
   airhelpTracked: "https://airhelp.tpm.lv/G53R3pcD",
   compensairTracked: "https://compensair.tpm.lv/crv6X5hT",
-  welcomepickupsTracked: "",
 } as const;
 
 /* -------------------------------------------------------------------------- */
@@ -74,14 +79,23 @@ function enc(value: unknown): string {
 function ymd(value?: string | null): string | null {
   const raw = clean(value);
   if (!raw) return null;
-  return raw.slice(0, 10);
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const sliced = raw.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(sliced) ? sliced : null;
 }
 
 function slugCity(city: string): string {
   return clean(city)
     .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9\s-]/g, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s-]/g, " ")
     .trim()
     .replace(/\s+/g, "-");
 }
@@ -104,16 +118,23 @@ function appendQuery(
   const safeBase = clean(base);
   if (!safeBase) return null;
 
-  const entries = Object.entries(params).filter(([, v]) => clean(v));
+  const entries = Object.entries(params).filter(([, value]) => clean(value));
   if (!entries.length) return safeBase;
 
   const joiner = safeBase.includes("?") ? "&" : "?";
-  const qs = entries.map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&");
+  const qs = entries.map(([key, value]) => `${enc(key)}=${enc(value)}`).join("&");
+
   return `${safeBase}${joiner}${qs}`;
 }
 
 function hasTrackedConfig(key: keyof typeof AffiliateConfig): boolean {
-  return !!safeTrackedUrl(AffiliateConfig[key]);
+  return Boolean(safeTrackedUrl(AffiliateConfig[key]));
+}
+
+function hasExpediaConfig(): boolean {
+  return Boolean(
+    safeTrackedUrl(AffiliateConfig.expediaTracked) || clean(AffiliateConfig.expediaToken)
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -121,23 +142,30 @@ function hasTrackedConfig(key: keyof typeof AffiliateConfig): boolean {
 /* -------------------------------------------------------------------------- */
 
 function buildAviasales(ctx: AffiliateContext): string | null {
-  const fallback = safeTrackedUrl(AffiliateConfig.aviasalesFallback);
-  if (!fallback) return null;
+  const marker = clean(AffiliateConfig.aviasalesMarker);
 
-  const city = clean(ctx.city);
-  const start = ymd(ctx.startDate);
+  // Do not use the old broken tpm redirect here.
+  const base = "https://www.aviasales.com/";
 
-  if (!city || !start) return fallback;
-
-  return appendQuery(fallback, {
-    destination: city,
-    departureDate: start,
+  return appendQuery(base, {
+    marker: marker || null,
+    destination: clean(ctx.city) || null,
+    departureDate: ymd(ctx.startDate),
     returnDate: ymd(ctx.endDate),
-    origin: clean(ctx.originIata) || null,
+    origin: clean(ctx.originIata).toUpperCase() || null,
   });
 }
 
 function buildExpedia(ctx: AffiliateContext): string | null {
+  const tracked = safeTrackedUrl(AffiliateConfig.expediaTracked);
+  if (tracked) {
+    return appendQuery(tracked, {
+      destination: clean(ctx.city) || null,
+      startDate: ymd(ctx.startDate),
+      endDate: ymd(ctx.endDate),
+    });
+  }
+
   const city = clean(ctx.city);
   const token = clean(AffiliateConfig.expediaToken);
 
@@ -189,12 +217,10 @@ function buildOmio(ctx: AffiliateContext): string | null {
   if (!tracked) return null;
 
   return appendQuery(tracked, {
-    destination: clean(ctx.city) || null,
-    destination_name: clean(ctx.city) || null,
-    outboundDate: ymd(ctx.startDate),
+    departureLocation: clean(ctx.originIata) || null,
+    arrivalLocation: clean(ctx.city) || null,
     departureDate: ymd(ctx.startDate),
-    inboundDate: ymd(ctx.endDate),
-    returnDate: ymd(ctx.endDate),
+    arrivalDate: ymd(ctx.endDate),
   });
 }
 
@@ -214,7 +240,7 @@ export const PARTNERS = [
     name: "Aviasales",
     category: "flights",
     affiliate: true,
-    api: false,
+    api: true,
     live: true,
     buildUrl: buildAviasales,
   },
@@ -222,45 +248,45 @@ export const PARTNERS = [
     id: "expedia",
     name: "Expedia",
     category: "stays",
-    affiliate: true,
+    affiliate: hasExpediaConfig(),
     api: false,
-    live: true,
+    live: hasExpediaConfig(),
     buildUrl: buildExpedia,
   },
   {
     id: "kiwitaxi",
     name: "KiwiTaxi",
     category: "transfers",
-    affiliate: true,
+    affiliate: hasTrackedConfig("kiwitaxiTracked"),
     api: false,
-    live: true,
+    live: hasTrackedConfig("kiwitaxiTracked"),
     buildUrl: buildKiwitaxi,
   },
   {
     id: "getyourguide",
     name: "GetYourGuide",
     category: "experiences",
-    affiliate: true,
+    affiliate: Boolean(clean(AffiliateConfig.getyourguidePartnerId)),
     api: false,
-    live: true,
+    live: Boolean(clean(AffiliateConfig.getyourguidePartnerId)),
     buildUrl: buildGetYourGuide,
   },
   {
     id: "sportsevents365",
     name: "SportsEvents365",
     category: "tickets",
-    affiliate: true,
+    affiliate: hasTrackedConfig("sportsevents365Tracked"),
     api: true,
-    live: true,
+    live: hasTrackedConfig("sportsevents365Tracked"),
     buildUrl: buildSportsEvents365,
   },
   {
     id: "omio",
     name: "Omio",
     category: "transport",
-    affiliate: true,
+    affiliate: hasTrackedConfig("omioTracked"),
     api: false,
-    live: true,
+    live: hasTrackedConfig("omioTracked"),
     buildUrl: buildOmio,
   },
   {
@@ -370,4 +396,4 @@ export function buildPartnerUrl(
   } catch {
     return null;
   }
-    }
+  }
