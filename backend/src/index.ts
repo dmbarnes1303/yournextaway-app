@@ -327,15 +327,6 @@ app.get("/hello", async (request) => {
 });
 
 app.get("/health", async (request) => {
-  if (isProduction()) {
-    return {
-      ok: true,
-      status: "ok",
-      service: "yournextaway-backend",
-      requestId: request.id,
-    };
-  }
-
   return {
     ok: true,
     status: "ok",
@@ -347,30 +338,34 @@ app.get("/health", async (request) => {
     providers: {
       apiFootball: {
         configured: hasApiFootballConfig(),
-        baseUrl: env.apiFootballBaseUrl,
+        baseUrl: isProduction() ? undefined : env.apiFootballBaseUrl,
         timeoutMs: env.apiFootballTimeoutMs,
       },
       walletWorker: {
         configured: hasWalletWorkerConfig(),
-        baseUrl: env.walletWorkerBaseUrl || null,
-        safeBaseUrl: walletWorkerBaseUrl() || null,
+        baseUrl: isProduction() ? undefined : env.walletWorkerBaseUrl || null,
+        safeBaseUrl: isProduction() ? undefined : walletWorkerBaseUrl() || null,
         hasApiKey: Boolean(env.walletWorkerApiKey),
       },
-      footballticketsnet: { configured: hasFtnConfig() },
-      sportsevents365: { configured: hasSe365Config() },
+      footballticketsnet: {
+        configured: hasFtnConfig(),
+      },
+      sportsevents365: {
+        configured: hasSe365Config(),
+      },
       gigsberg: {
         configured: hasGigsbergConfig(),
-        baseUrl: env.gigsbergBaseUrl,
+        baseUrl: isProduction() ? undefined : env.gigsbergBaseUrl,
       },
       aviasales: {
         configured: hasAviasalesConfig(),
-        baseUrl: env.aviasalesBaseUrl,
+        baseUrl: isProduction() ? undefined : env.aviasalesBaseUrl,
         hasToken: Boolean(env.aviasalesToken),
         hasMarker: Boolean(env.aviasalesMarker),
       },
     },
     cors: {
-      configuredOrigins: env.appCorsOrigins,
+      configuredOrigins: isProduction() ? undefined : env.appCorsOrigins,
     },
     caches: {
       items: memoryCache.size,
