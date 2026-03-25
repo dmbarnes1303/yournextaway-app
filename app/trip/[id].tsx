@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -24,14 +23,10 @@ import { theme } from "@/src/constants/theme";
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 import preferencesStore from "@/src/state/preferences";
-import tripWorkspaceStore from "@/src/state/tripWorkspace";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
 import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
-import {
-  computeWorkspaceSnapshot,
-  groupSavedItemsBySection,
-} from "@/src/core/tripWorkspace";
+import { groupSavedItemsBySection } from "@/src/core/tripWorkspace";
 
 import storage from "@/src/services/storage";
 
@@ -85,9 +80,6 @@ export default function TripDetailScreen() {
   const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
   const [allSavedItems, setAllSavedItems] = useState<SavedItem[]>([]);
 
-  const [originLoaded, setOriginLoaded] = useState(
-    preferencesStore.getState().loaded
-  );
   const [originIata, setOriginIata] = useState(
     preferencesStore.getPreferredOriginIata()
   );
@@ -103,7 +95,9 @@ export default function TripDetailScreen() {
         const value = await storage.getString(PLAN_STORAGE_KEY);
         if (value === "premium") setPlan("premium");
         else if (value === "free") setPlan("free");
-      } catch {}
+      } catch {
+        // ignore storage failure
+      }
     })();
   }, []);
 
@@ -146,7 +140,6 @@ export default function TripDetailScreen() {
   useEffect(() => {
     const sync = () => {
       const state = preferencesStore.getState();
-      setOriginLoaded(Boolean(state.loaded));
       setOriginIata(cleanUpper3(state.preferredOriginIata, "LON"));
     };
 
@@ -177,18 +170,12 @@ export default function TripDetailScreen() {
     [savedItems]
   );
 
-  const workspaceSnapshot = useMemo(
-    () => computeWorkspaceSnapshot(savedItems),
-    [savedItems]
-  );
-
   const data = useTripDetailData({
     trip,
     savedItems,
     originIata,
   });
 
-  /* 🔥 FIX: PASS affiliateUrls */
   const controller = useTripDetailController({
     trip,
     activeTripId,
@@ -228,14 +215,15 @@ export default function TripDetailScreen() {
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen options={{ headerShown: true, title: "Trip" }} />
 
-      <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
+      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <ScrollView
-          contentContainerStyle={{
-            paddingTop: 100,
-            paddingHorizontal: theme.spacing.lg,
-            paddingBottom: theme.spacing.xxl + insets.bottom,
-            gap: theme.spacing.lg,
-          }}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingBottom: theme.spacing.xxl + insets.bottom,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
         >
           {!trip ? (
             <GlassCard>
@@ -243,15 +231,15 @@ export default function TripDetailScreen() {
             </GlassCard>
           ) : (
             <>
-              {/* HERO */}
               <GlassCard>
                 <Text style={styles.city}>{data.cityName}</Text>
                 <Text style={styles.meta}>{summaryLine(trip)}</Text>
 
                 <View style={styles.heroRow}>
-                  <Text style={styles.status}>{statusLabel(status)}</Text>
-                  <Pressable onPress={controller.onViewWallet}>
-                    <Text style={styles.wallet}>Wallet</Text>
+                  <Text style={styles.statusBadge}>{statusLabel(status)}</Text>
+
+                  <Pressable onPress={controller.onViewWallet} hitSlop={8}>
+                    <Text style={styles.walletLink}>Wallet</Text>
                   </Pressable>
                 </View>
 
@@ -277,11 +265,14 @@ export default function TripDetailScreen() {
                 onUpgradePress={controller.onUpgradePress}
               />
 
-              {/* 🔥 FIXED PLANNING RAIL */}
               <GlassCard>
                 <Text style={styles.sectionTitle}>Plan your trip</Text>
 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.railScrollContent}
+                >
                   {[
                     { key: "tickets", label: "Tickets" },
                     { key: "stay", label: "Stay" },
@@ -330,3 +321,134 @@ export default function TripDetailScreen() {
     </Background>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+
+  content: {
+    paddingTop: 100,
+    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.lg,
+  },
+
+  city: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: theme.colors.text,
+    letterSpacing: -0.4,
+  },
+
+  meta: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textMuted,
+  },
+
+  heroRow: {
+    marginTop: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+  },
+
+  statusBadge: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.text,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
+  },
+
+  walletLink: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.colors.accent,
+  },
+
+  progressBox: {
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    gap: 4,
+  },
+
+  progressText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+
+  nextText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textMuted,
+  },
+
+  heroActions: {
+    marginTop: theme.spacing.md,
+  },
+
+  primaryBtn: {
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: theme.colors.accent,
+    paddingHorizontal: 16,
+  },
+
+  primaryBtnText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0B1020",
+  },
+
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+
+  railScrollContent: {
+    paddingRight: 4,
+    gap: theme.spacing.sm,
+  },
+
+  railCard: {
+    width: 132,
+    minHeight: 88,
+    borderRadius: 16,
+    padding: theme.spacing.md,
+    marginRight: theme.spacing.sm,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    justifyContent: "space-between",
+  },
+
+  railTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+
+  railSub: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textMuted,
+  },
+});
