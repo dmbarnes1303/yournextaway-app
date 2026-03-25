@@ -63,13 +63,19 @@ type FlightState = {
   pricePoint: PricePoint | null;
 };
 
-function pickPrimaryMatchId(trip: Trip | null, numericMatchIds: string[]): string | null {
+function pickPrimaryMatchId(
+  trip: Trip | null,
+  numericMatchIds: string[]
+): string | null {
   const preferred = clean((trip as any)?.fixtureIdPrimary);
   if (preferred && numericMatchIds.includes(preferred)) return preferred;
   return numericMatchIds[0] ?? null;
 }
 
-function getTripCity(trip: Trip | null, primaryFixture: FixtureListRow | null): string {
+function getTripCity(
+  trip: Trip | null,
+  primaryFixture: FixtureListRow | null
+): string {
   const raw =
     clean((trip as any)?.displayCity) ||
     clean((trip as any)?.venueCity) ||
@@ -91,11 +97,17 @@ function getPrimaryLeagueId(
   return typeof fromTrip === "number" ? fromTrip : undefined;
 }
 
-function getPrimaryHomeName(trip: Trip | null, primaryFixture: FixtureListRow | null): string {
+function getPrimaryHomeName(
+  trip: Trip | null,
+  primaryFixture: FixtureListRow | null
+): string {
   return clean((primaryFixture as any)?.teams?.home?.name) || clean((trip as any)?.homeName);
 }
 
-function getPrimaryLeagueName(trip: Trip | null, primaryFixture: FixtureListRow | null): string {
+function getPrimaryLeagueName(
+  trip: Trip | null,
+  primaryFixture: FixtureListRow | null
+): string {
   return clean((primaryFixture as any)?.league?.name) || clean((trip as any)?.leagueName);
 }
 
@@ -298,7 +310,9 @@ function buildPricePointFromItem(item: SavedItem | null): PricePoint | null {
       return {
         amount,
         currency: currency || null,
-        text: currency ? `${currency} ${amount.toFixed(amount % 1 === 0 ? 0 : 2)}` : `${amount}`,
+        text: currency
+          ? `${currency} ${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`
+          : `${amount}`,
         source: "metadata",
       };
     }
@@ -329,7 +343,9 @@ function chooseBestPricePoint(items: SavedItem[]): PricePoint | null {
 
   if (points.length === 0) return null;
 
-  const withAmounts = points.filter((x) => typeof x.amount === "number" && Number.isFinite(x.amount));
+  const withAmounts = points.filter(
+    (x) => typeof x.amount === "number" && Number.isFinite(x.amount)
+  );
   if (withAmounts.length === 0) return points[0] ?? null;
 
   const preferredCurrency =
@@ -410,6 +426,10 @@ function priceLine(point: PricePoint | null, prefix = "From"): string | null {
 
   if (point.currency) return `${prefix} ${point.currency} ${point.amount}`;
   return `${prefix} ${point.amount}`;
+}
+
+function resolveFlightDestinationIata(cityName: string): string {
+  return clean(getIataCityCodeForCity(cityName)).toUpperCase();
 }
 
 export default function useTripDetailData({ trip, savedItems, originIata }: Props) {
@@ -508,7 +528,7 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
       }
 
       const origin = cleanUpper3(originIata, "LON");
-      const destination = clean(getIataCityCodeForCity(cityName)).toUpperCase();
+      const destination = resolveFlightDestinationIata(cityName);
 
       if (!destination || origin === destination) {
         if (!cancelled) {
@@ -676,7 +696,10 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
       difficulty: difficultyLabel((rankedTrip as any)?.travelDifficulty ?? null),
       confidence: confidencePctLabel((rankedTrip as any)?.confidence ?? null),
       reasons: rankReasonsText(rankedTrip),
-      score: typeof rawScore === "number" && Number.isFinite(rawScore) ? Math.round(rawScore) : null,
+      score:
+        typeof rawScore === "number" && Number.isFinite(rawScore)
+          ? Math.round(rawScore)
+          : null,
     };
   }, [rankedTrip]);
 
@@ -794,4 +817,4 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     flightSearchLoading: flightState.loading,
     liveFlightPricePoint: flightState.pricePoint,
   };
-}
+  }
