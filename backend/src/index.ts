@@ -1,7 +1,6 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
-
 import {
   env,
   hasApiFootballConfig,
@@ -9,9 +8,11 @@ import {
   hasGigsbergConfig,
   hasSe365Config,
   hasWalletWorkerConfig,
+  hasAviasalesConfig,
   isProduction,
 } from "./lib/env.js";
 import { resolveTicket } from "./services/tickets/resolve.js";
+import { searchAviasalesFlights } from "./services/flights/aviasales.js";
 
 const app = Fastify({
   logger: true,
@@ -57,6 +58,11 @@ function clean(value: unknown): string {
 function toBool(value: unknown): boolean {
   const normalized = clean(value).toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+
+function toPositiveInt(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
 function safeUrl(value: unknown): string | null {
@@ -277,26 +283,24 @@ async function walletWorkerFetch(
   }
 }
 
-function setStandardCacheHeaders(requestUrl: string, reply: any): void {
-  if (
-    requestUrl.startsWith("/tickets/resolve") ||
-    requestUrl.startsWith("/football/fixtures") ||
-    requestUrl.startsWith("/football/fixture") ||
-    requestUrl.startsWith("/football/fixtures/by-round") ||
-    requestUrl.startsWith("/football/countries") ||
-    requestUrl.startsWith("/football/teams")
-  ) {
-    reply.header("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
-    return;
-  }
-
-  reply.header("Cache-Control", "no-store");
-}
-
 app.addHook("onSend", async (request, reply, payload) => {
   reply.header("X-Request-Id", request.id);
   applyCors(request, reply);
-  setStandardCacheHeaders(request.url, reply);
+
+  if (
+    request.url.startsWith("/tickets/resolve") ||
+    request.url.startsWith("/football/fixtures") ||
+    request.url.startsWith("/football/fixture") ||
+    request.url.startsWith("/football/fixtures/by-round") ||
+    request.url.startsWith("/football/countries") ||
+    request.url.startsWith("/football/teams") ||
+    request.url.startsWith("/flights/search")
+  ) {
+    reply.header("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+  } else {
+    reply.header("Cache-Control", "no-store");
+  }
+
   return payload;
 });
 
@@ -358,6 +362,12 @@ app.get("/health", async (request) => {
         configured: hasGigsbergConfig(),
         baseUrl: env.gigsbergBaseUrl,
       },
+      aviasales: {
+        configured: hasAviasalesConfig(),
+        baseUrl: env.aviasalesBaseUrl,
+        hasToken: Boolean(env.aviasalesToken),
+        hasMarker: Boolean(env.aviasalesMarker),
+      },
     },
     cors: {
       configuredOrigins: env.appCorsOrigins,
@@ -372,6 +382,146 @@ app.get("/health", async (request) => {
       teamsTtlMs: TEAMS_CACHE_TTL_MS,
     },
   };
+});
+
+app.get<{
+  Querystring: {
+    originIata?: string;
+    destinationIata?: string;
+    departureDate?: string;
+    returnDate?: string;
+    currency?: string;
+    oneWay?: string;
+    direct?: string;
+    limit?: string;
+    page?: string;
+    market?: string;
+  };
+}>("/flights/search", async (request, reply) => {
+  const originIata = clean(request.query.originIata).toUpperCase();
+  const destinationIata = clean(request.query.destinationIata).toUpperCase();
+  const departureDate = clean(request.query.departureDate);
+  const returnDate = clean(request.query.returnDate) || null;
+  const currency = clean(request.query.currency).toUpperCase() || "GBP";
+  const oneWay = toBool(request.query.oneWay);
+  const direct = toBool(request.query.direct);
+  const limit = toPositiveInt(request.query.limit, 10);
+  const page = toPositiveInt(request.query.page, 1);
+  const market = clean(request.query.market) || null;
+
+  if (!originIata || !destinationIata || !departureDate) {
+    reply.code(400);
+    return {
+      ok: false,
+      error: "originIata, destinationIata and departureDate are required",
+      requestId: request.id,
+    };
+  }
+
+  if (!hasAviasalesConfig()) {
+    reply.code(503);
+    return {
+      ok: false,
+      error: "aviasales_not_configured",
+      requestId: request.id,
+    };
+  }
+
+  request.log.info(
+    {
+      requestId: request.id,
+      originIata,
+      destinationIata,
+      departureDate,
+      returnDate,
+      currency,
+      oneWay,
+      direct,
+      limit,
+      page,
+      market,
+    },
+    "Flight search request received"
+  );
+
+  try {
+    const result = await searchAviasalesFlights({
+      originIata,
+      destinationIata,
+      departureDate,
+      returnDate,
+      currency,
+      oneWay,
+      direct,
+      limit,
+      page,
+      market,
+    });
+
+    request.log.info(
+      {
+        requestId: request.id,
+        originIata,
+        destinationIata,
+        departureDate,
+        returnDate,
+        ok: result.ok,
+        cached: result.cached,
+        offerCount: result.offers.length,
+        cheapest: result.cheapest
+          ? {
+              price: result.cheapest.price,
+              currency: result.cheapest.currency,
+              airline: result.cheapest.airline,
+              origin: result.cheapest.origin,
+              destination: result.cheapest.destination,
+            }
+          : null,
+        error: result.error ?? null,
+      },
+      "Flight search request completed"
+    );
+
+    if (!result.ok) {
+      reply.code(502);
+    }
+
+    return {
+      ...result,
+      requestId: request.id,
+    };
+  } catch (error) {
+    request.log.error(
+      {
+        requestId: request.id,
+        err: error,
+        originIata,
+        destinationIata,
+        departureDate,
+        returnDate,
+        currency,
+        oneWay,
+        direct,
+        limit,
+        page,
+        market,
+      },
+      "Flight search failed"
+    );
+
+    reply.code(500);
+    return {
+      ok: false,
+      source: "aviasales_data_api",
+      cached: false,
+      fromCacheAgeMs: null,
+      offers: [],
+      cheapest: null,
+      error: "internal_flight_search_error",
+      debug: getErrorMessage(error),
+      requestId: request.id,
+    };
+  }
 });
 
 app.get<{
