@@ -1,6 +1,7 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
+
 import {
   env,
   hasApiFootballConfig,
@@ -276,23 +277,26 @@ async function walletWorkerFetch(
   }
 }
 
+function setStandardCacheHeaders(requestUrl: string, reply: any): void {
+  if (
+    requestUrl.startsWith("/tickets/resolve") ||
+    requestUrl.startsWith("/football/fixtures") ||
+    requestUrl.startsWith("/football/fixture") ||
+    requestUrl.startsWith("/football/fixtures/by-round") ||
+    requestUrl.startsWith("/football/countries") ||
+    requestUrl.startsWith("/football/teams")
+  ) {
+    reply.header("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
+    return;
+  }
+
+  reply.header("Cache-Control", "no-store");
+}
+
 app.addHook("onSend", async (request, reply, payload) => {
   reply.header("X-Request-Id", request.id);
   applyCors(request, reply);
-
-  if (
-    request.url.startsWith("/tickets/resolve") ||
-    request.url.startsWith("/football/fixtures") ||
-    request.url.startsWith("/football/fixture") ||
-    request.url.startsWith("/football/fixtures/by-round") ||
-    request.url.startsWith("/football/countries") ||
-    request.url.startsWith("/football/teams")
-  ) {
-    reply.header("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
-  } else {
-    reply.header("Cache-Control", "no-store");
-  }
-
+  setStandardCacheHeaders(request.url, reply);
   return payload;
 });
 
@@ -660,8 +664,6 @@ app.get<{
     };
   }
 });
-
-// Wallet proxy routes
 
 app.get<{
   Querystring: {
