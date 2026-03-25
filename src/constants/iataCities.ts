@@ -143,13 +143,14 @@ const FOOTBALL_AIRPORT_OVERRIDES: FootballAirportOverride[] = [
   { iata: "BHX", city: "Birmingham", country: "England", countryCode: "GB", aliases: ["birmingham", "aston", "aston villa", "west bromwich", "wolverhampton", "wolves"] },
   { iata: "NCL", city: "Newcastle upon Tyne", country: "England", countryCode: "GB", aliases: ["newcastle", "newcastle upon tyne", "sunderland"] },
   { iata: "LBA", city: "Leeds", country: "England", countryCode: "GB", aliases: ["leeds", "leeds bradford"] },
-  { iata: "EMA", city: "Nottingham", country: "England", countryCode: "GB", aliases: ["nottingham", "nottingham forest", "leicester", "derby"] },
+  { iata: "EMA", city: "Nottingham", country: "England", countryCode: "GB", aliases: ["nottingham", "nottingham forest", "derby"] },
+  { iata: "EMA", city: "East Midlands", country: "England", countryCode: "GB", aliases: ["leicester"] },
   { iata: "BRS", city: "Bristol", country: "England", countryCode: "GB", aliases: ["bristol"] },
   { iata: "SOU", city: "Southampton", country: "England", countryCode: "GB", aliases: ["southampton", "portsmouth"] },
   { iata: "NWI", city: "Norwich", country: "England", countryCode: "GB", aliases: ["norwich"] },
   { iata: "BOH", city: "Bournemouth", country: "England", countryCode: "GB", aliases: ["bournemouth"] },
   { iata: "EXT", city: "Exeter", country: "England", countryCode: "GB", aliases: ["exeter", "plymouth"] },
-  { iata: "JER", city: "Jersey", country: "England", countryCode: "GB", aliases: ["jersey"] },
+  { iata: "JER", city: "Jersey", country: "Channel Islands", countryCode: "GB", aliases: ["jersey"] },
 
   // Scotland
   { iata: "GLA", city: "Glasgow", country: "Scotland", countryCode: "GB", aliases: ["glasgow", "celtic", "rangers"] },
@@ -159,8 +160,10 @@ const FOOTBALL_AIRPORT_OVERRIDES: FootballAirportOverride[] = [
   { iata: "DND", city: "Dundee", country: "Scotland", countryCode: "GB", aliases: ["dundee"] },
 
   // Wales
-  { iata: "CWL", city: "Cardiff", country: "Wales", countryCode: "GB", aliases: ["cardiff", "swansea"] },
-  { iata: "BRS", city: "Bristol", country: "Wales", countryCode: "GB", aliases: ["newport", "wrexham"] },
+  { iata: "CWL", city: "Cardiff", country: "Wales", countryCode: "GB", aliases: ["cardiff"] },
+  { iata: "CWL", city: "Cardiff", country: "Wales", countryCode: "GB", aliases: ["swansea"] },
+  { iata: "LPL", city: "Liverpool", country: "England", countryCode: "GB", aliases: ["wrexham"] },
+  { iata: "BRS", city: "Bristol", country: "England", countryCode: "GB", aliases: ["newport"] },
 
   // Northern Ireland
   { iata: "BFS", city: "Belfast", country: "Northern Ireland", countryCode: "GB", aliases: ["belfast", "linfield"] },
@@ -176,14 +179,14 @@ const FOOTBALL_AIRPORT_OVERRIDES: FootballAirportOverride[] = [
   { iata: "ALC", city: "Alicante", country: "Spain", countryCode: "ES", aliases: ["alicante", "elche"] },
   { iata: "PMI", city: "Palma de Mallorca", country: "Spain", countryCode: "ES", aliases: ["palma", "mallorca", "palma de mallorca"] },
   { iata: "LPA", city: "Las Palmas", country: "Spain", countryCode: "ES", aliases: ["las palmas", "gran canaria"] },
-  { iata: "TFN", city: "Santa Cruz de Tenerife", country: "Spain", countryCode: "ES", aliases: ["tenerife", "santa cruz de tenerife"] },
+  { iata: "TCI", city: "Tenerife", country: "Spain", countryCode: "ES", aliases: ["tenerife", "santa cruz de tenerife"] },
   { iata: "GRO", city: "Girona", country: "Spain", countryCode: "ES", aliases: ["girona"] },
   { iata: "VGO", city: "Vigo", country: "Spain", countryCode: "ES", aliases: ["vigo", "celta vigo"] },
   { iata: "SCQ", city: "Santiago de Compostela", country: "Spain", countryCode: "ES", aliases: ["santiago de compostela"] },
   { iata: "OVD", city: "Oviedo", country: "Spain", countryCode: "ES", aliases: ["oviedo", "gijon", "gijón", "sporting gijon", "sporting gijón"] },
   { iata: "ZAZ", city: "Zaragoza", country: "Spain", countryCode: "ES", aliases: ["zaragoza"] },
   { iata: "VIT", city: "Vitoria-Gasteiz", country: "Spain", countryCode: "ES", aliases: ["vitoria", "vitoria gasteiz", "alaves", "alavés"] },
-  { iata: "MJV", city: "Murcia", country: "Spain", countryCode: "ES", aliases: ["murcia", "cartagena"] },
+  { iata: "RMU", city: "Murcia", country: "Spain", countryCode: "ES", aliases: ["murcia", "cartagena"] },
   { iata: "GRX", city: "Granada", country: "Spain", countryCode: "ES", aliases: ["granada"] },
   { iata: "XRY", city: "Jerez", country: "Spain", countryCode: "ES", aliases: ["jerez", "cadiz", "cádiz"] },
   { iata: "RGS", city: "Burgos", country: "Spain", countryCode: "ES", aliases: ["burgos"] },
@@ -212,7 +215,8 @@ const FOOTBALL_AIRPORT_OVERRIDES: FootballAirportOverride[] = [
   // Germany
   { iata: "BER", city: "Berlin", country: "Germany", countryCode: "DE", aliases: ["berlin", "union berlin", "hertha berlin"] },
   { iata: "MUC", city: "Munich", country: "Germany", countryCode: "DE", aliases: ["munich", "munchen", "muenchen", "münchen", "bayern munich"] },
-  { iata: "DUS", city: "Dusseldorf", country: "Germany", countryCode: "DE", aliases: ["dusseldorf", "düsseldorf", "monchengladbach", "mönchengladbach", "gladbach", "leverkusen", "koln", "köln", "cologne", "schalke", "gelsenkirchen", "bochum", "dortmund"] },
+  { iata: "DTM", city: "Dortmund", country: "Germany", countryCode: "DE", aliases: ["dortmund"] },
+  { iata: "DUS", city: "Dusseldorf", country: "Germany", countryCode: "DE", aliases: ["dusseldorf", "düsseldorf", "monchengladbach", "mönchengladbach", "gladbach", "leverkusen", "koln", "köln", "cologne", "schalke", "gelsenkirchen", "bochum"] },
   { iata: "FRA", city: "Frankfurt", country: "Germany", countryCode: "DE", aliases: ["frankfurt", "eintracht frankfurt", "mainz", "darmstadt", "kaiserslautern"] },
   { iata: "HAM", city: "Hamburg", country: "Germany", countryCode: "DE", aliases: ["hamburg", "st pauli", "st. pauli"] },
   { iata: "STR", city: "Stuttgart", country: "Germany", countryCode: "DE", aliases: ["stuttgart", "vfb stuttgart", "sinsheim", "hoffenheim", "heidenheim"] },
@@ -319,7 +323,8 @@ const FOOTBALL_AIRPORT_OVERRIDES: FootballAirportOverride[] = [
 
   // Sweden
   { iata: "STO", city: "Stockholm", country: "Sweden", countryCode: "SE", aliases: ["stockholm", "hammarby", "djurgarden", "djurgården", "aik"] },
-  { iata: "GOT", city: "Gothenburg", country: "Sweden", countryCode: "SE", aliases: ["gothenburg", "goteborg", "göteborg", "malmo", "malmö"] },
+  { iata: "GOT", city: "Gothenburg", country: "Sweden", countryCode: "SE", aliases: ["gothenburg", "goteborg", "göteborg"] },
+  { iata: "MMX", city: "Malmo", country: "Sweden", countryCode: "SE", aliases: ["malmo", "malmö"] },
 
   // Norway
   { iata: "OSL", city: "Oslo", country: "Norway", countryCode: "NO", aliases: ["oslo"] },
@@ -516,4 +521,4 @@ export function searchIataCities(query: string, limit = 20): IataCity[] {
   }
 
   return out;
-   }
+  }
