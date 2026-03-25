@@ -507,8 +507,10 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
         return;
       }
 
-      const destinationIata = clean(getIataCityCodeForCity(cityName)).toUpperCase();
-      if (!destinationIata) {
+      const origin = cleanUpper3(originIata, "LON");
+      const destination = clean(getIataCityCodeForCity(cityName)).toUpperCase();
+
+      if (!destination || origin === destination) {
         if (!cancelled) {
           setFlightState({ loading: false, pricePoint: null });
         }
@@ -534,8 +536,8 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
 
       try {
         const result = await searchFlights({
-          originIata: cleanUpper3(originIata, "LON"),
-          destinationIata,
+          originIata: origin,
+          destinationIata: destination,
           departureDate,
           returnDate,
           limit: 1,
@@ -691,7 +693,7 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
 
   const bookingPriceBoard = useMemo(() => {
     const base = buildBookingPriceBoard(savedItems);
-    const flights = base.flights || flightState.pricePoint;
+    const flights = flightState.pricePoint || base.flights;
 
     const tripTotal = sumTripCorePrice({
       tickets: base.tickets,
@@ -792,4 +794,4 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     flightSearchLoading: flightState.loading,
     liveFlightPricePoint: flightState.pricePoint,
   };
-  }
+}
