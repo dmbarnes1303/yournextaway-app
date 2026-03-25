@@ -1,13 +1,14 @@
 import * as rawIataCitiesModule from "@/src/data/iataCityCodes";
 
-// Robust IATA city index + football-specific overrides.
-// Goal:
-// 1) keep the large raw dataset as the base
-// 2) add hard overrides for football destination cities
-// 3) support accent/local-language aliases
-// 4) support awkward venue-city -> nearest viable airport mappings
-//
-// This must NEVER throw during import.
+/**
+ * Single source of truth for city -> IATA resolution.
+ *
+ * Rules:
+ * - raw dataset remains the base
+ * - football-specific overrides patch gaps and awkward stadium-city mappings
+ * - accent/local-language aliases are supported
+ * - import must never throw
+ */
 
 export type IataCity = {
   iata: string;
@@ -38,7 +39,7 @@ function normalizeText(v: unknown): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/&/g, " and ")
-    .replace(/['’]/g, "")
+    .replace(/[’']/g, "")
     .replace(/[^a-z0-9\s-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -54,9 +55,11 @@ function toNumberOrUndef(v: unknown): number | undefined {
 }
 
 function uniqueStrings(values: unknown[]): string[] {
-  return Array.from(
-    new Set(values.map((x) => safeStr(x)).filter(Boolean))
-  );
+  return Array.from(new Set(values.map((x) => safeStr(x)).filter(Boolean)));
+}
+
+function isIataCode(v: unknown): boolean {
+  return /^[A-Z]{3}$/.test(safeStr(v).toUpperCase());
 }
 
 function loadRawDataset(): unknown {
@@ -82,7 +85,7 @@ export function normalizeIataCity(raw: unknown): IataCity | null {
     const country = safeStr(raw[2]);
     const countryCode = safeStr(raw[3]).toUpperCase();
 
-    if (!iata || !city) return null;
+    if (!isIataCode(iata) || !city) return null;
 
     return {
       iata,
@@ -96,12 +99,16 @@ export function normalizeIataCity(raw: unknown): IataCity | null {
 
   const value = raw as Record<string, unknown>;
 
-  const iata = safeStr(value.iata ?? value.code ?? value.IATA ?? value.airportCode).toUpperCase();
+  const iata = safeStr(
+    value.iata ?? value.code ?? value.IATA ?? value.airportCode
+  ).toUpperCase();
   const city = safeStr(value.city ?? value.name ?? value.cityName);
   const country = safeStr(value.country ?? value.countryName);
-  const countryCode = safeStr(value.countryCode ?? value.iso2 ?? value.iso).toUpperCase();
+  const countryCode = safeStr(
+    value.countryCode ?? value.iso2 ?? value.iso
+  ).toUpperCase();
 
-  if (!iata || !city) return null;
+  if (!isIataCode(iata) || !city) return null;
 
   const lat = toNumberOrUndef(value.lat ?? value.latitude);
   const lon = toNumberOrUndef(value.lon ?? value.lng ?? value.longitude);
@@ -123,1185 +130,235 @@ export function normalizeIataCity(raw: unknown): IataCity | null {
   };
 }
 
-// Football-specific overrides.
-// These are not random city mappings.
-// They exist because football venue cities and flight-booking destination logic
-// are often not the same thing.
+/**
+ * Football-specific overrides.
+ * These are pragmatic destination mappings for club/stadium travel.
+ * Not every city here is a literal airport city; some are nearest viable hubs.
+ */
 const FOOTBALL_AIRPORT_OVERRIDES: FootballAirportOverride[] = [
   // England
-  {
-    iata: "LON",
-    city: "London",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["london"],
-  },
-  {
-    iata: "MAN",
-    city: "Manchester",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["manchester"],
-  },
-  {
-    iata: "LPL",
-    city: "Liverpool",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["liverpool"],
-  },
-  {
-    iata: "BHX",
-    city: "Birmingham",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["birmingham", "aston", "aston villa", "west bromwich", "wolverhampton", "wolves"],
-  },
-  {
-    iata: "NCL",
-    city: "Newcastle upon Tyne",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["newcastle", "newcastle upon tyne", "sunderland"],
-  },
-  {
-    iata: "LBA",
-    city: "Leeds",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["leeds", "leeds bradford"],
-  },
-  {
-    iata: "EMA",
-    city: "Nottingham",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["nottingham", "nottingham forest", "leicester", "derby"],
-  },
-  {
-    iata: "BRS",
-    city: "Bristol",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["bristol"],
-  },
-  {
-    iata: "SOU",
-    city: "Southampton",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["southampton", "portsmouth"],
-  },
-  {
-    iata: "NWI",
-    city: "Norwich",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["norwich"],
-  },
-  {
-    iata: "BOH",
-    city: "Bournemouth",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["bournemouth"],
-  },
-  {
-    iata: "EXT",
-    city: "Exeter",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["exeter", "plymouth"],
-  },
-  {
-    iata: "JER",
-    city: "Jersey",
-    country: "England",
-    countryCode: "GB",
-    aliases: ["jersey"],
-  },
+  { iata: "LON", city: "London", country: "England", countryCode: "GB", aliases: ["london"] },
+  { iata: "MAN", city: "Manchester", country: "England", countryCode: "GB", aliases: ["manchester"] },
+  { iata: "LPL", city: "Liverpool", country: "England", countryCode: "GB", aliases: ["liverpool"] },
+  { iata: "BHX", city: "Birmingham", country: "England", countryCode: "GB", aliases: ["birmingham", "aston", "aston villa", "west bromwich", "wolverhampton", "wolves"] },
+  { iata: "NCL", city: "Newcastle upon Tyne", country: "England", countryCode: "GB", aliases: ["newcastle", "newcastle upon tyne", "sunderland"] },
+  { iata: "LBA", city: "Leeds", country: "England", countryCode: "GB", aliases: ["leeds", "leeds bradford"] },
+  { iata: "EMA", city: "Nottingham", country: "England", countryCode: "GB", aliases: ["nottingham", "nottingham forest", "leicester", "derby"] },
+  { iata: "BRS", city: "Bristol", country: "England", countryCode: "GB", aliases: ["bristol"] },
+  { iata: "SOU", city: "Southampton", country: "England", countryCode: "GB", aliases: ["southampton", "portsmouth"] },
+  { iata: "NWI", city: "Norwich", country: "England", countryCode: "GB", aliases: ["norwich"] },
+  { iata: "BOH", city: "Bournemouth", country: "England", countryCode: "GB", aliases: ["bournemouth"] },
+  { iata: "EXT", city: "Exeter", country: "England", countryCode: "GB", aliases: ["exeter", "plymouth"] },
+  { iata: "JER", city: "Jersey", country: "England", countryCode: "GB", aliases: ["jersey"] },
 
   // Scotland
-  {
-    iata: "GLA",
-    city: "Glasgow",
-    country: "Scotland",
-    countryCode: "GB",
-    aliases: ["glasgow", "celtic", "rangers"],
-  },
-  {
-    iata: "EDI",
-    city: "Edinburgh",
-    country: "Scotland",
-    countryCode: "GB",
-    aliases: ["edinburgh", "hearts", "hibs", "hibernian"],
-  },
-  {
-    iata: "ABZ",
-    city: "Aberdeen",
-    country: "Scotland",
-    countryCode: "GB",
-    aliases: ["aberdeen"],
-  },
-  {
-    iata: "INV",
-    city: "Inverness",
-    country: "Scotland",
-    countryCode: "GB",
-    aliases: ["inverness"],
-  },
-  {
-    iata: "DND",
-    city: "Dundee",
-    country: "Scotland",
-    countryCode: "GB",
-    aliases: ["dundee"],
-  },
+  { iata: "GLA", city: "Glasgow", country: "Scotland", countryCode: "GB", aliases: ["glasgow", "celtic", "rangers"] },
+  { iata: "EDI", city: "Edinburgh", country: "Scotland", countryCode: "GB", aliases: ["edinburgh", "hearts", "hibs", "hibernian"] },
+  { iata: "ABZ", city: "Aberdeen", country: "Scotland", countryCode: "GB", aliases: ["aberdeen"] },
+  { iata: "INV", city: "Inverness", country: "Scotland", countryCode: "GB", aliases: ["inverness"] },
+  { iata: "DND", city: "Dundee", country: "Scotland", countryCode: "GB", aliases: ["dundee"] },
 
   // Wales
-  {
-    iata: "CWL",
-    city: "Cardiff",
-    country: "Wales",
-    countryCode: "GB",
-    aliases: ["cardiff", "swansea"],
-  },
-  {
-    iata: "BRS",
-    city: "Bristol",
-    country: "Wales",
-    countryCode: "GB",
-    aliases: ["newport", "wrexham"],
-  },
+  { iata: "CWL", city: "Cardiff", country: "Wales", countryCode: "GB", aliases: ["cardiff", "swansea"] },
+  { iata: "BRS", city: "Bristol", country: "Wales", countryCode: "GB", aliases: ["newport", "wrexham"] },
 
   // Northern Ireland
-  {
-    iata: "BFS",
-    city: "Belfast",
-    country: "Northern Ireland",
-    countryCode: "GB",
-    aliases: ["belfast", "linfield"],
-  },
+  { iata: "BFS", city: "Belfast", country: "Northern Ireland", countryCode: "GB", aliases: ["belfast", "linfield"] },
 
   // Spain
-  {
-    iata: "MAD",
-    city: "Madrid",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["madrid"],
-  },
-  {
-    iata: "BCN",
-    city: "Barcelona",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["barcelona", "barca"],
-  },
-  {
-    iata: "SVQ",
-    city: "Seville",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["seville", "sevilla"],
-  },
-  {
-    iata: "VLC",
-    city: "Valencia",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["valencia"],
-  },
-  {
-    iata: "BIO",
-    city: "Bilbao",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["bilbao", "athletic bilbao", "athletic club"],
-  },
-  {
-    iata: "EAS",
-    city: "San Sebastian",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["san sebastian", "san sebastián", "donostia", "real sociedad"],
-  },
-  {
-    iata: "AGP",
-    city: "Malaga",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["malaga", "málaga"],
-  },
-  {
-    iata: "ALC",
-    city: "Alicante",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["alicante", "elche"],
-  },
-  {
-    iata: "PMI",
-    city: "Palma de Mallorca",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["palma", "mallorca", "palma de mallorca"],
-  },
-  {
-    iata: "LPA",
-    city: "Las Palmas",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["las palmas", "gran canaria"],
-  },
-  {
-    iata: "TFN",
-    city: "Santa Cruz de Tenerife",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["tenerife", "santa cruz de tenerife"],
-  },
-  {
-    iata: "GRO",
-    city: "Girona",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["girona"],
-  },
-  {
-    iata: "VGO",
-    city: "Vigo",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["vigo", "celta vigo"],
-  },
-  {
-    iata: "SCQ",
-    city: "Santiago de Compostela",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["santiago de compostela"],
-  },
-  {
-    iata: "OVD",
-    city: "Oviedo",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["oviedo", "gijon", "gijón", "sporting gijon", "sporting gijón"],
-  },
-  {
-    iata: "ZAZ",
-    city: "Zaragoza",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["zaragoza"],
-  },
-  {
-    iata: "VIT",
-    city: "Vitoria-Gasteiz",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["vitoria", "vitoria gasteiz", "alaves", "alavés"],
-  },
-  {
-    iata: "MJV",
-    city: "Murcia",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["murcia", "cartagena"],
-  },
-  {
-    iata: "GRX",
-    city: "Granada",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["granada"],
-  },
-  {
-    iata: "XRY",
-    city: "Jerez",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["jerez", "cadiz", "cádiz"],
-  },
-  {
-    iata: "RGS",
-    city: "Burgos",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["burgos"],
-  },
-  {
-    iata: "PNA",
-    city: "Pamplona",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["pamplona", "osasuna"],
-  },
-  {
-    iata: "LEN",
-    city: "Leon",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["leon", "león"],
-  },
-  {
-    iata: "REU",
-    city: "Reus",
-    country: "Spain",
-    countryCode: "ES",
-    aliases: ["tarragona", "reus"],
-  },
+  { iata: "MAD", city: "Madrid", country: "Spain", countryCode: "ES", aliases: ["madrid"] },
+  { iata: "BCN", city: "Barcelona", country: "Spain", countryCode: "ES", aliases: ["barcelona", "barca"] },
+  { iata: "SVQ", city: "Seville", country: "Spain", countryCode: "ES", aliases: ["seville", "sevilla"] },
+  { iata: "VLC", city: "Valencia", country: "Spain", countryCode: "ES", aliases: ["valencia"] },
+  { iata: "BIO", city: "Bilbao", country: "Spain", countryCode: "ES", aliases: ["bilbao", "athletic bilbao", "athletic club"] },
+  { iata: "EAS", city: "San Sebastian", country: "Spain", countryCode: "ES", aliases: ["san sebastian", "san sebastián", "donostia", "real sociedad"] },
+  { iata: "AGP", city: "Malaga", country: "Spain", countryCode: "ES", aliases: ["malaga", "málaga"] },
+  { iata: "ALC", city: "Alicante", country: "Spain", countryCode: "ES", aliases: ["alicante", "elche"] },
+  { iata: "PMI", city: "Palma de Mallorca", country: "Spain", countryCode: "ES", aliases: ["palma", "mallorca", "palma de mallorca"] },
+  { iata: "LPA", city: "Las Palmas", country: "Spain", countryCode: "ES", aliases: ["las palmas", "gran canaria"] },
+  { iata: "TFN", city: "Santa Cruz de Tenerife", country: "Spain", countryCode: "ES", aliases: ["tenerife", "santa cruz de tenerife"] },
+  { iata: "GRO", city: "Girona", country: "Spain", countryCode: "ES", aliases: ["girona"] },
+  { iata: "VGO", city: "Vigo", country: "Spain", countryCode: "ES", aliases: ["vigo", "celta vigo"] },
+  { iata: "SCQ", city: "Santiago de Compostela", country: "Spain", countryCode: "ES", aliases: ["santiago de compostela"] },
+  { iata: "OVD", city: "Oviedo", country: "Spain", countryCode: "ES", aliases: ["oviedo", "gijon", "gijón", "sporting gijon", "sporting gijón"] },
+  { iata: "ZAZ", city: "Zaragoza", country: "Spain", countryCode: "ES", aliases: ["zaragoza"] },
+  { iata: "VIT", city: "Vitoria-Gasteiz", country: "Spain", countryCode: "ES", aliases: ["vitoria", "vitoria gasteiz", "alaves", "alavés"] },
+  { iata: "MJV", city: "Murcia", country: "Spain", countryCode: "ES", aliases: ["murcia", "cartagena"] },
+  { iata: "GRX", city: "Granada", country: "Spain", countryCode: "ES", aliases: ["granada"] },
+  { iata: "XRY", city: "Jerez", country: "Spain", countryCode: "ES", aliases: ["jerez", "cadiz", "cádiz"] },
+  { iata: "RGS", city: "Burgos", country: "Spain", countryCode: "ES", aliases: ["burgos"] },
+  { iata: "PNA", city: "Pamplona", country: "Spain", countryCode: "ES", aliases: ["pamplona", "osasuna"] },
+  { iata: "LEN", city: "Leon", country: "Spain", countryCode: "ES", aliases: ["leon", "león"] },
+  { iata: "REU", city: "Reus", country: "Spain", countryCode: "ES", aliases: ["tarragona", "reus"] },
 
   // Italy
-  {
-    iata: "ROM",
-    city: "Rome",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["rome", "roma"],
-  },
-  {
-    iata: "MIL",
-    city: "Milan",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["milan", "milano", "inter", "internazionale", "ac milan"],
-  },
-  {
-    iata: "NAP",
-    city: "Naples",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["naples", "napoli"],
-  },
-  {
-    iata: "TRN",
-    city: "Turin",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["turin", "torino", "juventus"],
-  },
-  {
-    iata: "BLQ",
-    city: "Bologna",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["bologna"],
-  },
-  {
-    iata: "FLR",
-    city: "Florence",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["florence", "firenze", "fiorentina"],
-  },
-  {
-    iata: "PSA",
-    city: "Pisa",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["pisa"],
-  },
-  {
-    iata: "VRN",
-    city: "Verona",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["verona", "hellas verona"],
-  },
-  {
-    iata: "VCE",
-    city: "Venice",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["venice", "venezia"],
-  },
-  {
-    iata: "TRS",
-    city: "Trieste",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["trieste", "udine", "udinese"],
-  },
-  {
-    iata: "GOA",
-    city: "Genoa",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["genoa", "genova", "sampdoria"],
-  },
-  {
-    iata: "CAG",
-    city: "Cagliari",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["cagliari"],
-  },
-  {
-    iata: "PMO",
-    city: "Palermo",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["palermo"],
-  },
-  {
-    iata: "CTA",
-    city: "Catania",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["catania"],
-  },
-  {
-    iata: "BRI",
-    city: "Bari",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["bari"],
-  },
-  {
-    iata: "Lamezia Terme",
-    city: "Lamezia Terme",
-    country: "Italy",
-    countryCode: "IT",
-    aliases: ["reggio calabria", "cosenza"],
-  } as unknown as FootballAirportOverride,
+  { iata: "ROM", city: "Rome", country: "Italy", countryCode: "IT", aliases: ["rome", "roma"] },
+  { iata: "MIL", city: "Milan", country: "Italy", countryCode: "IT", aliases: ["milan", "milano", "inter", "internazionale", "ac milan"] },
+  { iata: "NAP", city: "Naples", country: "Italy", countryCode: "IT", aliases: ["naples", "napoli"] },
+  { iata: "TRN", city: "Turin", country: "Italy", countryCode: "IT", aliases: ["turin", "torino", "juventus"] },
+  { iata: "BLQ", city: "Bologna", country: "Italy", countryCode: "IT", aliases: ["bologna"] },
+  { iata: "FLR", city: "Florence", country: "Italy", countryCode: "IT", aliases: ["florence", "firenze", "fiorentina"] },
+  { iata: "PSA", city: "Pisa", country: "Italy", countryCode: "IT", aliases: ["pisa"] },
+  { iata: "VRN", city: "Verona", country: "Italy", countryCode: "IT", aliases: ["verona", "hellas verona"] },
+  { iata: "VCE", city: "Venice", country: "Italy", countryCode: "IT", aliases: ["venice", "venezia"] },
+  { iata: "TRS", city: "Trieste", country: "Italy", countryCode: "IT", aliases: ["trieste", "udine", "udinese"] },
+  { iata: "GOA", city: "Genoa", country: "Italy", countryCode: "IT", aliases: ["genoa", "genova", "sampdoria"] },
+  { iata: "CAG", city: "Cagliari", country: "Italy", countryCode: "IT", aliases: ["cagliari"] },
+  { iata: "PMO", city: "Palermo", country: "Italy", countryCode: "IT", aliases: ["palermo"] },
+  { iata: "CTA", city: "Catania", country: "Italy", countryCode: "IT", aliases: ["catania"] },
+  { iata: "BRI", city: "Bari", country: "Italy", countryCode: "IT", aliases: ["bari"] },
+  { iata: "SUF", city: "Lamezia Terme", country: "Italy", countryCode: "IT", aliases: ["lamezia terme", "reggio calabria", "cosenza"] },
 
   // Germany
-  {
-    iata: "BER",
-    city: "Berlin",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["berlin", "union berlin", "hertha berlin"],
-  },
-  {
-    iata: "MUC",
-    city: "Munich",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["munich", "munchen", "muenchen", "münchen", "bayern munich"],
-  },
-  {
-    iata: "DUS",
-    city: "Dusseldorf",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: [
-      "dusseldorf",
-      "düsseldorf",
-      "monchengladbach",
-      "mönchengladbach",
-      "gladbach",
-      "leverkusen",
-      "koln",
-      "köln",
-      "cologne",
-      "schalke",
-      "gelsenkirchen",
-      "bochum",
-      "dortmund",
-    ],
-  },
-  {
-    iata: "FRA",
-    city: "Frankfurt",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["frankfurt", "eintracht frankfurt", "mainz", "darmstadt", "kaiserslautern"],
-  },
-  {
-    iata: "HAM",
-    city: "Hamburg",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["hamburg", "st pauli", "st. pauli"],
-  },
-  {
-    iata: "STR",
-    city: "Stuttgart",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["stuttgart", "vfb stuttgart", "sinsheim", "hoffenheim", "heidenheim"],
-  },
-  {
-    iata: "LEJ",
-    city: "Leipzig",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["leipzig", "rb leipzig", "dresden", "halle"],
-  },
-  {
-    iata: "HAJ",
-    city: "Hannover",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["hannover", "wolfsburg", "braunschweig", "brunswick"],
-  },
-  {
-    iata: "BRE",
-    city: "Bremen",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["bremen"],
-  },
-  {
-    iata: "NUE",
-    city: "Nuremberg",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["nuremberg", "nurnberg", "nürnberg", "augsburg"],
-  },
-  {
-    iata: "SCN",
-    city: "Saarbrucken",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["saarbrucken", "saarbrücken"],
-  },
-  {
-    iata: "FMO",
-    city: "Munster",
-    country: "Germany",
-    countryCode: "DE",
-    aliases: ["munster", "münster", "bielefeld", "paderborn", "osnabruck", "osnabrück"],
-  },
+  { iata: "BER", city: "Berlin", country: "Germany", countryCode: "DE", aliases: ["berlin", "union berlin", "hertha berlin"] },
+  { iata: "MUC", city: "Munich", country: "Germany", countryCode: "DE", aliases: ["munich", "munchen", "muenchen", "münchen", "bayern munich"] },
+  { iata: "DUS", city: "Dusseldorf", country: "Germany", countryCode: "DE", aliases: ["dusseldorf", "düsseldorf", "monchengladbach", "mönchengladbach", "gladbach", "leverkusen", "koln", "köln", "cologne", "schalke", "gelsenkirchen", "bochum", "dortmund"] },
+  { iata: "FRA", city: "Frankfurt", country: "Germany", countryCode: "DE", aliases: ["frankfurt", "eintracht frankfurt", "mainz", "darmstadt", "kaiserslautern"] },
+  { iata: "HAM", city: "Hamburg", country: "Germany", countryCode: "DE", aliases: ["hamburg", "st pauli", "st. pauli"] },
+  { iata: "STR", city: "Stuttgart", country: "Germany", countryCode: "DE", aliases: ["stuttgart", "vfb stuttgart", "sinsheim", "hoffenheim", "heidenheim"] },
+  { iata: "LEJ", city: "Leipzig", country: "Germany", countryCode: "DE", aliases: ["leipzig", "rb leipzig", "dresden", "halle"] },
+  { iata: "HAJ", city: "Hannover", country: "Germany", countryCode: "DE", aliases: ["hannover", "wolfsburg", "braunschweig", "brunswick"] },
+  { iata: "BRE", city: "Bremen", country: "Germany", countryCode: "DE", aliases: ["bremen"] },
+  { iata: "NUE", city: "Nuremberg", country: "Germany", countryCode: "DE", aliases: ["nuremberg", "nurnberg", "nürnberg", "augsburg"] },
+  { iata: "SCN", city: "Saarbrucken", country: "Germany", countryCode: "DE", aliases: ["saarbrucken", "saarbrücken"] },
+  { iata: "FMO", city: "Munster", country: "Germany", countryCode: "DE", aliases: ["munster", "münster", "bielefeld", "paderborn", "osnabruck", "osnabrück"] },
 
   // France
-  {
-    iata: "PAR",
-    city: "Paris",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["paris", "psg", "paris saint germain"],
-  },
-  {
-    iata: "MRS",
-    city: "Marseille",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["marseille"],
-  },
-  {
-    iata: "LYS",
-    city: "Lyon",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["lyon"],
-  },
-  {
-    iata: "NCE",
-    city: "Nice",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["nice", "monaco"],
-  },
-  {
-    iata: "LIL",
-    city: "Lille",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["lille", "lens"],
-  },
-  {
-    iata: "TLS",
-    city: "Toulouse",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["toulouse"],
-  },
-  {
-    iata: "BOD",
-    city: "Bordeaux",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["bordeaux"],
-  },
-  {
-    iata: "NTE",
-    city: "Nantes",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["nantes", "saint nazaire"],
-  },
-  {
-    iata: "SXB",
-    city: "Strasbourg",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["strasbourg", "metz"],
-  },
-  {
-    iata: "MPL",
-    city: "Montpellier",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["montpellier", "nimes", "nîmes"],
-  },
-  {
-    iata: "RNS",
-    city: "Rennes",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["rennes", "brest", "lorient"],
-  },
-  {
-    iata: "BIQ",
-    city: "Biarritz",
-    country: "France",
-    countryCode: "FR",
-    aliases: ["biarritz", "bayonne"],
-  },
+  { iata: "PAR", city: "Paris", country: "France", countryCode: "FR", aliases: ["paris", "psg", "paris saint germain"] },
+  { iata: "MRS", city: "Marseille", country: "France", countryCode: "FR", aliases: ["marseille"] },
+  { iata: "LYS", city: "Lyon", country: "France", countryCode: "FR", aliases: ["lyon"] },
+  { iata: "NCE", city: "Nice", country: "France", countryCode: "FR", aliases: ["nice", "monaco"] },
+  { iata: "LIL", city: "Lille", country: "France", countryCode: "FR", aliases: ["lille", "lens"] },
+  { iata: "TLS", city: "Toulouse", country: "France", countryCode: "FR", aliases: ["toulouse"] },
+  { iata: "BOD", city: "Bordeaux", country: "France", countryCode: "FR", aliases: ["bordeaux"] },
+  { iata: "NTE", city: "Nantes", country: "France", countryCode: "FR", aliases: ["nantes", "saint nazaire"] },
+  { iata: "SXB", city: "Strasbourg", country: "France", countryCode: "FR", aliases: ["strasbourg", "metz"] },
+  { iata: "MPL", city: "Montpellier", country: "France", countryCode: "FR", aliases: ["montpellier", "nimes", "nîmes"] },
+  { iata: "RNS", city: "Rennes", country: "France", countryCode: "FR", aliases: ["rennes", "brest", "lorient"] },
+  { iata: "BIQ", city: "Biarritz", country: "France", countryCode: "FR", aliases: ["biarritz", "bayonne"] },
 
   // Netherlands
-  {
-    iata: "AMS",
-    city: "Amsterdam",
-    country: "Netherlands",
-    countryCode: "NL",
-    aliases: ["amsterdam", "ajax"],
-  },
-  {
-    iata: "EIN",
-    city: "Eindhoven",
-    country: "Netherlands",
-    countryCode: "NL",
-    aliases: ["eindhoven", "psv"],
-  },
-  {
-    iata: "RTM",
-    city: "Rotterdam",
-    country: "Netherlands",
-    countryCode: "NL",
-    aliases: ["rotterdam", "feyenoord", "the hague", "den haag", "sparta rotterdam"],
-  },
-  {
-    iata: "ENS",
-    city: "Enschede",
-    country: "Netherlands",
-    countryCode: "NL",
-    aliases: ["enschede", "twente"],
-  },
-  {
-    iata: "MST",
-    city: "Maastricht",
-    country: "Netherlands",
-    countryCode: "NL",
-    aliases: ["maastricht", "sittard"],
-  },
-  {
-    iata: "GRQ",
-    city: "Groningen",
-    country: "Netherlands",
-    countryCode: "NL",
-    aliases: ["groningen", "heerenveen"],
-  },
+  { iata: "AMS", city: "Amsterdam", country: "Netherlands", countryCode: "NL", aliases: ["amsterdam", "ajax"] },
+  { iata: "EIN", city: "Eindhoven", country: "Netherlands", countryCode: "NL", aliases: ["eindhoven", "psv"] },
+  { iata: "RTM", city: "Rotterdam", country: "Netherlands", countryCode: "NL", aliases: ["rotterdam", "feyenoord", "the hague", "den haag", "sparta rotterdam"] },
+  { iata: "ENS", city: "Enschede", country: "Netherlands", countryCode: "NL", aliases: ["enschede", "twente"] },
+  { iata: "MST", city: "Maastricht", country: "Netherlands", countryCode: "NL", aliases: ["maastricht", "sittard"] },
+  { iata: "GRQ", city: "Groningen", country: "Netherlands", countryCode: "NL", aliases: ["groningen", "heerenveen"] },
 
   // Portugal
-  {
-    iata: "LIS",
-    city: "Lisbon",
-    country: "Portugal",
-    countryCode: "PT",
-    aliases: ["lisbon", "lisboa", "sporting", "benfica"],
-  },
-  {
-    iata: "OPO",
-    city: "Porto",
-    country: "Portugal",
-    countryCode: "PT",
-    aliases: ["porto", "braga", "guimaraes", "guimarães", "boavista"],
-  },
-  {
-    iata: "FAO",
-    city: "Faro",
-    country: "Portugal",
-    countryCode: "PT",
-    aliases: ["faro", "portimao", "portimão"],
-  },
-  {
-    iata: "FNC",
-    city: "Funchal",
-    country: "Portugal",
-    countryCode: "PT",
-    aliases: ["funchal", "madeira"],
-  },
-  {
-    iata: "PDL",
-    city: "Ponta Delgada",
-    country: "Portugal",
-    countryCode: "PT",
-    aliases: ["ponta delgada", "azores"],
-  },
+  { iata: "LIS", city: "Lisbon", country: "Portugal", countryCode: "PT", aliases: ["lisbon", "lisboa", "sporting", "benfica"] },
+  { iata: "OPO", city: "Porto", country: "Portugal", countryCode: "PT", aliases: ["porto", "braga", "guimaraes", "guimarães", "boavista"] },
+  { iata: "FAO", city: "Faro", country: "Portugal", countryCode: "PT", aliases: ["faro", "portimao", "portimão"] },
+  { iata: "FNC", city: "Funchal", country: "Portugal", countryCode: "PT", aliases: ["funchal", "madeira"] },
+  { iata: "PDL", city: "Ponta Delgada", country: "Portugal", countryCode: "PT", aliases: ["ponta delgada", "azores"] },
 
   // Belgium
-  {
-    iata: "BRU",
-    city: "Brussels",
-    country: "Belgium",
-    countryCode: "BE",
-    aliases: ["brussels", "bruxelles", "anderlecht"],
-  },
-  {
-    iata: "ANR",
-    city: "Antwerp",
-    country: "Belgium",
-    countryCode: "BE",
-    aliases: ["antwerp", "antwerpen", "mechelen"],
-  },
-  {
-    iata: "CRL",
-    city: "Charleroi",
-    country: "Belgium",
-    countryCode: "BE",
-    aliases: ["charleroi", "standard liege", "liège", "liege"],
-  },
-  {
-    iata: "OST",
-    city: "Ostend",
-    country: "Belgium",
-    countryCode: "BE",
-    aliases: ["bruges", "brugge", "ghent", "gent", "ostend", "genk"],
-  },
+  { iata: "BRU", city: "Brussels", country: "Belgium", countryCode: "BE", aliases: ["brussels", "bruxelles", "anderlecht"] },
+  { iata: "ANR", city: "Antwerp", country: "Belgium", countryCode: "BE", aliases: ["antwerp", "antwerpen", "mechelen"] },
+  { iata: "CRL", city: "Charleroi", country: "Belgium", countryCode: "BE", aliases: ["charleroi", "standard liege", "liège", "liege"] },
+  { iata: "OST", city: "Ostend", country: "Belgium", countryCode: "BE", aliases: ["bruges", "brugge", "ghent", "gent", "ostend", "genk"] },
 
   // Turkey
-  {
-    iata: "IST",
-    city: "Istanbul",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["istanbul", "galatasaray", "fenerbahce", "fenerbahçe", "besiktas", "beşiktaş"],
-  },
-  {
-    iata: "ESB",
-    city: "Ankara",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["ankara"],
-  },
-  {
-    iata: "ADB",
-    city: "Izmir",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["izmir", "i̇zmir"],
-  },
-  {
-    iata: "AYT",
-    city: "Antalya",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["antalya", "alanya"],
-  },
-  {
-    iata: "TZX",
-    city: "Trabzon",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["trabzon"],
-  },
-  {
-    iata: "ADA",
-    city: "Adana",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["adana", "mersin"],
-  },
-  {
-    iata: "BJV",
-    city: "Bodrum",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["bodrum"],
-  },
-  {
-    iata: "DLM",
-    city: "Dalaman",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["dalaman"],
-  },
-  {
-    iata: "ASR",
-    city: "Kayseri",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["kayseri"],
-  },
-  {
-    iata: "GZT",
-    city: "Gaziantep",
-    country: "Turkey",
-    countryCode: "TR",
-    aliases: ["gaziantep"],
-  },
+  { iata: "IST", city: "Istanbul", country: "Turkey", countryCode: "TR", aliases: ["istanbul", "galatasaray", "fenerbahce", "fenerbahçe", "besiktas", "beşiktaş"] },
+  { iata: "ESB", city: "Ankara", country: "Turkey", countryCode: "TR", aliases: ["ankara"] },
+  { iata: "ADB", city: "Izmir", country: "Turkey", countryCode: "TR", aliases: ["izmir", "i̇zmir"] },
+  { iata: "AYT", city: "Antalya", country: "Turkey", countryCode: "TR", aliases: ["antalya", "alanya"] },
+  { iata: "TZX", city: "Trabzon", country: "Turkey", countryCode: "TR", aliases: ["trabzon"] },
+  { iata: "ADA", city: "Adana", country: "Turkey", countryCode: "TR", aliases: ["adana", "mersin"] },
+  { iata: "BJV", city: "Bodrum", country: "Turkey", countryCode: "TR", aliases: ["bodrum"] },
+  { iata: "DLM", city: "Dalaman", country: "Turkey", countryCode: "TR", aliases: ["dalaman"] },
+  { iata: "ASR", city: "Kayseri", country: "Turkey", countryCode: "TR", aliases: ["kayseri"] },
+  { iata: "GZT", city: "Gaziantep", country: "Turkey", countryCode: "TR", aliases: ["gaziantep"] },
 
   // Austria
-  {
-    iata: "VIE",
-    city: "Vienna",
-    country: "Austria",
-    countryCode: "AT",
-    aliases: ["vienna", "wien", "rapid vienna", "austria vienna"],
-  },
-  {
-    iata: "SZG",
-    city: "Salzburg",
-    country: "Austria",
-    countryCode: "AT",
-    aliases: ["salzburg"],
-  },
-  {
-    iata: "LNZ",
-    city: "Linz",
-    country: "Austria",
-    countryCode: "AT",
-    aliases: ["linz"],
-  },
-  {
-    iata: "GRZ",
-    city: "Graz",
-    country: "Austria",
-    countryCode: "AT",
-    aliases: ["graz", "hartberg"],
-  },
-  {
-    iata: "INN",
-    city: "Innsbruck",
-    country: "Austria",
-    countryCode: "AT",
-    aliases: ["innsbruck", "tirol"],
-  },
-  {
-    iata: "KLU",
-    city: "Klagenfurt",
-    country: "Austria",
-    countryCode: "AT",
-    aliases: ["klagenfurt", "wolfsberg"],
-  },
+  { iata: "VIE", city: "Vienna", country: "Austria", countryCode: "AT", aliases: ["vienna", "wien", "rapid vienna", "austria vienna"] },
+  { iata: "SZG", city: "Salzburg", country: "Austria", countryCode: "AT", aliases: ["salzburg"] },
+  { iata: "LNZ", city: "Linz", country: "Austria", countryCode: "AT", aliases: ["linz"] },
+  { iata: "GRZ", city: "Graz", country: "Austria", countryCode: "AT", aliases: ["graz", "hartberg"] },
+  { iata: "INN", city: "Innsbruck", country: "Austria", countryCode: "AT", aliases: ["innsbruck", "tirol"] },
+  { iata: "KLU", city: "Klagenfurt", country: "Austria", countryCode: "AT", aliases: ["klagenfurt", "wolfsberg"] },
 
   // Switzerland
-  {
-    iata: "ZRH",
-    city: "Zurich",
-    country: "Switzerland",
-    countryCode: "CH",
-    aliases: ["zurich", "zürich"],
-  },
-  {
-    iata: "GVA",
-    city: "Geneva",
-    country: "Switzerland",
-    countryCode: "CH",
-    aliases: ["geneva", "genève", "lausanne"],
-  },
-  {
-    iata: "BSL",
-    city: "Basel",
-    country: "Switzerland",
-    countryCode: "CH",
-    aliases: ["basel"],
-  },
-  {
-    iata: "BRN",
-    city: "Bern",
-    country: "Switzerland",
-    countryCode: "CH",
-    aliases: ["bern", "berne", "young boys"],
-  },
+  { iata: "ZRH", city: "Zurich", country: "Switzerland", countryCode: "CH", aliases: ["zurich", "zürich"] },
+  { iata: "GVA", city: "Geneva", country: "Switzerland", countryCode: "CH", aliases: ["geneva", "genève", "lausanne"] },
+  { iata: "BSL", city: "Basel", country: "Switzerland", countryCode: "CH", aliases: ["basel"] },
+  { iata: "BRN", city: "Bern", country: "Switzerland", countryCode: "CH", aliases: ["bern", "berne", "young boys"] },
 
   // Greece
-  {
-    iata: "ATH",
-    city: "Athens",
-    country: "Greece",
-    countryCode: "GR",
-    aliases: ["athens", "olympiacos", "aek athens", "panathinaikos"],
-  },
-  {
-    iata: "SKG",
-    city: "Thessaloniki",
-    country: "Greece",
-    countryCode: "GR",
-    aliases: ["thessaloniki", "paok", "aris"],
-  },
-  {
-    iata: "HER",
-    city: "Heraklion",
-    country: "Greece",
-    countryCode: "GR",
-    aliases: ["heraklion", "crete"],
-  },
+  { iata: "ATH", city: "Athens", country: "Greece", countryCode: "GR", aliases: ["athens", "olympiacos", "aek athens", "panathinaikos"] },
+  { iata: "SKG", city: "Thessaloniki", country: "Greece", countryCode: "GR", aliases: ["thessaloniki", "paok", "aris"] },
+  { iata: "HER", city: "Heraklion", country: "Greece", countryCode: "GR", aliases: ["heraklion", "crete"] },
 
   // Czech Republic
-  {
-    iata: "PRG",
-    city: "Prague",
-    country: "Czech Republic",
-    countryCode: "CZ",
-    aliases: ["prague", "praha", "sparta prague", "slavia prague"],
-  },
-  {
-    iata: "BRQ",
-    city: "Brno",
-    country: "Czech Republic",
-    countryCode: "CZ",
-    aliases: ["brno"],
-  },
-  {
-    iata: "OSR",
-    city: "Ostrava",
-    country: "Czech Republic",
-    countryCode: "CZ",
-    aliases: ["ostrava", "banik ostrava", "baník ostrava"],
-  },
+  { iata: "PRG", city: "Prague", country: "Czech Republic", countryCode: "CZ", aliases: ["prague", "praha", "sparta prague", "slavia prague"] },
+  { iata: "BRQ", city: "Brno", country: "Czech Republic", countryCode: "CZ", aliases: ["brno"] },
+  { iata: "OSR", city: "Ostrava", country: "Czech Republic", countryCode: "CZ", aliases: ["ostrava", "banik ostrava", "baník ostrava"] },
 
   // Poland
-  {
-    iata: "WAW",
-    city: "Warsaw",
-    country: "Poland",
-    countryCode: "PL",
-    aliases: ["warsaw", "warszawa", "legia warsaw"],
-  },
-  {
-    iata: "KRK",
-    city: "Krakow",
-    country: "Poland",
-    countryCode: "PL",
-    aliases: ["krakow", "kraków", "cracow"],
-  },
-  {
-    iata: "GDN",
-    city: "Gdansk",
-    country: "Poland",
-    countryCode: "PL",
-    aliases: ["gdansk", "gdańsk", "gdynia", "sopot"],
-  },
-  {
-    iata: "KTW",
-    city: "Katowice",
-    country: "Poland",
-    countryCode: "PL",
-    aliases: ["katowice", "zabrze", "gliwice", "chorzow", "chorzów"],
-  },
-  {
-    iata: "POZ",
-    city: "Poznan",
-    country: "Poland",
-    countryCode: "PL",
-    aliases: ["poznan", "poznań"],
-  },
-  {
-    iata: "WRO",
-    city: "Wroclaw",
-    country: "Poland",
-    countryCode: "PL",
-    aliases: ["wroclaw", "wrocław"],
-  },
-  {
-    iata: "SZZ",
-    city: "Szczecin",
-    country: "Poland",
-    countryCode: "PL",
-    aliases: ["szczecin"],
-  },
+  { iata: "WAW", city: "Warsaw", country: "Poland", countryCode: "PL", aliases: ["warsaw", "warszawa", "legia warsaw"] },
+  { iata: "KRK", city: "Krakow", country: "Poland", countryCode: "PL", aliases: ["krakow", "kraków", "cracow"] },
+  { iata: "GDN", city: "Gdansk", country: "Poland", countryCode: "PL", aliases: ["gdansk", "gdańsk", "gdynia", "sopot"] },
+  { iata: "KTW", city: "Katowice", country: "Poland", countryCode: "PL", aliases: ["katowice", "zabrze", "gliwice", "chorzow", "chorzów"] },
+  { iata: "POZ", city: "Poznan", country: "Poland", countryCode: "PL", aliases: ["poznan", "poznań"] },
+  { iata: "WRO", city: "Wroclaw", country: "Poland", countryCode: "PL", aliases: ["wroclaw", "wrocław"] },
+  { iata: "SZZ", city: "Szczecin", country: "Poland", countryCode: "PL", aliases: ["szczecin"] },
 
   // Croatia
-  {
-    iata: "ZAG",
-    city: "Zagreb",
-    country: "Croatia",
-    countryCode: "HR",
-    aliases: ["zagreb", "dinamo zagreb"],
-  },
-  {
-    iata: "SPU",
-    city: "Split",
-    country: "Croatia",
-    countryCode: "HR",
-    aliases: ["split", "hajduk split"],
-  },
-  {
-    iata: "RJK",
-    city: "Rijeka",
-    country: "Croatia",
-    countryCode: "HR",
-    aliases: ["rijeka"],
-  },
-  {
-    iata: "OSI",
-    city: "Osijek",
-    country: "Croatia",
-    countryCode: "HR",
-    aliases: ["osijek"],
-  },
+  { iata: "ZAG", city: "Zagreb", country: "Croatia", countryCode: "HR", aliases: ["zagreb", "dinamo zagreb"] },
+  { iata: "SPU", city: "Split", country: "Croatia", countryCode: "HR", aliases: ["split", "hajduk split"] },
+  { iata: "RJK", city: "Rijeka", country: "Croatia", countryCode: "HR", aliases: ["rijeka"] },
+  { iata: "OSI", city: "Osijek", country: "Croatia", countryCode: "HR", aliases: ["osijek"] },
 
   // Serbia
-  {
-    iata: "BEG",
-    city: "Belgrade",
-    country: "Serbia",
-    countryCode: "RS",
-    aliases: ["belgrade", "beograd", "red star", "partizan"],
-  },
+  { iata: "BEG", city: "Belgrade", country: "Serbia", countryCode: "RS", aliases: ["belgrade", "beograd", "red star", "partizan"] },
 
   // Denmark
-  {
-    iata: "CPH",
-    city: "Copenhagen",
-    country: "Denmark",
-    countryCode: "DK",
-    aliases: ["copenhagen", "kobenhavn", "københavn"],
-  },
-  {
-    iata: "BLL",
-    city: "Billund",
-    country: "Denmark",
-    countryCode: "DK",
-    aliases: ["billund", "vejle"],
-  },
-  {
-    iata: "AAL",
-    city: "Aalborg",
-    country: "Denmark",
-    countryCode: "DK",
-    aliases: ["aalborg", "ålborg"],
-  },
+  { iata: "CPH", city: "Copenhagen", country: "Denmark", countryCode: "DK", aliases: ["copenhagen", "kobenhavn", "københavn"] },
+  { iata: "BLL", city: "Billund", country: "Denmark", countryCode: "DK", aliases: ["billund", "vejle"] },
+  { iata: "AAL", city: "Aalborg", country: "Denmark", countryCode: "DK", aliases: ["aalborg", "ålborg"] },
 
   // Sweden
-  {
-    iata: "STO",
-    city: "Stockholm",
-    country: "Sweden",
-    countryCode: "SE",
-    aliases: ["stockholm", "hammarby", "djurgarden", "djurgården", "aik"],
-  },
-  {
-    iata: "GOT",
-    city: "Gothenburg",
-    country: "Sweden",
-    countryCode: "SE",
-    aliases: ["gothenburg", "goteborg", "göteborg", "malmo", "malmö"],
-  },
+  { iata: "STO", city: "Stockholm", country: "Sweden", countryCode: "SE", aliases: ["stockholm", "hammarby", "djurgarden", "djurgården", "aik"] },
+  { iata: "GOT", city: "Gothenburg", country: "Sweden", countryCode: "SE", aliases: ["gothenburg", "goteborg", "göteborg", "malmo", "malmö"] },
 
   // Norway
-  {
-    iata: "OSL",
-    city: "Oslo",
-    country: "Norway",
-    countryCode: "NO",
-    aliases: ["oslo"],
-  },
-  {
-    iata: "BGO",
-    city: "Bergen",
-    country: "Norway",
-    countryCode: "NO",
-    aliases: ["bergen"],
-  },
-  {
-    iata: "TRD",
-    city: "Trondheim",
-    country: "Norway",
-    countryCode: "NO",
-    aliases: ["trondheim"],
-  },
+  { iata: "OSL", city: "Oslo", country: "Norway", countryCode: "NO", aliases: ["oslo"] },
+  { iata: "BGO", city: "Bergen", country: "Norway", countryCode: "NO", aliases: ["bergen"] },
+  { iata: "TRD", city: "Trondheim", country: "Norway", countryCode: "NO", aliases: ["trondheim"] },
 
   // Hungary
-  {
-    iata: "BUD",
-    city: "Budapest",
-    country: "Hungary",
-    countryCode: "HU",
-    aliases: ["budapest", "ferencvaros", "ferencváros"],
-  },
+  { iata: "BUD", city: "Budapest", country: "Hungary", countryCode: "HU", aliases: ["budapest", "ferencvaros", "ferencváros"] },
 
   // Romania
-  {
-    iata: "BUH",
-    city: "Bucharest",
-    country: "Romania",
-    countryCode: "RO",
-    aliases: ["bucharest", "bucuresti", "bucurești", "steaua", "rapid bucharest"],
-  },
-  {
-    iata: "CLJ",
-    city: "Cluj-Napoca",
-    country: "Romania",
-    countryCode: "RO",
-    aliases: ["cluj", "cluj napoca", "cluj-napoca"],
-  },
+  { iata: "BUH", city: "Bucharest", country: "Romania", countryCode: "RO", aliases: ["bucharest", "bucuresti", "bucurești", "steaua", "rapid bucharest"] },
+  { iata: "CLJ", city: "Cluj-Napoca", country: "Romania", countryCode: "RO", aliases: ["cluj", "cluj napoca", "cluj-napoca"] },
 
   // Bulgaria
-  {
-    iata: "SOF",
-    city: "Sofia",
-    country: "Bulgaria",
-    countryCode: "BG",
-    aliases: ["sofia", "cska sofia", "levski sofia"],
-  },
-  {
-    iata: "VAR",
-    city: "Varna",
-    country: "Bulgaria",
-    countryCode: "BG",
-    aliases: ["varna"],
-  },
+  { iata: "SOF", city: "Sofia", country: "Bulgaria", countryCode: "BG", aliases: ["sofia", "cska sofia", "levski sofia"] },
+  { iata: "VAR", city: "Varna", country: "Bulgaria", countryCode: "BG", aliases: ["varna"] },
 
   // Ukraine
-  {
-    iata: "IEV",
-    city: "Kyiv",
-    country: "Ukraine",
-    countryCode: "UA",
-    aliases: ["kyiv", "kiev", "dynamo kyiv", "dynamo kiev"],
-  },
+  { iata: "IEV", city: "Kyiv", country: "Ukraine", countryCode: "UA", aliases: ["kyiv", "kiev", "dynamo kyiv", "dynamo kiev"] },
 
   // Ireland
-  {
-    iata: "DUB",
-    city: "Dublin",
-    country: "Ireland",
-    countryCode: "IE",
-    aliases: ["dublin", "shamrock rovers", "bohemians"],
-  },
-  {
-    iata: "ORK",
-    city: "Cork",
-    country: "Ireland",
-    countryCode: "IE",
-    aliases: ["cork"],
-  },
+  { iata: "DUB", city: "Dublin", country: "Ireland", countryCode: "IE", aliases: ["dublin", "shamrock rovers", "bohemians"] },
+  { iata: "ORK", city: "Cork", country: "Ireland", countryCode: "IE", aliases: ["cork"] },
 
   // Finland
-  {
-    iata: "HEL",
-    city: "Helsinki",
-    country: "Finland",
-    countryCode: "FI",
-    aliases: ["helsinki", "hjk"],
-  },
-  {
-    iata: "TMP",
-    city: "Tampere",
-    country: "Finland",
-    countryCode: "FI",
-    aliases: ["tampere"],
-  },
+  { iata: "HEL", city: "Helsinki", country: "Finland", countryCode: "FI", aliases: ["helsinki", "hjk"] },
+  { iata: "TMP", city: "Tampere", country: "Finland", countryCode: "FI", aliases: ["tampere"] },
 ];
 
 function buildOverrideCities(): IataCity[] {
-  return FOOTBALL_AIRPORT_OVERRIDES.map((row) => ({
-    iata: safeStr(row.iata).toUpperCase(),
-    city: safeStr(row.city),
-    country: safeStr(row.country) || undefined,
-    countryCode: safeStr(row.countryCode).toUpperCase() || undefined,
-    aliases: uniqueStrings([
-      row.city,
-      ...(Array.isArray(row.aliases) ? row.aliases : []),
-    ]),
-  }));
+  return FOOTBALL_AIRPORT_OVERRIDES
+    .filter((row) => isIataCode(row.iata))
+    .map((row) => ({
+      iata: safeStr(row.iata).toUpperCase(),
+      city: safeStr(row.city),
+      country: safeStr(row.country) || undefined,
+      countryCode: safeStr(row.countryCode).toUpperCase() || undefined,
+      aliases: uniqueStrings([row.city, ...(Array.isArray(row.aliases) ? row.aliases : [])]),
+    }));
 }
 
 function mergeBaseWithOverrides(base: IataCity[], overrides: IataCity[]): IataCity[] {
@@ -1459,4 +516,4 @@ export function searchIataCities(query: string, limit = 20): IataCity[] {
   }
 
   return out;
-    }
+   }
