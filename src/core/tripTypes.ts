@@ -2,54 +2,82 @@
 
 export type Id = string;
 export type TripId = string;
+export type FixtureId = string;
+
+/* -------------------------------------------------------------------------- */
+/* Trip                                                                        */
+/* -------------------------------------------------------------------------- */
 
 /**
- * Trip
- * Phase 1: "trip workspace" anchored around 1+ fixtures, with pragmatic cityId.
+ * Phase 1 canonical Trip model.
  *
- * IMPORTANT:
- * - We store snapshot fields to keep the UI readable offline and resilient
- *   if API responses change or fixture lookups fail.
- * - All snapshot fields are optional and may be stale; live API data can override.
+ * Truth:
+ * - A trip can contain 1+ matches.
+ * - One match is the primary match for the trip.
+ * - Primary-match snapshot fields are stored on the trip root on purpose so
+ *   Trip Workspace and related screens remain readable and resilient offline.
+ *
+ * Guardrails:
+ * - `matchIds` is the membership list for the trip.
+ * - `fixtureIdPrimary` must refer to one of `matchIds` when both are present.
+ * - snapshot fields are convenience/cache fields, not the source of truth for
+ *   live fixture data.
  */
 export type Trip = {
+  /* ---------------------------------------------------------------------- */
+  /* Core identity                                                           */
+  /* ---------------------------------------------------------------------- */
+
   id: TripId;
 
   /**
-   * For Phase 1 we keep this pragmatic: the "destination" identifier
-   * derived from venue city. Later: normalize to city registry IDs.
+   * Pragmatic destination key for Phase 1.
+   * Usually derived from venue city at trip creation time.
    */
   cityId: string;
+
+  /**
+   * Optional alias kept for route/display compatibility.
+   * In Phase 1 this will usually match `cityId`.
+   */
   citySlug?: string;
 
-  /** YYYY-MM-DD */
-  startDate: string;
-  /** YYYY-MM-DD */
-  endDate: string;
-
   /**
-   * Match IDs (API-Football fixture IDs stored as strings)
-   * Phase 1: one fixture per trip, but keep as array for future.
-   */
-  matchIds: string[];
-
-  notes?: string;
-
-  /* ---------------------------------------------------------------------- */
-  /* Snapshot fields (Phase 1 resilience)                                    */
-  /* ---------------------------------------------------------------------- */
-
-  /**
-   * Human display city captured at trip creation time.
-   * Useful when cityId is a slug or when fixture enrichment fails.
+   * Human-readable city captured at trip creation/update time.
+   * Useful when `cityId` is sluggy or fixture enrichment later fails.
    */
   displayCity?: string;
 
+  /** YYYY-MM-DD */
+  startDate: string;
+
+  /** YYYY-MM-DD */
+  endDate: string;
+
+  notes?: string;
+
+  createdAt: number;
+  updatedAt: number;
+
+  /* ---------------------------------------------------------------------- */
+  /* Match membership                                                        */
+  /* ---------------------------------------------------------------------- */
+
   /**
-   * Primary fixture snapshot (first/selected match).
-   * These let Trip screens show real names even when offline.
+   * API-Football fixture IDs stored as strings.
+   * Phase 1 supports multi-match trips. Do not treat this as single-match only.
    */
-  fixtureIdPrimary?: string; // convenience (often matchIds[0])
+  matchIds: FixtureId[];
+
+  /**
+   * The primary match controls the headline trip snapshot shown across the app.
+   * This should usually be one of `matchIds`.
+   */
+  fixtureIdPrimary?: FixtureId;
+
+  /* ---------------------------------------------------------------------- */
+  /* Primary match snapshot (Phase 1 resilience)                             */
+  /* ---------------------------------------------------------------------- */
 
   homeTeamId?: number;
   awayTeamId?: number;
@@ -62,38 +90,39 @@ export type Trip = {
   round?: string;
 
   /**
-   * ISO string e.g. 2026-02-22T15:00:00+00:00
-   * This is a snapshot; live fixture can override.
+   * ISO datetime string, for example:
+   * 2026-02-22T15:00:00+00:00
+   *
+   * Snapshot only. Live fixture data may override when available.
    */
   kickoffIso?: string;
 
   /**
-   * Snapshot inference at time of save (or last refresh).
-   * True means kickoff time not reliable / likely placeholder.
+   * Snapshot inference captured when the trip or primary match was saved/refreshed.
+   * True means the kickoff time is unreliable, unconfirmed, or likely placeholder.
    */
   kickoffTbc?: boolean;
 
   venueName?: string;
   venueCity?: string;
 
+  /* ---------------------------------------------------------------------- */
+  /* Booking enrichment                                                      */
+  /* ---------------------------------------------------------------------- */
+
   /**
-   * Ticketing affiliate deep-link enrichment if known.
-   * If missing, match screen falls back to SE365 search.
+   * Ticketing affiliate enrichment when a direct event mapping is known.
    */
   sportsevents365EventId?: number;
 
   /**
-   * Direct event deep-link URL from SE365 (preferred).
-   * Store snapshot so opening tickets is instant next time.
+   * Preferred direct ticket URL when known.
    */
   sportsevents365EventUrl?: string;
-
-  createdAt: number;
-  updatedAt: number;
 };
 
 /* -------------------------------------------------------------------------- */
-/* Wallet (manual entries) - Phase 1 */
+/* Wallet (manual entries only)                                               */
 /* -------------------------------------------------------------------------- */
 
 export type WalletCategory =
@@ -109,12 +138,18 @@ export type WalletCategory =
 
 export type WalletItemType = "text" | "link";
 
+/**
+ * Manual wallet/reference item.
+ *
+ * This is not the canonical booking/workflow entity.
+ * Canonical trip-linked booking items live in SavedItem types/store.
+ */
 export type WalletItem = {
   id: Id;
 
   /**
-   * Optional: if set, item appears under that Trip in Wallet.
-   * If missing, it’s “Unassigned”.
+   * Optional trip association.
+   * If omitted, the item is effectively unassigned.
    */
   tripId?: Id;
 
@@ -124,12 +159,12 @@ export type WalletItem = {
   subtitle?: string;
 
   /**
-   * For "text" items we use `reference` as the stored content.
+   * Used when `type === "text"`.
    */
   reference?: string;
 
   /**
-   * For "link" items we use `sourceUrl`.
+   * Used when `type === "link"`.
    */
   sourceUrl?: string;
 
