@@ -1,4 +1,9 @@
-import type { PartnerId } from "@/src/core/partners";
+import {
+  canonicalizePartnerId,
+  getPartnerOrNull,
+  supportsCategory,
+  type PartnerId,
+} from "@/src/constants/partners";
 import type { SavedItem } from "@/src/core/savedItemTypes";
 import type { Trip } from "@/src/state/trips";
 import { parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
@@ -13,12 +18,29 @@ import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/typ
 export type PlanValue = "not_set" | "free" | "premium";
 
 export type AffiliateUrls = {
-  flightsUrl: string;
-  hotelsUrl: string;
-  omioUrl: string;
-  transfersUrl: string;
-  experiencesUrl: string;
-  mapsUrl: string;
+  /* Canonical */
+  ticketsUrl?: string | null;
+  flightsUrl?: string | null;
+  staysUrl?: string | null;
+  trainsUrl?: string | null;
+  busesUrl?: string | null;
+  transfersUrl?: string | null;
+  insuranceUrl?: string | null;
+  thingsUrl?: string | null;
+  carHireUrl?: string | null;
+
+  /* Utility */
+  mapsUrl?: string | null;
+  officialSiteUrl?: string | null;
+
+  /* Internal */
+  claimsUrl?: string | null;
+
+  /* Compatibility */
+  hotelsUrl?: string | null;
+  experiencesUrl?: string | null;
+  transportUrl?: string | null;
+  omioUrl?: string | null;
 };
 
 export type SmartButton = {
@@ -69,6 +91,12 @@ export type SourceSection =
   | "notes"
   | "summary"
   | "unknown";
+
+const DEFAULT_PARTNER_BADGE_STYLE: PartnerUiBadgeStyle = {
+  borderColor: "rgba(255,255,255,0.15)",
+  backgroundColor: "rgba(255,255,255,0.06)",
+  textColor: "rgba(242,244,246,1)",
+};
 
 export function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -130,143 +158,23 @@ export function statusLabel(status: SavedItem["status"]) {
 }
 
 export function providerLabel(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) return clean(provider) || "Provider";
 
-  if (raw === "footballticketsnet") return "FootballTicketNet";
-  if (raw === "sportsevents365") return "SportsEvents365";
-  if (raw === "gigsberg") return "Gigsberg";
-  if (raw === "seatpick") return "SeatPick";
-  if (raw === "aviasales") return "Aviasales";
-  if (raw === "expedia" || raw === "expedia_stays") return "Expedia";
-  if (raw === "kiwitaxi") return "KiwiTaxi";
-  if (raw === "welcomepickups") return "Welcome Pickups";
-  if (raw === "omio") return "Omio";
-  if (raw === "getyourguide") return "GetYourGuide";
-  if (raw === "klook") return "Klook";
-  if (raw === "tiqets") return "Tiqets";
-  if (raw === "wegotrip") return "WeGoTrip";
-  if (raw === "safetywing") return "SafetyWing";
-  if (raw === "ekta") return "EKTA";
-  if (raw === "airhelp") return "AirHelp";
-  if (raw === "compensair") return "Compensair";
-  if (raw === "googlemaps") return "Google Maps";
-
-  return clean(provider) || "Provider";
+  const partner = getPartnerOrNull(canonical);
+  return partner?.display.name || clean(provider) || "Provider";
 }
 
 export function providerShort(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) return "P";
 
-  if (raw === "footballticketsnet") return "FTN";
-  if (raw === "sportsevents365") return "365";
-  if (raw === "gigsberg") return "G";
-  if (raw === "seatpick") return "SP";
-  if (raw === "aviasales") return "AV";
-  if (raw === "expedia" || raw === "expedia_stays") return "EX";
-  if (raw === "kiwitaxi") return "KT";
-  if (raw === "welcomepickups") return "WP";
-  if (raw === "omio") return "OM";
-  if (raw === "getyourguide") return "GYG";
-  if (raw === "klook") return "KL";
-  if (raw === "tiqets") return "TQ";
-  if (raw === "wegotrip") return "WGT";
-  if (raw === "safetywing") return "SW";
-  if (raw === "ekta") return "EK";
-  if (raw === "airhelp") return "AH";
-  if (raw === "compensair") return "CP";
-  if (raw === "googlemaps") return "MAP";
-
-  return "P";
+  const partner = getPartnerOrNull(canonical);
+  return partner?.display.badgeText || "P";
 }
 
-export function providerBadgeStyle(provider?: string | null): PartnerUiBadgeStyle {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet") {
-    return {
-      borderColor: "rgba(120,170,255,0.35)",
-      backgroundColor: "rgba(120,170,255,0.12)",
-      textColor: "rgba(205,225,255,1)",
-    };
-  }
-
-  if (raw === "sportsevents365") {
-    return {
-      borderColor: "rgba(87,162,56,0.35)",
-      backgroundColor: "rgba(87,162,56,0.12)",
-      textColor: "rgba(208,240,192,1)",
-    };
-  }
-
-  if (raw === "gigsberg") {
-    return {
-      borderColor: "rgba(255,200,80,0.35)",
-      backgroundColor: "rgba(255,200,80,0.12)",
-      textColor: "rgba(255,226,160,1)",
-    };
-  }
-
-  if (raw === "aviasales") {
-    return {
-      borderColor: "rgba(120,170,255,0.30)",
-      backgroundColor: "rgba(120,170,255,0.10)",
-      textColor: "rgba(210,225,255,1)",
-    };
-  }
-
-  if (raw === "expedia" || raw === "expedia_stays") {
-    return {
-      borderColor: "rgba(87,162,56,0.30)",
-      backgroundColor: "rgba(87,162,56,0.10)",
-      textColor: "rgba(210,240,205,1)",
-    };
-  }
-
-  if (raw === "kiwitaxi" || raw === "welcomepickups") {
-    return {
-      borderColor: "rgba(255,160,120,0.30)",
-      backgroundColor: "rgba(255,160,120,0.10)",
-      textColor: "rgba(255,220,205,1)",
-    };
-  }
-
-  if (raw === "omio") {
-    return {
-      borderColor: "rgba(200,120,255,0.30)",
-      backgroundColor: "rgba(200,120,255,0.10)",
-      textColor: "rgba(235,210,255,1)",
-    };
-  }
-
-  if (raw === "getyourguide" || raw === "klook" || raw === "tiqets" || raw === "wegotrip") {
-    return {
-      borderColor: "rgba(255,90,120,0.30)",
-      backgroundColor: "rgba(255,90,120,0.10)",
-      textColor: "rgba(255,215,225,1)",
-    };
-  }
-
-  if (raw === "airhelp" || raw === "compensair") {
-    return {
-      borderColor: "rgba(255,120,120,0.30)",
-      backgroundColor: "rgba(255,120,120,0.10)",
-      textColor: "rgba(255,220,220,1)",
-    };
-  }
-
-  if (raw === "safetywing" || raw === "ekta") {
-    return {
-      borderColor: "rgba(120,220,200,0.30)",
-      backgroundColor: "rgba(120,220,200,0.10)",
-      textColor: "rgba(210,250,245,1)",
-    };
-  }
-
-  return {
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    textColor: "rgba(242,244,246,1)",
-  };
+export function providerBadgeStyle(_provider?: string | null): PartnerUiBadgeStyle {
+  return DEFAULT_PARTNER_BADGE_STYLE;
 }
 
 export function ticketConfidenceLabel(score?: number | null): string | null {
@@ -432,11 +340,17 @@ export function rankReasonsText(trip: RankedTrip | null): string | null {
 }
 
 export function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
-  const raw = clean(provider).toLowerCase();
-  if (raw === "footballticketsnet") return "footballticketsnet" as PartnerId;
-  if (raw === "gigsberg") return "gigsberg" as PartnerId;
-  if (raw === "seatpick") return "seatpick" as PartnerId;
-  return "sportsevents365" as PartnerId;
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) {
+    throw new Error(`Unsupported ticket provider: ${clean(provider) || "unknown"}`);
+  }
+
+  const partner = getPartnerOrNull(canonical);
+  if (!partner || !supportsCategory(canonical, "tickets")) {
+    throw new Error(`Provider is not a canonical ticket partner: ${clean(provider) || canonical}`);
+  }
+
+  return canonical;
 }
 
 export function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): string {
@@ -564,4 +478,4 @@ export function getIsoDateOnly(raw?: string | null) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-      }
+}
