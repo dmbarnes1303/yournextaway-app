@@ -1,4 +1,5 @@
 // src/services/partnerReturnBootstrap.ts
+
 import savedItemsStore from "@/src/state/savedItems";
 import {
   ensurePartnerReturnWatcher,
@@ -18,62 +19,83 @@ import {
  * - NO  -> markItemNotBooked(itemId)
  * - NOT NOW -> dismissPartnerReturn(itemId)
  *
- * Production goals:
+ * Goals:
  * - No duplicate UI handlers on fast refresh / remount
- * - If a click arrives before handler exists, hold it and replay once
- * - Never “lose” a click because a handler threw
+ * - If a click arrives before handler exists, hold latest and replay once
+ * - Never lose a click because UI handler throws
+ * - Do not redeliver the exact same click repeatedly
  */
 
+type ReturnModalHandler = (itemId: string, click: LastPartnerClick) => void;
+
 let bootstrapped = false;
+let watcherUnsubscribe: (() => void) | null = null;
 
-// Current UI handler (set by app/_layout.tsx)
-let handler: ((itemId: string, click: LastPartnerClick) => void) | null = null;
+// Current UI handler set by app/_layout.tsx
+let activeHandler: ReturnModalHandler | null = null;
 
-// If a return fires before UI registers a handler, hold latest
+// Hold latest undelivered click until UI is ready
 let pendingClick: LastPartnerClick | null = null;
 
-// Defensive: prevent double-delivery of the same click
+// De-dupe successfully delivered click sessions
 let lastDeliveredKey: string | null = null;
 
-function clean(s: any) {
-  return String(s ?? "").trim();
+// Prevent overlapping replay/delivery loops
+let deliveryInFlight = false;
+
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function clickKey(c: LastPartnerClick): string {
-  // Deterministic key from actual fields in LastPartnerClick
-  // openedAt is the best “session” discriminator
+function clickKey(click: LastPartnerClick): string {
   return [
-    clean(c.itemId),
-    clean(c.tripId),
-    clean(c.partnerId),
-    clean(c.url),
-    String(Number(c.openedAt || 0)),
+    clean(click.itemId),
+    clean(click.tripId),
+    clean(click.partnerId),
+    clean(click.url),
+    String(Number(click.openedAt || 0)),
   ].join("|");
 }
 
-function deliverToHandler(c: LastPartnerClick) {
-  const fn = handler;
-  if (!fn) {
-    pendingClick = c;
+async function deliverClick(click: LastPartnerClick) {
+  const handler = activeHandler;
+
+  if (!handler) {
+    pendingClick = click;
     return;
   }
 
-  const key = clickKey(c);
+  const key = clickKey(click);
 
-  // If we *successfully* delivered this exact click already, ignore repeats
-  if (lastDeliveredKey && key === lastDeliveredKey) return;
+  // Exact click already delivered successfully
+  if (lastDeliveredKey && key === lastDeliveredKey) {
+    pendingClick = null;
+    return;
+  }
 
   try {
-    fn(clean(c.itemId), c);
+    handler(clean(click.itemId), click);
 
-    // Mark delivered ONLY after success
     lastDeliveredKey = key;
     pendingClick = null;
   } catch {
-    // Never crash the app due to UI handler errors.
-    // Keep click so it can be replayed when handler is re-registered.
-    pendingClick = c;
-    // IMPORTANT: do NOT set lastDeliveredKey on failure
+    // Keep it pending so the UI can receive it later after remount / re-register
+    pendingClick = click;
+  }
+}
+
+async function flushPendingClick() {
+  if (deliveryInFlight) return;
+  if (!pendingClick) return;
+  if (!activeHandler) return;
+
+  deliveryInFlight = true;
+  try {
+    const click = pendingClick;
+    if (!click) return;
+    await deliverClick(click);
+  } finally {
+    deliveryInFlight = false;
   }
 }
 
@@ -81,18 +103,18 @@ function deliverToHandler(c: LastPartnerClick) {
  * Register UI modal handler.
  * Returns an unsubscribe function so _layout can clean up on refresh/remount.
  */
-export function registerReturnModalHandler(fn: (itemId: string, click: LastPartnerClick) => void) {
-  handler = fn;
+export function registerReturnModalHandler(fn: ReturnModalHandler) {
+  activeHandler = fn;
 
-  // If we already have a pending click, replay it once (next tick).
-  if (pendingClick) {
-    const c = pendingClick;
-    setTimeout(() => deliverToHandler(c), 0);
-  }
+  // Replay pending click on next tick so UI state is mounted first
+  setTimeout(() => {
+    void flushPendingClick();
+  }, 0);
 
   return () => {
-    // Only clear if the same handler is still installed
-    if (handler === fn) handler = null;
+    if (activeHandler === fn) {
+      activeHandler = null;
+    }
   };
 }
 
@@ -103,31 +125,55 @@ export function bootstrapPartnerReturnPrompt() {
   if (bootstrapped) return;
   bootstrapped = true;
 
-  // Ensure store is available; watcher itself loads click state.
+  // Ensure store is warm; watcher itself loads click state too.
   savedItemsStore.load().catch(() => null);
 
-  // Start watcher (partnerClicks.ts is idempotent + de-duped)
-  ensurePartnerReturnWatcher((click) => {
-    deliverToHandler(click);
+  watcherUnsubscribe = ensurePartnerReturnWatcher(async (click) => {
+    pendingClick = click;
+    await flushPendingClick();
   });
 }
 
 /** UI action: user confirms booking */
 export async function markItemBooked(itemId: string) {
   await markBooked(itemId);
-  // After decision, allow future clicks to deliver normally
+
+  // Clear current pending state and allow future sessions to deliver normally
+  pendingClick = null;
   lastDeliveredKey = null;
 }
 
 /** UI action: user says they did NOT book */
 export async function markItemNotBooked(itemId: string) {
   await markNotBooked(itemId);
+
+  pendingClick = null;
   lastDeliveredKey = null;
 }
 
 /** UI action: user dismisses ("Not now") */
 export async function dismissPartnerReturn(itemId?: string) {
   await dismissReturnPrompt(itemId);
-  // Not-now intentionally suppresses this click; allow future clicks
+
+  pendingClick = null;
   lastDeliveredKey = null;
+}
+
+/**
+ * Dev-only reset helper.
+ * Safe to leave unused in production.
+ */
+export function __unsafeResetPartnerReturnBootstrapForDevOnly() {
+  try {
+    watcherUnsubscribe?.();
+  } catch {
+    // ignore
+  }
+
+  watcherUnsubscribe = null;
+  bootstrapped = false;
+  activeHandler = null;
+  pendingClick = null;
+  lastDeliveredKey = null;
+  deliveryInFlight = false;
 }
