@@ -13,11 +13,11 @@ import {
   isUtilityPartner,
   type PartnerId,
 } from "@/src/constants/partners";
+import { DEFAULT_SEASON } from "@/src/constants/football";
+
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
 import { sectionForSavedItemType } from "@/src/core/tripWorkspace";
-
-import { DEFAULT_SEASON } from "@/src/constants/football";
 
 import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
@@ -63,11 +63,23 @@ type Props = {
 };
 
 type TrackedPartnerArgs = {
-  partnerId: PartnerId;
+  partnerId: PartnerId | string;
   url: string;
   title: string;
   savedItemType?: SavedItemType;
   metadata?: Record<string, unknown>;
+};
+
+type PartnerLaunchArgs = {
+  partnerId: PartnerId | string;
+  url: string | null | undefined;
+  title: string;
+  savedItemType?: SavedItemType;
+  sourceSurface: SourceSurface;
+  sourceSection?: SourceSection;
+  metadata?: Record<string, unknown>;
+  missingTitle?: string;
+  missingMessage?: string;
 };
 
 type CanonicalTripBuildParams = {
@@ -110,6 +122,12 @@ function safeSourceSurface(value: unknown): SourceSurface {
   return v as SourceSurface;
 }
 
+function safeSourceSection(value: unknown, fallback?: SavedItemType): SourceSection {
+  const v = clean(value);
+  if (v) return v as SourceSection;
+  return inferSourceSectionFromSavedItemType(fallback);
+}
+
 function getTrackedPartnerErrorMessage(error: unknown): string {
   const raw = clean((error as { message?: unknown })?.message ?? error);
 
@@ -125,42 +143,6 @@ function getTrackedPartnerErrorMessage(error: unknown): string {
   }
 
   return "This partner link could not be opened right now.";
-}
-
-function normalizeTrackedPartnerArgs(
-  args: TrackedPartnerArgs,
-  context: {
-    tripId: string | null;
-    cityName: string;
-    trip: Trip | null;
-  },
-  sourceSurface: SourceSurface
-): TrackedPartnerArgs {
-  const rawSourceSection = clean(args.metadata?.sourceSection);
-  const sourceSection =
-    (rawSourceSection as SourceSection) ||
-    inferSourceSectionFromSavedItemType(args.savedItemType);
-
-  return {
-    ...args,
-    partnerId: canonicalizePartnerId(args.partnerId) ?? args.partnerId,
-    url: clean(args.url),
-    title: clean(args.title),
-    metadata: {
-      tripId: context.tripId,
-      city: context.cityName,
-      startDate: context.trip?.startDate ?? null,
-      endDate: context.trip?.endDate ?? null,
-      primaryMatchId: clean(context.trip?.fixtureIdPrimary) || null,
-      sourceSurface,
-      sourceSection,
-      ...(args.metadata ?? {}),
-    },
-  };
-}
-
-function buildOfficialTicketFallbackMessage(homeName: string) {
-  return `No valid reseller ticket options were found right now. Try ${homeName}'s official ticket page instead.`;
 }
 
 function buildCanonicalTripBuildParams(args: {
@@ -257,7 +239,9 @@ function getTravelCandidate(affiliateUrls?: AffiliateUrls | null): {
     };
   }
 
-  const trainsUrl = clean(affiliateUrls?.trainsUrl || affiliateUrls?.omioUrl || affiliateUrls?.transportUrl);
+  const trainsUrl = clean(
+    affiliateUrls?.trainsUrl || affiliateUrls?.omioUrl || affiliateUrls?.transportUrl
+  );
   if (trainsUrl) {
     return {
       url: trainsUrl,
@@ -306,7 +290,23 @@ export default function useTripDetailController({
 }: Props) {
   const router = useRouter();
 
-  function openTripBuilder() {
+  function getResolvedTripId() {
+    return clean(trip?.id) || clean(activeTripId);
+  }
+
+  function getBaseCommercialMetadata() {
+    const tripId = getResolvedTripId();
+
+    return {
+      tripId: tripId || null,
+      city: cityName,
+      startDate: trip?.startDate ?? null,
+      endDate: trip?.endDate ?? null,
+      primaryMatchId: clean(trip?.fixtureIdPrimary) || null,
+    };
+  }
+
+  async function openTripBuilder() {
     if (!trip) return;
 
     const params = buildCanonicalTripBuildParams({
@@ -322,11 +322,11 @@ export default function useTripDetailController({
   }
 
   function onEditTrip() {
-    openTripBuilder();
+    void openTripBuilder();
   }
 
   function onAddMatch() {
-    openTripBuilder();
+    void openTripBuilder();
   }
 
   function onViewWallet() {
@@ -339,120 +339,6 @@ export default function useTripDetailController({
       "Pro removes caps and adds automation later. This is the placeholder entry point.",
       [{ text: "OK" }]
     );
-  }
-
-  async function onOpenSection(section: WorkspaceSectionKey | string) {
-    const next = clean(section) as WorkspaceSectionKey;
-    if (!next) return;
-
-    try {
-      await setActiveWorkspaceSection(next);
-    } catch {}
-
-    const tripId = clean(trip?.id) || clean(activeTripId);
-    if (!tripId) {
-      Alert.alert("Save trip first", "Save this trip before booking.");
-      return;
-    }
-
-    if (next === "tickets") {
-      const primaryMatchId = clean(trip?.fixtureIdPrimary);
-      if (primaryMatchId) {
-        await openTicketsForMatch(primaryMatchId);
-      } else {
-        Alert.alert("Tickets not ready", "No primary match is attached to this trip yet.");
-      }
-      return;
-    }
-
-    if (next === "stay") {
-      const url = getStayUrl(affiliateUrls);
-      if (!url) {
-        Alert.alert("Hotels not ready", "No hotel search available yet.");
-        return;
-      }
-
-      await openTrackedPartner({
-        partnerId: "expedia",
-        url,
-        savedItemType: "hotel",
-        title: `Stays in ${cityName}`,
-        metadata: {
-          sourceSurface: "workspace_cta",
-          sourceSection: "stay",
-        },
-      });
-      return;
-    }
-
-    if (next === "travel") {
-      const candidate = getTravelCandidate(affiliateUrls);
-      if (!candidate) {
-        Alert.alert("Travel not ready", "No travel search available yet.");
-        return;
-      }
-
-      const title =
-        candidate.titleKind === "flight"
-          ? `Flights to ${cityName}`
-          : candidate.titleKind === "bus"
-            ? `Buses to ${cityName}`
-            : candidate.titleKind === "train"
-              ? `Trains to ${cityName}`
-              : `Transfers in ${cityName}`;
-
-      await openTrackedPartner({
-        partnerId: candidate.partnerId,
-        url: candidate.url,
-        savedItemType: candidate.itemType,
-        title,
-        metadata: {
-          sourceSurface: "workspace_cta",
-          sourceSection: "travel",
-          travelMode: candidate.titleKind,
-        },
-      });
-      return;
-    }
-
-    if (next === "things") {
-      const url = getThingsUrl(affiliateUrls);
-      if (!url) {
-        Alert.alert("Experiences not ready", "No activities available yet.");
-        return;
-      }
-
-      await openTrackedPartner({
-        partnerId: "getyourguide",
-        url,
-        savedItemType: "things",
-        title: `Things to do in ${cityName}`,
-        metadata: {
-          sourceSurface: "workspace_cta",
-          sourceSection: "things",
-        },
-      });
-      return;
-    }
-
-    if (next === "transfers") {
-      const url = clean(affiliateUrls?.transfersUrl);
-      if (!url) {
-        Alert.alert("Transfers not ready", "No transfer booking link is available yet.");
-        return;
-      }
-
-      await openTrackedPartner({
-        partnerId: "kiwitaxi",
-        url,
-        savedItemType: "transfer",
-        title: `Transfers in ${cityName}`,
-        metadata: {
-          sourceSurface: "workspace_cta",
-          sourceSection: "transfers",
-        },
-      });
-    }
   }
 
   async function openUntracked(url?: string | null) {
@@ -470,8 +356,7 @@ export default function useTripDetailController({
   }
 
   async function openTrackedPartner(args: TrackedPartnerArgs) {
-    const tripId = clean(trip?.id) || clean(activeTripId);
-
+    const tripId = getResolvedTripId();
     if (!tripId) {
       Alert.alert(
         "Save trip first",
@@ -480,8 +365,8 @@ export default function useTripDetailController({
       return;
     }
 
-    const rawUrl = clean(args.url);
-    if (!rawUrl) {
+    const url = clean(args.url);
+    if (!url) {
       Alert.alert("Missing link", "This booking link is not ready yet.");
       return;
     }
@@ -493,63 +378,66 @@ export default function useTripDetailController({
     }
 
     if (isUtilityPartner(canonicalPartnerId)) {
-      await openUntracked(rawUrl);
+      await openUntracked(url);
       return;
     }
 
-    const enriched = normalizeTrackedPartnerArgs(
-      {
-        ...args,
-        partnerId: canonicalPartnerId,
-      },
-      { tripId, cityName, trip },
-      safeSourceSurface(args.metadata?.sourceSurface)
-    );
+    const sourceSurface = safeSourceSurface(args.metadata?.sourceSurface);
+    const sourceSection = safeSourceSection(args.metadata?.sourceSection, args.savedItemType);
 
     try {
       await beginPartnerClick({
         tripId,
-        partnerId: enriched.partnerId,
-        url: enriched.url,
-        savedItemType: enriched.savedItemType,
-        title: enriched.title,
-        metadata: enriched.metadata,
+        partnerId: canonicalPartnerId,
+        url,
+        savedItemType: args.savedItemType,
+        title: clean(args.title),
+        metadata: {
+          ...getBaseCommercialMetadata(),
+          sourceSurface,
+          sourceSection,
+          ...(args.metadata ?? {}),
+        },
       });
 
-      const nextSection = enriched.savedItemType
-        ? sectionForSavedItemType(enriched.savedItemType)
-        : undefined;
-
-      if (nextSection) {
-        void setActiveWorkspaceSection(nextSection);
+      if (args.savedItemType) {
+        void setActiveWorkspaceSection(sectionForSavedItemType(args.savedItemType));
       }
     } catch (error) {
       Alert.alert("Partner link failed", getTrackedPartnerErrorMessage(error));
     }
   }
 
-  function openPartnerOrAlert(
-    url: string | null | undefined,
-    message: string,
-    config: {
-      partnerId: PartnerId;
-      savedItemType: SavedItemType;
-      title: string;
-      metadata?: Record<string, unknown>;
-    }
-  ) {
-    const nextUrl = clean(url);
-    if (!nextUrl) {
-      Alert.alert("Not ready", message);
+  async function openPartnerLaunch(args: PartnerLaunchArgs) {
+    const url = clean(args.url);
+
+    if (!url) {
+      Alert.alert(args.missingTitle || "Not ready", args.missingMessage || "This link is not ready yet.");
       return;
     }
 
-    return openTrackedPartner({
-      partnerId: config.partnerId,
-      url: nextUrl,
-      savedItemType: config.savedItemType,
-      title: config.title,
-      metadata: config.metadata,
+    const canonicalPartnerId = canonicalizePartnerId(args.partnerId);
+    if (!canonicalPartnerId) {
+      Alert.alert("Partner link failed", "This partner is not configured correctly.");
+      return;
+    }
+
+    if (isUtilityPartner(canonicalPartnerId)) {
+      await openUntracked(url);
+      return;
+    }
+
+    await openTrackedPartner({
+      partnerId: canonicalPartnerId,
+      url,
+      title: args.title,
+      savedItemType: args.savedItemType,
+      metadata: {
+        sourceSurface: args.sourceSurface,
+        sourceSection:
+          args.sourceSection || inferSourceSectionFromSavedItemType(args.savedItemType),
+        ...(args.metadata ?? {}),
+      },
     });
   }
 
@@ -571,7 +459,7 @@ export default function useTripDetailController({
       return;
     }
 
-    const tripId = clean(item.tripId) || clean(trip?.id) || clean(activeTripId);
+    const tripId = clean(item.tripId) || getResolvedTripId();
     if (!tripId) {
       Alert.alert("Save trip first", "Save the trip before opening tracked booking items.");
       return;
@@ -585,9 +473,7 @@ export default function useTripDetailController({
         savedItemType: item.type,
         title: item.title,
         metadata: {
-          city: cityName,
-          startDate: trip?.startDate ?? null,
-          endDate: trip?.endDate ?? null,
+          ...getBaseCommercialMetadata(),
           sourceSurface: "workspace_item",
           sourceSection: inferSourceSectionFromSavedItemType(item.type),
           ...(item.metadata ?? {}),
@@ -648,7 +534,7 @@ export default function useTripDetailController({
       "Archived items are hidden from the trip workspace.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+        { text: "Archive", style: "destructive", onPress: () => void archiveItem(item) },
       ]
     );
   }
@@ -659,7 +545,7 @@ export default function useTripDetailController({
       "Only do this if you completed the booking and want it in Wallet.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Mark booked", onPress: () => markBookedSmart(item) },
+        { text: "Mark booked", onPress: () => void markBookedSmart(item) },
       ]
     );
   }
@@ -667,13 +553,13 @@ export default function useTripDetailController({
   function confirmMoveToPending(item: SavedItem) {
     Alert.alert("Move to Pending?", "Use Pending when you’re not sure if you booked it yet.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Move", onPress: () => moveToPending(item) },
+      { text: "Move", onPress: () => void moveToPending(item) },
     ]);
   }
 
   async function addNote() {
     const text = cleanNoteText(noteText);
-    const tripId = clean(trip?.id) || clean(activeTripId);
+    const tripId = getResolvedTripId();
 
     if (!tripId) return;
 
@@ -710,7 +596,7 @@ export default function useTripDetailController({
   function openNoteActions(item: SavedItem) {
     Alert.alert(item.title || "Notes", clean(item.metadata?.text) || "No details saved.", [
       { text: "Close", style: "cancel" },
-      { text: "Archive", style: "destructive", onPress: () => archiveItem(item) },
+      { text: "Archive", style: "destructive", onPress: () => void archiveItem(item) },
     ]);
   }
 
@@ -780,8 +666,8 @@ export default function useTripDetailController({
         : "Choose what you want to do with this match.",
       [
         { text: "Cancel", style: "cancel" },
-        !isPrimary ? { text: "Set as primary", onPress: () => setPrimaryMatch(mid) } : null,
-        { text: "Remove from trip", style: "destructive", onPress: () => removeMatch(mid) },
+        !isPrimary ? { text: "Set as primary", onPress: () => void setPrimaryMatch(mid) } : null,
+        { text: "Remove from trip", style: "destructive", onPress: () => void removeMatch(mid) },
       ].filter(Boolean) as AlertButton[]
     );
   }
@@ -807,11 +693,13 @@ export default function useTripDetailController({
       return;
     }
 
-    await openTrackedPartner({
+    await openPartnerLaunch({
       partnerId,
       url: args.option.url,
       title: args.option.title || `Tickets: ${args.homeName} vs ${args.awayName}`,
       savedItemType: "tickets",
+      sourceSurface: "ticket_choice_alert",
+      sourceSection: "tickets",
       metadata: {
         fixtureId: args.mid,
         leagueId: args.leagueId,
@@ -828,9 +716,9 @@ export default function useTripDetailController({
         score: args.option.score,
         checkedProviders: args.checkedProviders,
         optionCount: args.optionCount,
-        sourceSurface: "ticket_choice_alert",
-        sourceSection: "tickets",
       },
+      missingTitle: "Tickets not ready",
+      missingMessage: "This ticket option is missing a valid link.",
     });
   }
 
@@ -847,34 +735,32 @@ export default function useTripDetailController({
 
     Alert.alert(
       "Official club tickets",
-      buildOfficialTicketFallbackMessage(args.homeName),
+      `No valid reseller ticket options were found right now. Try ${args.homeName}'s official ticket page instead.`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Open official site",
-          onPress: async () => {
-            await openPartnerOrAlert(
-              args.officialTicketUrl,
-              "The club ticket page is not available yet.",
-              {
-                partnerId: "official_club_site",
-                savedItemType: "tickets",
-                title,
-                metadata: {
-                  fixtureId: args.mid,
-                  leagueId: args.leagueId,
-                  leagueName: args.leagueName,
-                  kickoffIso: args.kickoffIso,
-                  homeName: args.homeName,
-                  awayName: args.awayName,
-                  ticketProvider: "official_club_site",
-                  sourceSurface: "ticket_choice_alert",
-                  sourceSection: "tickets",
-                  officialFallback: true,
-                },
-              }
-            );
-          },
+          onPress: () =>
+            void openPartnerLaunch({
+              partnerId: "official_site",
+              url: args.officialTicketUrl,
+              title,
+              savedItemType: "tickets",
+              sourceSurface: "ticket_choice_alert",
+              sourceSection: "tickets",
+              metadata: {
+                fixtureId: args.mid,
+                leagueId: args.leagueId,
+                leagueName: args.leagueName,
+                kickoffIso: args.kickoffIso,
+                homeName: args.homeName,
+                awayName: args.awayName,
+                ticketProvider: "official_site",
+                officialFallback: true,
+              },
+              missingTitle: "Official site unavailable",
+              missingMessage: "The club ticket page is not available yet.",
+            }),
         },
       ]
     );
@@ -908,7 +794,7 @@ export default function useTripDetailController({
         ...top.map((option) => ({
           text: clean(option.provider),
           onPress: () =>
-            openTicketOptionForMatch({
+            void openTicketOptionForMatch({
               ...args,
               option,
               optionCount: args.options.length,
@@ -1058,6 +944,106 @@ export default function useTripDetailController({
     }
   }
 
+  async function onOpenSection(section: WorkspaceSectionKey | string) {
+    const next = clean(section) as WorkspaceSectionKey;
+    if (!next) return;
+
+    try {
+      await setActiveWorkspaceSection(next);
+    } catch {}
+
+    const tripId = getResolvedTripId();
+    if (!tripId) {
+      Alert.alert("Save trip first", "Save this trip before booking.");
+      return;
+    }
+
+    if (next === "tickets") {
+      const primaryMatchId = clean(trip?.fixtureIdPrimary);
+      if (!primaryMatchId) {
+        Alert.alert("Tickets not ready", "No primary match is attached to this trip yet.");
+        return;
+      }
+
+      await openTicketsForMatch(primaryMatchId);
+      return;
+    }
+
+    if (next === "stay") {
+      await openPartnerLaunch({
+        partnerId: "expedia",
+        url: getStayUrl(affiliateUrls),
+        savedItemType: "hotel",
+        title: `Stays in ${cityName}`,
+        sourceSurface: "workspace_cta",
+        sourceSection: "stay",
+        missingTitle: "Hotels not ready",
+        missingMessage: "No hotel search available yet.",
+      });
+      return;
+    }
+
+    if (next === "travel") {
+      const candidate = getTravelCandidate(affiliateUrls);
+      if (!candidate) {
+        Alert.alert("Travel not ready", "No travel search available yet.");
+        return;
+      }
+
+      const title =
+        candidate.titleKind === "flight"
+          ? `Flights to ${cityName}`
+          : candidate.titleKind === "bus"
+            ? `Buses to ${cityName}`
+            : candidate.titleKind === "train"
+              ? `Trains to ${cityName}`
+              : `Transfers in ${cityName}`;
+
+      await openPartnerLaunch({
+        partnerId: candidate.partnerId,
+        url: candidate.url,
+        savedItemType: candidate.itemType,
+        title,
+        sourceSurface: "workspace_cta",
+        sourceSection: "travel",
+        metadata: {
+          travelMode: candidate.titleKind,
+        },
+        missingTitle: "Travel not ready",
+        missingMessage: "No travel search available yet.",
+      });
+      return;
+    }
+
+    if (next === "things") {
+      await openPartnerLaunch({
+        partnerId: "getyourguide",
+        url: getThingsUrl(affiliateUrls),
+        savedItemType: "things",
+        title: `Things to do in ${cityName}`,
+        sourceSurface: "workspace_cta",
+        sourceSection: "things",
+        missingTitle: "Experiences not ready",
+        missingMessage: "No activities available yet.",
+      });
+      return;
+    }
+
+    if (next === "transfers") {
+      await openPartnerLaunch({
+        partnerId: "kiwitaxi",
+        url: clean(affiliateUrls?.transfersUrl),
+        savedItemType: "transfer",
+        title: `Transfers in ${cityName}`,
+        sourceSurface: "workspace_cta",
+        sourceSection: "transfers",
+        missingTitle: "Transfers not ready",
+        missingMessage: "No transfer booking link is available yet.",
+      });
+      return;
+    }
+  }
+
   return {
     onEditTrip,
     onAddMatch,
@@ -1066,7 +1052,6 @@ export default function useTripDetailController({
     onOpenSection,
     openUntracked,
     openTrackedPartner,
-    openPartnerOrAlert,
     openSavedItem,
     confirmArchive,
     confirmMarkBooked,
@@ -1079,4 +1064,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-}
+          }
