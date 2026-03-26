@@ -201,12 +201,25 @@ function buildAffiliateUrls(args: {
   });
 
   return {
+    /* Canonical */
+    ticketsUrl: built.ticketsUrl || "",
     flightsUrl: built.flightsUrl || "",
-    hotelsUrl: built.hotelsUrl || "",
-    omioUrl: built.omioUrl || built.transportUrl || "",
+    staysUrl: built.staysUrl || "",
+    trainsUrl: built.trainsUrl || "",
+    busesUrl: built.busesUrl || "",
     transfersUrl: built.transfersUrl || "",
-    experiencesUrl: built.experiencesUrl || "",
+    insuranceUrl: built.insuranceUrl || "",
+    thingsUrl: built.thingsUrl || "",
+    carHireUrl: built.carHireUrl || "",
     mapsUrl: built.mapsUrl || buildMapsSearchUrl(`${clean(cityName)} travel`),
+    officialSiteUrl: built.officialSiteUrl || "",
+    claimsUrl: built.claimsUrl || "",
+
+    /* Compatibility */
+    hotelsUrl: built.hotelsUrl || built.staysUrl || "",
+    experiencesUrl: built.experiencesUrl || built.thingsUrl || "",
+    transportUrl: built.transportUrl || built.trainsUrl || "",
+    omioUrl: built.omioUrl || built.trainsUrl || "",
   };
 }
 
@@ -817,4 +830,4 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     flightSearchLoading: flightState.loading,
     liveFlightPricePoint: flightState.pricePoint,
   };
-  }
+        }
