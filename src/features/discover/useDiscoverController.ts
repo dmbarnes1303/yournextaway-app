@@ -92,6 +92,65 @@ export type UseDiscoverControllerReturn = {
   };
 };
 
+function cleanString(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function fixtureDateOnly(iso?: string | null): string {
+  const value = cleanString(iso);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
+}
+
+function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string; to?: string } {
+  const dateOnly = fixtureDateOnly(kickoffIso);
+  if (!dateOnly) return {};
+
+  const start = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return {};
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 2);
+
+  const toIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+    end.getDate()
+  ).padStart(2, "0")}`;
+
+  return {
+    from: dateOnly,
+    to: toIso,
+  };
+}
+
+function buildCanonicalTripStartParams(args: {
+  fixtureId: string;
+  leagueId?: number | string | null;
+  season?: number | string | null;
+  city?: string | null;
+  kickoffIso?: string | null;
+  from?: string | null;
+  to?: string | null;
+}) {
+  const fallbackWindow = inferTripWindowFromKickoff(args.kickoffIso);
+
+  return {
+    fixtureId: cleanString(args.fixtureId),
+    ...(cleanString(args.from)
+      ? { from: cleanString(args.from) }
+      : fallbackWindow.from
+        ? { from: fallbackWindow.from }
+        : {}),
+    ...(cleanString(args.to)
+      ? { to: cleanString(args.to) }
+      : fallbackWindow.to
+        ? { to: fallbackWindow.to }
+        : {}),
+    ...(cleanString(args.leagueId) ? { leagueId: cleanString(args.leagueId) } : {}),
+    ...(cleanString(args.season) ? { season: cleanString(args.season) } : {}),
+    ...(cleanString(args.city) ? { city: cleanString(args.city) } : {}),
+  };
+}
+
 export default function useDiscoverController(): UseDiscoverControllerReturn {
   const router = useRouter();
 
@@ -272,38 +331,38 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           discoverTripLength,
           discoverVibes: discoverVibes.join(","),
         },
-      } as any);
+      } as never);
     },
     [router, currentWindow, discoverOrigin, discoverTripLength, discoverVibes]
   );
 
   const goMatchFromRow = useCallback(
     (row: FixtureListRow | null | undefined) => {
-      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : null;
+      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : "";
+      if (!fixtureId) return;
+
       const leagueId = row?.league?.id != null ? String(row.league.id) : null;
       const season =
-        (row as any)?.league?.season != null ? String((row as any).league.season) : null;
+        typeof row?.league?.season === "number" ? String(row.league.season) : null;
+      const city = cleanString(row?.fixture?.venue?.city) || null;
+      const kickoffIso = cleanString(row?.fixture?.date) || null;
 
-      if (!fixtureId) return;
+      const tripStartParams = buildCanonicalTripStartParams({
+        fixtureId,
+        leagueId,
+        season,
+        city,
+        kickoffIso,
+        from: currentWindow.from,
+        to: currentWindow.to,
+      });
 
       router.push({
         pathname: "/trip/build",
-        params: {
-          global: "1",
-          fixtureId,
-          ...(leagueId ? { leagueId } : {}),
-          ...(season ? { season } : {}),
-          from: currentWindow.from,
-          to: currentWindow.to,
-          prefMode: "discover",
-          prefFrom: discoverOrigin.trim() || undefined,
-          prefWindow: discoverWindowKey,
-          prefLength: discoverTripLength,
-          prefVibes: discoverVibes.join(","),
-        },
-      } as any);
+        params: tripStartParams,
+      } as never);
     },
-    [router, currentWindow, discoverOrigin, discoverWindowKey, discoverTripLength, discoverVibes]
+    [router, currentWindow.from, currentWindow.to]
   );
 
   const goMultiMatchTrip = useCallback(
@@ -321,7 +380,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           comboTitle: trip.title,
           comboIds: trip.fixtureIds.join(","),
         },
-      } as any);
+      } as never);
     },
     [router, discoverOrigin, discoverTripLength, discoverVibes, discoverWindowKey]
   );
@@ -348,7 +407,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           discoverTripLength: nextTripLength,
           discoverVibes: nextVibes.join(","),
         },
-      } as any);
+      } as never);
     },
     [router, discoverWindowKey, discoverOrigin, discoverTripLength, discoverVibes]
   );
@@ -375,7 +434,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           discoverTripLength: nextTripLength,
           discoverVibes: nextVibes.join(","),
         },
-      } as any);
+      } as never);
     },
     [router, discoverWindowKey, discoverOrigin, discoverTripLength, discoverVibes]
   );
@@ -405,29 +464,29 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       const chosen = pickRandom(poolTop);
       const row = chosen?.item?.fixture ?? null;
 
-      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : null;
+      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : "";
+      if (!fixtureId) return;
+
       const leagueId = row?.league?.id != null ? String(row.league.id) : null;
       const season =
-        (row as any)?.league?.season != null ? String((row as any).league.season) : null;
+        typeof row?.league?.season === "number" ? String(row.league.season) : null;
+      const city = cleanString(row?.fixture?.venue?.city) || null;
+      const kickoffIso = cleanString(row?.fixture?.date) || null;
 
-      if (!fixtureId) return;
+      const tripStartParams = buildCanonicalTripStartParams({
+        fixtureId,
+        leagueId,
+        season,
+        city,
+        kickoffIso,
+        from: currentWindow.from,
+        to: currentWindow.to,
+      });
 
       router.push({
         pathname: "/trip/build",
-        params: {
-          global: "1",
-          fixtureId,
-          ...(leagueId ? { leagueId } : {}),
-          ...(season ? { season } : {}),
-          from: currentWindow.from,
-          to: currentWindow.to,
-          prefMode: "random",
-          prefFrom: discoverOrigin.trim() || undefined,
-          prefWindow: discoverWindowKey,
-          prefLength: discoverTripLength,
-          prefVibes: discoverVibes.join(","),
-        },
-      } as any);
+        params: tripStartParams,
+      } as never);
     } finally {
       setLoadingRandom(false);
     }
@@ -439,8 +498,8 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     discoverTripLength,
     discoverVibes,
     router,
-    currentWindow,
-    discoverWindowKey,
+    currentWindow.from,
+    currentWindow.to,
   ]);
 
   return {
@@ -490,4 +549,4 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       rankLabel,
     },
   };
-}
+                  }
