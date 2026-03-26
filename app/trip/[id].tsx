@@ -1,538 +1,454 @@
-import crypto from "node:crypto";
-import { env, hasFtnConfig } from "../../lib/env.js";
-import type { TicketCandidate, TicketResolveInput } from "./types.js";
-import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
+// app/trip/[id].tsx
 
-type FtnEvent = {
-  event_id?: string | number;
-  id?: string | number;
-  event_name?: string;
-  name?: string;
-  event_date?: string;
-  date?: string;
-  url?: string;
-  event_url?: string;
-  min_price?: string | number | Record<string, unknown>;
-  lowest_price?: string | number | Record<string, unknown>;
-  home_team_name?: string;
-  away_team_name?: string;
-};
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Stack, useLocalSearchParams } from "expo-router";
 
-type FtnListResponse = {
-  events?: FtnEvent[];
-  data?: FtnEvent[];
-  success?: boolean | string | number;
-  error?: string;
-  message?: string;
-};
+import Background from "@/src/components/Background";
+import GlassCard from "@/src/components/GlassCard";
+import EmptyState from "@/src/components/EmptyState";
+import NextBestActionCard from "@/src/components/NextBestActionCard";
+import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
 
-const FTN_FETCH_TIMEOUT_MS = 6000;
-const FTN_CANONICAL_HOST = "www.footballticketnet.com";
-const FTN_ALLOWED_HOSTS = new Set([
-  "footballticketnet.com",
-  "www.footballticketnet.com",
-  "footballticketsnet.com",
-  "www.footballticketsnet.com",
-]);
+import { getBackground } from "@/src/constants/backgrounds";
+import { theme } from "@/src/constants/theme";
 
-function clean(v: unknown): string {
-  return String(v ?? "").trim();
+import tripsStore, { type Trip } from "@/src/state/trips";
+import savedItemsStore from "@/src/state/savedItems";
+import preferencesStore from "@/src/state/preferences";
+
+import type { SavedItem } from "@/src/core/savedItemTypes";
+import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
+import { groupSavedItemsBySection } from "@/src/core/tripWorkspace";
+
+import storage from "@/src/services/storage";
+
+import useTripDetailController from "@/src/features/tripDetail/useTripDetailController";
+import useTripDetailViewModel from "@/src/features/tripDetail/useTripDetailViewModel";
+import useTripDetailData from "@/src/features/tripDetail/useTripDetailData";
+
+import {
+  type PlanValue,
+  clean,
+  cleanUpper3,
+  coerceId,
+  itemResolvedScore,
+  livePriceLine,
+  summaryLine,
+  ticketProviderFromItem,
+  tripStatus,
+} from "@/src/features/tripDetail/helpers";
+
+const PLAN_STORAGE_KEY = "yna:plan";
+
+/* ---------------- helpers ---------------- */
+
+function statusLabel(status: string) {
+  const v = String(status ?? "").toLowerCase();
+  if (v === "completed") return "Completed";
+  if (v === "in progress") return "In progress";
+  return "Upcoming";
 }
 
-function norm(v: unknown): string {
-  return clean(v).toLowerCase();
+function nextStepLabel(stepKey?: string | null) {
+  if (stepKey === "tickets") return "Add tickets";
+  if (stepKey === "flight") return "Check travel";
+  if (stepKey === "hotel") return "Find a stay";
+  if (stepKey === "transfer") return "Sort transport";
+  if (stepKey === "things") return "Add extras";
+  return "Continue planning";
 }
 
-function safeDate(v?: string): Date | null {
-  const s = clean(v);
-  if (!s) return null;
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+/* ---------------- screen ---------------- */
 
-function absDays(a: Date, b: Date): number {
-  return Math.floor(Math.abs(a.getTime() - b.getTime()) / 86400000);
-}
+export default function TripDetailScreen() {
+  const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
 
-function sha256(input: string): string {
-  return crypto.createHash("sha256").update(input).digest("hex");
-}
+  const routeTripId = useMemo(() => coerceId((params as any)?.id), [params]);
 
-function eventTitle(ev: FtnEvent): string {
-  return clean(ev.event_name) || clean(ev.name);
-}
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
 
-function eventDate(ev: FtnEvent): string {
-  return clean(ev.event_date) || clean(ev.date);
-}
+  const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
+  const [allSavedItems, setAllSavedItems] = useState<SavedItem[]>([]);
 
-function eventHome(ev: FtnEvent): string {
-  return clean(ev.home_team_name);
-}
-
-function eventAway(ev: FtnEvent): string {
-  return clean(ev.away_team_name);
-}
-
-function normalizePriceValue(raw: unknown): string | null {
-  if (raw == null) return null;
-
-  if (typeof raw === "string" || typeof raw === "number") {
-    const value = clean(raw);
-    return value || null;
-  }
-
-  if (typeof raw !== "object") return null;
-
-  const obj = raw as Record<string, unknown>;
-
-  const amount =
-    obj.amount ??
-    obj.value ??
-    obj.price ??
-    obj.min_price ??
-    obj.lowest_price;
-
-  const currency =
-    obj.currency ??
-    obj.currency_code ??
-    obj.curr ??
-    obj.symbol ??
-    "";
-
-  const amountText = clean(amount);
-  const currencyText = clean(currency);
-
-  if (amountText && currencyText) return `${amountText} ${currencyText}`.trim();
-  if (amountText) return amountText;
-
-  return null;
-}
-
-function eventPrice(ev: FtnEvent): string | null {
-  return normalizePriceValue(ev.lowest_price) || normalizePriceValue(ev.min_price);
-}
-
-function textContainsVariant(text: string, variant: string): boolean {
-  const value = ` ${norm(text)} `;
-  const needle = ` ${norm(variant)} `;
-  return value.includes(needle);
-}
-
-function isBadStandaloneToken(text: string, token: string): boolean {
-  const value = ` ${norm(text)} `;
-  const needle = ` ${norm(token)} `;
-  return value.includes(needle);
-}
-
-function teamsMatchLoose(
-  title: string,
-  inputHomeVariants: string[],
-  inputAwayVariants: string[]
-): boolean {
-  const titleNorm = norm(title);
-  const homeMatch = inputHomeVariants.some((variant) =>
-    titleNorm.includes(norm(variant))
+  const [originIata, setOriginIata] = useState(
+    preferencesStore.getPreferredOriginIata()
   );
-  const awayMatch = inputAwayVariants.some((variant) =>
-    titleNorm.includes(norm(variant))
-  );
-  return homeMatch && awayMatch;
-}
 
-function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
-  const inputHomeVariants = expandTeamAliases(input.homeName);
-  const inputAwayVariants = expandTeamAliases(input.awayName);
+  const [plan, setPlan] = useState<PlanValue>("not_set");
+  const isPro = plan === "premium";
 
-  const evHome = norm(eventHome(ev));
-  const evAway = norm(eventAway(ev));
+  /* ---------------- load plan ---------------- */
 
-  if (evHome && evAway) {
-    const homeMatch = inputHomeVariants.some((variant) => evHome === norm(variant));
-    const awayMatch = inputAwayVariants.some((variant) => evAway === norm(variant));
-    return homeMatch && awayMatch;
-  }
+  useEffect(() => {
+    (async () => {
+      try {
+        const value = await storage.getString(PLAN_STORAGE_KEY);
+        if (value === "premium") setPlan("premium");
+        else if (value === "free") setPlan("free");
+      } catch {
+        // ignore storage failure
+      }
+    })();
+  }, []);
 
-  return teamsMatchLoose(eventTitle(ev), inputHomeVariants, inputAwayVariants);
-}
+  /* ---------------- stores ---------------- */
 
-function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
-  const haystack = [eventTitle(ev), eventHome(ev), eventAway(ev)].join(" ").toLowerCase();
-  const inputText = [input.homeName, input.awayName, input.leagueName ?? ""]
-    .join(" ")
-    .toLowerCase();
-
-  const variants = [
-    "women",
-    "women's",
-    "(women)",
-    "ladies",
-    "feminino",
-    "femenino",
-    "female",
-    "u17",
-    "u18",
-    "u19",
-    "u20",
-    "u21",
-    "u23",
-    "youth",
-    "juvenil",
-    "b team",
-    "ii",
-    "reserves",
-    "reserve",
-    "academy",
-    "legends",
-  ];
-
-  let penalty = 0;
-
-  for (const variant of variants) {
-    const eventHas = textContainsVariant(haystack, variant);
-    const inputHas = textContainsVariant(inputText, variant);
-
-    if (eventHas && !inputHas) {
-      penalty += 35;
-    }
-  }
-
-  const eventHasStandaloneB = isBadStandaloneToken(haystack, "b");
-  const inputHasStandaloneB = isBadStandaloneToken(inputText, "b");
-  if (eventHasStandaloneB && !inputHasStandaloneB) {
-    penalty += 35;
-  }
-
-  return penalty;
-}
-
-function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
-  let score = 0;
-
-  const title = eventTitle(ev);
-  const evHome = eventHome(ev);
-  const evAway = eventAway(ev);
-
-  const inputHomeVariants = expandTeamAliases(input.homeName);
-  const inputAwayVariants = expandTeamAliases(input.awayName);
-
-  if (evHome && evAway) {
-    const homeExact = inputHomeVariants.some((variant) => norm(evHome) === norm(variant));
-    const awayExact = inputAwayVariants.some((variant) => norm(evAway) === norm(variant));
-
-    const homeReversed = inputAwayVariants.some((variant) => norm(evHome) === norm(variant));
-    const awayReversed = inputHomeVariants.some((variant) => norm(evAway) === norm(variant));
-
-    if (homeExact && awayExact) score += 80;
-    else if (homeReversed && awayReversed) score += 20;
-  } else if (title && teamsMatchLoose(title, inputHomeVariants, inputAwayVariants)) {
-    score += 55;
-  }
-
-  const kickoff = safeDate(input.kickoffIso);
-  const evDt = safeDate(eventDate(ev));
-  if (kickoff && evDt) {
-    const diff = absDays(kickoff, evDt);
-
-    if (diff === 0) score += 25;
-    else if (diff === 1) score += 15;
-    else if (diff === 2) score += 8;
-    else if (diff === 3) score += 3;
-    else if (diff > 3) score -= 1000;
-  }
-
-  if (eventPrice(ev)) score += 2;
-
-  score -= variantPenalty(ev, input);
-
-  return score;
-}
-
-function isStrongEnough(score: number): boolean {
-  return score >= 50;
-}
-
-function formatYmd(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const copy = new Date(date.getTime());
-  copy.setUTCDate(copy.getUTCDate() + days);
-  return copy;
-}
-
-function buildDateWindow(kickoffIso: string): { fromDate?: string; toDate?: string } {
-  const kickoff = safeDate(kickoffIso);
-  if (!kickoff) return {};
-
-  const from = addDays(kickoff, -2);
-  const to = addDays(kickoff, 2);
-
-  return {
-    fromDate: formatYmd(from),
-    toDate: formatYmd(to),
-  };
-}
-
-function summarizeEvent(ev: FtnEvent) {
-  return {
-    eventId: clean(ev.event_id) || clean(ev.id) || null,
-    title: eventTitle(ev) || null,
-    home: eventHome(ev) || null,
-    away: eventAway(ev) || null,
-    date: eventDate(ev) || null,
-    rawUrl: clean(ev.event_url) || clean(ev.url) || null,
-    price: eventPrice(ev) || null,
-  };
-}
-
-function buildStableSearchUrl(input: TicketResolveInput): string {
-  const query = `${clean(input.homeName)} vs ${clean(input.awayName)}`.trim();
-  const encoded = encodeURIComponent(query);
-  return `https://${FTN_CANONICAL_HOST}/search?text=${encoded}`;
-}
-
-function normalizeFtnUrl(raw: unknown): string {
-  const value = clean(raw);
-  if (!value) return "";
-
-  try {
-    const parsed = value.startsWith("/")
-      ? new URL(value, `https://${FTN_CANONICAL_HOST}`)
-      : new URL(value);
-
-    const host = parsed.hostname.toLowerCase();
-    if (!FTN_ALLOWED_HOSTS.has(host)) {
-      return "";
-    }
-
-    parsed.protocol = "https:";
-    parsed.hostname = FTN_CANONICAL_HOST;
-    return parsed.toString();
-  } catch {
-    return "";
-  }
-}
-
-function buildSafeEventUrl(ev: FtnEvent, input: TicketResolveInput): string {
-  const direct = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
-  if (direct) return direct;
-
-  const eventId = clean(ev.event_id) || clean(ev.id);
-  if (eventId) {
-    return `https://${FTN_CANONICAL_HOST}/event/${encodeURIComponent(eventId)}`;
-  }
-
-  return buildStableSearchUrl(input);
-}
-
-function appendAffiliate(url: string): string {
-  const base = clean(url);
-  if (!base) return "";
-
-  try {
-    const parsed = new URL(base);
-    const aid = clean(env.ftnAffiliateId);
-
-    if (aid && !parsed.searchParams.get("aid")) {
-      parsed.searchParams.set("aid", aid);
-    }
-
-    return parsed.toString();
-  } catch {
-    return "";
-  }
-}
-
-async function fetchWithTimeout(
-  url: string
-): Promise<{ ok: boolean; status: number; body: string }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FTN_FETCH_TIMEOUT_MS);
-
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-    });
-
-    let body = "";
-    try {
-      body = await res.text();
-    } catch {
-      body = "";
-    }
-
-    return {
-      ok: res.ok,
-      status: res.status,
-      body,
+  useEffect(() => {
+    const sync = () => {
+      const state = tripsStore.getState();
+      setTripsLoaded(state.loaded);
+      setTrip(state.trips.find((x) => x.id === routeTripId) ?? null);
     };
-  } finally {
-    clearTimeout(timeout);
-  }
+
+    const unsub = tripsStore.subscribe(sync);
+    sync();
+
+    if (!tripsStore.getState().loaded) {
+      tripsStore.loadTrips().finally(sync);
+    }
+
+    return () => unsub();
+  }, [routeTripId]);
+
+  useEffect(() => {
+    const sync = () => {
+      const state = savedItemsStore.getState();
+      setSavedLoaded(state.loaded);
+      setAllSavedItems(Array.isArray(state.items) ? state.items : []);
+    };
+
+    const unsub = savedItemsStore.subscribe(sync);
+    sync();
+
+    if (!savedItemsStore.getState().loaded) {
+      savedItemsStore.load().finally(sync);
+    }
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      const state = preferencesStore.getState();
+      setOriginIata(cleanUpper3(state.preferredOriginIata, "LON"));
+    };
+
+    const unsub = preferencesStore.subscribe(sync);
+    sync();
+
+    if (!preferencesStore.getState().loaded) {
+      preferencesStore.load().finally(sync);
+    }
+
+    return () => unsub();
+  }, []);
+
+  /* ---------------- derived ---------------- */
+
+  const activeTripId = useMemo(
+    () => clean(trip?.id) || clean(routeTripId) || null,
+    [trip?.id, routeTripId]
+  );
+
+  const savedItems = useMemo(() => {
+    if (!activeTripId) return [];
+    return allSavedItems.filter((x) => clean(x.tripId) === activeTripId);
+  }, [allSavedItems, activeTripId]);
+
+  const groupedBySection = useMemo(
+    () => groupSavedItemsBySection(savedItems),
+    [savedItems]
+  );
+
+  const data = useTripDetailData({
+    trip,
+    savedItems,
+    originIata,
+  });
+
+  const controller = useTripDetailController({
+    trip,
+    activeTripId,
+    cityName: data.cityName,
+    primaryLeagueId: data.primaryLeagueId,
+    fixturesById: data.fixturesById,
+    ticketsByMatchId: data.ticketsByMatchId,
+    affiliateUrls: data.affiliateUrls,
+  });
+
+  const vm = useTripDetailViewModel({
+    trip,
+    tripsLoaded,
+    savedLoaded,
+    workspaceLoaded: true,
+    routeTripId,
+    cityName: data.cityName,
+    originIata,
+    affiliateUrls: data.affiliateUrls,
+    progress: data.progress,
+    readiness: data.readiness,
+    pending: savedItems.filter((x) => x.status === "pending"),
+    saved: savedItems.filter((x) => x.status === "saved"),
+    booked: savedItems.filter((x) => x.status === "booked"),
+    primaryMatchId: data.primaryMatchId,
+    primaryTicketItem: data.primaryTicketItem,
+    isPro,
+    kickoffTbc: data.kickoffMeta.tbc,
+    controller,
+  });
+
+  const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
+
+  /* ---------------- render ---------------- */
+
+  return (
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
+      <Stack.Screen options={{ headerShown: true, title: "Trip" }} />
+
+      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingBottom: theme.spacing.xxl + insets.bottom,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          {!trip ? (
+            <GlassCard>
+              <EmptyState title="Trip not found" message="No trip available." />
+            </GlassCard>
+          ) : (
+            <>
+              <GlassCard>
+                <Text style={styles.city}>{data.cityName}</Text>
+                <Text style={styles.meta}>{summaryLine(trip)}</Text>
+
+                <View style={styles.heroRow}>
+                  <Text style={styles.statusBadge}>{statusLabel(status)}</Text>
+
+                  <Pressable onPress={controller.onViewWallet} hitSlop={8}>
+                    <Text style={styles.walletLink}>Wallet</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.progressBox}>
+                  <Text style={styles.progressText}>
+                    {vm.tripCompletionPct ?? 0}% ready
+                  </Text>
+                  <Text style={styles.nextText}>
+                    {nextStepLabel(vm.nextIncompleteStep?.key)}
+                  </Text>
+                </View>
+
+                <View style={styles.heroActions}>
+                  <Pressable style={styles.primaryBtn} onPress={controller.onEditTrip}>
+                    <Text style={styles.primaryBtnText}>Continue planning</Text>
+                  </Pressable>
+                </View>
+              </GlassCard>
+
+              <NextBestActionCard
+                action={vm.nextAction}
+                isPro={isPro}
+                onUpgradePress={controller.onUpgradePress}
+              />
+
+              <GlassCard>
+                <Text style={styles.sectionTitle}>Plan your trip</Text>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.railScrollContent}
+                >
+                  {[
+                    { key: "tickets", label: "Tickets" },
+                    { key: "stay", label: "Stay" },
+                    { key: "travel", label: "Travel" },
+                    { key: "things", label: "Extras" },
+                  ].map((item) => {
+                    const count =
+                      groupedBySection[item.key as WorkspaceSectionKey]?.length || 0;
+
+                    return (
+                      <Pressable
+                        key={item.key}
+                        style={styles.railCard}
+                        onPress={() => controller.onOpenSection(item.key)}
+                      >
+                        <Text style={styles.railTitle}>{item.label}</Text>
+                        <Text style={styles.railSub}>
+                          {count > 0 ? `${count} added` : "Not added"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </GlassCard>
+
+              <TripMatchesCard
+                trip={trip}
+                numericMatchIds={data.numericMatchIds}
+                primaryMatchId={data.primaryMatchId}
+                fixturesById={data.fixturesById}
+                ticketsByMatchId={data.ticketsByMatchId}
+                fxLoading={data.fxLoading}
+                onAddMatch={controller.onAddMatch}
+                onOpenTicketsForMatch={controller.openTicketsForMatch}
+                onOpenMatchActions={controller.openMatchActions}
+                onSetPrimaryMatch={controller.setPrimaryMatch}
+                onRemoveMatch={controller.removeMatch}
+                getTicketProviderFromItem={ticketProviderFromItem}
+                getTicketScoreFromItem={itemResolvedScore}
+                getLivePriceLine={livePriceLine}
+              />
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Background>
+  );
 }
 
-export async function resolveFtnCandidate(
-  input: TicketResolveInput
-): Promise<TicketCandidate | null> {
-  if (!hasFtnConfig()) {
-    console.log("[FTN] skipped: missing config");
-    return null;
-  }
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
 
-  const homeName = getPreferredTeamName(input.homeName);
-  const awayName = getPreferredTeamName(input.awayName);
-  const kickoffIso = clean(input.kickoffIso);
+  content: {
+    paddingTop: 100,
+    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.lg,
+  },
 
-  if (!homeName || !awayName || !kickoffIso) {
-    console.log("[FTN] skipped: missing required input", {
-      homeName,
-      awayName,
-      kickoffIso,
-    });
-    return null;
-  }
+  city: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: theme.colors.text,
+    letterSpacing: -0.4,
+  },
 
-  const ts = String(Date.now());
-  const sig = sha256(`${env.ftnUsername}-list_events-${ts}-${env.ftnAffiliateSecret}`);
+  meta: {
+    marginTop: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textMuted,
+  },
 
-  const qs = new URLSearchParams({
-    action: "list_events",
-    u: env.ftnUsername,
-    s: sig,
-    ts,
-    home_team_name: homeName,
-    away_team_name: awayName,
-  });
+  heroRow: {
+    marginTop: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+  },
 
-  const dateWindow = buildDateWindow(kickoffIso);
-  if (dateWindow.fromDate) qs.set("from_date", dateWindow.fromDate);
-  if (dateWindow.toDate) qs.set("to_date", dateWindow.toDate);
+  statusBadge: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.text,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
+  },
 
-  const url = `${env.ftnBaseUrl}?${qs.toString()}`;
+  walletLink: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.colors.accent,
+  },
 
-  console.log("[FTN] request start", {
-    homeName,
-    awayName,
-    kickoffIso,
-    fromDate: dateWindow.fromDate ?? null,
-    toDate: dateWindow.toDate ?? null,
-  });
+  progressBox: {
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    gap: 4,
+  },
 
-  let response: { ok: boolean; status: number; body: string };
-  try {
-    response = await fetchWithTimeout(url);
-  } catch (error) {
-    console.log("[FTN] network/timeout error", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
+  progressText: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
 
-  if (!response.ok) {
-    console.log("[FTN] non-200 response", {
-      status: response.status,
-      body: response.body.slice(0, 500),
-    });
-    return null;
-  }
+  nextText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textMuted,
+  },
 
-  let json: FtnListResponse | null = null;
-  try {
-    json = response.body ? (JSON.parse(response.body) as FtnListResponse) : null;
-  } catch {
-    console.log("[FTN] invalid JSON response", {
-      body: response.body.slice(0, 500),
-    });
-    return null;
-  }
+  heroActions: {
+    marginTop: theme.spacing.md,
+  },
 
-  const events = Array.isArray(json?.events)
-    ? json.events
-    : Array.isArray(json?.data)
-    ? json.data
-    : [];
+  primaryBtn: {
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: theme.colors.accent,
+    paddingHorizontal: 16,
+  },
 
-  if (!events.length) {
-    console.log("[FTN] no events returned", {
-      homeName,
-      awayName,
-      kickoffIso,
-      fromDate: dateWindow.fromDate ?? null,
-      toDate: dateWindow.toDate ?? null,
-      success: json?.success ?? null,
-      error: json?.error ?? null,
-      message: json?.message ?? null,
-    });
-    return null;
-  }
+  primaryBtnText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0B1020",
+  },
 
-  console.log("[FTN] raw events returned", {
-    count: events.length,
-    sample: events.slice(0, 5).map(summarizeEvent),
-  });
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
 
-  const scored = events
-    .map((ev) => ({
-      ev,
-      score: scoreEvent(ev, input),
-      penalty: variantPenalty(ev, input),
-    }))
-    .filter((x) => isStrongEnough(x.score))
-    .sort((a, b) => b.score - a.score);
+  railScrollContent: {
+    paddingRight: 4,
+    gap: theme.spacing.sm,
+  },
 
-  if (!scored.length) {
-    console.log("[FTN] events returned but no strong match", {
-      count: events.length,
-      sample: events.slice(0, 5).map((ev) => ({
-        ...summarizeEvent(ev),
-        score: scoreEvent(ev, input),
-        penalty: variantPenalty(ev, input),
-      })),
-    });
-    return null;
-  }
+  railCard: {
+    width: 132,
+    minHeight: 88,
+    borderRadius: 16,
+    padding: theme.spacing.md,
+    marginRight: theme.spacing.sm,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    justifyContent: "space-between",
+  },
 
-  const best = scored[0];
-  const exact = exactTeamsMatch(best.ev, input) && best.score >= 80;
-  const normalizedPrice = eventPrice(best.ev);
+  railTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
 
-  const resolvedUrl = buildSafeEventUrl(best.ev, input);
-  const affiliateUrl = appendAffiliate(resolvedUrl);
-
-  if (!affiliateUrl) {
-    console.log("[FTN] failed to build outbound URL", {
-      best: {
-        ...summarizeEvent(best.ev),
-        score: best.score,
-        penalty: best.penalty,
-      },
-    });
-    return null;
-  }
-
-  console.log("[FTN] matched event", {
-    best: {
-      ...summarizeEvent(best.ev),
-      score: best.score,
-      penalty: best.penalty,
-      exact,
-      resolvedUrl,
-      affiliateUrl,
-    },
-  });
-
-  return {
-    provider: "footballticketsnet",
-    exact,
-    score: best.score,
-    url: affiliateUrl,
-    title: `Tickets: ${homeName} vs ${awayName}`,
-    priceText: normalizedPrice,
-    reason: exact ? "exact_event" : "search_fallback",
-  };
-}
+  railSub: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textMuted,
+  },
+});
