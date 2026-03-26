@@ -1,4 +1,3 @@
-// app/stadium/[slug].tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -36,6 +35,67 @@ function prettyFromSlug(slug: string) {
   return s.replace(/-/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
+function cleanString(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function fixtureDateOnly(iso?: string | null): string {
+  const value = cleanString(iso);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
+}
+
+function inferTripWindowFromKickoff(
+  kickoffIso?: string | null
+): { from?: string; to?: string } {
+  const dateOnly = fixtureDateOnly(kickoffIso);
+  if (!dateOnly) return {};
+
+  const start = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return {};
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 2);
+
+  const toIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+    end.getDate()
+  ).padStart(2, "0")}`;
+
+  return {
+    from: dateOnly,
+    to: toIso,
+  };
+}
+
+function buildCanonicalTripStartParams(args: {
+  fixtureId: string;
+  leagueId?: string | number | null;
+  season?: string | number | null;
+  city?: string | null;
+  kickoffIso?: string | null;
+  from?: string | null;
+  to?: string | null;
+}) {
+  const fallbackWindow = inferTripWindowFromKickoff(args.kickoffIso);
+
+  return {
+    fixtureId: cleanString(args.fixtureId),
+    ...(cleanString(args.leagueId) ? { leagueId: cleanString(args.leagueId) } : {}),
+    ...(cleanString(args.season) ? { season: cleanString(args.season) } : {}),
+    ...(cleanString(args.city) ? { city: cleanString(args.city) } : {}),
+    ...(cleanString(args.from)
+      ? { from: cleanString(args.from) }
+      : fallbackWindow.from
+        ? { from: fallbackWindow.from }
+        : {}),
+    ...(cleanString(args.to)
+      ? { to: cleanString(args.to) }
+      : fallbackWindow.to
+        ? { to: fallbackWindow.to }
+        : {}),
+  };
+}
+
 function fixtureLine(r: FixtureListRow) {
   const home = r?.teams?.home?.name ?? "Home";
   const away = r?.teams?.away?.name ?? "Away";
@@ -50,6 +110,9 @@ function fixtureLine(r: FixtureListRow) {
     meta: extra ? `${kickoff} • ${extra}` : kickoff,
     venue,
     city,
+    leagueId: r?.league?.id ? String(r.league.id) : "",
+    season: r?.league?.season ? String(r.league.season) : "",
+    kickoffIso: r?.fixture?.date ? String(r.fixture.date) : "",
   };
 }
 
@@ -129,14 +192,23 @@ export default function StadiumScreen() {
     };
   }, [venueKey, fromIso, toIso]);
 
-  function goPlanTripWithContext(fixtureId: string) {
+  function goPlanTripWithContext(row: FixtureListRow) {
+    const line = fixtureLine(row);
+    if (!line.fixtureId) return;
+
+    const canonicalParams = buildCanonicalTripStartParams({
+      fixtureId: line.fixtureId,
+      leagueId: line.leagueId || undefined,
+      season: line.season || undefined,
+      city: line.city || undefined,
+      kickoffIso: line.kickoffIso || undefined,
+      from: fromIso,
+      to: toIso,
+    });
+
     router.push({
       pathname: "/trip/build",
-      params: {
-        fixtureId,
-        from: fromIso,
-        to: toIso,
-      },
+      params: canonicalParams,
     } as any);
   }
 
@@ -217,7 +289,7 @@ export default function StadiumScreen() {
 
                       <Pressable
                         disabled={!fixtureId}
-                        onPress={() => (fixtureId ? goPlanTripWithContext(fixtureId) : null)}
+                        onPress={() => (fixtureId ? goPlanTripWithContext(r) : null)}
                         style={[styles.planBtn, !fixtureId && { opacity: 0.5 }]}
                       >
                         <Text style={styles.planText}>Plan</Text>
