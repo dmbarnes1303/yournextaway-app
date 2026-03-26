@@ -35,6 +35,18 @@ import { normalizeCityKey } from "@/src/utils/city";
 /* Utils */
 /* -------------------------------------------------------------------------- */
 
+type GuideBlock = { heading?: string; text: string };
+type GuideFull = { title: string; blocks: GuideBlock[] };
+
+type CanonicalTripStartParams = {
+  fixtureId: string;
+  from?: string;
+  to?: string;
+  leagueId?: string;
+  season?: string;
+  city?: string;
+};
+
 function safeStr(v: unknown) {
   return String(v ?? "").trim();
 }
@@ -66,6 +78,60 @@ function monthHeading(iso: string) {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return "";
   return d.toLocaleString("en-GB", { month: "long", year: "numeric" });
+}
+
+function fixtureDateOnly(iso?: string | null): string {
+  const value = safeStr(iso);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
+}
+
+function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string; to?: string } {
+  const dateOnly = fixtureDateOnly(kickoffIso);
+  if (!dateOnly) return {};
+
+  const start = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return {};
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 2);
+
+  const toIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+    end.getDate()
+  ).padStart(2, "0")}`;
+
+  return {
+    from: dateOnly,
+    to: toIso,
+  };
+}
+
+function buildCanonicalTripStartParams(args: {
+  fixtureId: string;
+  from?: string | null;
+  to?: string | null;
+  leagueId?: number | string | null;
+  season?: number | string | null;
+  city?: string | null;
+  kickoffIso?: string | null;
+}): CanonicalTripStartParams {
+  const fixtureId = safeStr(args.fixtureId);
+  const from = safeStr(args.from);
+  const to = safeStr(args.to);
+  const leagueId = safeStr(args.leagueId);
+  const season = safeStr(args.season);
+  const city = safeStr(args.city);
+
+  const fallbackWindow = inferTripWindowFromKickoff(args.kickoffIso);
+
+  return {
+    fixtureId,
+    ...(from ? { from } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
+    ...(to ? { to } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
+    ...(leagueId ? { leagueId } : {}),
+    ...(season ? { season } : {}),
+    ...(city ? { city } : {}),
+  };
 }
 
 function groupByMonth(rows: FixtureListRow[]) {
@@ -141,7 +207,8 @@ function splitLinesToBullets(text: string) {
 
   const looksBulleted =
     lines.length >= 3 &&
-    lines.filter((l) => /^[-•]/.test(l) || /^\d+[.)]\s/.test(l)).length >= Math.ceil(lines.length * 0.6);
+    lines.filter((l) => /^[-•]/.test(l) || /^\d+[.)]\s/.test(l)).length >=
+      Math.ceil(lines.length * 0.6);
 
   if (!looksBulleted) return { bullets: [] as string[], paragraph: raw };
 
@@ -246,9 +313,6 @@ function FlagMini({ countryCode, countryName }: { countryCode?: string; countryN
 /* -------------------------------------------------------------------------- */
 /* Guide loader (safe) */
 /* -------------------------------------------------------------------------- */
-
-type GuideBlock = { heading?: string; text: string };
-type GuideFull = { title: string; blocks: GuideBlock[] };
 
 function getCityGuideFull(cityKey: string): GuideFull | null {
   const key = safeStr(cityKey);
@@ -373,7 +437,12 @@ function GuideModal({
   }, []);
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
       <Background imageSource={backgroundSource} overlayOpacity={0.78}>
         <SafeAreaView style={styles.modalSafe} edges={["top", "bottom"]}>
           <View style={styles.modalTop}>
@@ -449,7 +518,9 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
     <View style={styles.fxRow}>
       <View style={styles.matchLine}>
         <View style={styles.teamSideLeft}>
-          {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+          {homeLogo ? (
+            <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" />
+          ) : null}
           <Text style={styles.teamNameLeft} numberOfLines={2}>
             {homeName}
           </Text>
@@ -463,7 +534,9 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
           <Text style={styles.teamNameRight} numberOfLines={2}>
             {awayName}
           </Text>
-          {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
+          {awayLogo ? (
+            <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" />
+          ) : null}
         </View>
       </View>
 
@@ -510,7 +583,9 @@ function pickLeaguesForCity(
 ): { leagues: LeagueOption[]; reason: string } {
   const all = uniqueLeaguesById(fallback);
 
-  const leagueIds = Array.isArray((city as any)?.leagueIds) ? (((city as any).leagueIds as any[]) ?? []) : [];
+  const leagueIds = Array.isArray((city as any)?.leagueIds)
+    ? (((city as any).leagueIds as any[]) ?? [])
+    : [];
   const leagueIdNums = leagueIds.map((x) => Number(x)).filter((n) => Number.isFinite(n));
 
   if (leagueIdNums.length) {
@@ -612,20 +687,6 @@ export default function CityScreen() {
     };
   }, []);
 
-  const loadCity = useCallback(async () => {
-    setCityLiveLoading(true);
-    try {
-      const c = await getCityByKeyLive(citySlug, LEAGUES);
-      if (cancelRef.current) return;
-      setCityLive(c);
-    } catch {
-      if (cancelRef.current) return;
-      setCityLive(null);
-    } finally {
-      if (!cancelRef.current) setCityLiveLoading(false);
-    }
-  }, [citySlug]);
-
   const loadCityFixtures = useCallback(
     async (cityOverride?: CityRecord | null) => {
       const activeCity = cityOverride ?? cityLive;
@@ -699,6 +760,7 @@ export default function CityScreen() {
 
     async function boot() {
       if (!citySlug) return;
+      setCityLiveLoading(true);
       const c = await getCityByKeyLive(citySlug, LEAGUES);
       if (!mounted || cancelRef.current) return;
       setCityLive(c);
@@ -706,7 +768,6 @@ export default function CityScreen() {
       await loadCityFixtures(c);
     }
 
-    setCityLiveLoading(true);
     boot().catch(() => {
       if (!mounted || cancelRef.current) return;
       setCityLive(null);
@@ -780,7 +841,7 @@ export default function CityScreen() {
   }, [loadingFx, progress]);
 
   const goHome = useCallback(() => {
-    router.push("/(tabs)/home" as any);
+    router.push("/(tabs)/home" as never);
   }, [router]);
 
   const goPlanTrip = useCallback(
@@ -790,20 +851,24 @@ export default function CityScreen() {
 
       const leagueId = row?.league?.id != null ? String(row.league.id) : undefined;
       const season = row?.league?.season != null ? String(row.league.season) : undefined;
+      const city = safeStr(row?.fixture?.venue?.city) || title;
+
+      const tripParams = buildCanonicalTripStartParams({
+        fixtureId,
+        from,
+        to,
+        leagueId,
+        season,
+        city,
+        kickoffIso: safeStr(row?.fixture?.date) || undefined,
+      });
 
       router.push({
         pathname: "/trip/build",
-        params: {
-          global: "1",
-          fixtureId,
-          from,
-          to,
-          ...(leagueId ? { leagueId } : {}),
-          ...(season ? { season } : {}),
-        },
-      } as any);
+        params: tripParams,
+      } as never);
     },
-    [router, from, to]
+    [router, from, to, title]
   );
 
   const bg = getCityBackground(citySlug || cityKeyParam);
@@ -849,7 +914,9 @@ export default function CityScreen() {
               ) : null}
 
               <Text style={styles.heroRange}>
-                {from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}
+                {from && to
+                  ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}`
+                  : ""}
               </Text>
 
               <View style={styles.heroActions}>
@@ -912,7 +979,9 @@ export default function CityScreen() {
                 </View>
               ) : null}
 
-              {!loadingFx && fxError ? <EmptyState title="Fixtures Unavailable" message={fxError} /> : null}
+              {!loadingFx && fxError ? (
+                <EmptyState title="Fixtures Unavailable" message={fxError} />
+              ) : null}
 
               {!loadingFx && !fxError && fxRows.length === 0 ? (
                 <EmptyState title="No City Fixtures Found" message="Try another date window." />
@@ -928,7 +997,13 @@ export default function CityScreen() {
                         {g.rows.map((r, idx) => {
                           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
                           const stableKey = id ? `fx-${id}` : `fx-${g.key}-${idx}`;
-                          return <FixtureRow key={stableKey} row={r} onPressPlan={() => goPlanTrip(r)} />;
+                          return (
+                            <FixtureRow
+                              key={stableKey}
+                              row={r}
+                              onPressPlan={() => goPlanTrip(r)}
+                            />
+                          );
                         })}
                       </View>
                     </View>
@@ -976,10 +1051,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   heroTitleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  heroTitle: { color: theme.colors.text, fontSize: 28, lineHeight: 34, fontWeight: theme.fontWeight.black },
+  heroTitle: {
+    color: theme.colors.text,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: theme.fontWeight.black,
+  },
 
-  heroMetaRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  heroMetaText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.black },
+  heroMetaRow: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  heroMetaText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
   flagMini: { width: 20, height: 14, borderRadius: 3, opacity: 0.9 },
 
   heroSubtitle: {
@@ -989,7 +1079,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     opacity: 0.95,
   },
-  heroRange: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.bold, marginTop: 2 },
+  heroRange: {
+    color: theme.colors.textTertiary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    marginTop: 2,
+  },
 
   heroActions: { flexDirection: "row", gap: 10, marginTop: 6 },
 
@@ -1003,17 +1098,37 @@ const styles = StyleSheet.create({
   },
   btnGhost: {
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
   },
-  btnGhostText: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: theme.fontWeight.black },
+  btnGhostText: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
 
   block: { borderRadius: 24 },
   blockInner: { padding: 14, gap: 10 },
   blockTitle: { color: theme.colors.text, fontSize: 18, fontWeight: theme.fontWeight.black },
-  blockNote: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+  blockNote: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 19,
+  },
 
-  guideTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  guideSub: { marginTop: 4, color: theme.colors.textTertiary, fontSize: 12, fontWeight: theme.fontWeight.bold },
+  guideTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  guideSub: {
+    marginTop: 4,
+    color: theme.colors.textTertiary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
 
   miniPrimaryPill: {
     paddingVertical: 10,
@@ -1021,10 +1136,15 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(79,224,138,0.26)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     overflow: "hidden",
   },
-  miniPrimaryPillText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
+  miniPrimaryPillText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
   muted: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold },
@@ -1033,23 +1153,48 @@ const styles = StyleSheet.create({
   monthWrap: { gap: 10 },
   fixtureListWrap: { gap: 12 },
 
-  month: { color: theme.colors.textTertiary, fontSize: 13, fontWeight: theme.fontWeight.black, letterSpacing: 0.2 },
+  month: {
+    color: theme.colors.textTertiary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.2,
+  },
 
   fxRow: {
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,12,14,0.18)" : "rgba(10,12,14,0.14)",
     paddingVertical: 16,
     paddingHorizontal: 12,
     gap: 12,
   },
   matchLine: { width: "100%", flexDirection: "row", alignItems: "center", gap: 10 },
 
-  teamSideLeft: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 },
-  teamSideRight: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
+  teamSideLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  teamSideRight: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
 
-  teamNameLeft: { flex: 1, minWidth: 0, color: theme.colors.text, fontSize: 14, fontWeight: theme.fontWeight.black },
+  teamNameLeft: {
+    flex: 1,
+    minWidth: 0,
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
   teamNameRight: {
     flex: 1,
     minWidth: 0,
@@ -1075,7 +1220,12 @@ const styles = StyleSheet.create({
   smallCrestImg: { width: 18, height: 18, opacity: 0.95 },
 
   fxMetaBlock: { gap: 4 },
-  fxMetaLine: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.fontWeight.bold, lineHeight: 16 },
+  fxMetaLine: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 16,
+  },
 
   fxCtaRow: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center" },
   planBtn: {
@@ -1084,7 +1234,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(79,224,138,0.26)",
-    backgroundColor: Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.androidBg.subtle : theme.glass.iosBg.subtle,
     overflow: "hidden",
   },
   planBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: theme.fontWeight.black },
@@ -1103,7 +1254,12 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.5,
   },
-  modalTitle: { marginTop: 4, color: theme.colors.text, fontSize: 20, fontWeight: theme.fontWeight.black },
+  modalTitle: {
+    marginTop: 4,
+    color: theme.colors.text,
+    fontSize: 20,
+    fontWeight: theme.fontWeight.black,
+  },
   closePill: {
     borderRadius: 999,
     borderWidth: 1,
@@ -1136,14 +1292,40 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  guideSecHeading: { color: theme.colors.text, fontSize: 15, fontWeight: theme.fontWeight.black },
-  guideSecChevron: { color: theme.colors.textSecondary, fontSize: 18, fontWeight: "900", marginTop: -2 },
+  guideSecHeading: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.black,
+  },
+  guideSecChevron: {
+    color: theme.colors.textSecondary,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: -2,
+  },
   guideSecBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
 
-  guideText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+  guideText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 19,
+  },
 
   bulletList: { gap: 10, paddingTop: 2 },
   bulletRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
-  bulletDot: { width: 6, height: 6, borderRadius: 999, marginTop: 7, backgroundColor: "rgba(79,224,138,0.65)" },
-  bulletText: { flex: 1, color: theme.colors.textSecondary, fontSize: 13, fontWeight: theme.fontWeight.bold, lineHeight: 19 },
+  bulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    marginTop: 7,
+    backgroundColor: "rgba(79,224,138,0.65)",
+  },
+  bulletText: {
+    flex: 1,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 19,
+  },
 });
