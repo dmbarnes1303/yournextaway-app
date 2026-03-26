@@ -1,10 +1,9 @@
-// src/features/tripDetail/tripDetailAffiliates.ts
-
 import type { AffiliateUrls } from "@/src/features/tripDetail/helpers";
 import {
   buildMapsSearchUrl,
   clean,
   cleanUpper3,
+  getIsoDateOnly,
 } from "@/src/features/tripDetail/helpers";
 
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
@@ -44,9 +43,11 @@ function addDays(ymd: string | null, offset: number): string | null {
 export function getBookingWindow(args: {
   trip: Trip | null;
   primaryKickoffIso: string | null;
-  getIsoDateOnly: (raw?: string | null) => string | undefined;
-}) {
-  const kickoffDate = args.getIsoDateOnly(args.primaryKickoffIso);
+}): {
+  startDate: string | null;
+  endDate: string | null;
+} {
+  const kickoffDate = getIsoDateOnly(args.primaryKickoffIso);
   const tripStart = clean(args.trip?.startDate) || null;
   const tripEnd = clean(args.trip?.endDate) || null;
 
@@ -64,16 +65,14 @@ export function buildAffiliateUrls(args: {
   cityName: string;
   originIata: string;
   primaryKickoffIso: string | null;
-  getIsoDateOnly: (raw?: string | null) => string | undefined;
 }): AffiliateUrls | null {
-  const { trip, cityName, originIata, primaryKickoffIso, getIsoDateOnly } = args;
+  const { trip, cityName, originIata, primaryKickoffIso } = args;
 
   if (!trip || !clean(cityName) || cityName === "Trip") return null;
 
   const bookingWindow = getBookingWindow({
     trip,
     primaryKickoffIso,
-    getIsoDateOnly,
   });
 
   const built = buildAffiliateLinks({
@@ -116,9 +115,8 @@ export async function fetchLiveFlightPrice(args: {
   cityName: string;
   originIata: string;
   primaryKickoffIso: string | null;
-  getIsoDateOnly: (raw?: string | null) => string | undefined;
 }): Promise<PricePoint | null> {
-  const { trip, cityName, originIata, primaryKickoffIso, getIsoDateOnly } = args;
+  const { trip, cityName, originIata, primaryKickoffIso } = args;
 
   if (!trip || !clean(cityName) || cityName === "Trip") return null;
 
@@ -130,7 +128,6 @@ export async function fetchLiveFlightPrice(args: {
   const bookingWindow = getBookingWindow({
     trip,
     primaryKickoffIso,
-    getIsoDateOnly,
   });
 
   const departureDate = bookingWindow.startDate;
