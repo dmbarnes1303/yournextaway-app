@@ -28,6 +28,7 @@ type FtnListResponse = {
 
 const FTN_FETCH_TIMEOUT_MS = 6000;
 const FTN_CANONICAL_HOST = "www.footballticketnet.com";
+const FTN_SEARCH_FALLBACK_PENALTY = 40;
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -278,57 +279,89 @@ function summarizeEvent(ev: FtnEvent) {
   };
 }
 
-function buildStableSearchUrl(input: TicketResolveInput): string {
-  const query = `${clean(input.homeName)} vs ${clean(input.awayName)}`.trim();
-  const encoded = encodeURIComponent(query);
-  return `https://${FTN_CANONICAL_HOST}/search?text=${encoded}`;
-}
-
 function normalizeFtnUrl(raw: unknown): string {
   const value = clean(raw);
   if (!value) return "";
 
   try {
-    const parsed = value.startsWith("/")
-      ? new URL(value, `https://${FTN_CANONICAL_HOST}`)
-      : new URL(value);
+    if (value.startsWith("/")) {
+      const parsed = new URL(value, `https://${FTN_CANONICAL_HOST}`);
+      parsed.protocol = "https:";
+      parsed.hostname = FTN_CANONICAL_HOST;
+      return parsed.toString();
+    }
 
+    const parsed = new URL(value);
     const host = parsed.hostname.toLowerCase();
-    const allowedHosts = [
+
+    const allowed = [
       "footballticketnet.com",
       "www.footballticketnet.com",
       "footballticketsnet.com",
       "www.footballticketsnet.com",
     ];
 
-    const allowed = allowedHosts.some(
-      (allowedHost) => host === allowedHost || host.endsWith(`.${allowedHost}`)
-    );
-
-    if (!allowed) {
+    if (!allowed.some((root) => host === root || host.endsWith(`.${root}`))) {
       return "";
     }
 
     parsed.protocol = "https:";
     parsed.hostname = FTN_CANONICAL_HOST;
-
     return parsed.toString();
   } catch {
     return "";
   }
 }
 
-function buildSafeEventUrl(ev: FtnEvent): string {
-  const direct = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
-  return direct;
-}
-
-function appendAffiliate(url: string): string {
-  const normalized = normalizeFtnUrl(url);
-  if (!normalized) return "";
+function hasUsableEventUrl(ev: FtnEvent): boolean {
+  const normalized = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
+  if (!normalized) return false;
 
   try {
     const parsed = new URL(normalized);
+    const path = parsed.pathname.toLowerCase();
+
+    if (!path || path === "/") return false;
+    if (path.startsWith("/search")) return false;
+    if (path.includes("404")) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildStableSearchUrl(input: TicketResolveInput): string {
+  const query = `${clean(input.homeName)} vs ${clean(input.awayName)}`.trim();
+  const encoded = encodeURIComponent(query);
+  return `https://${FTN_CANONICAL_HOST}/search?text=${encoded}`;
+}
+
+function buildOutboundUrl(ev: FtnEvent, input: TicketResolveInput): {
+  url: string;
+  isSearchFallback: boolean;
+} {
+  const direct = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
+
+  if (direct && hasUsableEventUrl(ev)) {
+    return {
+      url: direct,
+      isSearchFallback: false,
+    };
+  }
+
+  return {
+    url: buildStableSearchUrl(input),
+    isSearchFallback: true,
+  };
+}
+
+function appendAffiliate(url: string): string {
+  const base = clean(url);
+  if (!base) return "";
+
+  try {
+    const parsed = new URL(base);
     const aid = clean(env.ftnAffiliateId);
 
     if (aid && !parsed.searchParams.get("aid")) {
@@ -447,8 +480,8 @@ export async function resolveFtnCandidate(
   const events = Array.isArray(json?.events)
     ? json.events
     : Array.isArray(json?.data)
-    ? json.data
-    : [];
+      ? json.data
+      : [];
 
   if (!events.length) {
     console.log("[FTN] no events returned", {
@@ -494,9 +527,8 @@ export async function resolveFtnCandidate(
   const exact = exactTeamsMatch(best.ev, input) && best.score >= 80;
   const normalizedPrice = eventPrice(best.ev);
 
-  const rawEventUrl = buildSafeEventUrl(best.ev);
-  const finalBaseUrl = rawEventUrl || buildStableSearchUrl(input);
-  const affiliateUrl = appendAffiliate(finalBaseUrl);
+  const outbound = buildOutboundUrl(best.ev, input);
+  const affiliateUrl = appendAffiliate(outbound.url);
 
   if (!affiliateUrl) {
     console.log("[FTN] failed to build outbound URL", {
@@ -509,30 +541,35 @@ export async function resolveFtnCandidate(
     return null;
   }
 
+  const finalScore = outbound.isSearchFallback
+    ? Math.max(0, best.score - FTN_SEARCH_FALLBACK_PENALTY)
+    : best.score;
+
+  const reason: TicketCandidate["reason"] = outbound.isSearchFallback
+    ? "search_fallback"
+    : exact
+      ? "exact_event"
+      : "partial_match";
+
   console.log("[FTN] matched event", {
     best: {
       ...summarizeEvent(best.ev),
       score: best.score,
+      finalScore,
       penalty: best.penalty,
       exact,
-      rawEventUrl: rawEventUrl || null,
-      finalBaseUrl,
+      isSearchFallback: outbound.isSearchFallback,
       affiliateUrl,
-      usedFallbackSearch: !rawEventUrl,
     },
   });
 
   return {
     provider: "footballticketsnet",
     exact,
-    score: best.score,
+    score: finalScore,
     url: affiliateUrl,
     title: `Tickets: ${homeName} vs ${awayName}`,
     priceText: normalizedPrice,
-    reason: rawEventUrl
-      ? exact
-        ? "exact_event"
-        : "partial_match"
-      : "search_fallback",
+    reason,
   };
 }
