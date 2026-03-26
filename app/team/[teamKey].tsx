@@ -33,11 +33,16 @@ import * as TeamGuidesModule from "@/src/data/teamGuides";
 
 // Remote stadium backgrounds (V1). Use direct JPG/PNG URLs.
 const TEAM_BACKGROUNDS: Record<string, string> = {
-  "real-madrid": "https://images.unsplash.com/photo-1548600916-d2d8a0b2b3b6?auto=format&fit=crop&w=1400&q=80",
-  arsenal: "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?auto=format&fit=crop&w=1400&q=80",
-  "bayern-munich": "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1400&q=80",
-  inter: "https://images.unsplash.com/photo-1522770179533-24471fcdba45?auto=format&fit=crop&w=1400&q=80",
-  "borussia-dortmund": "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1400&q=80",
+  "real-madrid":
+    "https://images.unsplash.com/photo-1548600916-d2d8a0b2b3b6?auto=format&fit=crop&w=1400&q=80",
+  arsenal:
+    "https://images.unsplash.com/photo-1533106418989-88406c7cc8ca?auto=format&fit=crop&w=1400&q=80",
+  "bayern-munich":
+    "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1400&q=80",
+  inter:
+    "https://images.unsplash.com/photo-1522770179533-24471fcdba45?auto=format&fit=crop&w=1400&q=80",
+  "borussia-dortmund":
+    "https://images.unsplash.com/photo-1521412644187-c49fa049e84d?auto=format&fit=crop&w=1400&q=80",
 };
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
@@ -45,6 +50,15 @@ const API_SPORTS_TEAM_LOGO = (teamId: number) =>
 
 type GuideBlock = { heading?: string; text: string };
 type GuideFull = { title: string; blocks: GuideBlock[] };
+
+type CanonicalTripStartParams = {
+  fixtureId: string;
+  from?: string;
+  to?: string;
+  leagueId?: string;
+  season?: string;
+  city?: string;
+};
 
 function safeStr(v: unknown) {
   return String(v ?? "").trim();
@@ -68,6 +82,60 @@ function monthHeading(iso: string) {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return "";
   return d.toLocaleString("en-GB", { month: "long", year: "numeric" });
+}
+
+function fixtureDateOnly(iso?: string | null): string {
+  const value = safeStr(iso);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
+}
+
+function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string; to?: string } {
+  const dateOnly = fixtureDateOnly(kickoffIso);
+  if (!dateOnly) return {};
+
+  const start = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return {};
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 2);
+
+  const toIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+    end.getDate()
+  ).padStart(2, "0")}`;
+
+  return {
+    from: dateOnly,
+    to: toIso,
+  };
+}
+
+function buildCanonicalTripStartParams(args: {
+  fixtureId: string;
+  from?: string | null;
+  to?: string | null;
+  leagueId?: number | string | null;
+  season?: number | string | null;
+  city?: string | null;
+  kickoffIso?: string | null;
+}): CanonicalTripStartParams {
+  const fixtureId = safeStr(args.fixtureId);
+  const from = safeStr(args.from);
+  const to = safeStr(args.to);
+  const leagueId = safeStr(args.leagueId);
+  const season = safeStr(args.season);
+  const city = safeStr(args.city);
+
+  const fallbackWindow = inferTripWindowFromKickoff(args.kickoffIso);
+
+  return {
+    fixtureId,
+    ...(from ? { from } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
+    ...(to ? { to } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
+    ...(leagueId ? { leagueId } : {}),
+    ...(season ? { season } : {}),
+    ...(city ? { city } : {}),
+  };
 }
 
 function groupByMonth(rows: FixtureListRow[]) {
@@ -815,7 +883,7 @@ export default function TeamScreen() {
 
   const goBrowseFixtures = useCallback(() => {
     if (!league) {
-      router.push("/(tabs)/fixtures" as any);
+      router.push("/(tabs)/fixtures" as never);
       return;
     }
 
@@ -827,11 +895,11 @@ export default function TeamScreen() {
         from,
         to,
       },
-    } as any);
+    } as never);
   }, [router, league, from, to]);
 
   const goHome = useCallback(() => {
-    router.push("/(tabs)/home" as any);
+    router.push("/(tabs)/home" as never);
   }, [router]);
 
   const goPlanTrip = useCallback(
@@ -839,17 +907,20 @@ export default function TeamScreen() {
       const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : "";
       if (!fixtureId) return;
 
+      const tripParams = buildCanonicalTripStartParams({
+        fixtureId,
+        leagueId: league ? String((league as any).leagueId) : undefined,
+        season: league ? String((league as any).season) : undefined,
+        from,
+        to,
+        city: safeStr(row?.fixture?.venue?.city) || undefined,
+        kickoffIso: safeStr(row?.fixture?.date) || undefined,
+      });
+
       router.push({
         pathname: "/trip/build",
-        params: {
-          global: "1",
-          fixtureId,
-          leagueId: league ? String((league as any).leagueId) : undefined,
-          season: league ? String((league as any).season) : undefined,
-          from,
-          to,
-        },
-      } as any);
+        params: tripParams,
+      } as never);
     },
     [router, league, from, to]
   );
@@ -891,7 +962,9 @@ export default function TeamScreen() {
               </View>
 
               <Text style={styles.heroRange}>
-                {from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}
+                {from && to
+                  ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}`
+                  : ""}
               </Text>
 
               <View style={styles.heroActions}>
@@ -947,7 +1020,8 @@ export default function TeamScreen() {
                 <Text style={styles.blockNote}>{guidePreview}</Text>
               ) : !guideFull ? (
                 <Text style={styles.blockNote}>
-                  We’ll add this team soon. For now, use the fixtures and stadium info below to anchor your trip.
+                  We’ll add this team soon. For now, use the fixtures and stadium info below to
+                  anchor your trip.
                 </Text>
               ) : null}
             </View>
@@ -966,7 +1040,9 @@ export default function TeamScreen() {
                 </View>
               ) : null}
 
-              {!loading && error ? <EmptyState title="Fixtures Unavailable" message={error} /> : null}
+              {!loading && error ? (
+                <EmptyState title="Fixtures Unavailable" message={error} />
+              ) : null}
 
               {!loading && !error && rows.length === 0 ? (
                 <EmptyState title="No Home Fixtures Found" message="Try another date window." />
