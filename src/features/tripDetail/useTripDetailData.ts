@@ -1,3 +1,5 @@
+// src/features/tripDetail/useTripDetailData.ts
+
 import { useEffect, useMemo, useState } from "react";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
@@ -6,7 +8,6 @@ import type {
   GuidanceArea,
   TripFinderSummary,
 } from "@/src/features/tripDetail/helpers";
-
 import {
   buildMapsSearchUrl,
   clean,
@@ -18,24 +19,50 @@ import {
   isLateKickoff,
   isNumericId,
   rankReasonsText,
-  titleCaseCity,
 } from "@/src/features/tripDetail/helpers";
+
+import {
+  buildAffiliateUrls,
+  getBookingWindow,
+  resolveFlightDestinationIata,
+} from "@/src/features/tripDetail/tripDetailAffiliates";
+import {
+  normalizeAreas,
+  normalizeTips,
+  normalizeTransportStops,
+} from "@/src/features/tripDetail/tripDetailLogistics";
+import {
+  buildBookingPriceBoard,
+  priceLine,
+  type BookingPriceBoard,
+  type PricePoint,
+} from "@/src/features/tripDetail/tripDetailPricing";
+import {
+  buildDateIsoForPrimaryMatch,
+  buildPrimaryFixture,
+  buildPrimaryTicketItem,
+  buildTicketsByMatchId,
+  buildTripFinderSummary,
+  getPrimaryHomeName,
+  getPrimaryKickoffIso,
+  getPrimaryLeagueId,
+  getPrimaryLeagueName,
+  getTripCity,
+  pickPrimaryMatchId,
+  type FixtureMap,
+  type TicketMap,
+} from "@/src/features/tripDetail/tripDetailSelectors";
 
 import { getFixtureById, type FixtureListRow } from "@/src/services/apiFootball";
 import { getTripHealth, getTripProgress } from "@/src/services/tripProgress";
-import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 import { searchFlights } from "@/src/services/flights";
-import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 import {
   buildLogisticsSnippet,
   getMatchdayLogistics,
 } from "@/src/data/matchdayLogistics";
-
 import rankTrips from "@/src/features/tripFinder/rankTrips";
 import type { RankedTrip } from "@/src/features/tripFinder/types";
 import type { Trip } from "@/src/state/trips";
-
-/* ---------------- TYPES ---------------- */
 
 type Props = {
   trip: Trip | null;
@@ -43,223 +70,346 @@ type Props = {
   originIata: string;
 };
 
-type FixtureMap = Record<string, FixtureListRow>;
-type TicketMap = Record<string, SavedItem | null>;
-
-type PricePoint = {
-  amount: number | null;
-  currency: string | null;
-  text: string | null;
+type FlightState = {
+  loading: boolean;
+  pricePoint: PricePoint | null;
 };
 
-type BookingPriceBoard = {
-  tickets: PricePoint | null;
-  flights: PricePoint | null;
-  hotels: PricePoint | null;
-  transfers: PricePoint | null;
-  experiences: PricePoint | null;
-  tripTotal: PricePoint | null;
-};
-
-/* ---------------- CORE HELPERS ---------------- */
-
-function pickPrimaryMatchId(
-  trip: Trip | null,
-  ids: string[]
-): string | null {
-  const preferred = clean((trip as any)?.fixtureIdPrimary);
-  if (preferred && ids.includes(preferred)) return preferred;
-  return ids[0] ?? null;
-}
-
-function extractCity(trip: Trip | null, fixture: FixtureListRow | null) {
-  return titleCaseCity(
-    clean((trip as any)?.displayCity) ||
-      clean((trip as any)?.venueCity) ||
-      clean(fixture?.fixture?.venue?.city) ||
-      clean(trip?.cityId) ||
-      "Trip"
-  );
-}
-
-function extractKickoff(trip: Trip | null, fixture: FixtureListRow | null) {
-  return clean(fixture?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
-}
-
-/* ---------------- PRICE HELPERS ---------------- */
-
-function parsePrice(text?: string | null): PricePoint | null {
-  const raw = clean(text);
-  if (!raw) return null;
-
-  const match = raw.match(/([£€$])\s?(\d+)/);
-  if (!match) return null;
-
-  const amount = Number(match[2]);
-  if (!Number.isFinite(amount)) return null;
-
-  return {
-    amount,
-    currency: match[1] === "£" ? "GBP" : match[1] === "€" ? "EUR" : "USD",
-    text: `${match[1]}${amount}`,
-  };
-}
-
-function bestPrice(items: SavedItem[], type: string): PricePoint | null {
-  const candidates = items
-    .filter((x) => x.type === type && x.status !== "archived")
-    .map((x) => parsePrice((x.metadata as any)?.priceText || x.title))
-    .filter(Boolean) as PricePoint[];
-
-  if (!candidates.length) return null;
-
-  return candidates.reduce((a, b) =>
-    (b.amount ?? Infinity) < (a.amount ?? Infinity) ? b : a
-  );
-}
-
-function sumCorePrices(
-  tickets: PricePoint | null,
-  flights: PricePoint | null,
-  hotels: PricePoint | null
-): PricePoint | null {
-  if (!tickets?.amount || !flights?.amount || !hotels?.amount) return null;
-
-  const total = tickets.amount + flights.amount + hotels.amount;
-
-  return {
-    amount: total,
-    currency: tickets.currency,
-    text: `${tickets.currency} ${total}`,
-  };
-}
-
-/* ---------------- MAIN HOOK ---------------- */
-
-export default function useTripDetailData({
-  trip,
-  savedItems,
-  originIata,
-}: Props) {
+export default function useTripDetailData({ trip, savedItems, originIata }: Props) {
   const [fixturesById, setFixturesById] = useState<FixtureMap>({});
   const [fxLoading, setFxLoading] = useState(false);
+  const [flightState, setFlightState] = useState<FlightState>({
+    loading: false,
+    pricePoint: null,
+  });
 
-  /* ---------------- MATCH IDS ---------------- */
+  const activeTripId = useMemo(() => clean(trip?.id) || null, [trip?.id]);
 
   const numericMatchIds = useMemo(() => {
-    return (trip?.matchIds ?? [])
-      .map((x) => String(x).trim())
-      .filter(isNumericId);
+    const ids = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
+    return ids.map((id) => String(id).trim()).filter(isNumericId);
   }, [trip?.matchIds]);
 
-  const primaryMatchId = useMemo(
-    () => pickPrimaryMatchId(trip, numericMatchIds),
-    [trip, numericMatchIds]
-  );
-
-  /* ---------------- FIXTURE LOAD ---------------- */
+  const primaryMatchId = useMemo(() => {
+    return pickPrimaryMatchId(trip, numericMatchIds);
+  }, [trip, numericMatchIds]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
-      if (!numericMatchIds.length) {
+    async function run() {
+      if (numericMatchIds.length === 0) {
         setFixturesById({});
+        setFxLoading(false);
         return;
       }
 
       setFxLoading(true);
 
-      const map: FixtureMap = {};
+      try {
+        const next: FixtureMap = {};
 
-      for (const id of numericMatchIds) {
-        try {
-          const fx = await getFixtureById(id);
-          if (fx) map[id] = fx;
-        } catch {}
-      }
+        for (const id of numericMatchIds) {
+          try {
+            const row = await getFixtureById(id);
+            if (row) next[String(id)] = row;
+          } catch {
+            // ignore per-fixture failure
+          }
+        }
 
-      if (!cancelled) {
-        setFixturesById(map);
-        setFxLoading(false);
+        if (!cancelled) {
+          setFixturesById(next);
+        }
+      } finally {
+        if (!cancelled) {
+          setFxLoading(false);
+        }
       }
     }
 
-    load();
+    void run();
+
     return () => {
       cancelled = true;
     };
   }, [numericMatchIds]);
 
-  const primaryFixture = useMemo(
-    () => (primaryMatchId ? fixturesById[primaryMatchId] ?? null : null),
-    [primaryMatchId, fixturesById]
-  );
+  const primaryFixture = useMemo(() => {
+    return buildPrimaryFixture(primaryMatchId, fixturesById);
+  }, [primaryMatchId, fixturesById]);
 
-  /* ---------------- CORE DATA ---------------- */
+  const cityName = useMemo(() => {
+    return getTripCity(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  const cityName = useMemo(
-    () => extractCity(trip, primaryFixture),
-    [trip, primaryFixture]
-  );
+  const primaryLeagueId = useMemo(() => {
+    return getPrimaryLeagueId(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  const primaryKickoffIso = useMemo(
-    () => extractKickoff(trip, primaryFixture),
-    [trip, primaryFixture]
-  );
+  const primaryHomeName = useMemo(() => {
+    return getPrimaryHomeName(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  /* ---------------- AFFILIATE LINKS ---------------- */
+  const primaryLeagueName = useMemo(() => {
+    return getPrimaryLeagueName(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-  const affiliateUrls = useMemo(() => {
-    if (!trip || !cityName || cityName === "Trip") return null;
+  const primaryKickoffIso = useMemo(() => {
+    return getPrimaryKickoffIso(trip, primaryFixture);
+  }, [trip, primaryFixture]);
 
-    return buildAffiliateLinks({
-      city: cityName,
-      originIata: cleanUpper3(originIata, "LON"),
-      startDate: trip.startDate,
-      endDate: trip.endDate,
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!trip || !cityName || cityName === "Trip") {
+        if (!cancelled) {
+          setFlightState({ loading: false, pricePoint: null });
+        }
+        return;
+      }
+
+      const origin = cleanUpper3(originIata, "LON");
+      const destination = resolveFlightDestinationIata(cityName);
+
+      if (!destination || origin === destination) {
+        if (!cancelled) {
+          setFlightState({ loading: false, pricePoint: null });
+        }
+        return;
+      }
+
+      const bookingWindow = getBookingWindow({
+        trip,
+        primaryKickoffIso,
+      });
+
+      const departureDate = bookingWindow.startDate;
+      const returnDate = bookingWindow.endDate;
+
+      if (!departureDate) {
+        if (!cancelled) {
+          setFlightState({ loading: false, pricePoint: null });
+        }
+        return;
+      }
+
+      setFlightState({ loading: true, pricePoint: null });
+
+      try {
+        const result = await searchFlights({
+          originIata: origin,
+          destinationIata: destination,
+          departureDate,
+          returnDate,
+          limit: 1,
+        });
+
+        if (!result.ok || !result.cheapest) {
+          if (!cancelled) {
+            setFlightState({ loading: false, pricePoint: null });
+          }
+          return;
+        }
+
+        const cheapest = result.cheapest;
+
+        const pricePoint: PricePoint = {
+          amount: cheapest.price,
+          currency: cheapest.currency,
+          text: `${cheapest.currency} ${cheapest.price}`,
+          source: "metadata",
+        };
+
+        if (!cancelled) {
+          setFlightState({
+            loading: false,
+            pricePoint,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setFlightState({ loading: false, pricePoint: null });
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [trip, cityName, primaryKickoffIso, originIata]);
+
+  const affiliateUrls = useMemo<AffiliateUrls | null>(() => {
+    return buildAffiliateUrls({
+      trip,
+      cityName,
+      originIata,
+      primaryKickoffIso,
+      buildMapsSearchUrl,
     });
-  }, [trip, cityName, originIata]);
+  }, [trip, cityName, originIata, primaryKickoffIso]);
 
-  /* ---------------- LOGISTICS ---------------- */
+  const kickoffMeta = useMemo(() => {
+    return formatKickoffMeta(primaryFixture, trip);
+  }, [primaryFixture, trip]);
 
-  const logistics = useMemo(() => {
-    if (!primaryFixture) return null;
+  const primaryLogistics = useMemo(() => {
+    if (!primaryHomeName) return null;
 
     return getMatchdayLogistics({
-      homeTeamName: primaryFixture.teams?.home?.name,
-      leagueName: primaryFixture.league?.name,
+      homeTeamName: primaryHomeName,
+      leagueName: primaryLeagueName,
     });
-  }, [primaryFixture]);
+  }, [primaryHomeName, primaryLeagueName]);
 
-  const logisticsSnippet = useMemo(
-    () => (logistics ? buildLogisticsSnippet(logistics) : ""),
-    [logistics]
-  );
+  const primaryLogisticsSnippet = useMemo(() => {
+    return primaryLogistics ? buildLogisticsSnippet(primaryLogistics) : "";
+  }, [primaryLogistics]);
 
-  /* ---------------- PRICING ---------------- */
+  const stadiumName = useMemo(() => {
+    return clean((primaryLogistics as any)?.stadium);
+  }, [primaryLogistics]);
 
-  const bookingPriceBoard = useMemo(() => {
-    const tickets = bestPrice(savedItems, "tickets");
-    const flights = bestPrice(savedItems, "flight");
-    const hotels = bestPrice(savedItems, "hotel");
-    const transfers = bestPrice(savedItems, "transfer");
-    const experiences = bestPrice(savedItems, "things");
+  const stadiumCity = useMemo(() => {
+    return clean((primaryLogistics as any)?.city ?? cityName);
+  }, [primaryLogistics, cityName]);
+
+  const stadiumMapsUrl = useMemo(() => {
+    const query = [stadiumName || "stadium", stadiumCity].filter(Boolean).join(" ").trim();
+    return buildMapsSearchUrl(query);
+  }, [stadiumName, stadiumCity]);
+
+  const stayBestAreas = useMemo<GuidanceArea[]>(() => {
+    return normalizeAreas((primaryLogistics as any)?.stay?.bestAreas);
+  }, [primaryLogistics]);
+
+  const stayBudgetAreas = useMemo<GuidanceArea[]>(() => {
+    return normalizeAreas((primaryLogistics as any)?.stay?.budgetAreas);
+  }, [primaryLogistics]);
+
+  const transportStops = useMemo<string[]>(() => {
+    return normalizeTransportStops((primaryLogistics as any)?.transport?.primaryStops);
+  }, [primaryLogistics]);
+
+  const transportTips = useMemo<string[]>(() => {
+    return normalizeTips((primaryLogistics as any)?.transport?.tips);
+  }, [primaryLogistics]);
+
+  const lateTransportNote = useMemo(() => {
+    const explicit = clean((primaryLogistics as any)?.transport?.lateNightNote);
+    if (explicit) return explicit;
+
+    if (isLateKickoff(primaryKickoffIso)) {
+      return "Late kickoff: check last trains/metros and pre-book a taxi/Uber fallback after the match.";
+    }
+
+    return "";
+  }, [primaryLogistics, primaryKickoffIso]);
+
+  const rankedTrip = useMemo<RankedTrip | null>(() => {
+    if (!trip || !primaryFixture) return null;
+
+    try {
+      const ranked = rankTrips([
+        {
+          tripId: String(trip.id),
+          fixture: primaryFixture,
+          cityName,
+          originIata: cleanUpper3(originIata, "LON"),
+          startDate: trip.startDate,
+          endDate: trip.endDate,
+          kickoffIso: primaryKickoffIso ?? undefined,
+        } as any,
+      ]);
+
+      return Array.isArray(ranked) && ranked.length > 0 ? ranked[0] : null;
+    } catch {
+      return null;
+    }
+  }, [trip, primaryFixture, cityName, originIata, primaryKickoffIso]);
+
+  const tripFinderSummary = useMemo<TripFinderSummary | null>(() => {
+    return buildTripFinderSummary(rankedTrip, {
+      difficultyLabel,
+      confidencePctLabel,
+      rankReasonsText,
+    });
+  }, [rankedTrip]);
+
+  const ticketsByMatchId = useMemo<TicketMap>(() => {
+    return buildTicketsByMatchId({
+      numericMatchIds,
+      savedItems,
+    });
+  }, [numericMatchIds, savedItems]);
+
+  const primaryTicketItem = useMemo(() => {
+    return buildPrimaryTicketItem(primaryMatchId, ticketsByMatchId);
+  }, [primaryMatchId, ticketsByMatchId]);
+
+  const bookingPriceBoard = useMemo<BookingPriceBoard>(() => {
+    const base = buildBookingPriceBoard(savedItems);
+    const flights = flightState.pricePoint || base.flights;
 
     return {
-      tickets,
+      ...base,
       flights,
-      hotels,
-      transfers,
-      experiences,
-      tripTotal: sumCorePrices(tickets, flights, hotels),
+      tripTotal:
+        base.tickets?.amount && flights?.amount && base.hotels?.amount
+          ? {
+              amount: base.tickets.amount + flights.amount + base.hotels.amount,
+              currency:
+                base.tickets.currency === flights.currency &&
+                flights.currency === base.hotels.currency
+                  ? base.tickets.currency
+                  : null,
+              text:
+                base.tickets.currency === flights.currency &&
+                flights.currency === base.hotels.currency &&
+                base.tickets.currency
+                  ? `${base.tickets.currency} ${(
+                      base.tickets.amount +
+                      flights.amount +
+                      base.hotels.amount
+                    ).toFixed(
+                      (base.tickets.amount + flights.amount + base.hotels.amount) % 1 === 0 ? 0 : 2
+                    )}`
+                  : null,
+              source: "saved_item",
+            }
+          : null,
     };
-  }, [savedItems]);
+  }, [savedItems, flightState.pricePoint]);
 
-  /* ---------------- PROGRESS ---------------- */
+  const ticketsPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.tickets);
+  }, [bookingPriceBoard.tickets]);
+
+  const flightsPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.flights);
+  }, [bookingPriceBoard.flights]);
+
+  const hotelsPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.hotels);
+  }, [bookingPriceBoard.hotels]);
+
+  const transfersPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.transfers);
+  }, [bookingPriceBoard.transfers]);
+
+  const experiencesPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.experiences);
+  }, [bookingPriceBoard.experiences]);
+
+  const tripPriceFrom = useMemo(() => {
+    return priceLine(bookingPriceBoard.tripTotal);
+  }, [bookingPriceBoard.tripTotal]);
 
   const progress = useMemo(() => {
-    if (!trip?.id) {
+    if (!activeTripId) {
       return {
         tickets: "empty",
         flight: "empty",
@@ -269,15 +419,21 @@ export default function useTripDetailData({
       } as const;
     }
 
-    return getTripProgress(trip.id);
-  }, [trip?.id]);
+    return getTripProgress(activeTripId);
+  }, [activeTripId]);
 
   const readiness = useMemo(() => {
-    if (!trip?.id) return { score: 0, missing: [] as string[] };
-    return getTripHealth(trip.id);
-  }, [trip?.id]);
+    if (!activeTripId) return { score: 0, missing: [] as string[] };
+    return getTripHealth(activeTripId);
+  }, [activeTripId]);
 
-  /* ---------------- RETURN ---------------- */
+  const dateIsoForPrimaryMatch = useMemo(() => {
+    return buildDateIsoForPrimaryMatch({
+      trip,
+      primaryKickoffIso,
+      getIsoDateOnly,
+    });
+  }, [trip, primaryKickoffIso]);
 
   return {
     fixturesById,
@@ -286,11 +442,36 @@ export default function useTripDetailData({
     primaryMatchId,
     primaryFixture,
     cityName,
-    primaryKickoffIso,
+    primaryLeagueId,
     affiliateUrls,
-    logisticsSnippet,
+    primaryHomeName,
+    primaryLeagueName,
+    primaryKickoffIso,
+    kickoffMeta,
+    primaryLogisticsSnippet,
+    stadiumName,
+    stadiumCity,
+    stadiumMapsUrl,
+    stayBestAreas,
+    stayBudgetAreas,
+    transportStops,
+    transportTips,
+    lateTransportNote,
+    rankedTrip,
+    tripFinderSummary,
+    ticketsByMatchId,
+    primaryTicketItem,
     bookingPriceBoard,
+    ticketsPriceFrom,
+    flightsPriceFrom,
+    hotelsPriceFrom,
+    transfersPriceFrom,
+    experiencesPriceFrom,
+    tripPriceFrom,
     progress,
     readiness,
+    dateIsoForPrimaryMatch,
+    flightSearchLoading: flightState.loading,
+    liveFlightPricePoint: flightState.pricePoint,
   };
-}
+        }
