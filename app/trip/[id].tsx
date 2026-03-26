@@ -1,5 +1,3 @@
-// app/trip/[id].tsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -48,6 +46,18 @@ import {
 
 const PLAN_STORAGE_KEY = "yna:plan";
 
+type PlannerRailItem = {
+  key: Extract<WorkspaceSectionKey, "tickets" | "stay" | "travel" | "things">;
+  label: string;
+};
+
+const PLANNER_RAIL_ITEMS: PlannerRailItem[] = [
+  { key: "tickets", label: "Tickets" },
+  { key: "stay", label: "Stay" },
+  { key: "travel", label: "Travel" },
+  { key: "things", label: "Extras" },
+];
+
 /* ---------------- helpers ---------------- */
 
 function statusLabel(status: string) {
@@ -64,6 +74,11 @@ function nextStepLabel(stepKey?: string | null) {
   if (stepKey === "transfer") return "Sort transport";
   if (stepKey === "things") return "Add extras";
   return "Continue planning";
+}
+
+function sectionCountLabel(count: number) {
+  if (count <= 0) return "Not added";
+  return `${count} added`;
 }
 
 /* ---------------- screen ---------------- */
@@ -273,14 +288,8 @@ export default function TripDetailScreen() {
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.railScrollContent}
                 >
-                  {[
-                    { key: "tickets", label: "Tickets" },
-                    { key: "stay", label: "Stay" },
-                    { key: "travel", label: "Travel" },
-                    { key: "things", label: "Extras" },
-                  ].map((item) => {
-                    const count =
-                      groupedBySection[item.key as WorkspaceSectionKey]?.length || 0;
+                  {PLANNER_RAIL_ITEMS.map((item) => {
+                    const count = groupedBySection[item.key]?.length || 0;
 
                     return (
                       <Pressable
@@ -290,7 +299,7 @@ export default function TripDetailScreen() {
                       >
                         <Text style={styles.railTitle}>{item.label}</Text>
                         <Text style={styles.railSub}>
-                          {count > 0 ? `${count} added` : "Not added"}
+                          {sectionCountLabel(count)}
                         </Text>
                       </Pressable>
                     );
@@ -344,7 +353,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 14,
     lineHeight: 20,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary,
   },
 
   heroRow: {
@@ -393,7 +402,7 @@ const styles = StyleSheet.create({
   nextText: {
     fontSize: 14,
     lineHeight: 20,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary,
   },
 
   heroActions: {
@@ -449,6 +458,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 13,
     lineHeight: 18,
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary,
   },
 });
