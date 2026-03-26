@@ -27,7 +27,7 @@ import {
   type PartnerCategory,
   type PartnerId,
 } from "@/src/constants/partners";
-import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 
 export type LastPartnerClick = {
@@ -43,15 +43,16 @@ export type LastPartnerClick = {
 
 const STORAGE_KEY = "yna_last_partner_click_v2";
 const CLICK_RETENTION_MS = 1000 * 60 * 60 * 6;
+const RETURN_DEDUPE_MS = 1500;
 
 let lastClick: LastPartnerClick | null = null;
 let lastClickLoaded = false;
 
-let subscribed = false;
+let watcherSubscribed = false;
 let appStateSub: { remove: () => void } | null = null;
 let onReturnHandler: ((click: LastPartnerClick) => void | Promise<void>) | null = null;
 
-let opening = false;
+let openInFlight = false;
 let returnInFlight = false;
 let lastReturnHandledAt = 0;
 
@@ -59,10 +60,6 @@ let lastReturnHandledAt = 0;
 /* Canonical category -> SavedItemType mapping                                */
 /* -------------------------------------------------------------------------- */
 
-/**
- * SavedItemType remains the persistence contract for now.
- * Canonical partner categories map into it explicitly here.
- */
 const CATEGORY_TO_SAVED_ITEM_TYPE: Record<PartnerCategory, SavedItemType> = {
   tickets: "tickets",
   flights: "flight",
@@ -92,11 +89,11 @@ function now() {
   return Date.now();
 }
 
-function cleanString(v: unknown) {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-function isRecent(click: LastPartnerClick) {
+function isRecent(click: LastPartnerClick): boolean {
   return now() - click.createdAt <= CLICK_RETENTION_MS;
 }
 
@@ -107,12 +104,12 @@ function normalizeUrl(url: string): string {
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 
   try {
-    const u = new URL(withProto);
-    const host = u.hostname.toLowerCase();
-    const pathname = u.pathname || "/";
-    const search = u.search || "";
-    const proto = (u.protocol || "https:").toLowerCase();
-    return `${proto}//${host}${pathname}${search}`.trim();
+    const parsed = new URL(withProto);
+    const protocol = (parsed.protocol || "https:").toLowerCase();
+    const host = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname || "/";
+    const search = parsed.search || "";
+    return `${protocol}//${host}${pathname}${search}`.trim();
   } catch {
     return withProto.trim();
   }
@@ -125,11 +122,11 @@ function normalizeUrlLoose(url: string): string {
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
 
   try {
-    const u = new URL(withProto);
-    const host = u.hostname.toLowerCase();
-    const pathname = (u.pathname || "/").replace(/\/+$/, "") || "/";
-    const proto = (u.protocol || "https:").toLowerCase();
-    return `${proto}//${host}${pathname}`;
+    const parsed = new URL(withProto);
+    const protocol = (parsed.protocol || "https:").toLowerCase();
+    const host = parsed.hostname.toLowerCase();
+    const pathname = (parsed.pathname || "/").replace(/\/+$/, "") || "/";
+    return `${protocol}//${host}${pathname}`;
   } catch {
     return withProto.trim();
   }
@@ -137,6 +134,25 @@ function normalizeUrlLoose(url: string): string {
 
 function isDeterministicallyReusable(item: SavedItem): boolean {
   return item.status === "pending" || item.status === "saved" || item.status === "booked";
+}
+
+function isValidSavedItemStatus(value: unknown): value is SavedItemStatus {
+  return value === "saved" || value === "pending" || value === "booked" || value === "archived";
+}
+
+function isValidSavedItemType(value: unknown): value is SavedItemType {
+  return (
+    value === "tickets" ||
+    value === "hotel" ||
+    value === "flight" ||
+    value === "train" ||
+    value === "transfer" ||
+    value === "things" ||
+    value === "insurance" ||
+    value === "claim" ||
+    value === "note" ||
+    value === "other"
+  );
 }
 
 async function persistLastClick(next: LastPartnerClick | null) {
@@ -149,25 +165,33 @@ async function persistLastClick(next: LastPartnerClick | null) {
   }
 }
 
+async function clearLastClickState() {
+  await persistLastClick(null);
+}
+
 async function loadLastClickOnce() {
   if (lastClickLoaded) return;
   lastClickLoaded = true;
 
   try {
-    const raw = await readJson<any>(STORAGE_KEY, null);
-    if (!raw || typeof raw !== "object") return;
+    const raw = await readJson<unknown>(STORAGE_KEY, null);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
 
-    const itemId = cleanString(raw.itemId);
-    const tripId = cleanString(raw.tripId);
-    const partnerId = getCanonicalPartnerId(cleanString(raw.partnerId));
+    const record = raw as Record<string, unknown>;
+
+    const itemId = cleanString(record.itemId);
+    const tripId = cleanString(record.tripId);
+    const partnerId = getCanonicalPartnerId(cleanString(record.partnerId));
     const partnerCategory = getPartner(partnerId).primaryCategory;
-    const savedItemType =
-      typeof raw.savedItemType === "string" && cleanString(raw.savedItemType)
-        ? (cleanString(raw.savedItemType) as SavedItemType)
-        : mapPartnerCategoryToSavedItemType(partnerCategory);
-    const url = normalizeUrl(cleanString(raw.url));
-    const createdAt = Number(raw.createdAt);
-    const openedAt = Number(raw.openedAt);
+
+    const rawSavedItemType = cleanString(record.savedItemType);
+    const savedItemType = isValidSavedItemType(rawSavedItemType)
+      ? rawSavedItemType
+      : mapPartnerCategoryToSavedItemType(partnerCategory);
+
+    const url = normalizeUrl(cleanString(record.url));
+    const createdAt = Number(record.createdAt);
+    const openedAt = Number(record.openedAt);
 
     if (!itemId || !tripId || !partnerId || !url) return;
     if (!Number.isFinite(createdAt) || createdAt <= 0) return;
@@ -185,13 +209,13 @@ async function loadLastClickOnce() {
     };
 
     if (!isRecent(candidate)) {
-      await persistLastClick(null);
+      await clearLastClickState();
       return;
     }
 
     lastClick = candidate;
   } catch {
-    // ignore corrupt or old payloads
+    // ignore corrupt payloads
   }
 }
 
@@ -201,7 +225,7 @@ async function ensureSavedItemsLoaded() {
   try {
     await savedItemsStore.load();
   } catch {
-    // ignore
+    // ignore load failure here
   }
 }
 
@@ -211,34 +235,34 @@ function getItemById(itemId: string): SavedItem | undefined {
 
 async function transitionIfCurrent(
   itemId: string,
-  fromStatus: SavedItem["status"],
-  toStatus: SavedItem["status"]
+  fromStatus: SavedItemStatus,
+  toStatus: SavedItemStatus
 ) {
   const id = cleanString(itemId);
   if (!id) return;
 
   await ensureSavedItemsLoaded();
 
-  const cur = getItemById(id);
-  if (!cur || cur.status !== fromStatus) return;
+  const current = getItemById(id);
+  if (!current || current.status !== fromStatus) return;
 
   try {
     await savedItemsStore.transitionStatus(id, toStatus);
   } catch {
-    // ignore
+    // ignore transition failure
   }
 }
 
 async function openUrlInternal(url: string) {
-  const u = normalizeUrl(url);
-  if (!u) throw new Error("URL is required");
+  const normalized = normalizeUrl(url);
+  if (!normalized) throw new Error("url is required");
 
   if (Platform.OS === "web") {
-    window.open(u, "_blank", "noopener,noreferrer");
+    window.open(normalized, "_blank", "noopener,noreferrer");
     return { type: "opened" as const };
   }
 
-  return await WebBrowser.openBrowserAsync(u, {
+  return await WebBrowser.openBrowserAsync(normalized, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     readerMode: false,
     enableBarCollapsing: true,
@@ -246,38 +270,14 @@ async function openUrlInternal(url: string) {
   });
 }
 
-async function triggerReturnIfPresent(_reason: "appstate" | "browser_dismiss") {
-  const t = now();
-  if (returnInFlight) return;
-  if (t - lastReturnHandledAt < 1500) return;
+async function openBrowserGuarded(url: string) {
+  if (openInFlight) throw new Error("Partner open already in progress");
 
-  returnInFlight = true;
-
+  openInFlight = true;
   try {
-    await loadLastClickOnce();
-
-    if (!lastClick) return;
-
-    if (!isRecent(lastClick)) {
-      await persistLastClick(null);
-      return;
-    }
-
-    const click = lastClick;
-    const handler = onReturnHandler;
-    if (!handler) return;
-
-    await persistLastClick(null);
-
-    try {
-      await Promise.resolve(handler(click));
-    } catch {
-      // never crash return flow
-    } finally {
-      lastReturnHandledAt = now();
-    }
+    return await openUrlInternal(url);
   } finally {
-    returnInFlight = false;
+    openInFlight = false;
   }
 }
 
@@ -331,14 +331,14 @@ function findReusableItem(args: {
 
   const items = savedItemsStore.getAll();
 
-  const matches = items.filter((x) => {
-    if (cleanString(x.tripId) !== tripId) return false;
-    if (cleanString(x.partnerId) !== args.partnerId) return false;
-    if (String(x.type) !== String(args.type)) return false;
-    if (!isDeterministicallyReusable(x)) return false;
+  const matches = items.filter((item) => {
+    if (cleanString(item.tripId) !== tripId) return false;
+    if (cleanString(item.partnerId) !== args.partnerId) return false;
+    if (String(item.type) !== String(args.type)) return false;
+    if (!isDeterministicallyReusable(item)) return false;
 
-    const itemStrict = normalizeUrl(cleanString(x.partnerUrl));
-    const itemLoose = normalizeUrlLoose(cleanString(x.partnerUrl));
+    const itemStrict = normalizeUrl(cleanString(item.partnerUrl));
+    const itemLoose = normalizeUrlLoose(cleanString(item.partnerUrl));
 
     return itemStrict === strictUrl || itemLoose === looseUrl;
   });
@@ -346,11 +346,46 @@ function findReusableItem(args: {
   if (matches.length === 0) return null;
 
   return (
-    matches.find((m) => m.status === "pending") ??
-    matches.find((m) => m.status === "saved") ??
-    matches.find((m) => m.status === "booked") ??
+    matches.find((item) => item.status === "pending") ??
+    matches.find((item) => item.status === "saved") ??
+    matches.find((item) => item.status === "booked") ??
     null
   );
+}
+
+async function triggerReturnIfPresent(_reason: "appstate" | "browser_dismiss") {
+  const ts = now();
+  if (returnInFlight) return;
+  if (ts - lastReturnHandledAt < RETURN_DEDUPE_MS) return;
+
+  returnInFlight = true;
+
+  try {
+    await loadLastClickOnce();
+
+    const click = lastClick;
+    if (!click) return;
+
+    if (!isRecent(click)) {
+      await clearLastClickState();
+      return;
+    }
+
+    const handler = onReturnHandler;
+    if (!handler) return;
+
+    await clearLastClickState();
+
+    try {
+      await Promise.resolve(handler(click));
+    } catch {
+      // never crash app due to return handler failure
+    } finally {
+      lastReturnHandledAt = now();
+    }
+  } finally {
+    returnInFlight = false;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -358,7 +393,11 @@ function findReusableItem(args: {
 /* -------------------------------------------------------------------------- */
 
 export function getPartnerClicksDebugState() {
-  return { opening, subscribed, lastClick };
+  return {
+    opening: openInFlight,
+    subscribed: watcherSubscribed,
+    lastClick,
+  };
 }
 
 export function ensurePartnerReturnWatcher(
@@ -366,62 +405,50 @@ export function ensurePartnerReturnWatcher(
 ) {
   onReturnHandler = onReturn;
 
-  if (subscribed) {
+  if (watcherSubscribed) {
     return () => {
-      try {
-        appStateSub?.remove?.();
-      } catch {}
-      appStateSub = null;
-      subscribed = false;
       onReturnHandler = null;
     };
   }
 
-  subscribed = true;
-  loadLastClickOnce().catch(() => null);
+  watcherSubscribed = true;
+  void loadLastClickOnce();
 
   let lastState = AppState.currentState;
 
-  const sub = AppState.addEventListener("change", (next) => {
+  appStateSub = AppState.addEventListener("change", (nextState) => {
     const becameActive =
-      Boolean(String(lastState).match(/inactive|background/)) && next === "active";
-    lastState = next;
+      Boolean(String(lastState).match(/inactive|background/)) && nextState === "active";
+
+    lastState = nextState;
 
     if (!becameActive) return;
-
-    triggerReturnIfPresent("appstate").catch(() => null);
-  });
-
-  appStateSub = sub as any;
+    void triggerReturnIfPresent("appstate");
+  }) as any;
 
   return () => {
+    onReturnHandler = null;
+
     try {
       appStateSub?.remove?.();
-    } catch {}
+    } catch {
+      // ignore unsubscribe failure
+    }
+
     appStateSub = null;
-    subscribed = false;
-    onReturnHandler = null;
+    watcherSubscribed = false;
   };
 }
 
 export async function openUntrackedUrl(url: string) {
-  const u = normalizeUrl(url);
-  if (!u) throw new Error("url is required");
-  if (opening) throw new Error("Partner open already in progress");
-
-  opening = true;
-
-  try {
-    await openUrlInternal(u);
-  } finally {
-    opening = false;
-  }
+  const normalized = normalizeUrl(url);
+  if (!normalized) throw new Error("url is required");
+  return await openBrowserGuarded(normalized);
 }
 
 /**
  * Utility/simple opens only.
- * Commercial or utility actions that need SavedItem reuse / session tracking
- * should go through beginPartnerClick.
+ * Tracked partner flows should go through beginPartnerClick.
  */
 export async function openPartnerUrl(url: string) {
   return await openUntrackedUrl(url);
@@ -435,116 +462,100 @@ export async function beginPartnerClick(args: {
   title?: string;
   metadata?: Record<string, any>;
 }): Promise<SavedItem> {
-  if (opening) throw new Error("Partner open already in progress");
-  opening = true;
+  const tripId = cleanString(args.tripId);
+  if (!tripId) throw new Error("tripId is required");
+
+  const canonicalPartnerId = getCanonicalPartnerId(args.partnerId);
+  const partner = getPartner(canonicalPartnerId);
+
+  const url = normalizeUrl(args.url);
+  if (!url) throw new Error("url is required");
+
+  const savedItemType =
+    args.savedItemType ?? mapPartnerCategoryToSavedItemType(partner.primaryCategory);
+
+  await ensureSavedItemsLoaded();
+
+  let item = findReusableItem({
+    tripId,
+    partnerId: canonicalPartnerId,
+    url,
+    type: savedItemType,
+  });
 
   let createdNew = false;
   let promotedFromSaved = false;
-  let item: SavedItem | null = null;
 
-  try {
-    const tripId = cleanString(args.tripId);
-    if (!tripId) throw new Error("tripId is required");
+  if (item?.status === "saved") {
+    promotedFromSaved = true;
+    await transitionIfCurrent(item.id, "saved", "pending");
+    item = getItemById(item.id) ?? item;
+  }
 
-    const canonicalPartnerId = getCanonicalPartnerId(args.partnerId);
-    const partner = getPartner(canonicalPartnerId);
-
-    const url = normalizeUrl(args.url);
-    if (!url) throw new Error("url is required");
-
-    const savedItemType =
-      args.savedItemType ?? mapPartnerCategoryToSavedItemType(partner.primaryCategory);
-
-    await ensureSavedItemsLoaded();
-
-    const reusable = findReusableItem({
-      tripId,
-      partnerId: canonicalPartnerId,
-      url,
-      type: savedItemType,
-    });
-
-    if (reusable) {
-      item = reusable;
-
-      if (item.status === "booked") {
-        await persistLastClick(null);
-        await openUntrackedUrl(url);
-        return item;
-      }
-
-      if (item.status === "saved") {
-        promotedFromSaved = true;
-        await transitionIfCurrent(item.id, "saved", "pending");
-        item = getItemById(item.id) ?? item;
-      }
-    }
-
-    if (!item) {
-      const title =
-        cleanString(args.title) ||
-        buildDefaultTitle({
-          partnerName: partner.display.name,
-          type: savedItemType,
-          metadata: args.metadata,
-        });
-
-      item = await savedItemsStore.add({
-        tripId,
+  if (!item) {
+    const title =
+      cleanString(args.title) ||
+      buildDefaultTitle({
+        partnerName: partner.display.name,
         type: savedItemType,
-        status: isUtilityPartner(canonicalPartnerId) ? "saved" : "pending",
-        title,
-        partnerId: canonicalPartnerId,
-        partnerUrl: url,
         metadata: args.metadata,
       });
 
-      createdNew = true;
+    item = await savedItemsStore.add({
+      tripId,
+      type: savedItemType,
+      status: isUtilityPartner(canonicalPartnerId) ? "saved" : "pending",
+      title,
+      partnerId: canonicalPartnerId,
+      partnerUrl: url,
+      metadata: args.metadata,
+    });
+
+    createdNew = true;
+  }
+
+  const itemForOpen = getItemById(item.id) ?? item;
+  const isTrackedPending = !isUtilityPartner(canonicalPartnerId) && itemForOpen.status === "pending";
+  const clickAt = now();
+
+  if (isTrackedPending) {
+    await persistLastClick({
+      itemId: itemForOpen.id,
+      tripId,
+      partnerId: canonicalPartnerId,
+      partnerCategory: partner.primaryCategory,
+      savedItemType,
+      url,
+      createdAt: clickAt,
+      openedAt: clickAt,
+    });
+  } else {
+    await clearLastClickState();
+  }
+
+  try {
+    const browserResult = await openBrowserGuarded(url);
+    const resultType = cleanString((browserResult as { type?: unknown })?.type).toLowerCase();
+    const isDismissLike = resultType === "dismiss" || resultType === "cancel";
+
+    if (isDismissLike && isTrackedPending) {
+      await triggerReturnIfPresent("browser_dismiss");
     }
 
-    const clickAt = now();
-
-    if (!isUtilityPartner(canonicalPartnerId) && item.status === "pending") {
-      await persistLastClick({
-        itemId: item.id,
-        tripId,
-        partnerId: canonicalPartnerId,
-        partnerCategory: partner.primaryCategory,
-        savedItemType,
-        url,
-        createdAt: clickAt,
-        openedAt: clickAt,
-      });
-    } else {
-      await persistLastClick(null);
-    }
-
-    try {
-      const res = await openUrlInternal(url);
-      const resultType = cleanString((res as any)?.type).toLowerCase();
-      const isDismissLike = resultType === "dismiss" || resultType === "cancel";
-
-      if (isDismissLike && !isUtilityPartner(canonicalPartnerId)) {
-        await triggerReturnIfPresent("browser_dismiss");
+    return getItemById(itemForOpen.id) ?? itemForOpen;
+  } catch (error) {
+    if (createdNew) {
+      try {
+        await savedItemsStore.remove(itemForOpen.id);
+      } catch {
+        // ignore rollback failure
       }
-    } catch (error) {
-      if (createdNew && item) {
-        try {
-          await savedItemsStore.remove(item.id);
-        } catch {
-          // ignore
-        }
-      } else if (promotedFromSaved && item) {
-        await transitionIfCurrent(item.id, "pending", "saved");
-      }
-
-      await persistLastClick(null);
-      throw error;
+    } else if (promotedFromSaved) {
+      await transitionIfCurrent(itemForOpen.id, "pending", "saved");
     }
 
-    return item;
-  } finally {
-    opening = false;
+    await clearLastClickState();
+    throw error;
   }
 }
 
@@ -553,10 +564,16 @@ export async function markBooked(itemId: string) {
   if (!id) return;
 
   await ensureSavedItemsLoaded();
-  await savedItemsStore.transitionStatus(id, "booked");
+
+  const current = getItemById(id);
+  if (!current) return;
+
+  if (current.status !== "booked") {
+    await savedItemsStore.transitionStatus(id, "booked");
+  }
 
   if (lastClick?.itemId === id) {
-    await persistLastClick(null);
+    await clearLastClickState();
   }
 
   lastReturnHandledAt = now();
@@ -569,24 +586,26 @@ export async function markNotBooked(itemId: string) {
   await transitionIfCurrent(id, "pending", "saved");
 
   if (lastClick?.itemId === id) {
-    await persistLastClick(null);
+    await clearLastClickState();
   }
 
   lastReturnHandledAt = now();
 }
 
 export async function dismissReturnPrompt(itemId?: string) {
+  await loadLastClickOnce();
+
   if (!lastClick) return;
 
   if (!itemId) {
-    await persistLastClick(null);
+    await clearLastClickState();
     lastReturnHandledAt = now();
     return;
   }
 
   const id = cleanString(itemId);
   if (id && lastClick.itemId === id) {
-    await persistLastClick(null);
+    await clearLastClickState();
     lastReturnHandledAt = now();
   }
 }
@@ -602,14 +621,16 @@ export function getLastClick(): LastPartnerClick | null {
 export function __unsafeResetPartnerClickStateForDevOnly() {
   try {
     appStateSub?.remove?.();
-  } catch {}
+  } catch {
+    // ignore
+  }
 
   appStateSub = null;
-  subscribed = false;
+  watcherSubscribed = false;
   onReturnHandler = null;
-  void persistLastClick(null);
-  opening = false;
-  lastClickLoaded = false;
+  openInFlight = false;
   returnInFlight = false;
   lastReturnHandledAt = 0;
+  lastClickLoaded = false;
+  void clearLastClickState();
 }
