@@ -1,9 +1,11 @@
+// src/features/tripDetail/useTripDetailViewModel.ts
+
 import { Alert } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 
-import type { PartnerId } from "@/src/core/partners";
+import type { PartnerId } from "@/src/constants/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { NextAction } from "@/src/components/NextBestActionCard";
 import type { TripProgressItem } from "@/src/components/TripProgressStrip";
@@ -88,7 +90,7 @@ type Params = {
   isPro: boolean;
   kickoffTbc: boolean;
   controller: Controller;
-  setActiveWorkspaceSection: (section: WorkspaceSectionKey) => Promise<void> | void;
+  setActiveWorkspaceSection?: (section: WorkspaceSectionKey) => Promise<void> | void;
 
   bookingPriceBoard?: BookingPriceBoard | null;
   ticketsPriceFrom?: string | null;
@@ -109,11 +111,11 @@ type BookingStep = {
 
 const FREE_TRIP_CAP = 5;
 
-function isStarted(state: ProgressState) {
+function isStarted(state: ProgressState): boolean {
   return state !== "empty";
 }
 
-function isComplete(state: ProgressState) {
+function isComplete(state: ProgressState): boolean {
   return state === "booked";
 }
 
@@ -122,18 +124,18 @@ function completionLabel(
   emptyLabel: string,
   inProgressLabel: string,
   doneLabel: string
-) {
+): string {
   if (state === "booked") return doneLabel;
   if (state === "pending" || state === "saved") return inProgressLabel;
   return emptyLabel;
 }
 
-function cleanPriceLabel(value?: string | null) {
+function cleanPriceLabel(value?: string | null): string | null {
   const v = String(value ?? "").trim();
   return v || null;
 }
 
-function pricingOrFallback(priceLine: string | null | undefined, fallback: string) {
+function pricingOrFallback(priceLine: string | null | undefined, fallback: string): string {
   return cleanPriceLabel(priceLine) || fallback;
 }
 
@@ -141,10 +143,11 @@ function ticketButtonSubtitle(args: {
   primaryTicketItem: SavedItem | null;
   ticketState: ProgressState;
   ticketsPriceFrom?: string | null;
-}) {
+}): string {
   const { primaryTicketItem, ticketState, ticketsPriceFrom } = args;
 
   if (ticketState === "booked") return "Ticket booked";
+
   if (ticketState === "saved" || ticketState === "pending") {
     return smartButtonSubtitle(primaryTicketItem, "Ticket option saved");
   }
@@ -155,7 +158,7 @@ function ticketButtonSubtitle(args: {
   );
 }
 
-function stepPriorityScore(step: BookingStepKey) {
+function stepPriorityScore(step: BookingStepKey): number {
   if (step === "tickets") return 1;
   if (step === "flight") return 2;
   if (step === "hotel") return 3;
@@ -183,7 +186,7 @@ export default function useTripDetailViewModel({
   kickoffTbc,
   controller,
   setActiveWorkspaceSection,
-  bookingPriceBoard,
+  bookingPriceBoard = null,
   ticketsPriceFrom,
   flightsPriceFrom,
   hotelsPriceFrom,
@@ -205,24 +208,23 @@ export default function useTripDetailViewModel({
   const hasTransport = isStarted(transportState);
   const hasThings = isStarted(thingsState);
 
-  const [tripCount, setTripCount] = useState(tripsStore.getState().trips?.length ?? 0);
+  const [tripCount, setTripCount] = useState<number>(tripsStore.getState().trips?.length ?? 0);
 
   useEffect(() => {
-    const unsub = tripsStore.subscribe((s) => {
-      setTripCount(s.trips?.length ?? 0);
+    const unsub = tripsStore.subscribe((state) => {
+      setTripCount(state.trips?.length ?? 0);
     });
+
     return unsub;
   }, []);
 
-  const loading = useMemo(
-    () => Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded)),
-    [routeTripId, tripsLoaded, savedLoaded, workspaceLoaded]
-  );
+  const loading = useMemo(() => {
+    return Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded));
+  }, [routeTripId, tripsLoaded, savedLoaded, workspaceLoaded]);
 
-  const showHeroBanners = useMemo(
-    () => pending.length > 0 || saved.length > 0 || booked.length > 0,
-    [pending.length, saved.length, booked.length]
-  );
+  const showHeroBanners = useMemo(() => {
+    return pending.length > 0 || saved.length > 0 || booked.length > 0;
+  }, [pending.length, saved.length, booked.length]);
 
   const baseMeta = useMemo(
     () => ({
@@ -237,13 +239,26 @@ export default function useTripDetailViewModel({
   );
 
   const buildMeta = useCallback(
-    (sourceSurface: SourceSurface, sourceSection: SourceSection, extra?: Record<string, any>) => ({
-      ...baseMeta,
-      sourceSurface,
-      sourceSection,
-      ...(extra ?? {}),
-    }),
+    (sourceSurface: SourceSurface, sourceSection: SourceSection, extra?: Record<string, any>) => {
+      return {
+        ...baseMeta,
+        sourceSurface,
+        sourceSection,
+        ...(extra ?? {}),
+      };
+    },
     [baseMeta]
+  );
+
+  const setWorkspaceSection = useCallback(
+    async (section: WorkspaceSectionKey) => {
+      try {
+        await setActiveWorkspaceSection?.(section);
+      } catch {
+        // ignore workspace section failures in viewmodel actions
+      }
+    },
+    [setActiveWorkspaceSection]
   );
 
   const flightAction = useMemo<PartnerActionBundle>(
@@ -266,7 +281,7 @@ export default function useTripDetailViewModel({
 
   const hotelAction = useMemo<PartnerActionBundle>(
     () => ({
-      url: affiliateUrls?.hotelsUrl,
+      url: affiliateUrls?.hotelsUrl || affiliateUrls?.staysUrl,
       message: "We need a city + dates saved to build booking links.",
       config: {
         partnerId: "expedia",
@@ -279,43 +294,51 @@ export default function useTripDetailViewModel({
         }),
       },
     }),
-    [affiliateUrls?.hotelsUrl, cityName, buildMeta, hotelsPriceFrom]
+    [affiliateUrls?.hotelsUrl, affiliateUrls?.staysUrl, cityName, buildMeta, hotelsPriceFrom]
   );
 
   const transportAction = useMemo<PartnerActionBundle>(
     () => ({
-      url: affiliateUrls?.omioUrl || affiliateUrls?.transfersUrl,
+      url: affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl || affiliateUrls?.transfersUrl,
       message: "We need a city + dates saved to build booking links.",
-      config: affiliateUrls?.omioUrl
-        ? {
-            partnerId: "omio",
-            savedItemType: "train",
-            title: `Rail & bus for ${cityName}`,
-            metadata: buildMeta("unknown", "travel", {
-              provider: "omio",
-              priceMode: "live",
-              transportMode: "rail_bus",
-              priceFrom: cleanPriceLabel(transfersPriceFrom),
-            }),
-          }
-        : {
-            partnerId: "kiwitaxi",
-            savedItemType: "transfer",
-            title: `Transfers in ${cityName}`,
-            metadata: buildMeta("unknown", "transfers", {
-              provider: "kiwitaxi",
-              priceMode: "live",
-              transportMode: "transfer",
-              priceFrom: cleanPriceLabel(transfersPriceFrom),
-            }),
-          },
+      config:
+        affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl
+          ? {
+              partnerId: "omio",
+              savedItemType: "train",
+              title: `Rail & bus for ${cityName}`,
+              metadata: buildMeta("unknown", "travel", {
+                provider: "omio",
+                priceMode: "live",
+                transportMode: "rail_bus",
+                priceFrom: cleanPriceLabel(transfersPriceFrom),
+              }),
+            }
+          : {
+              partnerId: "kiwitaxi",
+              savedItemType: "transfer",
+              title: `Transfers in ${cityName}`,
+              metadata: buildMeta("unknown", "transfers", {
+                provider: "kiwitaxi",
+                priceMode: "live",
+                transportMode: "transfer",
+                priceFrom: cleanPriceLabel(transfersPriceFrom),
+              }),
+            },
     }),
-    [affiliateUrls?.omioUrl, affiliateUrls?.transfersUrl, cityName, buildMeta, transfersPriceFrom]
+    [
+      affiliateUrls?.omioUrl,
+      affiliateUrls?.trainsUrl,
+      affiliateUrls?.transfersUrl,
+      cityName,
+      buildMeta,
+      transfersPriceFrom,
+    ]
   );
 
   const thingsAction = useMemo<PartnerActionBundle>(
     () => ({
-      url: affiliateUrls?.experiencesUrl,
+      url: affiliateUrls?.experiencesUrl || affiliateUrls?.thingsUrl,
       message: "We need a city saved to build booking links.",
       config: {
         partnerId: "getyourguide",
@@ -328,34 +351,43 @@ export default function useTripDetailViewModel({
         }),
       },
     }),
-    [affiliateUrls?.experiencesUrl, cityName, buildMeta, experiencesPriceFrom]
+    [affiliateUrls?.experiencesUrl, affiliateUrls?.thingsUrl, cityName, buildMeta, experiencesPriceFrom]
   );
 
   const openFlights = useCallback(
-    (sourceSurface: SourceSurface = "unknown") =>
-      controller.openPartnerOrAlert(flightAction.url, flightAction.message, {
+    async (sourceSurface: SourceSurface = "unknown") => {
+      await setWorkspaceSection("travel");
+
+      return controller.openPartnerOrAlert(flightAction.url, flightAction.message, {
         ...flightAction.config,
         metadata: buildMeta(sourceSurface, "travel", {
           ...(flightAction.config.metadata ?? {}),
         }),
-      }),
-    [controller, flightAction, buildMeta]
+      });
+    },
+    [controller, flightAction, buildMeta, setWorkspaceSection]
   );
 
   const openHotels = useCallback(
-    (sourceSurface: SourceSurface = "unknown") =>
-      controller.openPartnerOrAlert(hotelAction.url, hotelAction.message, {
+    async (sourceSurface: SourceSurface = "unknown") => {
+      await setWorkspaceSection("stay");
+
+      return controller.openPartnerOrAlert(hotelAction.url, hotelAction.message, {
         ...hotelAction.config,
         metadata: buildMeta(sourceSurface, "stay", {
           ...(hotelAction.config.metadata ?? {}),
         }),
-      }),
-    [controller, hotelAction, buildMeta]
+      });
+    },
+    [controller, hotelAction, buildMeta, setWorkspaceSection]
   );
 
   const openTransport = useCallback(
-    (sourceSurface: SourceSurface = "unknown") => {
-      const section: SourceSection = affiliateUrls?.omioUrl ? "travel" : "transfers";
+    async (sourceSurface: SourceSurface = "unknown") => {
+      const section: SourceSection =
+        affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "travel" : "transfers";
+
+      await setWorkspaceSection(section === "travel" ? "travel" : "transfers");
 
       return controller.openPartnerOrAlert(transportAction.url, transportAction.message, {
         ...transportAction.config,
@@ -364,31 +396,34 @@ export default function useTripDetailViewModel({
         }),
       });
     },
-    [controller, transportAction, affiliateUrls?.omioUrl, buildMeta]
+    [controller, transportAction, affiliateUrls?.omioUrl, affiliateUrls?.trainsUrl, buildMeta, setWorkspaceSection]
   );
 
   const openThings = useCallback(
-    (sourceSurface: SourceSurface = "unknown") =>
-      controller.openPartnerOrAlert(thingsAction.url, thingsAction.message, {
+    async (sourceSurface: SourceSurface = "unknown") => {
+      await setWorkspaceSection("things");
+
+      return controller.openPartnerOrAlert(thingsAction.url, thingsAction.message, {
         ...thingsAction.config,
         metadata: buildMeta(sourceSurface, "things", {
           ...(thingsAction.config.metadata ?? {}),
         }),
-      }),
-    [controller, thingsAction, buildMeta]
+      });
+    },
+    [controller, thingsAction, buildMeta, setWorkspaceSection]
   );
 
   const openTickets = useCallback(
-    (sourceSurface: SourceSurface = "unknown") => {
-      void sourceSurface;
+    async (_sourceSurface: SourceSurface = "unknown") => {
       if (!hasMatch || !primaryMatchId) {
-        Alert.alert("Add a match first", "Add a match to unlock tickets + match planning.");
+        Alert.alert("Add a match first", "Add a match to unlock tickets and proper trip planning.");
         return;
       }
 
+      await setWorkspaceSection("tickets");
       return controller.openTicketsForMatch(primaryMatchId);
     },
-    [controller, hasMatch, primaryMatchId]
+    [controller, hasMatch, primaryMatchId, setWorkspaceSection]
   );
 
   const bookingSteps = useMemo<BookingStep[]>(
@@ -402,10 +437,9 @@ export default function useTripDetailViewModel({
     [ticketState, flightState, hotelState, transportState, thingsState]
   );
 
-  const completeCoreCount = useMemo(
-    () => bookingSteps.filter((step) => step.key !== "things" && step.complete).length,
-    [bookingSteps]
-  );
+  const completeCoreCount = useMemo(() => {
+    return bookingSteps.filter((step) => step.key !== "things" && step.complete).length;
+  }, [bookingSteps]);
 
   const tripCompletionPct = useMemo(() => {
     const score =
@@ -418,30 +452,61 @@ export default function useTripDetailViewModel({
     return Math.max(0, Math.min(100, score));
   }, [ticketState, flightState, hotelState, transportState, thingsState]);
 
-  const nextIncompleteStep = useMemo(
-    () =>
+  const nextIncompleteStep = useMemo(() => {
+    return (
       bookingSteps
         .slice()
         .sort((a, b) => stepPriorityScore(a.key) - stepPriorityScore(b.key))
-        .find((step) => !step.complete && step.state !== "booked") ?? null,
-    [bookingSteps]
-  );
+        .find((step) => !step.complete && step.state !== "booked") ?? null
+    );
+  }, [bookingSteps]);
 
   const progressItems = useMemo<TripProgressItem[]>(
     () => [
-      { key: "tickets", label: "Tickets", state: ticketState, onPress: () => openTickets("progress_strip") },
-      { key: "flight", label: "Flights", state: flightState, onPress: () => openFlights("progress_strip") },
-      { key: "hotel", label: "Hotel", state: hotelState, onPress: () => openHotels("progress_strip") },
+      {
+        key: "tickets",
+        label: "Tickets",
+        state: ticketState,
+        onPress: () => {
+          void openTickets("progress_strip");
+        },
+      },
+      {
+        key: "flight",
+        label: "Flights",
+        state: flightState,
+        onPress: () => {
+          void openFlights("progress_strip");
+        },
+      },
+      {
+        key: "hotel",
+        label: "Hotel",
+        state: hotelState,
+        onPress: () => {
+          void openHotels("progress_strip");
+        },
+      },
       {
         key: "transfer",
-        label: affiliateUrls?.omioUrl ? "Rail/Bus" : "Transfer",
+        label: affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "Rail/Bus" : "Transfer",
         state: transportState,
-        onPress: () => openTransport("progress_strip"),
+        onPress: () => {
+          void openTransport("progress_strip");
+        },
       },
-      { key: "things", label: "Things", state: thingsState, onPress: () => openThings("progress_strip") },
+      {
+        key: "things",
+        label: "Things",
+        state: thingsState,
+        onPress: () => {
+          void openThings("progress_strip");
+        },
+      },
     ],
     [
       affiliateUrls?.omioUrl,
+      affiliateUrls?.trainsUrl,
       openTickets,
       openFlights,
       openHotels,
@@ -459,10 +524,13 @@ export default function useTripDetailViewModel({
     if (!hasMatch) {
       return {
         title: "Start by choosing a match",
-        body: "No primary match means no proper trip flow. Pick the match first, then everything else becomes specific and prefilled.",
+        body: "No primary match means no real trip flow. Pick the match first, then the rest becomes specific instead of vague.",
         cta: "Add a match",
         onPress: () => {
-          Alert.alert("Add a match first", "Use the Matches card to add or select the primary fixture for this trip.");
+          Alert.alert(
+            "Add a match first",
+            "Use the Matches card to add or select the primary fixture for this trip."
+          );
         },
         badge: "Blocked",
       };
@@ -471,21 +539,31 @@ export default function useTripDetailViewModel({
     if (!hasTickets) {
       return {
         title: "Book tickets first",
-        body: "Tickets are the anchor. Until the seat is sorted, flights and hotels are premature.",
-        cta: cleanPriceLabel(ticketsPriceFrom) ? `Compare tickets • ${ticketsPriceFrom}` : "Compare tickets",
-        onPress: () => openTickets("next_best_action"),
+        body: "Tickets are the anchor. Until that is sorted, flights and hotels are guesswork.",
+        cta: cleanPriceLabel(ticketsPriceFrom)
+          ? `Compare tickets • ${ticketsPriceFrom}`
+          : "Compare tickets",
+        onPress: () => {
+          void openTickets("next_best_action");
+        },
         badge: "Priority",
       };
     }
 
     if (kickoffTbc && !hasFlight) {
       return {
-        title: "Kickoff not confirmed — use flexible travel",
-        body: "You’ve started correctly with tickets. Now keep flights flexible because hard-booking travel against a moving kickoff is reckless.",
-        cta: cleanPriceLabel(flightsPriceFrom) ? `View flights • ${flightsPriceFrom}` : "View flights",
-        onPress: () => openFlights("next_best_action"),
+        title: "Kickoff not confirmed — keep travel flexible",
+        body: "You started correctly with tickets. Do not hard-book inflexible travel against an unstable kickoff if you can avoid it.",
+        cta: cleanPriceLabel(flightsPriceFrom)
+          ? `View flights • ${flightsPriceFrom}`
+          : "View flights",
+        onPress: () => {
+          void openFlights("next_best_action");
+        },
         secondaryCta: "Open tickets",
-        onSecondaryPress: () => openTickets("next_best_action"),
+        onSecondaryPress: () => {
+          void openTickets("next_best_action");
+        },
         badge: "TBC",
         proLocked: true,
       };
@@ -495,21 +573,32 @@ export default function useTripDetailViewModel({
       return {
         title: "Add flights next",
         body: "The trip is not real until transport in and out is covered.",
-        cta: cleanPriceLabel(flightsPriceFrom) ? `View flights • ${flightsPriceFrom}` : "View flights",
-        onPress: () => openFlights("next_best_action"),
+        cta: cleanPriceLabel(flightsPriceFrom)
+          ? `View flights • ${flightsPriceFrom}`
+          : "View flights",
+        onPress: () => {
+          void openFlights("next_best_action");
+        },
       };
     }
 
     if (!hasHotel) {
       return {
         title: "Lock the hotel",
-        body: "A bad hotel choice ruins matchday logistics. Book the stay after tickets and flights, not before.",
-        cta: cleanPriceLabel(hotelsPriceFrom) ? `View hotels • ${hotelsPriceFrom}` : "View hotels",
-        onPress: () => openHotels("next_best_action"),
+        body: "A bad location ruins matchday logistics. Book the stay after tickets and flights, not before.",
+        cta: cleanPriceLabel(hotelsPriceFrom)
+          ? `View hotels • ${hotelsPriceFrom}`
+          : "View hotels",
+        onPress: () => {
+          void openHotels("next_best_action");
+        },
         secondaryCta: "Stay guidance",
         onSecondaryPress: () => {
-          void setActiveWorkspaceSection("stay");
-          Alert.alert("Stay guidance", "Use the stay section and guidance card to avoid booking in a useless area.");
+          void setWorkspaceSection("stay");
+          Alert.alert(
+            "Stay guidance",
+            "Use the stay section and guidance card to avoid booking in a pointless area."
+          );
         },
       };
     }
@@ -519,33 +608,42 @@ export default function useTripDetailViewModel({
         title: "Sort local transport",
         body: "Airport, hotel, stadium. Remove that friction now instead of scrambling later.",
         cta: cleanPriceLabel(transfersPriceFrom)
-          ? `${affiliateUrls?.omioUrl ? "Rail / bus" : "Transfers"} • ${transfersPriceFrom}`
-          : affiliateUrls?.omioUrl
+          ? `${
+              affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "Rail / bus" : "Transfers"
+            } • ${transfersPriceFrom}`
+          : affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl
           ? "View rail / bus"
           : "View transfers",
-        onPress: () => openTransport("next_best_action"),
+        onPress: () => {
+          void openTransport("next_best_action");
+        },
       };
     }
 
     if (!hasThings) {
       return {
         title: "Add extras only if they improve the trip",
-        body: "Core trip is covered. Extras should earn their place, not bloat the plan.",
-        cta: cleanPriceLabel(experiencesPriceFrom) ? `View activities • ${experiencesPriceFrom}` : "View activities",
-        onPress: () => openThings("next_best_action"),
+        body: "Core trip is covered. Extras should improve the trip, not clutter it.",
+        cta: cleanPriceLabel(experiencesPriceFrom)
+          ? `View activities • ${experiencesPriceFrom}`
+          : "View activities",
+        onPress: () => {
+          void openThings("next_best_action");
+        },
         badge: "Optional",
       };
     }
 
     return {
       title: "Trip booking flow complete",
-      body: "Core trip components are covered. Store proof, confirmations and QR codes in Wallet and stop fiddling with finished work.",
+      body: "Core trip components are covered. Store proof, confirmations and QR codes in Wallet and stop messing with finished work.",
       cta: "Open wallet",
       onPress: controller.onViewWallet,
       badge: "Ready",
     };
   }, [
     affiliateUrls?.omioUrl,
+    affiliateUrls?.trainsUrl,
     controller.onViewWallet,
     experiencesPriceFrom,
     flightsPriceFrom,
@@ -562,7 +660,7 @@ export default function useTripDetailViewModel({
     openThings,
     openTickets,
     openTransport,
-    setActiveWorkspaceSection,
+    setWorkspaceSection,
     ticketsPriceFrom,
     transfersPriceFrom,
   ]);
@@ -586,7 +684,9 @@ export default function useTripDetailViewModel({
       add(
         "Tickets",
         ticketButtonSubtitle({ primaryTicketItem, ticketState, ticketsPriceFrom }),
-        () => openTickets("smart_booking"),
+        () => {
+          void openTickets("smart_booking");
+        },
         "primary",
         ticketProviderFromItem(primaryTicketItem)
       );
@@ -601,7 +701,9 @@ export default function useTripDetailViewModel({
           "Flight option saved",
           "Flight booked"
         ),
-        () => openFlights("smart_booking"),
+        () => {
+          void openFlights("smart_booking");
+        },
         hasTickets ? "primary" : "neutral",
         "aviasales"
       );
@@ -616,13 +718,15 @@ export default function useTripDetailViewModel({
           "Hotel option saved",
           "Hotel booked"
         ),
-        () => openHotels("smart_booking"),
+        () => {
+          void openHotels("smart_booking");
+        },
         hasTickets && hasFlight ? "primary" : "neutral",
         "expedia"
       );
     }
 
-    if (!hasTransport && affiliateUrls.omioUrl) {
+    if (!hasTransport && (affiliateUrls.omioUrl || affiliateUrls.trainsUrl)) {
       add(
         "Rail / Bus",
         completionLabel(
@@ -631,7 +735,9 @@ export default function useTripDetailViewModel({
           "Transport option saved",
           "Transport booked"
         ),
-        () => openTransport("smart_booking"),
+        () => {
+          void openTransport("smart_booking");
+        },
         "neutral",
         "omio"
       );
@@ -644,7 +750,9 @@ export default function useTripDetailViewModel({
           "Transfer option saved",
           "Transfer booked"
         ),
-        () => openTransport("smart_booking"),
+        () => {
+          void openTransport("smart_booking");
+        },
         "neutral",
         "kiwitaxi"
       );
@@ -659,7 +767,9 @@ export default function useTripDetailViewModel({
           "Activity saved",
           "Activity booked"
         ),
-        () => openThings("smart_booking"),
+        () => {
+          void openThings("smart_booking");
+        },
         "neutral",
         "getyourguide"
       );
@@ -668,11 +778,13 @@ export default function useTripDetailViewModel({
     if (buttons.length === 0) {
       add("Wallet", "Trip proof and confirmations", controller.onViewWallet, "primary", null);
 
-      if (affiliateUrls.omioUrl) {
+      if (affiliateUrls.omioUrl || affiliateUrls.trainsUrl) {
         add(
           "Rail / Bus",
           pricingOrFallback(transfersPriceFrom, "Omio • live routes"),
-          () => openTransport("smart_booking"),
+          () => {
+            void openTransport("smart_booking");
+          },
           "neutral",
           "omio"
         );
@@ -680,7 +792,9 @@ export default function useTripDetailViewModel({
         add(
           "Activities",
           pricingOrFallback(experiencesPriceFrom, "GetYourGuide • live options"),
-          () => openThings("smart_booking"),
+          () => {
+            void openThings("smart_booking");
+          },
           "neutral",
           "getyourguide"
         );
@@ -716,10 +830,9 @@ export default function useTripDetailViewModel({
     trip,
   ]);
 
-  const capHint = useMemo(
-    () => (!isPro ? proCapHint(FREE_TRIP_CAP, tripCount) : undefined),
-    [isPro, tripCount]
-  );
+  const capHint = useMemo(() => {
+    return !isPro ? proCapHint(FREE_TRIP_CAP, tripCount) : undefined;
+  }, [isPro, tripCount]);
 
   const heroBannerCounts = useMemo(
     () => ({
@@ -740,10 +853,12 @@ export default function useTripDetailViewModel({
   }, [hasMatch, hasTickets, hasFlight, hasHotel, hasTransport]);
 
   const commercialSummaryLine = useMemo(() => {
-    if (cleanPriceLabel(tripPriceFrom)) return `${tripPriceFrom} total for core trip`;
+    if (cleanPriceLabel(tripPriceFrom)) {
+      return `${tripPriceFrom} total for core trip`;
+    }
 
     const parts = [ticketsPriceFrom, flightsPriceFrom, hotelsPriceFrom]
-      .map((x) => cleanPriceLabel(x))
+      .map((value) => cleanPriceLabel(value))
       .filter(Boolean) as string[];
 
     if (parts.length >= 2) return parts.join(" • ");
@@ -788,4 +903,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-    }
+                         }
