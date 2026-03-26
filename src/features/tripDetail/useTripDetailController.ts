@@ -8,7 +8,11 @@ import tripsStore, {
 } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
-import type { PartnerId } from "@/src/core/partners";
+import {
+  canonicalizePartnerId,
+  isUtilityPartner,
+  type PartnerId,
+} from "@/src/constants/partners";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
 import { sectionForSavedItemType } from "@/src/core/tripWorkspace";
@@ -36,21 +40,12 @@ import {
   noteTitleFromText,
   cleanNoteText,
   ticketResolverFailureMessage,
+  type AffiliateUrls,
   type SourceSection,
   type SourceSurface,
 } from "@/src/features/tripDetail/helpers";
 
 type SetState<T> = React.Dispatch<React.SetStateAction<T>>;
-
-type AffiliateUrls = {
-  ticketsUrl?: string | null;
-  hotelUrl?: string | null;
-  flightsUrl?: string | null;
-  trainsUrl?: string | null;
-  transfersUrl?: string | null;
-  thingsUrl?: string | null;
-  mapsUrl?: string | null;
-} | null;
 
 type Props = {
   trip: Trip | null;
@@ -59,7 +54,7 @@ type Props = {
   primaryLeagueId?: number;
   fixturesById: Record<string, FixtureListRow>;
   ticketsByMatchId: Record<string, SavedItem | null>;
-  affiliateUrls?: AffiliateUrls;
+  affiliateUrls?: AffiliateUrls | null;
   noteText?: string;
   setNoteText?: SetState<string>;
   setNoteSaving?: SetState<boolean>;
@@ -148,6 +143,7 @@ function normalizeTrackedPartnerArgs(
 
   return {
     ...args,
+    partnerId: canonicalizePartnerId(args.partnerId) ?? args.partnerId,
     url: clean(args.url),
     title: clean(args.title),
     metadata: {
@@ -237,6 +233,63 @@ function buildPrimarySnapshotFromFixtureRow(
   };
 }
 
+function getStayUrl(affiliateUrls?: AffiliateUrls | null): string {
+  return clean(affiliateUrls?.staysUrl || affiliateUrls?.hotelsUrl);
+}
+
+function getThingsUrl(affiliateUrls?: AffiliateUrls | null): string {
+  return clean(affiliateUrls?.thingsUrl || affiliateUrls?.experiencesUrl);
+}
+
+function getTravelCandidate(affiliateUrls?: AffiliateUrls | null): {
+  url: string;
+  partnerId: PartnerId;
+  itemType: SavedItemType;
+  titleKind: "flight" | "train" | "bus" | "transfer";
+} | null {
+  const flightsUrl = clean(affiliateUrls?.flightsUrl);
+  if (flightsUrl) {
+    return {
+      url: flightsUrl,
+      partnerId: "aviasales",
+      itemType: "flight",
+      titleKind: "flight",
+    };
+  }
+
+  const trainsUrl = clean(affiliateUrls?.trainsUrl || affiliateUrls?.omioUrl || affiliateUrls?.transportUrl);
+  if (trainsUrl) {
+    return {
+      url: trainsUrl,
+      partnerId: "omio",
+      itemType: "train",
+      titleKind: "train",
+    };
+  }
+
+  const busesUrl = clean(affiliateUrls?.busesUrl);
+  if (busesUrl) {
+    return {
+      url: busesUrl,
+      partnerId: "omio",
+      itemType: "train",
+      titleKind: "bus",
+    };
+  }
+
+  const transfersUrl = clean(affiliateUrls?.transfersUrl);
+  if (transfersUrl) {
+    return {
+      url: transfersUrl,
+      partnerId: "kiwitaxi",
+      itemType: "transfer",
+      titleKind: "transfer",
+    };
+  }
+
+  return null;
+}
+
 export default function useTripDetailController({
   trip,
   activeTripId,
@@ -313,19 +366,19 @@ export default function useTripDetailController({
     }
 
     if (next === "stay") {
-      const url = clean(affiliateUrls?.hotelUrl);
+      const url = getStayUrl(affiliateUrls);
       if (!url) {
         Alert.alert("Hotels not ready", "No hotel search available yet.");
         return;
       }
 
       await openTrackedPartner({
-        partnerId: "expedia" as PartnerId,
+        partnerId: "expedia",
         url,
         savedItemType: "hotel",
         title: `Stays in ${cityName}`,
         metadata: {
-          sourceSurface: "planning_rail",
+          sourceSurface: "workspace_cta",
           sourceSection: "stay",
         },
       });
@@ -333,60 +386,49 @@ export default function useTripDetailController({
     }
 
     if (next === "travel") {
-      const url = clean(
-        affiliateUrls?.flightsUrl || affiliateUrls?.trainsUrl || affiliateUrls?.transfersUrl
-      );
-      if (!url) {
+      const candidate = getTravelCandidate(affiliateUrls);
+      if (!candidate) {
         Alert.alert("Travel not ready", "No travel search available yet.");
         return;
       }
 
-      const partnerId: PartnerId = clean(affiliateUrls?.flightsUrl)
-        ? ("aviasales" as PartnerId)
-        : clean(affiliateUrls?.trainsUrl)
-          ? ("omio" as PartnerId)
-          : ("kiwitaxi" as PartnerId);
-
-      const itemType: SavedItemType = clean(affiliateUrls?.flightsUrl)
-        ? "flight"
-        : clean(affiliateUrls?.trainsUrl)
-          ? "train"
-          : "transfer";
-
       const title =
-        itemType === "flight"
+        candidate.titleKind === "flight"
           ? `Flights to ${cityName}`
-          : itemType === "train"
-            ? `Trains to ${cityName}`
-            : `Transfers in ${cityName}`;
+          : candidate.titleKind === "bus"
+            ? `Buses to ${cityName}`
+            : candidate.titleKind === "train"
+              ? `Trains to ${cityName}`
+              : `Transfers in ${cityName}`;
 
       await openTrackedPartner({
-        partnerId,
-        url,
-        savedItemType: itemType,
+        partnerId: candidate.partnerId,
+        url: candidate.url,
+        savedItemType: candidate.itemType,
         title,
         metadata: {
-          sourceSurface: "planning_rail",
+          sourceSurface: "workspace_cta",
           sourceSection: "travel",
+          travelMode: candidate.titleKind,
         },
       });
       return;
     }
 
     if (next === "things") {
-      const url = clean(affiliateUrls?.thingsUrl);
+      const url = getThingsUrl(affiliateUrls);
       if (!url) {
         Alert.alert("Experiences not ready", "No activities available yet.");
         return;
       }
 
       await openTrackedPartner({
-        partnerId: "getyourguide" as PartnerId,
+        partnerId: "getyourguide",
         url,
         savedItemType: "things",
         title: `Things to do in ${cityName}`,
         metadata: {
-          sourceSurface: "planning_rail",
+          sourceSurface: "workspace_cta",
           sourceSection: "things",
         },
       });
@@ -401,12 +443,12 @@ export default function useTripDetailController({
       }
 
       await openTrackedPartner({
-        partnerId: "kiwitaxi" as PartnerId,
+        partnerId: "kiwitaxi",
         url,
         savedItemType: "transfer",
         title: `Transfers in ${cityName}`,
         metadata: {
-          sourceSurface: "planning_rail",
+          sourceSurface: "workspace_cta",
           sourceSection: "transfers",
         },
       });
@@ -444,13 +486,22 @@ export default function useTripDetailController({
       return;
     }
 
-    if (args.partnerId === ("googlemaps" as PartnerId)) {
+    const canonicalPartnerId = canonicalizePartnerId(args.partnerId);
+    if (!canonicalPartnerId) {
+      Alert.alert("Partner link failed", "This partner is not configured correctly.");
+      return;
+    }
+
+    if (isUtilityPartner(canonicalPartnerId)) {
       await openUntracked(rawUrl);
       return;
     }
 
     const enriched = normalizeTrackedPartnerArgs(
-      args,
+      {
+        ...args,
+        partnerId: canonicalPartnerId,
+      },
       { tripId, cityName, trip },
       safeSourceSurface(args.metadata?.sourceSurface)
     );
@@ -514,8 +565,8 @@ export default function useTripDetailController({
       return;
     }
 
-    const partnerId = clean(item.partnerId);
-    if (!partnerId || partnerId === "googlemaps") {
+    const canonicalPartnerId = canonicalizePartnerId(item.partnerId);
+    if (!canonicalPartnerId || isUtilityPartner(canonicalPartnerId)) {
       await openUntracked(partnerUrl);
       return;
     }
@@ -529,7 +580,7 @@ export default function useTripDetailController({
     try {
       await beginPartnerClick({
         tripId,
-        partnerId: partnerId as PartnerId,
+        partnerId: canonicalPartnerId,
         url: partnerUrl,
         savedItemType: item.type,
         title: item.title,
@@ -806,7 +857,7 @@ export default function useTripDetailController({
               args.officialTicketUrl,
               "The club ticket page is not available yet.",
               {
-                partnerId: "googlemaps" as PartnerId,
+                partnerId: "official_club_site",
                 savedItemType: "tickets",
                 title,
                 metadata: {
@@ -817,7 +868,7 @@ export default function useTripDetailController({
                   homeName: args.homeName,
                   awayName: args.awayName,
                   ticketProvider: "official_club_site",
-                  sourceSurface: "official_ticket_fallback",
+                  sourceSurface: "ticket_choice_alert",
                   sourceSection: "tickets",
                   officialFallback: true,
                 },
@@ -1028,4 +1079,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-    }
+}
