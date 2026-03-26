@@ -1,4 +1,3 @@
-// src/services/bookingProof.ts
 import { Alert } from "react-native";
 
 import savedItemsStore from "@/src/state/savedItems";
@@ -8,12 +7,19 @@ import { writeJson } from "@/src/state/persist";
 
 const LAST_BOOKED_KEY = "yna_last_booked_v1";
 
+let proofPromptInFlightForItemId: string | null = null;
+
 function defer(fn: () => void) {
   setTimeout(fn, 60);
 }
 
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
+}
+
 async function ensureSavedItemsLoaded() {
   if (savedItemsStore.getState().loaded) return;
+
   try {
     await savedItemsStore.load();
   } catch {
@@ -25,46 +31,58 @@ function getAttachments(item?: SavedItem | null) {
   return Array.isArray(item?.attachments) ? item.attachments : [];
 }
 
+function showOkAlert(title: string, message: string) {
+  Alert.alert(title, message, [{ text: "OK" }], { cancelable: true });
+}
+
 async function persistLastBookedPointer(item?: SavedItem | null) {
-  const itemId = String(item?.id ?? "").trim();
-  const tripId = String(item?.tripId ?? "").trim();
+  const itemId = cleanString(item?.id);
+  const tripId = cleanString(item?.tripId);
+
   if (!itemId || !tripId) return;
 
   try {
-    await writeJson(LAST_BOOKED_KEY, { itemId, tripId, at: Date.now() });
+    await writeJson(LAST_BOOKED_KEY, {
+      itemId,
+      tripId,
+      at: Date.now(),
+    });
   } catch {
     // best-effort
   }
 }
 
 async function promptAddProof(itemId: string) {
-  const id = String(itemId ?? "").trim();
+  const id = cleanString(itemId);
   if (!id) return;
 
+  if (proofPromptInFlightForItemId === id) return;
+  proofPromptInFlightForItemId = id;
+
   try {
-    const existingBefore = savedItemsStore.getById(id);
+    await ensureSavedItemsLoaded();
+
+    const existingBefore = savedItemsStore.getById(id) ?? null;
     if (existingBefore && getAttachments(existingBefore).length > 0) {
-      Alert.alert("Already added", "This booking already has proof stored in Wallet.", [{ text: "OK" }], {
-        cancelable: true,
-      });
+      showOkAlert("Already added", "This booking already has proof stored in Wallet.");
       return;
     }
 
-    const att = await pickAndStoreAttachmentForItem(id);
+    const attachment = await pickAndStoreAttachmentForItem(id);
 
     await ensureSavedItemsLoaded();
-    await savedItemsStore.addAttachment(id, att);
+    await savedItemsStore.addAttachment(id, attachment);
 
-    Alert.alert("Saved", "Booking proof stored in Wallet for offline access.", [{ text: "OK" }], {
-      cancelable: true,
-    });
-  } catch (e: any) {
-    const msg = String(e?.message ?? "");
-    if (msg === "cancelled") return;
+    showOkAlert("Saved", "Booking proof stored in Wallet for offline access.");
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? cleanString(error.message) : cleanString(error);
 
-    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], {
-      cancelable: true,
-    });
+    if (message === "cancelled") return;
+
+    showOkAlert("Couldn’t add attachment", message || "Try again.");
+  } finally {
+    proofPromptInFlightForItemId = null;
   }
 }
 
@@ -75,7 +93,7 @@ async function promptAddProof(itemId: string) {
  * - offers proof upload if no proof exists yet
  */
 export async function confirmBookedAndOfferProof(itemId: string) {
-  const id = String(itemId ?? "").trim();
+  const id = cleanString(itemId);
   if (!id) return;
 
   await ensureSavedItemsLoaded();
@@ -84,19 +102,16 @@ export async function confirmBookedAndOfferProof(itemId: string) {
   if (!item) return;
 
   if (item.status !== "booked") {
-    // Do not lie to the user. If the item is not booked, don't show Wallet-booked messaging.
     return;
   }
 
   await persistLastBookedPointer(item);
 
-  const title = String(item.title ?? "").trim() || "Booking";
-  const atts = getAttachments(item);
+  const title = cleanString(item.title) || "Booking";
+  const attachments = getAttachments(item);
 
-  if (atts.length > 0) {
-    Alert.alert("Added to Wallet", `"${title}" is booked and saved in your Wallet.`, [{ text: "OK" }], {
-      cancelable: true,
-    });
+  if (attachments.length > 0) {
+    showOkAlert("Added to Wallet", `"${title}" is booked and saved in your Wallet.`);
     return;
   }
 
@@ -108,9 +123,12 @@ export async function confirmBookedAndOfferProof(itemId: string) {
     "Added to Wallet",
     message,
     [
-      { text: "Not now", style: "cancel" as const },
-      { text: "Add booking proof", onPress: () => defer(() => promptAddProof(id)) },
-    ] as any,
+      { text: "Not now", style: "cancel" },
+      {
+        text: "Add booking proof",
+        onPress: () => defer(() => void promptAddProof(id)),
+      },
+    ],
     { cancelable: true }
   );
 }
