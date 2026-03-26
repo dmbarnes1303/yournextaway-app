@@ -15,6 +15,8 @@ import {
   dismissPartnerReturn,
 } from "@/src/services/partnerReturnBootstrap";
 
+import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
+
 import type { LastPartnerClick } from "@/src/services/partnerClicks";
 
 export default function RootLayout() {
@@ -32,7 +34,6 @@ export default function RootLayout() {
   useEffect(() => {
     mountedRef.current = true;
 
-    // ✅ SAFE: initialise logger AFTER app starts
     try {
       const { setupErrorLogging } = require("@/src/utils/errorLogger");
       setupErrorLogging();
@@ -63,6 +64,9 @@ export default function RootLayout() {
   async function handleBooked(itemId: string) {
     try {
       await markItemBooked(itemId);
+
+      // ✅ SINGLE OWNER OF POST-BOOKING FLOW
+      await confirmBookedAndOfferProof(itemId);
     } finally {
       closeModal();
     }
@@ -106,7 +110,6 @@ export default function RootLayout() {
         onBooked={handleBooked}
         onNotBooked={handleNotBooked}
         onNotNow={handleNotNow}
-        onClose={closeModal}
       />
     </ProProvider>
   );
