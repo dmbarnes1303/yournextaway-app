@@ -16,14 +16,13 @@ import {
 } from "@/src/services/partnerReturnBootstrap";
 
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
-
 import type { LastPartnerClick } from "@/src/services/partnerClicks";
 
 export default function RootLayout() {
   const [modalItemId, setModalItemId] = useState<string | null>(null);
   const [modalClick, setModalClick] = useState<LastPartnerClick | null>(null);
 
-  const mountedRef = useRef(true);
+  const mountedRef = useRef(false);
 
   function closeModal() {
     if (!mountedRef.current) return;
@@ -37,35 +36,37 @@ export default function RootLayout() {
     try {
       const { setupErrorLogging } = require("@/src/utils/errorLogger");
       setupErrorLogging();
-    } catch (e) {
-      console.warn("Logger init failed", e);
+    } catch (error) {
+      console.warn("Logger init failed", error);
     }
 
     identity.ensureIdentity().catch(() => null);
+    preferencesStore.load().catch(() => null);
 
     bootstrapPartnerReturnPrompt();
 
-    const maybeUnsub = registerReturnModalHandler((itemId, click) => {
+    const unsubscribe = registerReturnModalHandler((itemId, click) => {
       if (!mountedRef.current) return;
-      setModalItemId(itemId);
-      setModalClick(click);
+      setModalItemId(String(itemId ?? "").trim() || null);
+      setModalClick(click ?? null);
     });
-
-    preferencesStore.load().catch(() => null);
 
     return () => {
       mountedRef.current = false;
+
       try {
-        if (typeof maybeUnsub === "function") maybeUnsub();
-      } catch {}
+        if (typeof unsubscribe === "function") {
+          unsubscribe();
+        }
+      } catch {
+        // ignore cleanup failure
+      }
     };
   }, []);
 
   async function handleBooked(itemId: string) {
     try {
       await markItemBooked(itemId);
-
-      // ✅ SINGLE OWNER OF POST-BOOKING FLOW
       await confirmBookedAndOfferProof(itemId);
     } finally {
       closeModal();
@@ -85,6 +86,7 @@ export default function RootLayout() {
       closeModal();
       return;
     }
+
     try {
       await dismissPartnerReturn(itemId);
     } finally {
@@ -104,7 +106,7 @@ export default function RootLayout() {
       </Stack>
 
       <PartnerReturnModal
-        visible={!!modalItemId}
+        visible={Boolean(modalItemId)}
         itemId={modalItemId}
         click={modalClick}
         onBooked={handleBooked}
