@@ -2,7 +2,10 @@ import React from "react";
 import { Alert, type AlertButton } from "react-native";
 import { useRouter } from "expo-router";
 
-import tripsStore, { type Trip } from "@/src/state/trips";
+import tripsStore, {
+  type Trip,
+  type TripSnapshotPatch,
+} from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
 
 import type { PartnerId } from "@/src/core/partners";
@@ -69,7 +72,16 @@ type TrackedPartnerArgs = {
   url: string;
   title: string;
   savedItemType?: SavedItemType;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
+};
+
+type CanonicalTripBuildParams = {
+  tripId: string;
+  from: string;
+  to: string;
+  city?: string;
+  leagueId?: string;
+  season?: string;
 };
 
 function inferSourceSectionFromSavedItemType(type?: SavedItemType): SourceSection {
@@ -104,7 +116,7 @@ function safeSourceSurface(value: unknown): SourceSurface {
 }
 
 function getTrackedPartnerErrorMessage(error: unknown): string {
-  const raw = clean((error as any)?.message ?? error);
+  const raw = clean((error as { message?: unknown })?.message ?? error);
 
   if (!raw) return "This partner link could not be opened right now.";
   if (raw.includes("tripId is required")) {
@@ -129,8 +141,9 @@ function normalizeTrackedPartnerArgs(
   },
   sourceSurface: SourceSurface
 ): TrackedPartnerArgs {
+  const rawSourceSection = clean(args.metadata?.sourceSection);
   const sourceSection =
-    (clean(args.metadata?.sourceSection) as SourceSection) ||
+    (rawSourceSection as SourceSection) ||
     inferSourceSectionFromSavedItemType(args.savedItemType);
 
   return {
@@ -142,7 +155,7 @@ function normalizeTrackedPartnerArgs(
       city: context.cityName,
       startDate: context.trip?.startDate ?? null,
       endDate: context.trip?.endDate ?? null,
-      primaryMatchId: clean((context.trip as any)?.fixtureIdPrimary) || null,
+      primaryMatchId: clean(context.trip?.fixtureIdPrimary) || null,
       sourceSurface,
       sourceSection,
       ...(args.metadata ?? {}),
@@ -152,6 +165,76 @@ function normalizeTrackedPartnerArgs(
 
 function buildOfficialTicketFallbackMessage(homeName: string) {
   return `No valid reseller ticket options were found right now. Try ${homeName}'s official ticket page instead.`;
+}
+
+function buildCanonicalTripBuildParams(args: {
+  trip: Trip;
+  cityName: string;
+  primaryLeagueId?: number;
+}): CanonicalTripBuildParams {
+  return {
+    tripId: args.trip.id,
+    from: args.trip.startDate,
+    to: args.trip.endDate,
+    city: args.cityName || undefined,
+    leagueId:
+      typeof args.primaryLeagueId === "number" && Number.isFinite(args.primaryLeagueId)
+        ? String(args.primaryLeagueId)
+        : undefined,
+    season: String(DEFAULT_SEASON),
+  };
+}
+
+function buildPrimarySnapshotFromFixtureRow(
+  row: FixtureListRow | null,
+  fallbackDisplayCity?: string
+): TripSnapshotPatch | null {
+  if (!row?.fixture?.id) return null;
+
+  const homeName = clean(row.teams?.home?.name) || undefined;
+  const awayName = clean(row.teams?.away?.name) || undefined;
+  const leagueName = clean(row.league?.name) || undefined;
+  const round = clean(row.league?.round) || undefined;
+  const kickoffIso = clean(row.fixture?.date) || undefined;
+  const venueName = clean(row.fixture?.venue?.name) || undefined;
+  const venueCity = clean(row.fixture?.venue?.city) || undefined;
+
+  const homeTeamId =
+    typeof row.teams?.home?.id === "number" ? row.teams.home.id : undefined;
+  const awayTeamId =
+    typeof row.teams?.away?.id === "number" ? row.teams.away.id : undefined;
+  const leagueId =
+    typeof row.league?.id === "number" ? row.league.id : undefined;
+
+  const statusShort = clean(row.fixture?.status?.short).toUpperCase();
+  const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
+  const midnight =
+    kickoffDate && Number.isFinite(kickoffDate.getTime())
+      ? kickoffDate.getHours() === 0 && kickoffDate.getMinutes() === 0
+      : true;
+
+  const kickoffTbc =
+    statusShort === "TBD" ||
+    statusShort === "TBA" ||
+    statusShort === "NS" ||
+    statusShort === "PST" ||
+    midnight;
+
+  return {
+    fixtureIdPrimary: String(row.fixture.id),
+    homeTeamId,
+    awayTeamId,
+    homeName,
+    awayName,
+    leagueId,
+    leagueName,
+    round,
+    kickoffIso,
+    kickoffTbc,
+    venueName,
+    venueCity,
+    displayCity: venueCity || clean(fallbackDisplayCity) || undefined,
+  };
 }
 
 export default function useTripDetailController({
@@ -173,17 +256,16 @@ export default function useTripDetailController({
   function openTripBuilder() {
     if (!trip) return;
 
+    const params = buildCanonicalTripBuildParams({
+      trip,
+      cityName,
+      primaryLeagueId,
+    });
+
     router.push({
       pathname: "/trip/build",
-      params: {
-        tripId: trip.id,
-        from: trip.startDate,
-        to: trip.endDate,
-        city: cityName,
-        leagueId: String(primaryLeagueId ?? ""),
-        season: String(DEFAULT_SEASON),
-      },
-    } as any);
+      params,
+    } as never);
   }
 
   function onEditTrip() {
@@ -195,7 +277,7 @@ export default function useTripDetailController({
   }
 
   function onViewWallet() {
-    router.push("/(tabs)/wallet" as any);
+    router.push("/(tabs)/wallet" as never);
   }
 
   function onUpgradePress() {
@@ -221,7 +303,7 @@ export default function useTripDetailController({
     }
 
     if (next === "tickets") {
-      const primaryMatchId = clean((trip as any)?.fixtureIdPrimary);
+      const primaryMatchId = clean(trip?.fixtureIdPrimary);
       if (primaryMatchId) {
         await openTicketsForMatch(primaryMatchId);
       } else {
@@ -251,7 +333,9 @@ export default function useTripDetailController({
     }
 
     if (next === "travel") {
-      const url = clean(affiliateUrls?.flightsUrl || affiliateUrls?.trainsUrl || affiliateUrls?.transfersUrl);
+      const url = clean(
+        affiliateUrls?.flightsUrl || affiliateUrls?.trainsUrl || affiliateUrls?.transfersUrl
+      );
       if (!url) {
         Alert.alert("Travel not ready", "No travel search available yet.");
         return;
@@ -326,7 +410,6 @@ export default function useTripDetailController({
           sourceSection: "transfers",
         },
       });
-      return;
     }
   }
 
@@ -361,7 +444,7 @@ export default function useTripDetailController({
       return;
     }
 
-    if (args.partnerId === ("googlemaps" as any)) {
+    if (args.partnerId === ("googlemaps" as PartnerId)) {
       await openUntracked(rawUrl);
       return;
     }
@@ -401,7 +484,7 @@ export default function useTripDetailController({
       partnerId: PartnerId;
       savedItemType: SavedItemType;
       title: string;
-      metadata?: Record<string, any>;
+      metadata?: Record<string, unknown>;
     }
   ) {
     const nextUrl = clean(url);
@@ -562,7 +645,7 @@ export default function useTripDetailController({
           sourceSurface: "workspace_cta",
           sourceSection: "notes",
         },
-      } as any);
+      });
 
       setNoteText("");
       void setActiveWorkspaceSection("notes");
@@ -584,47 +667,18 @@ export default function useTripDetailController({
     if (!trip) return;
 
     const mid = clean(matchId);
-    if (!mid || mid === clean((trip as any)?.fixtureIdPrimary)) return;
+    if (!mid || mid === clean(trip.fixtureIdPrimary)) return;
 
     const row = fixturesById[mid] ?? null;
+    const snapshot = buildPrimarySnapshotFromFixtureRow(row, trip.displayCity);
 
-    const homeName = clean((row as any)?.teams?.home?.name) || undefined;
-    const awayName = clean((row as any)?.teams?.away?.name) || undefined;
-    const leagueName = clean((row as any)?.league?.name) || undefined;
-    const leagueId =
-      typeof (row as any)?.league?.id === "number" ? (row as any).league.id : undefined;
-    const kickoffIso = clean((row as any)?.fixture?.date) || undefined;
-    const venueName = clean((row as any)?.fixture?.venue?.name) || undefined;
-    const venueCity = clean((row as any)?.fixture?.venue?.city) || undefined;
-
-    const statusShort = clean((row as any)?.fixture?.status?.short).toUpperCase();
-    const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
-    const midnight =
-      kickoffDate && Number.isFinite(kickoffDate.getTime())
-        ? kickoffDate.getHours() === 0 && kickoffDate.getMinutes() === 0
-        : true;
-
-    const kickoffTbc =
-      statusShort === "TBD" ||
-      statusShort === "TBA" ||
-      statusShort === "NS" ||
-      statusShort === "PST" ||
-      midnight;
+    if (!snapshot) {
+      Alert.alert("Couldn’t set primary match", "Match data is missing.");
+      return;
+    }
 
     try {
-      await tripsStore.setPrimaryMatchForTrip(trip.id, mid);
-      await tripsStore.updateTrip(trip.id, {
-        fixtureIdPrimary: mid,
-        homeName,
-        awayName,
-        leagueName,
-        leagueId,
-        kickoffIso,
-        kickoffTbc,
-        venueName,
-        venueCity,
-        displayCity: venueCity || (trip as any)?.displayCity,
-      } as any);
+      await tripsStore.applyPrimaryMatchSelection(trip.id, mid, snapshot);
     } catch {
       Alert.alert("Couldn’t set primary match", "Try again.");
     }
@@ -666,7 +720,7 @@ export default function useTripDetailController({
     if (!trip) return;
 
     const mid = clean(matchId);
-    const isPrimary = mid === clean((trip as any)?.fixtureIdPrimary);
+    const isPrimary = mid === clean(trip.fixtureIdPrimary);
 
     Alert.alert(
       "Match options",
@@ -815,7 +869,7 @@ export default function useTripDetailController({
             router.push({
               pathname: "/match/[id]",
               params: { id: args.mid, tripId: activeTripId ?? undefined },
-            } as any),
+            } as never),
         },
       ] as AlertButton[]
     );
@@ -846,12 +900,11 @@ export default function useTripDetailController({
 
     const row = fixturesById[mid] ?? null;
 
-    const homeName = clean((row as any)?.teams?.home?.name ?? (trip as any)?.homeName);
-    const awayName = clean((row as any)?.teams?.away?.name ?? (trip as any)?.awayName);
-    const kickoffIso = clean((row as any)?.fixture?.date ?? (trip as any)?.kickoffIso) || null;
-    const leagueName =
-      clean((row as any)?.league?.name ?? (trip as any)?.leagueName) || undefined;
-    const leagueIdRaw = (row as any)?.league?.id ?? (trip as any)?.leagueId;
+    const homeName = clean(row?.teams?.home?.name ?? trip?.homeName);
+    const awayName = clean(row?.teams?.away?.name ?? trip?.awayName);
+    const kickoffIso = clean(row?.fixture?.date ?? trip?.kickoffIso) || null;
+    const leagueName = clean(row?.league?.name ?? trip?.leagueName) || undefined;
+    const leagueIdRaw = row?.league?.id ?? trip?.leagueId;
     const leagueId =
       typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string"
         ? leagueIdRaw
@@ -975,4 +1028,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-  }
+    }
