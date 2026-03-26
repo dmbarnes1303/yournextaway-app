@@ -1,11 +1,16 @@
-// src/components/PartnerReturnModal.tsx
 import React, { useMemo, useState } from "react";
-import { View, Text, Pressable, StyleSheet, Modal, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Modal,
+  ActivityIndicator,
+} from "react-native";
 
 import { theme } from "@/src/constants/theme";
 import type { LastPartnerClick } from "@/src/services/partnerClicks";
-import { getPartnerOrNull } from "@/src/core/partners";
-import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
+import { getPartnerOrNull } from "@/src/constants/partners";
 
 type Props = {
   visible: boolean;
@@ -15,8 +20,6 @@ type Props = {
   onBooked: (itemId: string) => Promise<void>;
   onNotBooked: (itemId: string) => Promise<void>;
   onNotNow: (itemId: string) => Promise<void>;
-
-  onClose: () => void;
 };
 
 function shortDomain(url?: string) {
@@ -36,13 +39,16 @@ export default function PartnerReturnModal({
   onBooked,
   onNotBooked,
   onNotNow,
-  onClose,
 }: Props) {
   const [loading, setLoading] = useState<"booked" | "notBooked" | "notNow" | null>(null);
 
   const meta = useMemo(() => {
-    const partnerName = click?.partnerId ? getPartnerOrNull(click.partnerId)?.name : null;
+    const partner =
+      click?.partnerId ? getPartnerOrNull(click.partnerId) : null;
+
+    const partnerName = partner?.display?.name ?? null;
     const domain = shortDomain(click?.url);
+
     const bits = [partnerName, domain].filter(Boolean);
     return bits.length ? bits.join(" • ") : null;
   }, [click]);
@@ -53,25 +59,16 @@ export default function PartnerReturnModal({
     setLoading(kind);
     try {
       if (kind === "booked") {
-        // 1) Mark booked (store transition)
         await onBooked(itemId);
-
-        // 2) Centralised proof flow (Wallet-friendly, offline-first)
-        await confirmBookedAndOfferProof(itemId);
-
-        onClose();
         return;
       }
 
       if (kind === "notBooked") {
         await onNotBooked(itemId);
-        onClose();
         return;
       }
 
-      // kind === "notNow"
       await onNotNow(itemId);
-      onClose();
     } finally {
       setLoading(null);
     }
@@ -80,7 +77,12 @@ export default function PartnerReturnModal({
   const busy = loading !== null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => itemId && run("notNow")} // ✅ back = not now
+    >
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>Did you complete booking?</Text>
@@ -91,27 +93,43 @@ export default function PartnerReturnModal({
             <View style={styles.loadingRow}>
               <ActivityIndicator />
               <Text style={styles.loadingText}>
-                {loading === "booked" ? "Saving…" : loading === "notBooked" ? "Updating…" : "Ok…"}
+                {loading === "booked"
+                  ? "Saving…"
+                  : loading === "notBooked"
+                  ? "Updating…"
+                  : "Ok…"}
               </Text>
             </View>
           ) : (
             <View style={styles.row}>
-              <Pressable style={[styles.btn, styles.btnNeutral]} onPress={() => run("notNow")}>
+              <Pressable
+                style={[styles.btn, styles.btnNeutral]}
+                onPress={() => run("notNow")}
+              >
                 <Text style={styles.btnNeutralText}>Not now</Text>
               </Pressable>
 
-              <Pressable style={[styles.btn, styles.btnNo]} onPress={() => run("notBooked")}>
+              <Pressable
+                style={[styles.btn, styles.btnNo]}
+                onPress={() => run("notBooked")}
+              >
                 <Text style={styles.btnNoText}>No</Text>
               </Pressable>
 
-              <Pressable style={[styles.btn, styles.btnYes]} onPress={() => run("booked")}>
+              <Pressable
+                style={[styles.btn, styles.btnYes]}
+                onPress={() => run("booked")}
+              >
                 <Text style={styles.btnYesText}>Yes, booked</Text>
               </Pressable>
             </View>
           )}
 
           {!busy ? (
-            <Pressable onPress={onClose} style={styles.dismiss}>
+            <Pressable
+              onPress={() => itemId && run("notNow")} // ✅ no silent close
+              style={styles.dismiss}
+            >
               <Text style={styles.dismissText}>Close</Text>
             </Pressable>
           ) : null}
@@ -147,7 +165,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 12,
   },
-
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -158,7 +175,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: "800",
   },
-
   row: {
     flexDirection: "row",
     gap: 10,
@@ -171,25 +187,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
   },
-
   btnNeutral: {
     borderColor: "rgba(255,255,255,0.14)",
     backgroundColor: "rgba(255,255,255,0.06)",
   },
-  btnNeutralText: { color: theme.colors.textSecondary, fontWeight: "900", fontSize: 12 },
-
+  btnNeutralText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 12,
+  },
   btnNo: {
     borderColor: "rgba(255,200,80,0.35)",
     backgroundColor: "rgba(255,200,80,0.10)",
   },
-  btnNoText: { color: "rgba(255,200,80,1)", fontWeight: "900", fontSize: 12 },
-
+  btnNoText: {
+    color: "rgba(255,200,80,1)",
+    fontWeight: "900",
+    fontSize: 12,
+  },
   btnYes: {
     borderColor: "rgba(0,255,136,0.40)",
     backgroundColor: "rgba(0,255,136,0.14)",
   },
-  btnYesText: { color: "rgba(0,255,136,1)", fontWeight: "900", fontSize: 12 },
-
+  btnYesText: {
+    color: "rgba(0,255,136,1)",
+    fontWeight: "900",
+    fontSize: 12,
+  },
   dismiss: {
     alignSelf: "center",
     paddingTop: 2,
