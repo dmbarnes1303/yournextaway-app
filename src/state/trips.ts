@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import { makeTripId } from "@/src/core/id";
-import type { Trip } from "@/src/core/tripTypes";
+import type { FixtureId, Trip } from "@/src/core/tripTypes";
 import { buildMockSavedItemsForSeed } from "@/src/data/mockTripItems";
 import { MOCK_TRIP_SEEDS } from "@/src/data/mockTrips";
 import { readJson, writeJson } from "@/src/state/persist";
@@ -9,33 +9,73 @@ import savedItemsStore from "@/src/state/savedItems";
 
 const STORAGE_KEY = "yna_trips_v1";
 
-type UnknownRecord = Record<string, unknown>;
+type TripSnapshotPatch = Partial<
+  Pick<
+    Trip,
+    | "displayCity"
+    | "fixtureIdPrimary"
+    | "homeTeamId"
+    | "awayTeamId"
+    | "homeName"
+    | "awayName"
+    | "leagueId"
+    | "leagueName"
+    | "round"
+    | "kickoffIso"
+    | "kickoffTbc"
+    | "venueName"
+    | "venueCity"
+    | "sportsevents365EventId"
+    | "sportsevents365EventUrl"
+  >
+>;
+
+type AddTripInput = {
+  cityId: string;
+  citySlug?: string;
+  displayCity?: string;
+  startDate: string;
+  endDate: string;
+  matchIds?: FixtureId[];
+  fixtureIdPrimary?: FixtureId;
+  notes?: string;
+} & TripSnapshotPatch;
+
+type UpdateTripInput = Partial<
+  Pick<Trip, "cityId" | "citySlug" | "displayCity" | "startDate" | "endDate" | "matchIds" | "fixtureIdPrimary" | "notes">
+> &
+  TripSnapshotPatch;
 
 type TripsState = {
   loaded: boolean;
   trips: Trip[];
+
   loadTrips: () => Promise<void>;
-  addTrip: (input: {
-    cityId: string;
-    citySlug?: string;
-    startDate: string;
-    endDate: string;
-    matchIds?: string[];
-    fixtureIdPrimary?: string;
-    notes?: string;
-    [key: string]: unknown;
-  }) => Promise<Trip>;
-  updateTrip: (
-    tripId: string,
-    patch: Partial<Omit<Trip, "id" | "createdAt">> & UnknownRecord
-  ) => Promise<void>;
+
+  addTrip: (input: AddTripInput) => Promise<Trip>;
+  updateTrip: (tripId: string, patch: UpdateTripInput) => Promise<void>;
+
   addMatchToTrip: (
     tripId: string,
     fixtureId: string,
     opts?: { setPrimary?: boolean }
   ) => Promise<void>;
+
   removeMatchFromTrip: (tripId: string, fixtureId: string) => Promise<void>;
+
   setPrimaryMatchForTrip: (tripId: string, fixtureId: string) => Promise<void>;
+
+  /**
+   * Canonical atomic helper for primary-match changes.
+   * Ensures the match is present, marks it primary, and updates the root snapshot
+   * in one write.
+   */
+  applyPrimaryMatchSelection: (
+    tripId: string,
+    fixtureId: string,
+    snapshot?: TripSnapshotPatch
+  ) => Promise<void>;
+
   deleteTripCascade: (tripId: string) => Promise<void>;
   clearAll: () => Promise<void>;
   seedMockTrips: () => Promise<void>;
@@ -58,7 +98,19 @@ function toOptionalString(value: unknown): string | undefined {
   return cleaned || undefined;
 }
 
-function isPlainObject(value: unknown): value is UnknownRecord {
+function toOptionalNumber(value: unknown): number | undefined {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function toOptionalBool(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -81,31 +133,13 @@ function normalizeCityKey(cityRaw: unknown): string {
   );
 }
 
-function cleanMatchIds(value: unknown): string[] {
+function cleanMatchIds(value: unknown): FixtureId[] {
   if (!Array.isArray(value)) return [];
 
   return value
     .map((matchId) => cleanString(matchId))
     .filter(Boolean)
     .filter((entry, index, array) => array.indexOf(entry) === index);
-}
-
-function sortTrips(trips: Trip[]) {
-  const copy = [...trips];
-  copy.sort((a, b) => (Number(b.updatedAt ?? 0) || 0) - (Number(a.updatedAt ?? 0) || 0));
-  return copy;
-}
-
-function toOptionalNumber(value: unknown): number | undefined {
-  const numeric = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numeric) ? numeric : undefined;
-}
-
-function toOptionalBool(value: unknown): boolean | undefined {
-  if (typeof value === "boolean") return value;
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return undefined;
 }
 
 function uniqPush(arr: string[], id: string) {
@@ -117,9 +151,69 @@ function removeFrom(arr: string[], id: string) {
   return arr.filter((entry) => entry !== id);
 }
 
+function sortTrips(trips: Trip[]) {
+  const copy = [...trips];
+  copy.sort((a, b) => (Number(b.updatedAt ?? 0) || 0) - (Number(a.updatedAt ?? 0) || 0));
+  return copy;
+}
+
 function cloneTrip<T extends Trip | null | undefined>(trip: T): T {
   if (!trip) return trip;
   return { ...trip };
+}
+
+function normalizeFixtureMembership(
+  matchIdsRaw: unknown,
+  primaryRaw: unknown
+): { matchIds: FixtureId[]; fixtureIdPrimary?: FixtureId } {
+  const matchIds = cleanMatchIds(matchIdsRaw);
+  let fixtureIdPrimary = cleanString(primaryRaw);
+
+  if (fixtureIdPrimary && !matchIds.includes(fixtureIdPrimary)) {
+    matchIds.push(fixtureIdPrimary);
+  }
+
+  if (!fixtureIdPrimary && matchIds.length > 0) {
+    fixtureIdPrimary = String(matchIds[0]);
+  }
+
+  return {
+    matchIds,
+    fixtureIdPrimary: fixtureIdPrimary || undefined,
+  };
+}
+
+function normalizeSnapshotPatch(input: TripSnapshotPatch): TripSnapshotPatch {
+  const next: TripSnapshotPatch = {};
+
+  if ("displayCity" in input) next.displayCity = toOptionalString(input.displayCity);
+  if ("fixtureIdPrimary" in input) next.fixtureIdPrimary = toOptionalString(input.fixtureIdPrimary);
+
+  if ("homeTeamId" in input) next.homeTeamId = toOptionalNumber(input.homeTeamId);
+  if ("awayTeamId" in input) next.awayTeamId = toOptionalNumber(input.awayTeamId);
+
+  if ("homeName" in input) next.homeName = toOptionalString(input.homeName);
+  if ("awayName" in input) next.awayName = toOptionalString(input.awayName);
+
+  if ("leagueId" in input) next.leagueId = toOptionalNumber(input.leagueId);
+  if ("leagueName" in input) next.leagueName = toOptionalString(input.leagueName);
+  if ("round" in input) next.round = toOptionalString(input.round);
+
+  if ("kickoffIso" in input) next.kickoffIso = toOptionalString(input.kickoffIso);
+  if ("kickoffTbc" in input) next.kickoffTbc = toOptionalBool(input.kickoffTbc);
+
+  if ("venueName" in input) next.venueName = toOptionalString(input.venueName);
+  if ("venueCity" in input) next.venueCity = toOptionalString(input.venueCity);
+
+  if ("sportsevents365EventId" in input) {
+    next.sportsevents365EventId = toOptionalNumber(input.sportsevents365EventId);
+  }
+
+  if ("sportsevents365EventUrl" in input) {
+    next.sportsevents365EventUrl = toOptionalString(input.sportsevents365EventUrl);
+  }
+
+  return next;
 }
 
 function cleanLoadedTrip(raw: unknown): Trip | null {
@@ -148,18 +242,7 @@ function cleanLoadedTrip(raw: unknown): Trip | null {
       ? Number(raw.updatedAt)
       : createdAt;
 
-  const matchIds = cleanMatchIds(raw.matchIds);
-
-  let fixtureIdPrimary =
-    cleanString(raw.fixtureIdPrimary) || (matchIds[0] ? String(matchIds[0]) : "");
-  let nextMatchIds = matchIds;
-
-  if (fixtureIdPrimary && !nextMatchIds.includes(fixtureIdPrimary)) {
-    nextMatchIds = [...nextMatchIds, fixtureIdPrimary];
-  }
-
-  if (fixtureIdPrimary && nextMatchIds.length === 0) nextMatchIds = [fixtureIdPrimary];
-  if (!fixtureIdPrimary && nextMatchIds.length > 0) fixtureIdPrimary = String(nextMatchIds[0]);
+  const membership = normalizeFixtureMembership(raw.matchIds, raw.fixtureIdPrimary);
 
   const displayCity =
     typeof raw.displayCity === "string" && raw.displayCity.trim()
@@ -169,21 +252,30 @@ function cleanLoadedTrip(raw: unknown): Trip | null {
         : undefined;
 
   const trip: Trip = {
-    ...(raw as Trip),
     id,
     cityId,
     citySlug: cityId,
+    displayCity,
     startDate,
     endDate,
-    matchIds: nextMatchIds,
-    fixtureIdPrimary: fixtureIdPrimary || undefined,
-    notes: typeof raw.notes === "string" ? raw.notes.trim() : undefined,
-    ...(displayCity ? { displayCity } : {}),
+    matchIds: membership.matchIds,
+    fixtureIdPrimary: membership.fixtureIdPrimary,
+    notes: typeof raw.notes === "string" ? raw.notes.trim() || undefined : undefined,
+
     homeTeamId: toOptionalNumber(raw.homeTeamId),
     awayTeamId: toOptionalNumber(raw.awayTeamId),
+    homeName: toOptionalString(raw.homeName),
+    awayName: toOptionalString(raw.awayName),
     leagueId: toOptionalNumber(raw.leagueId),
-    sportsevents365EventId: toOptionalNumber(raw.sportsevents365EventId),
+    leagueName: toOptionalString(raw.leagueName),
+    round: toOptionalString(raw.round),
+    kickoffIso: toOptionalString(raw.kickoffIso),
     kickoffTbc: toOptionalBool(raw.kickoffTbc),
+    venueName: toOptionalString(raw.venueName),
+    venueCity: toOptionalString(raw.venueCity),
+    sportsevents365EventId: toOptionalNumber(raw.sportsevents365EventId),
+    sportsevents365EventUrl: toOptionalString(raw.sportsevents365EventUrl),
+
     createdAt,
     updatedAt,
   };
@@ -191,11 +283,8 @@ function cleanLoadedTrip(raw: unknown): Trip | null {
   return trip;
 }
 
-function normalizeTripPatch(
-  current: Trip,
-  patch: Partial<Omit<Trip, "id" | "createdAt">> & UnknownRecord
-): UnknownRecord {
-  const next: UnknownRecord = {};
+function normalizeTripPatch(current: Trip, patch: UpdateTripInput): UpdateTripInput {
+  const next: UpdateTripInput = {};
 
   if ("startDate" in patch) {
     const value = cleanString(patch.startDate);
@@ -216,81 +305,60 @@ function normalizeTripPatch(
     next.citySlug = normalizeCityKey(patch.citySlug ?? current.cityId);
   }
 
-  if ("displayCity" in patch) {
-    next.displayCity = toOptionalString(patch.displayCity);
-  }
+  if ("displayCity" in patch) next.displayCity = toOptionalString(patch.displayCity);
 
-  if ("matchIds" in patch) {
-    next.matchIds = cleanMatchIds(patch.matchIds);
-  }
-
-  if ("fixtureIdPrimary" in patch) {
-    next.fixtureIdPrimary = toOptionalString(patch.fixtureIdPrimary);
-  }
+  if ("matchIds" in patch) next.matchIds = cleanMatchIds(patch.matchIds);
+  if ("fixtureIdPrimary" in patch) next.fixtureIdPrimary = toOptionalString(patch.fixtureIdPrimary);
 
   if ("notes" in patch) {
     next.notes =
       typeof patch.notes === "string" ? patch.notes.trim() || undefined : undefined;
   }
 
-  if ("homeTeamId" in patch) next.homeTeamId = toOptionalNumber(patch.homeTeamId);
-  if ("awayTeamId" in patch) next.awayTeamId = toOptionalNumber(patch.awayTeamId);
-  if ("leagueId" in patch) next.leagueId = toOptionalNumber(patch.leagueId);
-  if ("sportsevents365EventId" in patch) {
-    next.sportsevents365EventId = toOptionalNumber(patch.sportsevents365EventId);
-  }
-  if ("kickoffTbc" in patch) next.kickoffTbc = toOptionalBool(patch.kickoffTbc);
-
-  const passthroughStringKeys = [
-    "homeName",
-    "awayName",
-    "leagueName",
-    "kickoffIso",
-    "venueName",
-    "venueCity",
-  ] as const;
-
-  for (const key of passthroughStringKeys) {
-    if (key in patch) {
-      next[key] = toOptionalString(patch[key]);
-    }
-  }
-
-  return next;
+  return {
+    ...next,
+    ...normalizeSnapshotPatch(patch),
+  };
 }
 
-function normalizeMergedTrip(current: Trip, patch: UnknownRecord): Trip {
-  const merged = { ...current, ...patch } as Trip & {
-    matchIds?: unknown;
-    fixtureIdPrimary?: unknown;
-    cityId?: unknown;
-    citySlug?: unknown;
-    updatedAt?: unknown;
+function mergeTrip(current: Trip, patch: UpdateTripInput): Trip {
+  const merged: Trip = {
+    ...current,
+    ...patch,
+    updatedAt: now(),
   };
 
-  const matchIds = Array.isArray(merged.matchIds) ? cleanMatchIds(merged.matchIds) : [];
-  let primary = cleanString(merged.fixtureIdPrimary);
+  const membership = normalizeFixtureMembership(merged.matchIds, merged.fixtureIdPrimary);
+  merged.matchIds = membership.matchIds;
+  merged.fixtureIdPrimary = membership.fixtureIdPrimary;
 
-  if (primary && !matchIds.includes(primary)) {
-    merged.matchIds = [...matchIds, primary];
-  } else {
-    merged.matchIds = matchIds;
-  }
-
-  if (!primary && merged.matchIds.length > 0) {
-    primary = String(merged.matchIds[0]);
-  }
-
-  merged.fixtureIdPrimary = primary || undefined;
-
-  if ("cityId" in merged) {
-    merged.cityId = normalizeCityKey(merged.cityId);
-    merged.citySlug = merged.cityId;
-  }
-
-  merged.updatedAt = now();
+  merged.cityId = normalizeCityKey(merged.cityId);
+  merged.citySlug = merged.cityId;
 
   return merged;
+}
+
+function applyPrimarySelection(
+  trip: Trip,
+  fixtureId: string,
+  snapshot?: TripSnapshotPatch
+): Trip {
+  const fid = cleanString(fixtureId);
+  if (!fid) return trip;
+
+  const nextMatchIds = uniqPush([...(trip.matchIds ?? [])], fid);
+  const next: Trip = {
+    ...trip,
+    matchIds: nextMatchIds,
+    fixtureIdPrimary: fid,
+    updatedAt: now(),
+  };
+
+  const normalizedSnapshot = normalizeSnapshotPatch(snapshot ?? {});
+  return {
+    ...next,
+    ...normalizedSnapshot,
+  };
 }
 
 async function persistTrips(trips: Trip[]) {
@@ -310,9 +378,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
     inflightLoad = (async () => {
       const raw = await readJson<unknown>(STORAGE_KEY, []);
       const arr = Array.isArray(raw) ? raw : [];
-      const cleaned = arr
-        .map(cleanLoadedTrip)
-        .filter((trip): trip is Trip => trip !== null);
+      const cleaned = arr.map(cleanLoadedTrip).filter((trip): trip is Trip => trip !== null);
       const sorted = sortTrips(cleaned);
 
       set({ trips: sorted, loaded: true });
@@ -338,41 +404,32 @@ const useTripsStore = create<TripsState>((set, get) => ({
   addTrip: async (input) => {
     if (!get().loaded) await get().loadTrips();
 
-    const cityIdNorm = normalizeCityKey(input.cityId);
+    const cityId = normalizeCityKey(input.cityId);
     const startDate = cleanString(input.startDate);
     const endDate = cleanString(input.endDate);
 
-    if (!cityIdNorm) throw new Error("cityId required");
+    if (!cityId) throw new Error("cityId required");
     if (!isIsoDateOnly(startDate)) throw new Error("startDate must be YYYY-MM-DD");
     if (!isIsoDateOnly(endDate)) throw new Error("endDate must be YYYY-MM-DD");
 
-    const matchIds = Array.isArray(input.matchIds) ? cleanMatchIds(input.matchIds) : [];
-    const fixtureIdPrimaryRaw = cleanString(input.fixtureIdPrimary);
-    const fixtureIdPrimary =
-      fixtureIdPrimaryRaw || (matchIds[0] ? String(matchIds[0]) : "");
+    const membership = normalizeFixtureMembership(input.matchIds, input.fixtureIdPrimary);
+    const snapshot = normalizeSnapshotPatch(input);
 
-    const nextMatchIds = fixtureIdPrimary
-      ? uniqPush([...matchIds], fixtureIdPrimary)
-      : matchIds;
-
-    const displayCity =
-      typeof input.displayCity === "string" && input.displayCity.trim()
-        ? input.displayCity.trim()
-        : undefined;
+    const createdAt = now();
 
     const trip: Trip = {
-      ...(input as Trip),
       id: makeTripId(),
-      cityId: cityIdNorm,
-      citySlug: cityIdNorm,
+      cityId,
+      citySlug: cityId,
+      displayCity: toOptionalString(input.displayCity),
       startDate,
       endDate,
-      matchIds: nextMatchIds,
-      fixtureIdPrimary: fixtureIdPrimary || undefined,
+      matchIds: membership.matchIds,
+      fixtureIdPrimary: membership.fixtureIdPrimary,
       notes: typeof input.notes === "string" ? input.notes.trim() || undefined : undefined,
-      ...(displayCity ? { displayCity } : {}),
-      createdAt: now(),
-      updatedAt: now(),
+      ...snapshot,
+      createdAt,
+      updatedAt: createdAt,
     };
 
     const next = sortTrips([trip, ...get().trips]);
@@ -397,7 +454,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
       if (trip.id !== id) return trip;
 
       const normalizedPatch = normalizeTripPatch(trip, patch);
-      const merged = normalizeMergedTrip(trip, normalizedPatch);
+      const merged = mergeTrip(trip, normalizedPatch);
       changed = true;
       return merged;
     });
@@ -424,8 +481,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const next = get().trips.map((trip) => {
       if (trip.id !== id) return trip;
 
-      const matchIds = Array.isArray(trip.matchIds) ? cleanMatchIds(trip.matchIds) : [];
-      const mergedIds = uniqPush([...matchIds], fid);
+      const mergedIds = uniqPush([...(trip.matchIds ?? [])], fid);
 
       return {
         ...trip,
@@ -455,8 +511,7 @@ const useTripsStore = create<TripsState>((set, get) => ({
     const next = get().trips.map((trip) => {
       if (trip.id !== id) return trip;
 
-      const matchIds = Array.isArray(trip.matchIds) ? cleanMatchIds(trip.matchIds) : [];
-      const after = removeFrom(matchIds, fid);
+      const after = removeFrom(trip.matchIds ?? [], fid);
 
       const nextTrip: Trip = {
         ...trip,
@@ -482,7 +537,43 @@ const useTripsStore = create<TripsState>((set, get) => ({
   },
 
   setPrimaryMatchForTrip: async (tripId, fixtureId) => {
-    await get().addMatchToTrip(tripId, fixtureId, { setPrimary: true });
+    if (!get().loaded) await get().loadTrips();
+
+    const id = cleanString(tripId);
+    const fid = cleanString(fixtureId);
+    if (!id || !fid) return;
+
+    const next = get().trips.map((trip) => {
+      if (trip.id !== id) return trip;
+      return applyPrimarySelection(trip, fid);
+    });
+
+    const sorted = sortTrips(next);
+    set({ trips: sorted, loaded: true });
+
+    try {
+      await persistTrips(sorted);
+    } catch {}
+  },
+
+  applyPrimaryMatchSelection: async (tripId, fixtureId, snapshot) => {
+    if (!get().loaded) await get().loadTrips();
+
+    const id = cleanString(tripId);
+    const fid = cleanString(fixtureId);
+    if (!id || !fid) return;
+
+    const next = get().trips.map((trip) => {
+      if (trip.id !== id) return trip;
+      return applyPrimarySelection(trip, fid, snapshot);
+    });
+
+    const sorted = sortTrips(next);
+    set({ trips: sorted, loaded: true });
+
+    try {
+      await persistTrips(sorted);
+    } catch {}
   },
 
   deleteTripCascade: async (tripId) => {
@@ -580,11 +671,11 @@ const tripsStore = {
     await useTripsStore.getState().loadTrips();
   },
 
-  addTrip: async (input: Parameters<TripsState["addTrip"]>[0]) => {
+  addTrip: async (input: AddTripInput) => {
     return await useTripsStore.getState().addTrip(input);
   },
 
-  updateTrip: async (tripId: string, patch: Parameters<TripsState["updateTrip"]>[1]) => {
+  updateTrip: async (tripId: string, patch: UpdateTripInput) => {
     await useTripsStore.getState().updateTrip(tripId, patch);
   },
 
@@ -598,6 +689,14 @@ const tripsStore = {
 
   setPrimaryMatchForTrip: async (tripId: string, fixtureId: string) => {
     await useTripsStore.getState().setPrimaryMatchForTrip(tripId, fixtureId);
+  },
+
+  applyPrimaryMatchSelection: async (
+    tripId: string,
+    fixtureId: string,
+    snapshot?: TripSnapshotPatch
+  ) => {
+    await useTripsStore.getState().applyPrimaryMatchSelection(tripId, fixtureId, snapshot);
   },
 
   deleteTripCascade: async (tripId: string) => {
@@ -634,28 +733,11 @@ const tripsStore = {
       .map((trip) => cloneTrip(trip) as Trip);
   },
 
-  upsertTripSnapshot: async (
-    tripId: string,
-    snapshot: Partial<
-      Pick<
-        Trip,
-        | "homeName"
-        | "awayName"
-        | "leagueName"
-        | "leagueId"
-        | "kickoffIso"
-        | "kickoffTbc"
-        | "venueName"
-        | "venueCity"
-        | "displayCity"
-      >
-    > &
-      UnknownRecord
-  ) => {
+  upsertTripSnapshot: async (tripId: string, snapshot: TripSnapshotPatch) => {
     const id = cleanString(tripId);
     if (!id) return;
 
-    await useTripsStore.getState().updateTrip(id, snapshot);
+    await useTripsStore.getState().updateTrip(id, normalizeSnapshotPatch(snapshot));
   },
 
   getTripByMatchId: (fixtureId: string) => {
@@ -678,4 +760,4 @@ const tripsStore = {
 
 export default tripsStore;
 export { useTripsStore };
-export type { Trip };
+export type { AddTripInput, Trip, TripSnapshotPatch, UpdateTripInput };
