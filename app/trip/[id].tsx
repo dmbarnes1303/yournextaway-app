@@ -58,8 +58,6 @@ const PLANNER_RAIL_ITEMS: PlannerRailItem[] = [
   { key: "things", label: "Extras" },
 ];
 
-/* ---------------- helpers ---------------- */
-
 function statusLabel(status: string) {
   const v = String(status ?? "").toLowerCase();
   if (v === "completed") return "Completed";
@@ -81,8 +79,6 @@ function sectionCountLabel(count: number) {
   return `${count} added`;
 }
 
-/* ---------------- screen ---------------- */
-
 export default function TripDetailScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -90,33 +86,39 @@ export default function TripDetailScreen() {
   const routeTripId = useMemo(() => coerceId((params as any)?.id), [params]);
 
   const [trip, setTrip] = useState<Trip | null>(null);
-  const [tripsLoaded, setTripsLoaded] = useState(tripsStore.getState().loaded);
+  const [tripsLoaded, setTripsLoaded] = useState<boolean>(tripsStore.getState().loaded);
 
-  const [savedLoaded, setSavedLoaded] = useState(savedItemsStore.getState().loaded);
+  const [savedLoaded, setSavedLoaded] = useState<boolean>(savedItemsStore.getState().loaded);
   const [allSavedItems, setAllSavedItems] = useState<SavedItem[]>([]);
 
-  const [originIata, setOriginIata] = useState(
+  const [originIata, setOriginIata] = useState<string>(
     preferencesStore.getPreferredOriginIata()
   );
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const isPro = plan === "premium";
 
-  /* ---------------- load plan ---------------- */
-
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    async function loadPlan() {
       try {
         const value = await storage.getString(PLAN_STORAGE_KEY);
+        if (cancelled) return;
+
         if (value === "premium") setPlan("premium");
         else if (value === "free") setPlan("free");
       } catch {
         // ignore storage failure
       }
-    })();
-  }, []);
+    }
 
-  /* ---------------- stores ---------------- */
+    void loadPlan();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const sync = () => {
@@ -168,22 +170,33 @@ export default function TripDetailScreen() {
     return () => unsub();
   }, []);
 
-  /* ---------------- derived ---------------- */
-
-  const activeTripId = useMemo(
-    () => clean(trip?.id) || clean(routeTripId) || null,
-    [trip?.id, routeTripId]
-  );
+  const activeTripId = useMemo(() => {
+    return clean(trip?.id) || clean(routeTripId) || null;
+  }, [trip?.id, routeTripId]);
 
   const savedItems = useMemo(() => {
     if (!activeTripId) return [];
-    return allSavedItems.filter((x) => clean(x.tripId) === activeTripId);
+    return allSavedItems.filter((item) => clean(item.tripId) === activeTripId);
   }, [allSavedItems, activeTripId]);
 
-  const groupedBySection = useMemo(
-    () => groupSavedItemsBySection(savedItems),
+  const pendingItems = useMemo(
+    () => savedItems.filter((item) => item.status === "pending"),
     [savedItems]
   );
+
+  const savedOnlyItems = useMemo(
+    () => savedItems.filter((item) => item.status === "saved"),
+    [savedItems]
+  );
+
+  const bookedItems = useMemo(
+    () => savedItems.filter((item) => item.status === "booked"),
+    [savedItems]
+  );
+
+  const groupedBySection = useMemo(() => {
+    return groupSavedItemsBySection(savedItems);
+  }, [savedItems]);
 
   const data = useTripDetailData({
     trip,
@@ -212,19 +225,28 @@ export default function TripDetailScreen() {
     affiliateUrls: data.affiliateUrls,
     progress: data.progress,
     readiness: data.readiness,
-    pending: savedItems.filter((x) => x.status === "pending"),
-    saved: savedItems.filter((x) => x.status === "saved"),
-    booked: savedItems.filter((x) => x.status === "booked"),
+    pending: pendingItems,
+    saved: savedOnlyItems,
+    booked: bookedItems,
     primaryMatchId: data.primaryMatchId,
     primaryTicketItem: data.primaryTicketItem,
     isPro,
     kickoffTbc: data.kickoffMeta.tbc,
     controller,
+    bookingPriceBoard: data.bookingPriceBoard,
+    ticketsPriceFrom: data.ticketsPriceFrom,
+    flightsPriceFrom: data.flightsPriceFrom,
+    hotelsPriceFrom: data.hotelsPriceFrom,
+    transfersPriceFrom: data.transfersPriceFrom,
+    experiencesPriceFrom: data.experiencesPriceFrom,
+    tripPriceFrom: data.tripPriceFrom,
   });
 
-  const status = useMemo(() => (trip ? tripStatus(trip) : "Upcoming"), [trip]);
+  const status = useMemo(() => {
+    return trip ? tripStatus(trip) : "Upcoming";
+  }, [trip]);
 
-  /* ---------------- render ---------------- */
+  const isMissingTrip = !trip && tripsLoaded;
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -240,9 +262,20 @@ export default function TripDetailScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {!trip ? (
+          {vm.loading ? (
+            <GlassCard>
+              <EmptyState
+                title="Loading trip"
+                message="Pulling together matches, bookings and trip details."
+              />
+            </GlassCard>
+          ) : isMissingTrip ? (
             <GlassCard>
               <EmptyState title="Trip not found" message="No trip available." />
+            </GlassCard>
+          ) : !trip ? (
+            <GlassCard>
+              <EmptyState title="Loading" message="Trip details are still loading." />
             </GlassCard>
           ) : (
             <>
@@ -259,12 +292,16 @@ export default function TripDetailScreen() {
                 </View>
 
                 <View style={styles.progressBox}>
-                  <Text style={styles.progressText}>
-                    {vm.tripCompletionPct ?? 0}% ready
-                  </Text>
-                  <Text style={styles.nextText}>
-                    {nextStepLabel(vm.nextIncompleteStep?.key)}
-                  </Text>
+                  <Text style={styles.progressText}>{vm.tripCompletionPct ?? 0}% ready</Text>
+                  <Text style={styles.nextText}>{nextStepLabel(vm.nextIncompleteStep?.key)}</Text>
+
+                  {vm.bookingFunnelLabel ? (
+                    <Text style={styles.funnelText}>{vm.bookingFunnelLabel}</Text>
+                  ) : null}
+
+                  {vm.commercialSummaryLine ? (
+                    <Text style={styles.commercialText}>{vm.commercialSummaryLine}</Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.heroActions}>
@@ -272,6 +309,8 @@ export default function TripDetailScreen() {
                     <Text style={styles.primaryBtnText}>Continue planning</Text>
                   </Pressable>
                 </View>
+
+                {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
               </GlassCard>
 
               <NextBestActionCard
@@ -298,9 +337,7 @@ export default function TripDetailScreen() {
                         onPress={() => controller.onOpenSection(item.key)}
                       >
                         <Text style={styles.railTitle}>{item.label}</Text>
-                        <Text style={styles.railSub}>
-                          {sectionCountLabel(count)}
-                        </Text>
+                        <Text style={styles.railSub}>{sectionCountLabel(count)}</Text>
                       </Pressable>
                     );
                   })}
@@ -405,6 +442,21 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
+  funnelText: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+  },
+
+  commercialText: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textMuted,
+  },
+
   heroActions: {
     marginTop: theme.spacing.md,
   },
@@ -422,6 +474,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     color: "#0B1020",
+  },
+
+  capHint: {
+    marginTop: theme.spacing.sm,
+    fontSize: 12,
+    lineHeight: 18,
+    color: theme.colors.textMuted,
   },
 
   sectionTitle: {
