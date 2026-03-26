@@ -1,449 +1,750 @@
-// src/services/affiliateLinks.ts
+// src/constants/partners.ts
+// Canonical Phase 2 partner registry.
 //
-// Canonical outbound commercial link generation layer.
+// Single source of truth for:
+// - canonical partner ids
+// - canonical category vocabularies
+// - display metadata
+// - aliases / legacy id resolution
+// - live / affiliate / api / utility / internal capability flags
+// - fallback metadata
+// - tracked config metadata
 //
-// This file consumes the canonical partner registry in src/constants/partners.ts
-// and builds runtime-ready URLs for supported partners/categories.
-//
-// IMPORTANT:
-// - Keep provider/category truth in the registry, not here.
-// - Keep this file focused on building URLs from normalized context.
-// - Do not redesign downstream consumers here.
-// - Maintain compatibility output fields during migration.
+// Important:
+// - Keep this data-first.
+// - Do not put outbound URL construction logic here.
+// - Do not recreate a legacy switch-first registry.
+// - Compatibility exports remain here only because surrounding files still import them.
 
-import { getIataCityCodeForCity } from "@/src/constants/iataCities";
-import {
-  AffiliateConfig,
-  getCanonicalPartnerId,
-  getPartner,
-  getPartnerFallbackBaseUrl,
-  getTrackedConfigValue,
-  isPartnerLive,
-  supportsCategory,
-  type CommercialCategory,
-  type PartnerId,
-} from "@/src/constants/partners";
-import { formatIsoToYmd } from "@/src/utils/dates";
+export const COMMERCIAL_PARTNER_CATEGORIES = [
+  "tickets",
+  "flights",
+  "stays",
+  "trains",
+  "buses",
+  "transfers",
+  "insurance",
+  "things",
+  "car_hire",
+] as const;
 
-export type CabinClass = "economy" | "premium" | "business" | "first";
+export const UTILITY_PARTNER_CATEGORIES = ["maps", "official_site"] as const;
 
-export type BuildAffiliateLinksArgs = {
-  city: string;
-  startDate?: string | null;
-  endDate?: string | null;
-  originIata?: string | null;
-  passengers?: number | null;
-  cabinClass?: CabinClass | null;
+export const INTERNAL_PARTNER_CATEGORIES = ["claim", "note", "other"] as const;
+
+export const ALL_PARTNER_CATEGORIES = [
+  ...COMMERCIAL_PARTNER_CATEGORIES,
+  ...UTILITY_PARTNER_CATEGORIES,
+  ...INTERNAL_PARTNER_CATEGORIES,
+] as const;
+
+export type CommercialCategory = (typeof COMMERCIAL_PARTNER_CATEGORIES)[number];
+export type UtilityCategory = (typeof UTILITY_PARTNER_CATEGORIES)[number];
+export type InternalCategory = (typeof INTERNAL_PARTNER_CATEGORIES)[number];
+export type PartnerCategory = (typeof ALL_PARTNER_CATEGORIES)[number];
+
+export const CANONICAL_PARTNER_IDS = [
+  // Tickets
+  "footballticketnet",
+  "sportsevents365",
+  "gigsberg",
+  "seatpick",
+
+  // Flights
+  "aviasales",
+
+  // Stays / car hire
+  "expedia",
+
+  // Rail / bus
+  "omio",
+
+  // Transfers
+  "kiwitaxi",
+  "welcomepickups",
+
+  // Insurance
+  "ekta",
+  "safetywing",
+
+  // Things
+  "getyourguide",
+  "tiqets",
+  "klook",
+  "wegotrip",
+
+  // Claims
+  "airhelp",
+  "compensair",
+
+  // Utility
+  "google",
+  "official_site",
+
+  // Internal
+  "internal_claim",
+  "internal_note",
+  "internal_other",
+] as const;
+
+export type PartnerId = (typeof CANONICAL_PARTNER_IDS)[number];
+export type CanonicalPartnerId = PartnerId;
+
+export type PartnerFallbackPolicyMode =
+  | "none"
+  | "category_fallback"
+  | "generic_search"
+  | "official_site_only"
+  | "internal_only"
+  | "partner_fallback";
+
+export type PartnerCapabilityFlags = {
+  affiliate: boolean;
+  api: boolean;
+  utility: boolean;
+  internal: boolean;
 };
 
-export type BuiltAffiliateLinks = {
-  /* ---------------------------------------------------------------------- */
-  /* Canonical category outputs                                             */
-  /* ---------------------------------------------------------------------- */
-  ticketsUrl: string | null;
-  flightsUrl: string | null;
-  staysUrl: string | null;
-  trainsUrl: string | null;
-  busesUrl: string | null;
-  transfersUrl: string | null;
-  insuranceUrl: string | null;
-  thingsUrl: string | null;
-  carHireUrl: string | null;
-
-  /* ---------------------------------------------------------------------- */
-  /* Utility outputs                                                        */
-  /* ---------------------------------------------------------------------- */
-  mapsUrl: string | null;
-  officialSiteUrl: string | null;
-
-  /* ---------------------------------------------------------------------- */
-  /* Internal/non-commercial outputs                                        */
-  /* ---------------------------------------------------------------------- */
-  claimsUrl: string | null;
-
-  /* ---------------------------------------------------------------------- */
-  /* Migration compatibility aliases                                        */
-  /* ---------------------------------------------------------------------- */
-  hotelsUrl: string | null;
-  experiencesUrl: string | null;
-  transportUrl: string | null;
-  omioUrl: string | null;
+export type PartnerDisplay = {
+  name: string;
+  badgeText: string;
 };
 
-/* -------------------------------------------------------------------------- */
-/* Helpers                                                                    */
-/* -------------------------------------------------------------------------- */
+export type PartnerFallbackPolicy = {
+  mode: PartnerFallbackPolicyMode;
+  reason?: string;
+  partnerIds?: readonly PartnerId[];
+  baseUrl?: string | null;
+};
+
+export type PartnerDefinition = {
+  id: PartnerId;
+  display: PartnerDisplay;
+  categories: readonly PartnerCategory[];
+  primaryCategory: PartnerCategory;
+  live: boolean;
+  capabilities: PartnerCapabilityFlags;
+  aliases: readonly string[];
+  baseUrl: string;
+  trackedConfigKey?: keyof typeof AffiliateConfig;
+  fallback: PartnerFallbackPolicy;
+};
 
 function clean(value: unknown): string {
-  return String(value ?? "").trim();
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-function enc(value: unknown): string {
-  return encodeURIComponent(clean(value));
+function normalizeKey(value: unknown): string {
+  return clean(value)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[\s\-]+/g, "_");
 }
 
-function normalizeYmd(value: unknown): string | null {
-  const raw = clean(value);
+function unique<T>(items: readonly T[]): T[] {
+  return Array.from(new Set(items));
+}
+
+/**
+ * Tracked / affiliate config.
+ *
+ * Validation scripts in this repo inspect these exact keys directly.
+ * Keep required keys present and non-empty.
+ * Optional/deprecated integrations can remain present for migration coverage.
+ */
+export const AffiliateConfig = {
+  // Flights
+  aviasalesMarker: "700937",
+  aviasalesFallback: "https://www.aviasales.com/",
+
+  // Stays
+  expediaToken: "yna-expedia",
+  expediaTracked: "https://www.expedia.co.uk/Hotel-Search?affcid=yna-expedia",
+
+  // Rail / bus
+  omioTracked: "https://www.omio.com/?partner_id=yna",
+
+  // Transfers
+  kiwitaxiTracked: "https://kiwitaxi.tp.st/yna",
+  welcomepickupsTracked: "",
+
+  // Tickets
+  sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=yna",
+  footballticketnetTracked: "",
+  gigsbergTracked: "",
+  seatpickTracked: "",
+
+  // Things
+  getyourguidePartnerId: "YNA123",
+  tiqetsTracked: "",
+  klookTracked: "",
+  wegotripTracked: "",
+
+  // Insurance
+  ektaTracked: "",
+  safetywingTracked: "",
+
+  // Claims
+  airhelpTracked: "",
+  compensairTracked: "",
+
+  // Utility / internal
+  googleMapsBase: "https://www.google.com/maps/search/?api=1",
+} as const;
+
+export const PARTNER_REGISTRY = [
+  {
+    id: "footballticketnet",
+    display: { name: "FootballTicketNet", badgeText: "FTN" },
+    categories: ["tickets"],
+    primaryCategory: "tickets",
+    live: true,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: [
+      "footballticketnet",
+      "football_ticket_net",
+      "football-ticket-net",
+      "footballticketsnet",
+      "football_tickets_net",
+      "ftn",
+    ],
+    baseUrl: "https://www.footballticketnet.com/",
+    trackedConfigKey: "footballticketnetTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Use other ticket marketplaces if direct routing is unavailable.",
+      partnerIds: ["sportsevents365", "gigsberg", "seatpick"],
+      baseUrl: "https://www.footballticketnet.com/",
+    },
+  },
+  {
+    id: "sportsevents365",
+    display: { name: "SportsEvents365", badgeText: "SE365" },
+    categories: ["tickets"],
+    primaryCategory: "tickets",
+    live: true,
+    capabilities: { affiliate: true, api: false, utility: false, internal: false },
+    aliases: ["sportsevents365", "sports_events_365", "sports-events-365", "se365"],
+    baseUrl: "https://www.sportsevents365.com/",
+    trackedConfigKey: "sportsevents365Tracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Fallback to other live ticket providers if needed.",
+      partnerIds: ["footballticketnet", "gigsberg", "seatpick"],
+      baseUrl: "https://www.sportsevents365.com/",
+    },
+  },
+  {
+    id: "gigsberg",
+    display: { name: "Gigsberg", badgeText: "GIG" },
+    categories: ["tickets"],
+    primaryCategory: "tickets",
+    live: true,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["gigsberg"],
+    baseUrl: "https://www.gigsberg.com/",
+    trackedConfigKey: "gigsbergTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Fallback ticket marketplace.",
+      partnerIds: ["sportsevents365", "footballticketnet", "seatpick"],
+      baseUrl: "https://www.gigsberg.com/",
+    },
+  },
+  {
+    id: "seatpick",
+    display: { name: "SeatPick", badgeText: "SP" },
+    categories: ["tickets"],
+    primaryCategory: "tickets",
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["seatpick", "seat_pick"],
+    baseUrl: "https://seatpick.com/",
+    trackedConfigKey: "seatpickTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Kept only for compatibility while not live.",
+      partnerIds: ["sportsevents365", "footballticketnet", "gigsberg"],
+      baseUrl: "https://seatpick.com/",
+    },
+  },
+  {
+    id: "aviasales",
+    display: { name: "Aviasales", badgeText: "AVA" },
+    categories: ["flights"],
+    primaryCategory: "flights",
+    live: true,
+    capabilities: { affiliate: true, api: true, utility: false, internal: false },
+    aliases: ["aviasales", "avia_sales"],
+    baseUrl: "https://www.aviasales.com/",
+    fallback: {
+      mode: "generic_search",
+      reason: "Flight search can degrade to a generic search URL if route data is incomplete.",
+      baseUrl: "https://www.aviasales.com/",
+    },
+  },
+  {
+    id: "expedia",
+    display: { name: "Expedia", badgeText: "EXP" },
+    categories: ["stays", "car_hire"],
+    primaryCategory: "stays",
+    live: true,
+    capabilities: { affiliate: true, api: false, utility: false, internal: false },
+    aliases: ["expedia"],
+    baseUrl: "https://www.expedia.co.uk/",
+    trackedConfigKey: "expediaTracked",
+    fallback: {
+      mode: "generic_search",
+      reason: "Generic destination/date hotel search is acceptable fallback behaviour.",
+      baseUrl: "https://www.expedia.co.uk/Hotel-Search",
+    },
+  },
+  {
+    id: "omio",
+    display: { name: "Omio", badgeText: "OM" },
+    categories: ["trains", "buses"],
+    primaryCategory: "trains",
+    live: true,
+    capabilities: { affiliate: true, api: true, utility: false, internal: false },
+    aliases: ["omio"],
+    baseUrl: "https://www.omio.com/",
+    trackedConfigKey: "omioTracked",
+    fallback: {
+      mode: "generic_search",
+      reason: "Journey flow can fall back to a broad route search.",
+      baseUrl: "https://www.omio.com/",
+    },
+  },
+  {
+    id: "kiwitaxi",
+    display: { name: "KiwiTaxi", badgeText: "KT" },
+    categories: ["transfers"],
+    primaryCategory: "transfers",
+    live: true,
+    capabilities: { affiliate: true, api: false, utility: false, internal: false },
+    aliases: ["kiwitaxi", "kiwi_taxi", "kiwi-taxi"],
+    baseUrl: "https://kiwitaxi.com/",
+    trackedConfigKey: "kiwitaxiTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Fallback to Welcome Pickups if KiwiTaxi is unavailable.",
+      partnerIds: ["welcomepickups"],
+      baseUrl: "https://kiwitaxi.com/",
+    },
+  },
+  {
+    id: "welcomepickups",
+    display: { name: "Welcome Pickups", badgeText: "WP" },
+    categories: ["transfers"],
+    primaryCategory: "transfers",
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["welcomepickups", "welcome_pickups", "welcome-pickups"],
+    baseUrl: "https://www.welcomepickups.com/",
+    trackedConfigKey: "welcomepickupsTracked",
+    fallback: {
+      mode: "generic_search",
+      reason: "Compatibility fallback partner for transfers.",
+      baseUrl: "https://www.welcomepickups.com/",
+    },
+  },
+  {
+    id: "ekta",
+    display: { name: "EKTA", badgeText: "EK" },
+    categories: ["insurance"],
+    primaryCategory: "insurance",
+    live: true,
+    capabilities: { affiliate: true, api: false, utility: false, internal: false },
+    aliases: ["ekta"],
+    baseUrl: "https://ektatraveling.com/",
+    trackedConfigKey: "ektaTracked",
+    fallback: {
+      mode: "generic_search",
+      reason: "Use generic insurance landing if no tracked route is available.",
+      baseUrl: "https://ektatraveling.com/",
+    },
+  },
+  {
+    id: "safetywing",
+    display: { name: "SafetyWing", badgeText: "SW" },
+    categories: ["insurance"],
+    primaryCategory: "insurance",
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["safetywing", "safety_wing"],
+    baseUrl: "https://safetywing.com/",
+    trackedConfigKey: "safetywingTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Kept for compatibility only; route insurance traffic to EKTA.",
+      partnerIds: ["ekta"],
+      baseUrl: "https://safetywing.com/",
+    },
+  },
+  {
+    id: "getyourguide",
+    display: { name: "GetYourGuide", badgeText: "GYG" },
+    categories: ["things"],
+    primaryCategory: "things",
+    live: true,
+    capabilities: { affiliate: true, api: true, utility: false, internal: false },
+    aliases: ["getyourguide", "get_your_guide", "gyg"],
+    baseUrl: "https://www.getyourguide.com/",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Primary things-to-do partner; other discovery providers remain optional fallback.",
+      partnerIds: ["tiqets", "klook", "wegotrip"],
+      baseUrl: "https://www.getyourguide.com/",
+    },
+  },
+  {
+    id: "tiqets",
+    display: { name: "Tiqets", badgeText: "TQ" },
+    categories: ["things"],
+    primaryCategory: "things",
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["tiqets"],
+    baseUrl: "https://www.tiqets.com/",
+    trackedConfigKey: "tiqetsTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Compatibility-only things partner while not live.",
+      partnerIds: ["getyourguide", "klook", "wegotrip"],
+      baseUrl: "https://www.tiqets.com/",
+    },
+  },
+  {
+    id: "klook",
+    display: { name: "Klook", badgeText: "KL" },
+    categories: ["things"],
+    primaryCategory: "things",
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["klook"],
+    baseUrl: "https://www.klook.com/",
+    trackedConfigKey: "klookTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Compatibility-only things partner while not live.",
+      partnerIds: ["getyourguide", "tiqets", "wegotrip"],
+      baseUrl: "https://www.klook.com/",
+    },
+  },
+  {
+    id: "wegotrip",
+    display: { name: "WeGoTrip", badgeText: "WGT" },
+    categories: ["things"],
+    primaryCategory: "things",
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["wegotrip", "wego_trip", "wego-trip"],
+    baseUrl: "https://wegotrip.com/",
+    trackedConfigKey: "wegotripTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Compatibility-only things partner while not live.",
+      partnerIds: ["getyourguide", "tiqets", "klook"],
+      baseUrl: "https://wegotrip.com/",
+    },
+  },
+  {
+    id: "airhelp",
+    display: { name: "AirHelp", badgeText: "AH" },
+    categories: ["claim"],
+    primaryCategory: "claim",
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["airhelp", "air_help"],
+    baseUrl: "https://www.airhelp.com/",
+    trackedConfigKey: "airhelpTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Compatibility claim provider.",
+      partnerIds: ["compensair"],
+      baseUrl: "https://www.airhelp.com/",
+    },
+  },
+  {
+    id: "compensair",
+    display: { name: "Compensair", badgeText: "CA" },
+    categories: ["claim"],
+    primaryCategory: "claim",
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
+    aliases: ["compensair"],
+    baseUrl: "https://compensair.com/",
+    trackedConfigKey: "compensairTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Compatibility claim provider.",
+      partnerIds: ["airhelp"],
+      baseUrl: "https://compensair.com/",
+    },
+  },
+  {
+    id: "google",
+    display: { name: "Google Maps", badgeText: "MAP" },
+    categories: ["maps"],
+    primaryCategory: "maps",
+    live: true,
+    capabilities: { affiliate: false, api: false, utility: true, internal: false },
+    aliases: ["google", "google_maps", "googlemaps", "maps", "gmaps"],
+    baseUrl: "https://www.google.com/maps/",
+    fallback: {
+      mode: "none",
+      reason: "Utility destination only.",
+      baseUrl: "https://www.google.com/maps/",
+    },
+  },
+  {
+    id: "official_site",
+    display: { name: "Official Site", badgeText: "OFF" },
+    categories: ["official_site"],
+    primaryCategory: "official_site",
+    live: true,
+    capabilities: { affiliate: false, api: false, utility: true, internal: false },
+    aliases: ["official_site", "official", "club_site", "venue_site", "officialsite"],
+    baseUrl: "",
+    fallback: {
+      mode: "official_site_only",
+      reason: "Official destination only.",
+      baseUrl: null,
+    },
+  },
+  {
+    id: "internal_claim",
+    display: { name: "Internal Claim", badgeText: "CLM" },
+    categories: ["claim"],
+    primaryCategory: "claim",
+    live: true,
+    capabilities: { affiliate: false, api: false, utility: false, internal: true },
+    aliases: ["internal_claim"],
+    baseUrl: "",
+    fallback: {
+      mode: "internal_only",
+      reason: "Internal workflow only.",
+      baseUrl: null,
+    },
+  },
+  {
+    id: "internal_note",
+    display: { name: "Internal Note", badgeText: "NOTE" },
+    categories: ["note"],
+    primaryCategory: "note",
+    live: true,
+    capabilities: { affiliate: false, api: false, utility: false, internal: true },
+    aliases: ["internal_note"],
+    baseUrl: "",
+    fallback: {
+      mode: "internal_only",
+      reason: "Internal workflow only.",
+      baseUrl: null,
+    },
+  },
+  {
+    id: "internal_other",
+    display: { name: "Internal Other", badgeText: "OTHER" },
+    categories: ["other"],
+    primaryCategory: "other",
+    live: true,
+    capabilities: { affiliate: false, api: false, utility: false, internal: true },
+    aliases: ["internal_other"],
+    baseUrl: "",
+    fallback: {
+      mode: "internal_only",
+      reason: "Internal workflow only.",
+      baseUrl: null,
+    },
+  },
+] as const satisfies readonly PartnerDefinition[];
+
+export const PARTNER_REGISTRY_BY_ID: Readonly<Record<PartnerId, PartnerDefinition>> =
+  Object.freeze(
+    PARTNER_REGISTRY.reduce((acc, partner) => {
+      acc[partner.id] = partner;
+      return acc;
+    }, {} as Record<PartnerId, PartnerDefinition>)
+  );
+
+export const PARTNER_ALIAS_INDEX: Readonly<Record<string, PartnerId>> = Object.freeze(
+  PARTNER_REGISTRY.reduce((acc, partner) => {
+    const keys = unique([partner.id, partner.display.name, ...partner.aliases]).map(normalizeKey);
+
+    for (const key of keys) {
+      acc[key] = partner.id;
+    }
+
+    return acc;
+  }, {} as Record<string, PartnerId>)
+);
+
+const COMMERCIAL_CATEGORY_SET = new Set<string>(COMMERCIAL_PARTNER_CATEGORIES);
+const UTILITY_CATEGORY_SET = new Set<string>(UTILITY_PARTNER_CATEGORIES);
+const INTERNAL_CATEGORY_SET = new Set<string>(INTERNAL_PARTNER_CATEGORIES);
+const ALL_CATEGORY_SET = new Set<string>(ALL_PARTNER_CATEGORIES);
+const PARTNER_ID_SET = new Set<string>(CANONICAL_PARTNER_IDS);
+
+/* -------------------------------------------------------------------------- */
+/* Category guards                                                            */
+/* -------------------------------------------------------------------------- */
+
+export function isCommercialCategory(
+  value: string | null | undefined
+): value is CommercialCategory {
+  return COMMERCIAL_CATEGORY_SET.has(clean(value));
+}
+
+export function isUtilityCategory(
+  value: string | null | undefined
+): value is UtilityCategory {
+  return UTILITY_CATEGORY_SET.has(clean(value));
+}
+
+export function isInternalCategory(
+  value: string | null | undefined
+): value is InternalCategory {
+  return INTERNAL_CATEGORY_SET.has(clean(value));
+}
+
+export function isKnownPartnerCategory(
+  value: string | null | undefined
+): value is PartnerCategory {
+  return ALL_CATEGORY_SET.has(clean(value));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Canonical id resolution                                                    */
+/* -------------------------------------------------------------------------- */
+
+export function canonicalizePartnerId(input: string | null | undefined): PartnerId | null {
+  const raw = clean(input);
   if (!raw) return null;
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const byAlias = PARTNER_ALIAS_INDEX[normalizeKey(raw)];
+  return byAlias ?? null;
+}
 
-  try {
-    return formatIsoToYmd(raw);
-  } catch {
-    return null;
+export function isPartnerId(input: string | null | undefined): input is PartnerId {
+  const canonical = canonicalizePartnerId(input);
+  return Boolean(canonical && PARTNER_ID_SET.has(canonical));
+}
+
+export function getCanonicalPartnerId(input: PartnerId | string): PartnerId {
+  const canonical = canonicalizePartnerId(input);
+  if (!canonical) {
+    throw new Error(`Unknown canonical partner id: ${clean(input)}`);
   }
+  return canonical;
 }
 
-function toCompactYmd(value: string | null): string | null {
-  return value ? value.replace(/-/g, "") : null;
+/* -------------------------------------------------------------------------- */
+/* Registry lookups                                                           */
+/* -------------------------------------------------------------------------- */
+
+export function getPartnerOrNull(input: PartnerId | string | null | undefined): PartnerDefinition | null {
+  const canonical = canonicalizePartnerId(input);
+  return canonical ? PARTNER_REGISTRY_BY_ID[canonical] ?? null : null;
 }
 
-function clampInt(value: unknown, min: number, max: number, fallback: number): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, Math.floor(parsed)));
-}
-
-function normalizeCabinClass(value: unknown): CabinClass {
-  const raw = clean(value).toLowerCase();
-  if (raw === "premium") return "premium";
-  if (raw === "business") return "business";
-  if (raw === "first") return "first";
-  return "economy";
-}
-
-function safeUrl(value: unknown): string | null {
-  const raw = clean(value);
-  if (!raw) return null;
-
-  try {
-    return new URL(raw).toString();
-  } catch {
-    return null;
+export function getPartner(input: PartnerId | string): PartnerDefinition {
+  const partner = getPartnerOrNull(input);
+  if (!partner) {
+    throw new Error(`Unknown partner id: ${clean(input)}`);
   }
+  return partner;
 }
 
-function appendQuery(
-  base: string | null,
-  params: Record<string, string | null | undefined>
+export function mustGetPartnerById(input: PartnerId | string): PartnerDefinition {
+  return getPartner(input);
+}
+
+export function getPartnersByCategory(category: PartnerCategory): PartnerDefinition[] {
+  return PARTNER_REGISTRY.filter((partner) => partner.categories.includes(category));
+}
+
+export function getLivePartnersByCategory(category: PartnerCategory): PartnerDefinition[] {
+  return PARTNER_REGISTRY.filter(
+    (partner) => partner.live && partner.categories.includes(category)
+  );
+}
+
+export function getCommercialPartners(): PartnerDefinition[] {
+  return PARTNER_REGISTRY.filter((partner) =>
+    partner.categories.some((category) => isCommercialCategory(category))
+  );
+}
+
+export function getUtilityPartners(): PartnerDefinition[] {
+  return PARTNER_REGISTRY.filter((partner) =>
+    partner.categories.some((category) => isUtilityCategory(category))
+  );
+}
+
+export function getInternalPartners(): PartnerDefinition[] {
+  return PARTNER_REGISTRY.filter((partner) =>
+    partner.categories.some((category) => isInternalCategory(category))
+  );
+}
+
+export function listAllPartners(): PartnerDefinition[] {
+  return [...PARTNER_REGISTRY];
+}
+
+/* -------------------------------------------------------------------------- */
+/* Capability / support helpers                                               */
+/* -------------------------------------------------------------------------- */
+
+export function isPartnerLive(input: PartnerId | string | null | undefined): boolean {
+  const partner = getPartnerOrNull(input);
+  return Boolean(partner?.live);
+}
+
+export function isUtilityPartner(input: PartnerId | string | null | undefined): boolean {
+  const partner = getPartnerOrNull(input);
+  return Boolean(partner?.capabilities.utility);
+}
+
+export function supportsCategory(
+  input: PartnerId | string | null | undefined,
+  category: PartnerCategory
+): boolean {
+  const partner = getPartnerOrNull(input);
+  return Boolean(partner?.categories.includes(category));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tracked config / fallback helpers                                          */
+/* -------------------------------------------------------------------------- */
+
+export function getTrackedConfigValue(
+  input: PartnerId | string | null | undefined
 ): string | null {
-  const safeBase = clean(base);
-  if (!safeBase) return null;
+  const partner = getPartnerOrNull(input);
+  if (!partner?.trackedConfigKey) return null;
 
-  const entries = Object.entries(params).filter(([, value]) => clean(value));
-  if (!entries.length) return safeBase;
+  const value = AffiliateConfig[partner.trackedConfigKey];
+  const cleaned = clean(value);
 
-  const joiner = safeBase.includes("?") ? "&" : "?";
-  const qs = entries.map(([key, value]) => `${enc(key)}=${enc(value)}`).join("&");
-
-  return `${safeBase}${joiner}${qs}`;
+  return cleaned || null;
 }
 
-function buildMapsSearchUrl(query: string): string | null {
-  const q = clean(query);
-  if (!q) return null;
-  return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
-}
+export function getPartnerFallbackBaseUrl(
+  input: PartnerId | string | null | undefined
+): string | null {
+  const partner = getPartnerOrNull(input);
+  if (!partner) return null;
 
-function normalizeOriginIata(value: unknown): string {
-  const raw = clean(value).toUpperCase();
-  return /^[A-Z]{3}$/.test(raw) ? raw : "LON";
-}
+  const fallbackBase = clean(partner.fallback.baseUrl);
+  if (fallbackBase) return fallbackBase;
 
-function resolveDestinationIata(city: string): string | null {
-  const resolved = clean(getIataCityCodeForCity(city)).toUpperCase();
-  return /^[A-Z]{3}$/.test(resolved) ? resolved : null;
-}
-
-function getTrackedOrFallbackBase(partnerId: PartnerId): string | null {
-  const tracked = getTrackedConfigValue(partnerId);
-  if (tracked) return safeUrl(tracked);
-
-  const fallback = getPartnerFallbackBaseUrl(partnerId);
-  if (fallback) return safeUrl(fallback);
-
-  const base = clean(getPartner(partnerId).baseUrl);
-  return safeUrl(base);
-}
-
-function buildGenericPartnerBase(partnerId: PartnerId): string | null {
-  const base = clean(getPartner(partnerId).baseUrl);
-  return safeUrl(base);
-}
-
-function canBuildCommercialCategory(partnerId: PartnerId, category: CommercialCategory): boolean {
-  return isPartnerLive(partnerId) && supportsCategory(partnerId, category);
-}
-
-function getPartnerId(input: PartnerId | string): PartnerId {
-  return getCanonicalPartnerId(input);
+  const ownBase = clean(partner.baseUrl);
+  return ownBase || null;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Category-specific builders                                                 */
+/* Backwards-compatible aliases for newer names used elsewhere                */
 /* -------------------------------------------------------------------------- */
 
-function buildFlightsUrl(args: {
-  city: string;
-  originIata: string;
-  startDate: string | null;
-  endDate: string | null;
-  passengers: number;
-  cabinClass: CabinClass;
-}): string | null {
-  const partnerId = getPartnerId("aviasales");
-  if (!canBuildCommercialCategory(partnerId, "flights")) return null;
-
-  const city = clean(args.city);
-  const origin = normalizeOriginIata(args.originIata);
-  const destination = resolveDestinationIata(city);
-  const outbound = toCompactYmd(args.startDate);
-  const inbound = toCompactYmd(args.endDate);
-  const marker = clean(AffiliateConfig.aviasalesMarker);
-
-  if (!destination || !outbound) {
-    return getTrackedOrFallbackBase(partnerId);
-  }
-
-  const routeToken = `${origin}${outbound}${destination}${inbound || ""}${Math.max(
-    1,
-    args.passengers
-  )}`;
-
-  const base = `https://www.aviasales.com/search/${routeToken}`;
-
-  return appendQuery(base, {
-    marker: marker || null,
-    cabin: args.cabinClass !== "economy" ? args.cabinClass : null,
-  });
-}
-
-function buildStaysUrl(args: {
-  city: string;
-  startDate: string | null;
-  endDate: string | null;
-  passengers: number;
-}): string | null {
-  const partnerId = getPartnerId("expedia");
-  if (!canBuildCommercialCategory(partnerId, "stays")) return null;
-
-  const city = clean(args.city);
-  if (!city) return null;
-
-  const trackedBase = safeUrl(clean(AffiliateConfig.expediaTracked));
-  if (trackedBase) {
-    return appendQuery(trackedBase, {
-      destination: city,
-      startDate: args.startDate,
-      endDate: args.endDate,
-      adults: String(Math.max(1, args.passengers)),
-      rooms: "1",
-    });
-  }
-
-  const fallbackBase = getPartnerFallbackBaseUrl(partnerId);
-  return appendQuery(fallbackBase, {
-    destination: city,
-    startDate: args.startDate,
-    endDate: args.endDate,
-    adults: String(Math.max(1, args.passengers)),
-    rooms: "1",
-  });
-}
-
-function omioOriginLabel(originIata: string): string {
-  if (originIata === "LON") return "London";
-  if (originIata === "PAR") return "Paris";
-  if (originIata === "MIL") return "Milan";
-  if (originIata === "ROM") return "Rome";
-  return originIata;
-}
-
-function buildOmioJourneyUrl(args: {
-  city: string;
-  originIata: string;
-  startDate: string | null;
-  endDate: string | null;
-}): string | null {
-  const partnerId = getPartnerId("omio");
-  if (!isPartnerLive(partnerId)) return null;
-
-  const city = clean(args.city);
-  const base = getTrackedOrFallbackBase(partnerId);
-
-  if (!base || !city) return base;
-
-  return appendQuery(base, {
-    departureLocation: omioOriginLabel(normalizeOriginIata(args.originIata)),
-    arrivalLocation: city,
-    departureDate: args.startDate,
-    arrivalDate: args.endDate,
-  });
-}
-
-function buildTransfersUrl(args: { city: string; date: string | null }): string | null {
-  const primaryPartnerId = getPartnerId("kiwitaxi");
-  const fallbackPartnerId = getPartnerId("welcomepickups");
-
-  const chosenPartner = isPartnerLive(primaryPartnerId)
-    ? primaryPartnerId
-    : isPartnerLive(fallbackPartnerId)
-      ? fallbackPartnerId
-      : null;
-
-  if (!chosenPartner) return null;
-
-  const base = getTrackedOrFallbackBase(chosenPartner);
-  if (!base) return null;
-
-  return appendQuery(base, {
-    to: clean(args.city),
-    destination: clean(args.city),
-    date: args.date,
-  });
-}
-
-function buildTicketsUrl(args: {
-  city: string;
-  startDate: string | null;
-  endDate: string | null;
-}): string | null {
-  const partnerId = getPartnerId("sportsevents365");
-  if (!canBuildCommercialCategory(partnerId, "tickets")) return null;
-
-  const base = getTrackedOrFallbackBase(partnerId);
-  if (!base) return null;
-
-  const city = clean(args.city);
-
-  return appendQuery(base, {
-    q: city || null,
-    city: city || null,
-    from: args.startDate,
-    to: args.endDate,
-  });
-}
-
-function buildThingsUrl(city: string): string | null {
-  const primaryPartnerId = getPartnerId("getyourguide");
-  if (!canBuildCommercialCategory(primaryPartnerId, "things")) return null;
-
-  const cityName = clean(city);
-  const partnerId = clean(AffiliateConfig.getyourguidePartnerId);
-
-  if (!cityName || !partnerId) return null;
-
-  return `https://www.getyourguide.com/s/?q=${enc(cityName)}&partner_id=${enc(partnerId)}`;
-}
-
-function buildInsuranceUrl(): string | null {
-  const ektaId = getPartnerId("ekta");
-  if (isPartnerLive(ektaId)) {
-    return getTrackedOrFallbackBase(ektaId);
-  }
-
-  const safetyWingId = getPartnerId("safetywing");
-  if (isPartnerLive(safetyWingId)) {
-    return getTrackedOrFallbackBase(safetyWingId) || buildGenericPartnerBase(safetyWingId);
-  }
-
-  return null;
-}
-
-function buildClaimsUrl(): string | null {
-  const airhelpId = getPartnerId("airhelp");
-  const compensairId = getPartnerId("compensair");
-
-  if (isPartnerLive(airhelpId)) {
-    return getTrackedOrFallbackBase(airhelpId);
-  }
-
-  if (isPartnerLive(compensairId)) {
-    return getTrackedOrFallbackBase(compensairId);
-  }
-
-  return null;
-}
-
-function buildMapsUrl(city: string): string | null {
-  return buildMapsSearchUrl(city);
-}
-
-/* -------------------------------------------------------------------------- */
-/* Main                                                                       */
-/* -------------------------------------------------------------------------- */
-
-export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffiliateLinks {
-  const city = clean(args.city);
-  const startDate = normalizeYmd(args.startDate);
-  const endDate = normalizeYmd(args.endDate);
-  const originIata = normalizeOriginIata(args.originIata);
-  const passengers = clampInt(args.passengers, 1, 9, 1);
-  const cabinClass = normalizeCabinClass(args.cabinClass);
-
-  const flightsUrl = buildFlightsUrl({
-    city,
-    originIata,
-    startDate,
-    endDate,
-    passengers,
-    cabinClass,
-  });
-
-  const staysUrl = buildStaysUrl({
-    city,
-    startDate,
-    endDate,
-    passengers,
-  });
-
-  const omioUrl = buildOmioJourneyUrl({
-    city,
-    originIata,
-    startDate,
-    endDate,
-  });
-
-  const transfersUrl = buildTransfersUrl({
-    city,
-    date: startDate,
-  });
-
-  const ticketsUrl = buildTicketsUrl({
-    city,
-    startDate,
-    endDate,
-  });
-
-  const thingsUrl = buildThingsUrl(city);
-  const insuranceUrl = buildInsuranceUrl();
-  const claimsUrl = buildClaimsUrl();
-  const mapsUrl = buildMapsUrl(city);
-
-  return {
-    /* Canonical */
-    ticketsUrl,
-    flightsUrl,
-    staysUrl,
-    trainsUrl: omioUrl,
-    busesUrl: omioUrl,
-    transfersUrl,
-    insuranceUrl,
-    thingsUrl,
-    carHireUrl: null,
-
-    /* Utility */
-    mapsUrl,
-    officialSiteUrl: null,
-
-    /* Internal */
-    claimsUrl,
-
-    /* Compatibility aliases */
-    hotelsUrl: staysUrl,
-    experiencesUrl: thingsUrl,
-    transportUrl: omioUrl,
-    omioUrl,
-  };
-}
+export const PARTNER_REGISTRY_LIST = PARTNER_REGISTRY;
+export const ALL_PARTNERS = PARTNER_REGISTRY;
