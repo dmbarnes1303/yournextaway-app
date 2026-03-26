@@ -1,4 +1,3 @@
-// app/(tabs)/trips.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
@@ -23,7 +22,12 @@ import EmptyState from "@/src/components/EmptyState";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
-import { LEAGUES, parseIsoDateOnly, toIsoDate } from "@/src/constants/football";
+import {
+  LEAGUES,
+  parseIsoDateOnly,
+  toIsoDate,
+  getRollingWindowIso,
+} from "@/src/constants/football";
 
 import tripsStore, { type Trip } from "@/src/state/trips";
 import savedItemsStore from "@/src/state/savedItems";
@@ -91,6 +95,10 @@ const TRIP_CITY_META: Record<
       "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1600&h=900&q=80",
   },
 };
+
+function cleanString(value: unknown) {
+  return String(value ?? "").trim();
+}
 
 function titleCase(input: string) {
   const s = String(input ?? "").trim();
@@ -273,15 +281,39 @@ function buildWalletIndex(groups: WalletTripGroup[]) {
   return byTrip;
 }
 
+function buildCanonicalTripEditParams(t: Trip) {
+  const leagueId =
+    (t as any)?.leagueId != null && Number.isFinite(Number((t as any)?.leagueId))
+      ? String((t as any).leagueId)
+      : undefined;
+
+  return {
+    tripId: t.id,
+    from: cleanString(t.startDate),
+    to: cleanString(t.endDate),
+    city: cityLabel(t),
+    ...(leagueId ? { leagueId } : {}),
+    season: String(LEAGUES[0]?.season ?? new Date().getFullYear()),
+  };
+}
+
+function buildCanonicalNewTripStartParams() {
+  const rolling = getRollingWindowIso();
+  return {
+    from: rolling.from,
+    to: rolling.to,
+  };
+}
+
 export default function TripsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
-  const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
+  const [trips, setTrips] = useState(tripsStore.getState().trips);
 
   const [loadedItems, setLoadedItems] = useState(savedItemsStore.getState().loaded);
-  const [items, setItems] = useState<SavedItem[]>(savedItemsStore.getState().items);
+  const [items, setItems] = useState(savedItemsStore.getState().items);
 
   const [walletGroups, setWalletGroups] = useState<WalletTripGroup[]>([]);
   const [walletLoaded, setWalletLoaded] = useState(false);
@@ -372,11 +404,23 @@ export default function TripsScreen() {
   );
 
   const editTrip = useCallback(
-    (t: Trip) => router.push({ pathname: "/trip/build", params: { tripId: t.id } } as any),
+    (t: Trip) =>
+      router.push({
+        pathname: "/trip/build",
+        params: buildCanonicalTripEditParams(t),
+      } as any),
     [router]
   );
 
-  const goBuild = useCallback(() => router.push("/trip/build"), [router]);
+  const goBuild = useCallback(
+    () =>
+      router.push({
+        pathname: "/trip/build",
+        params: buildCanonicalNewTripStartParams(),
+      } as any),
+    [router]
+  );
+
   const goFixtures = useCallback(() => router.push("/(tabs)/fixtures" as any), [router]);
 
   const goWalletForTrip = useCallback(
