@@ -1,4 +1,23 @@
 // src/core/partners.ts
+//
+// LEGACY COMPATIBILITY SHIM
+//
+// This file is no longer a source of truth.
+// Canonical commercial partner data now lives in:
+//   src/constants/partners.ts
+//
+// Keep this file thin and boring so old imports do not keep a second registry alive.
+
+import {
+  canonicalizePartnerId as canonicalizePartnerIdFromRegistry,
+  getCanonicalPartnerId as getCanonicalPartnerIdFromRegistry,
+  getPartner as getPartnerFromRegistry,
+  getPartnerOrNull as getPartnerOrNullFromRegistry,
+  getPartnersByCategory as getPartnersByCategoryFromRegistry,
+  isPartnerId as isPartnerIdFromRegistry,
+  type PartnerId as CanonicalPartnerId,
+  type PartnerDefinition,
+} from "@/src/constants/partners";
 
 export type PartnerCategory =
   | "tickets"
@@ -25,189 +44,69 @@ function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
+function toLegacyCategory(partner: PartnerDefinition): PartnerCategory {
+  if (partner.categories.includes("tickets")) return "tickets";
+  if (partner.categories.includes("flights")) return "flights";
+  if (partner.categories.includes("stays")) return "stays";
+  if (partner.categories.includes("transfers")) return "transfers";
+  if (partner.categories.includes("insurance")) return "insurance";
+  if (partner.categories.includes("things")) return "experiences";
+  if (partner.categories.includes("claim")) return "compensation";
+  if (partner.categories.includes("maps") || partner.categories.includes("official_site")) {
+    return "utility";
+  }
+  if (partner.categories.includes("trains") || partner.categories.includes("buses")) {
+    return "rail";
+  }
+
+  return "utility";
+}
+
+function toLegacyPartner(partner: PartnerDefinition): Partner {
+  return {
+    id: partner.id,
+    name: partner.display.name,
+    category: toLegacyCategory(partner),
+    affiliate: partner.capabilities.affiliate,
+    api: partner.capabilities.api,
+    deepLinkBase: partner.baseUrl,
+    canonicalId: partner.id,
+  };
+}
+
+/**
+ * Legacy exported list.
+ * This is derived from the canonical registry, not independently maintained.
+ */
 export const PARTNERS = [
-  {
-    id: "googlemaps",
-    name: "Google Maps",
-    category: "utility",
-    affiliate: false,
-    api: false,
-    deepLinkBase: "https://www.google.com/maps",
-    canonicalId: "googlemaps",
-  },
-
-  {
-    id: "footballticketsnet",
-    name: "FootballTicketNet",
-    category: "tickets",
-    affiliate: true,
-    api: true,
-    deepLinkBase: "https://www.footballticketnet.com/",
-    canonicalId: "footballticketsnet",
-  },
-  {
-    id: "sportsevents365",
-    name: "SportsEvents365",
-    category: "tickets",
-    affiliate: true,
-    api: true,
-    deepLinkBase: "https://www.sportsevents365.com/",
-    canonicalId: "sportsevents365",
-  },
-  {
-    id: "gigsberg",
-    name: "Gigsberg",
-    category: "tickets",
-    affiliate: true,
-    api: true,
-    deepLinkBase: "https://www.gigsberg.com/",
-    canonicalId: "gigsberg",
-  },
-  {
-    id: "seatpick",
-    name: "SeatPick",
-    category: "tickets",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://seatpick.com/",
-    canonicalId: "seatpick",
-  },
-
-  {
-    id: "aviasales",
-    name: "Aviasales",
-    category: "flights",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.aviasales.com/",
-    canonicalId: "aviasales",
-  },
-
-  {
-    id: "omio",
-    name: "Omio",
-    category: "rail",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.omio.com/",
-    canonicalId: "omio",
-  },
-
-  {
-    id: "expedia",
-    name: "Expedia",
-    category: "stays",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.expedia.co.uk/",
-    canonicalId: "expedia",
-  },
-  {
-    id: "expedia_stays",
-    name: "Expedia",
-    category: "stays",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.expedia.co.uk/",
-    canonicalId: "expedia",
-  },
-
-  {
-    id: "kiwitaxi",
-    name: "KiwiTaxi",
-    category: "transfers",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://kiwitaxi.com/",
-    canonicalId: "kiwitaxi",
-  },
-  {
-    id: "welcomepickups",
-    name: "Welcome Pickups",
-    category: "transfers",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.welcomepickups.com/",
-    canonicalId: "welcomepickups",
-  },
-
-  {
-    id: "tiqets",
-    name: "Tiqets",
-    category: "experiences",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.tiqets.com/",
-    canonicalId: "tiqets",
-  },
-  {
-    id: "klook",
-    name: "Klook",
-    category: "experiences",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.klook.com/",
-    canonicalId: "klook",
-  },
-  {
-    id: "getyourguide",
-    name: "GetYourGuide",
-    category: "experiences",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.getyourguide.com/",
-    canonicalId: "getyourguide",
-  },
-  {
-    id: "wegotrip",
-    name: "WeGoTrip",
-    category: "experiences",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://wegotrip.com/",
-    canonicalId: "wegotrip",
-  },
-
-  {
-    id: "safetywing",
-    name: "SafetyWing",
-    category: "insurance",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://safetywing.com/",
-    canonicalId: "safetywing",
-  },
-  {
-    id: "ekta",
-    name: "EKTA",
-    category: "insurance",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://ektatraveling.com/",
-    canonicalId: "ekta",
-  },
-
-  {
-    id: "airhelp",
-    name: "AirHelp",
-    category: "compensation",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.airhelp.com/",
-    canonicalId: "airhelp",
-  },
-  {
-    id: "compensair",
-    name: "Compensair",
-    category: "compensation",
-    affiliate: true,
-    api: false,
-    deepLinkBase: "https://www.compensair.com/",
-    canonicalId: "compensair",
-  },
+  ...new Map(
+    [
+      "googlemaps",
+      "footballticketsnet",
+      "sportsevents365",
+      "gigsberg",
+      "seatpick",
+      "aviasales",
+      "omio",
+      "expedia",
+      "kiwitaxi",
+      "welcomepickups",
+      "tiqets",
+      "klook",
+      "getyourguide",
+      "wegotrip",
+      "safetywing",
+      "ekta",
+      "airhelp",
+      "compensair",
+    ].map((id) => {
+      const canonical = getPartnerFromRegistry(id);
+      return [canonical.id, toLegacyPartner(canonical)] as const;
+    })
+  ).values(),
 ] as const satisfies readonly Partner[];
 
-export type PartnerId = (typeof PARTNERS)[number]["id"];
+export type PartnerId = CanonicalPartnerId;
 
 const PARTNER_MAP: Record<string, Partner> = Object.fromEntries(
   PARTNERS.map((partner) => [partner.id, partner])
@@ -230,35 +129,63 @@ for (const partner of PARTNERS) {
 }
 
 export function getPartnersByCategory(category: PartnerCategory): Partner[] {
-  return [...PARTNERS_BY_CATEGORY[category]];
+  if (category === "tickets") {
+    return getPartnersByCategoryFromRegistry("tickets").map(toLegacyPartner);
+  }
+  if (category === "flights") {
+    return getPartnersByCategoryFromRegistry("flights").map(toLegacyPartner);
+  }
+  if (category === "rail") {
+    const trains = getPartnersByCategoryFromRegistry("trains");
+    const buses = getPartnersByCategoryFromRegistry("buses");
+    return [...new Map([...trains, ...buses].map((p) => [p.id, toLegacyPartner(p)])).values()];
+  }
+  if (category === "stays") {
+    return getPartnersByCategoryFromRegistry("stays").map(toLegacyPartner);
+  }
+  if (category === "transfers") {
+    return getPartnersByCategoryFromRegistry("transfers").map(toLegacyPartner);
+  }
+  if (category === "experiences") {
+    return getPartnersByCategoryFromRegistry("things").map(toLegacyPartner);
+  }
+  if (category === "insurance") {
+    return getPartnersByCategoryFromRegistry("insurance").map(toLegacyPartner);
+  }
+  if (category === "compensation") {
+    return getPartnersByCategoryFromRegistry("claim").map(toLegacyPartner);
+  }
+  return [
+    ...getPartnersByCategoryFromRegistry("maps").map(toLegacyPartner),
+    ...getPartnersByCategoryFromRegistry("official_site").map(toLegacyPartner),
+  ];
 }
 
 export function getPartnerOrNull(id: string | null | undefined): Partner | null {
-  const raw = clean(id);
-  if (!raw) return null;
-  return PARTNER_MAP[raw] ?? null;
+  const canonical = canonicalizePartnerIdFromRegistry(id);
+  if (!canonical) return null;
+
+  const partner = getPartnerOrNullFromRegistry(canonical);
+  return partner ? toLegacyPartner(partner) : null;
 }
 
 export function getPartner(id: PartnerId | string): Partner {
-  const raw = clean(id);
-  const partner = getPartnerOrNull(raw);
+  const canonical = canonicalizePartnerIdFromRegistry(id);
 
-  if (!partner) {
-    throw new Error(`Unknown partner id: ${raw}`);
+  if (!canonical) {
+    throw new Error(`Unknown partner id: ${clean(id)}`);
   }
 
-  return partner;
+  const partner = getPartnerFromRegistry(canonical);
+  return toLegacyPartner(partner);
 }
 
 export function isPartnerId(id: string | null | undefined): id is PartnerId {
-  const raw = clean(id);
-  if (!raw) return false;
-  return raw in PARTNER_MAP;
+  return isPartnerIdFromRegistry(id);
 }
 
 export function getCanonicalPartnerId(id: PartnerId | string): string {
-  const partner = getPartner(id);
-  return clean(partner.canonicalId) || partner.id;
+  return getCanonicalPartnerIdFromRegistry(id);
 }
 
 export function isSamePartner(a?: string | null, b?: string | null): boolean {
@@ -272,4 +199,12 @@ export function isSamePartner(a?: string | null, b?: string | null): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Optional helper for migration/debugging.
+ * Lets callers explicitly normalize legacy ids through the canonical registry.
+ */
+export function canonicalizePartnerId(id: string | null | undefined): PartnerId | null {
+  return canonicalizePartnerIdFromRegistry(id);
 }
