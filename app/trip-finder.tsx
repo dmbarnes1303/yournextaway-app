@@ -1,4 +1,3 @@
-// app/trip-finder.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -77,6 +76,67 @@ const HIDDEN_GEM_CITY_KEYS = new Set<string>([
 
 function toKey(input: string) {
   return String(input ?? "").trim().toLowerCase();
+}
+
+function cleanString(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function fixtureDateOnly(iso?: string | null): string {
+  const value = cleanString(iso);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
+}
+
+function inferTripWindowFromKickoff(
+  kickoffIso?: string | null
+): { from?: string; to?: string } {
+  const dateOnly = fixtureDateOnly(kickoffIso);
+  if (!dateOnly) return {};
+
+  const start = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return {};
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 2);
+
+  const toIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+    end.getDate()
+  ).padStart(2, "0")}`;
+
+  return {
+    from: dateOnly,
+    to: toIso,
+  };
+}
+
+function buildCanonicalTripStartParams(args: {
+  fixtureId: string;
+  leagueId?: string | number | null;
+  season?: string | number | null;
+  city?: string | null;
+  kickoffIso?: string | null;
+  from?: string | null;
+  to?: string | null;
+}) {
+  const fallbackWindow = inferTripWindowFromKickoff(args.kickoffIso);
+
+  return {
+    fixtureId: cleanString(args.fixtureId),
+    ...(cleanString(args.leagueId) ? { leagueId: cleanString(args.leagueId) } : {}),
+    ...(cleanString(args.season) ? { season: cleanString(args.season) } : {}),
+    ...(cleanString(args.city) ? { city: cleanString(args.city) } : {}),
+    ...(cleanString(args.from)
+      ? { from: cleanString(args.from) }
+      : fallbackWindow.from
+        ? { from: fallbackWindow.from }
+        : {}),
+    ...(cleanString(args.to)
+      ? { to: cleanString(args.to) }
+      : fallbackWindow.to
+        ? { to: fallbackWindow.to }
+        : {}),
+  };
 }
 
 function labelForWindow(key: WindowKey) {
@@ -325,21 +385,27 @@ export default function TripFinderScreen() {
       const leagueId =
         trip?.fixture?.league?.id != null ? String(trip.fixture.league.id) : "";
       const season =
-        (trip?.fixture as any)?.league?.season != null
-          ? String((trip.fixture as any).league.season)
+        trip?.fixture?.league?.season != null
+          ? String(trip.fixture.league.season)
           : "";
+      const city = cleanString(trip?.city || trip?.fixture?.fixture?.venue?.city);
+      const kickoffIso = cleanString(trip?.kickoffIso || trip?.fixture?.fixture?.date);
 
       if (!fixtureId) return;
 
+      const canonicalParams = buildCanonicalTripStartParams({
+        fixtureId,
+        leagueId: leagueId || undefined,
+        season: season || undefined,
+        city: city || undefined,
+        kickoffIso: kickoffIso || undefined,
+        from: windowRange.from,
+        to: windowRange.to,
+      });
+
       router.push({
         pathname: "/trip/build",
-        params: {
-          fixtureId,
-          ...(leagueId ? { leagueId } : {}),
-          ...(season ? { season } : {}),
-          from: windowRange.from,
-          to: windowRange.to,
-        },
+        params: canonicalParams,
       } as any);
     },
     [router, windowRange.from, windowRange.to]
