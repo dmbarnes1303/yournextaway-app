@@ -1,5 +1,3 @@
-// src/features/tripDetail/useTripDetailViewModel.ts
-
 import { Alert } from "react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -37,11 +35,13 @@ type PartnerActionBundle = {
 
 type Controller = {
   onViewWallet: () => void;
-  openPartnerOrAlert: (
-    url: string | null | undefined,
-    message: string,
-    config: PartnerActionConfig
-  ) => void | Promise<void>;
+  openTrackedPartner: (args: {
+    partnerId: PartnerId | string;
+    url: string;
+    title: string;
+    savedItemType?: SavedItemType;
+    metadata?: Record<string, unknown>;
+  }) => void | Promise<void>;
   openTicketsForMatch: (matchId: string) => void | Promise<void>;
 };
 
@@ -255,7 +255,7 @@ export default function useTripDetailViewModel({
       try {
         await setActiveWorkspaceSection?.(section);
       } catch {
-        // ignore workspace section failures in viewmodel actions
+        // ignore
       }
     },
     [setActiveWorkspaceSection]
@@ -356,10 +356,18 @@ export default function useTripDetailViewModel({
 
   const openFlights = useCallback(
     async (sourceSurface: SourceSurface = "unknown") => {
+      if (!flightAction.url) {
+        Alert.alert("Flights not ready", flightAction.message);
+        return;
+      }
+
       await setWorkspaceSection("travel");
 
-      return controller.openPartnerOrAlert(flightAction.url, flightAction.message, {
-        ...flightAction.config,
+      return controller.openTrackedPartner({
+        partnerId: flightAction.config.partnerId,
+        url: flightAction.url,
+        savedItemType: flightAction.config.savedItemType,
+        title: flightAction.config.title,
         metadata: buildMeta(sourceSurface, "travel", {
           ...(flightAction.config.metadata ?? {}),
         }),
@@ -370,10 +378,18 @@ export default function useTripDetailViewModel({
 
   const openHotels = useCallback(
     async (sourceSurface: SourceSurface = "unknown") => {
+      if (!hotelAction.url) {
+        Alert.alert("Hotels not ready", hotelAction.message);
+        return;
+      }
+
       await setWorkspaceSection("stay");
 
-      return controller.openPartnerOrAlert(hotelAction.url, hotelAction.message, {
-        ...hotelAction.config,
+      return controller.openTrackedPartner({
+        partnerId: hotelAction.config.partnerId,
+        url: hotelAction.url,
+        savedItemType: hotelAction.config.savedItemType,
+        title: hotelAction.config.title,
         metadata: buildMeta(sourceSurface, "stay", {
           ...(hotelAction.config.metadata ?? {}),
         }),
@@ -387,24 +403,47 @@ export default function useTripDetailViewModel({
       const section: SourceSection =
         affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "travel" : "transfers";
 
+      if (!transportAction.url) {
+        Alert.alert("Transport not ready", transportAction.message);
+        return;
+      }
+
       await setWorkspaceSection(section === "travel" ? "travel" : "transfers");
 
-      return controller.openPartnerOrAlert(transportAction.url, transportAction.message, {
-        ...transportAction.config,
+      return controller.openTrackedPartner({
+        partnerId: transportAction.config.partnerId,
+        url: transportAction.url,
+        savedItemType: transportAction.config.savedItemType,
+        title: transportAction.config.title,
         metadata: buildMeta(sourceSurface, section, {
           ...(transportAction.config.metadata ?? {}),
         }),
       });
     },
-    [controller, transportAction, affiliateUrls?.omioUrl, affiliateUrls?.trainsUrl, buildMeta, setWorkspaceSection]
+    [
+      controller,
+      transportAction,
+      affiliateUrls?.omioUrl,
+      affiliateUrls?.trainsUrl,
+      buildMeta,
+      setWorkspaceSection,
+    ]
   );
 
   const openThings = useCallback(
     async (sourceSurface: SourceSurface = "unknown") => {
+      if (!thingsAction.url) {
+        Alert.alert("Activities not ready", thingsAction.message);
+        return;
+      }
+
       await setWorkspaceSection("things");
 
-      return controller.openPartnerOrAlert(thingsAction.url, thingsAction.message, {
-        ...thingsAction.config,
+      return controller.openTrackedPartner({
+        partnerId: thingsAction.config.partnerId,
+        url: thingsAction.url,
+        savedItemType: thingsAction.config.savedItemType,
+        title: thingsAction.config.title,
         metadata: buildMeta(sourceSurface, "things", {
           ...(thingsAction.config.metadata ?? {}),
         }),
@@ -612,8 +651,8 @@ export default function useTripDetailViewModel({
               affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "Rail / bus" : "Transfers"
             } • ${transfersPriceFrom}`
           : affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl
-          ? "View rail / bus"
-          : "View transfers",
+            ? "View rail / bus"
+            : "View transfers",
         onPress: () => {
           void openTransport("next_best_action");
         },
@@ -903,4 +942,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-                         }
+    }
