@@ -1,5 +1,3 @@
-// src/features/tripDetail/tripDetailLogistics.ts
-
 import type {
   GuidanceArea,
   TripFinderSummary,
@@ -24,7 +22,7 @@ import type { RankedTrip } from "@/src/features/tripFinder/types";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import type { Trip } from "@/src/state/trips";
 
-function normalizeAreas(raw: unknown): GuidanceArea[] {
+export function normalizeAreas(raw: unknown): GuidanceArea[] {
   const arr = Array.isArray(raw) ? raw : [];
 
   return arr
@@ -38,7 +36,7 @@ function normalizeAreas(raw: unknown): GuidanceArea[] {
     .filter((item): item is GuidanceArea => Boolean(item.area));
 }
 
-function normalizeTransportStops(raw: unknown): string[] {
+export function normalizeTransportStops(raw: unknown): string[] {
   const arr = Array.isArray(raw) ? raw : [];
 
   return arr
@@ -52,9 +50,9 @@ function normalizeTransportStops(raw: unknown): string[] {
     .filter(Boolean);
 }
 
-function normalizeTips(raw: unknown): string[] {
+export function normalizeTips(raw: unknown): string[] {
   const arr = Array.isArray(raw) ? raw : [];
-  return arr.slice(0, 3).map((x) => clean(x)).filter(Boolean);
+  return arr.slice(0, 3).map((entry) => clean(entry)).filter(Boolean);
 }
 
 export function getPrimaryLogistics(args: {
@@ -177,15 +175,15 @@ export function getTripFinderSummary(
 ): TripFinderSummary | null {
   if (!rankedTrip) return null;
 
-  const rawScore = (rankedTrip as any)?.score;
+  const rawScore =
+    typeof rankedTrip?.breakdown?.combinedScore === "number"
+      ? rankedTrip.breakdown.combinedScore
+      : null;
 
   return {
-    difficulty: difficultyLabel((rankedTrip as any)?.travelDifficulty ?? null),
-    confidence: confidencePctLabel((rankedTrip as any)?.confidence ?? null),
+    difficulty: difficultyLabel(rankedTrip?.breakdown?.travelDifficulty ?? null),
+    confidence: null,
     reasons: rankReasonsText(rankedTrip),
-    score:
-      typeof rawScore === "number" && Number.isFinite(rawScore)
-        ? Math.round(rawScore)
-        : null,
+    score: typeof rawScore === "number" && Number.isFinite(rawScore) ? Math.round(rawScore) : null,
   };
 }
