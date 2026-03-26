@@ -82,6 +82,13 @@ type PartnerLaunchArgs = {
   missingMessage?: string;
 };
 
+type OpenPartnerOrAlertConfig = {
+  partnerId: PartnerId;
+  savedItemType: SavedItemType;
+  title: string;
+  metadata?: Record<string, unknown>;
+};
+
 type CanonicalTripBuildParams = {
   tripId: string;
   from: string;
@@ -118,14 +125,12 @@ function inferSourceSectionFromSavedItemType(type?: SavedItemType): SourceSectio
 
 function safeSourceSurface(value: unknown): SourceSurface {
   const v = clean(value);
-  if (!v) return "unknown";
-  return v as SourceSurface;
+  return v ? (v as SourceSurface) : "unknown";
 }
 
 function safeSourceSection(value: unknown, fallback?: SavedItemType): SourceSection {
   const v = clean(value);
-  if (v) return v as SourceSection;
-  return inferSourceSectionFromSavedItemType(fallback);
+  return v ? (v as SourceSection) : inferSourceSectionFromSavedItemType(fallback);
 }
 
 function getTrackedPartnerErrorMessage(error: unknown): string {
@@ -290,7 +295,7 @@ export default function useTripDetailController({
 }: Props) {
   const router = useRouter();
 
-  function getResolvedTripId() {
+  function getResolvedTripId(): string {
     return clean(trip?.id) || clean(activeTripId);
   }
 
@@ -412,7 +417,10 @@ export default function useTripDetailController({
     const url = clean(args.url);
 
     if (!url) {
-      Alert.alert(args.missingTitle || "Not ready", args.missingMessage || "This link is not ready yet.");
+      Alert.alert(
+        args.missingTitle || "Not ready",
+        args.missingMessage || "This link is not ready yet."
+      );
       return;
     }
 
@@ -438,6 +446,24 @@ export default function useTripDetailController({
           args.sourceSection || inferSourceSectionFromSavedItemType(args.savedItemType),
         ...(args.metadata ?? {}),
       },
+    });
+  }
+
+  async function openPartnerOrAlert(
+    url: string | null | undefined,
+    message: string,
+    config: OpenPartnerOrAlertConfig
+  ) {
+    await openPartnerLaunch({
+      partnerId: config.partnerId,
+      url,
+      title: config.title,
+      savedItemType: config.savedItemType,
+      sourceSurface: safeSourceSurface(config.metadata?.sourceSurface),
+      sourceSection: safeSourceSection(config.metadata?.sourceSection, config.savedItemType),
+      metadata: config.metadata,
+      missingTitle: "Not ready",
+      missingMessage: message,
     });
   }
 
@@ -950,7 +976,9 @@ export default function useTripDetailController({
 
     try {
       await setActiveWorkspaceSection(next);
-    } catch {}
+    } catch {
+      // ignore section open failure
+    }
 
     const tripId = getResolvedTripId();
     if (!tripId) {
@@ -1005,7 +1033,8 @@ export default function useTripDetailController({
         savedItemType: candidate.itemType,
         title,
         sourceSurface: "workspace_cta",
-        sourceSection: "travel",
+        sourceSection:
+          candidate.itemType === "transfer" ? "transfers" : "travel",
         metadata: {
           travelMode: candidate.titleKind,
         },
@@ -1040,7 +1069,6 @@ export default function useTripDetailController({
         missingTitle: "Transfers not ready",
         missingMessage: "No transfer booking link is available yet.",
       });
-      return;
     }
   }
 
@@ -1052,6 +1080,7 @@ export default function useTripDetailController({
     onOpenSection,
     openUntracked,
     openTrackedPartner,
+    openPartnerOrAlert,
     openSavedItem,
     confirmArchive,
     confirmMarkBooked,
@@ -1064,4 +1093,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-          }
+                                             }
