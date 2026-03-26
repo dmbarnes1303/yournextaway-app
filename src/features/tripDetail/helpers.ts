@@ -116,7 +116,7 @@ export function isNumericId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9]+$/.test(value.trim());
 }
 
-export function defer(fn: () => void) {
+export function defer(fn: () => void): void {
   setTimeout(fn, 60);
 }
 
@@ -204,7 +204,9 @@ export function confidenceLabel(score?: number | null): string {
   return "Available";
 }
 
-export function optionReasonLabel(reason?: TicketResolutionOption["reason"] | string | null): string {
+export function optionReasonLabel(
+  reason?: TicketResolutionOption["reason"] | string | null
+): string {
   if (reason === "exact_event") return "Best match for this fixture";
   if (reason === "partial_match") return "Similar fixture listing";
   return "Search result";
@@ -214,7 +216,9 @@ export function livePriceLine(item: SavedItem): string | null {
   if (!clean(item.partnerUrl)) return null;
 
   const resolvedPrice = clean(item.metadata?.resolvedPriceText);
-  const provider = providerLabel(clean(item.metadata?.ticketProvider) || clean(item.partnerId));
+  const provider = providerLabel(
+    clean(item.metadata?.ticketProvider) || clean(item.partnerId)
+  );
 
   if (item.status === "booked") {
     const bookedPrice = clean(item.priceText) || resolvedPrice;
@@ -329,11 +333,19 @@ export function proCapHint(cap: number, tripCount: number): string {
 
 export function difficultyLabel(value?: TravelDifficulty | null): string | null {
   if (!value) return null;
-  if (value === "easy") return "Easy travel";
-  if (value === "moderate") return "Moderate travel";
-  if (value === "hard") return "Harder travel";
-  if (value === "complex") return "Complex travel";
-  return null;
+
+  switch (value) {
+    case "easy":
+      return "Easy travel";
+    case "moderate":
+      return "Moderate travel";
+    case "hard":
+      return "Harder travel";
+    case "complex":
+      return "Complex travel";
+    default:
+      return null;
+  }
 }
 
 export function confidencePctLabel(value?: number | null): string | null {
@@ -356,13 +368,17 @@ export function mapTicketProviderToPartnerId(provider?: string | null): PartnerI
 
   const partner = getPartnerOrNull(canonical);
   if (!partner || !supportsCategory(canonical, "tickets")) {
-    throw new Error(`Provider is not a canonical ticket partner: ${clean(provider) || canonical}`);
+    throw new Error(
+      `Provider is not a canonical ticket partner: ${clean(provider) || canonical}`
+    );
   }
 
   return canonical;
 }
 
-export function ticketResolverFailureMessage(resolved: TicketResolutionResult | null): string {
+export function ticketResolverFailureMessage(
+  resolved: TicketResolutionResult | null
+): string {
   if (!resolved) return "Ticket options are unavailable right now.";
 
   const error = clean((resolved as any)?.error);
@@ -487,4 +503,4 @@ export function getIsoDateOnly(raw?: string | null): string | undefined {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-      }
+        }
