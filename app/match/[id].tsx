@@ -1,6 +1,4 @@
-// app/match/[id].tsx
-
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -25,7 +23,7 @@ import { theme } from "@/src/constants/theme";
 import { useFixture } from "@/src/hooks/useFixtures";
 import { useTripsStore } from "@/src/state/trips";
 
-import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
+import { beginPartnerClick } from "@/src/services/partnerClicks";
 import {
   resolveTicketForFixture,
   type TicketResolutionOption,
@@ -35,13 +33,26 @@ import {
 import { getStadiumByTeamFromRegistry } from "@/src/data/stadiumRegistry";
 import { normalizeTeamKey } from "@/src/data/teams";
 
+import { mapTicketProviderToPartnerId } from "@/src/features/tripDetail/helpers";
+import type { PartnerId } from "@/src/core/partners";
+
 /* -------------------------------------------------------------------------- */
-/* CORE HELPERS (STRIPPED BACK)                                               */
+/* CORE HELPERS                                                               */
 /* -------------------------------------------------------------------------- */
 
-const clean = (v: unknown) => String(v ?? "").trim();
+type RouteParams = Record<string, string | string[] | undefined>;
 
-const formatKickoff = (iso?: string | null) => {
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function getParam(params: RouteParams, key: string): string {
+  const value = params[key];
+  if (Array.isArray(value)) return clean(value[0]);
+  return clean(value);
+}
+
+function formatKickoff(iso?: string | null): string {
   if (!iso) return "Kick-off TBC";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Kick-off TBC";
@@ -53,14 +64,61 @@ const formatKickoff = (iso?: string | null) => {
     hour: "2-digit",
     minute: "2-digit",
   });
-};
+}
 
-const formatPrice = (price?: string | null) => {
+function formatPrice(price?: string | null): string {
   const p = clean(price);
   if (!p) return "View price";
   if (/^[£€$]/.test(p)) return `From ${p}`;
   return p;
-};
+}
+
+function fixtureDateOnly(iso?: string | null): string {
+  const value = clean(iso);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
+}
+
+function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string; to?: string } {
+  const dateOnly = fixtureDateOnly(kickoffIso);
+  if (!dateOnly) return {};
+
+  const start = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return {};
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 2);
+
+  const toIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+    end.getDate()
+  ).padStart(2, "0")}`;
+
+  return {
+    from: dateOnly,
+    to: toIso,
+  };
+}
+
+function buildCanonicalTripBuildParams(args: {
+  fixtureId: string;
+  leagueId?: string;
+  season?: string;
+  city?: string;
+  kickoffIso?: string;
+  from?: string;
+  to?: string;
+}) {
+  const fallbackWindow = inferTripWindowFromKickoff(args.kickoffIso);
+
+  return {
+    fixtureId: args.fixtureId,
+    ...(clean(args.leagueId) ? { leagueId: clean(args.leagueId) } : {}),
+    ...(clean(args.season) ? { season: clean(args.season) } : {}),
+    ...(clean(args.city) ? { city: clean(args.city) } : {}),
+    ...(clean(args.from) ? { from: clean(args.from) } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
+    ...(clean(args.to) ? { to: clean(args.to) } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
+  };
+}
 
 /* -------------------------------------------------------------------------- */
 /* UI COMPONENTS                                                              */
@@ -83,11 +141,13 @@ function TicketCard({
   isBest,
   onPress,
   loading,
+  locked,
 }: {
   option: TicketResolutionOption;
   isBest: boolean;
   onPress: () => void;
   loading: boolean;
+  locked: boolean;
 }) {
   return (
     <Pressable
@@ -103,7 +163,7 @@ function TicketCard({
       <Text style={styles.ticketProvider}>{option.provider}</Text>
 
       <Text style={styles.ticketCTA}>
-        {loading ? "Opening…" : "View tickets"}
+        {loading ? "Opening…" : locked ? "Save trip to open" : "View tickets"}
       </Text>
     </Pressable>
   );
@@ -115,19 +175,22 @@ function TicketCard({
 
 export default function MatchScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const rawParams = useLocalSearchParams() as RouteParams;
 
-  const fixtureId = clean((params as any)?.id);
-  const tripId = clean((params as any)?.tripId);
+  const fixtureId = getParam(rawParams, "id");
+  const tripId = getParam(rawParams, "tripId");
+  const routeFrom = getParam(rawParams, "from");
+  const routeTo = getParam(rawParams, "to");
+  const routeLeagueId = getParam(rawParams, "leagueId");
+  const routeSeason = getParam(rawParams, "season");
 
   const { fixture, loading } = useFixture(fixtureId);
 
   const trip = useTripsStore((s) =>
-    tripId ? s.trips.find((t) => t.id === tripId) : null
+    tripId ? s.trips.find((t) => t.id === tripId) ?? null : null
   );
 
-  const [ticketResult, setTicketResult] =
-    useState<TicketResolutionResult | null>(null);
+  const [ticketResult, setTicketResult] = useState<TicketResolutionResult | null>(null);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [openingUrl, setOpeningUrl] = useState<string | null>(null);
 
@@ -141,16 +204,39 @@ export default function MatchScreen() {
   const kickoffIso = clean(trip?.kickoffIso ?? fixture?.fixture?.date);
   const kickoffText = formatKickoff(kickoffIso);
 
-  const venue = clean(
-    `${fixture?.fixture?.venue?.name ?? ""} ${fixture?.fixture?.venue?.city ?? ""}`
-  );
+  const venueName = clean(fixture?.fixture?.venue?.name);
+  const venueCity = clean(fixture?.fixture?.venue?.city);
+  const venue = [venueName, venueCity].filter(Boolean).join(" • ");
 
   const crestHome = fixture?.teams?.home?.logo;
   const crestAway = fixture?.teams?.away?.logo;
 
+  const effectiveLeagueId =
+    clean(trip?.leagueId) ||
+    clean(fixture?.league?.id) ||
+    routeLeagueId;
+
+  const effectiveSeason =
+    routeSeason ||
+    clean((fixture?.league as { season?: unknown } | undefined)?.season);
+
   const stadium = useMemo(() => {
     return getStadiumByTeamFromRegistry(normalizeTeamKey(home));
   }, [home]);
+
+  const tripBuildParams = useMemo(
+    () =>
+      buildCanonicalTripBuildParams({
+        fixtureId,
+        leagueId: effectiveLeagueId,
+        season: effectiveSeason,
+        city: venueCity || trip?.displayCity,
+        kickoffIso,
+        from: routeFrom,
+        to: routeTo,
+      }),
+    [fixtureId, effectiveLeagueId, effectiveSeason, venueCity, trip?.displayCity, kickoffIso, routeFrom, routeTo]
+  );
 
   /* ------------------------------------------------------------------ */
   /* TICKETS                                                            */
@@ -161,10 +247,12 @@ export default function MatchScreen() {
     [ticketResult]
   );
 
+  const ticketsLocked = !clean(tripId);
+
   async function loadTickets() {
     if (loadingTickets) return;
 
-    if (!home || !away || !kickoffIso) {
+    if (!fixtureId || !home || !away || !kickoffIso) {
       Alert.alert("Match data not ready yet");
       return;
     }
@@ -177,6 +265,8 @@ export default function MatchScreen() {
         homeName: home,
         awayName: away,
         kickoffIso,
+        leagueId: effectiveLeagueId || undefined,
+        leagueName: clean(trip?.leagueName ?? fixture?.league?.name) || undefined,
       });
 
       setTicketResult(res);
@@ -190,21 +280,51 @@ export default function MatchScreen() {
   async function openTicket(option: TicketResolutionOption) {
     if (!option.url) return;
 
+    if (!tripId) {
+      Alert.alert(
+        "Save trip first",
+        "Phase 1 uses tracked partner opens only. Save the trip first, then open tickets from the trip flow."
+      );
+      buildTrip();
+      return;
+    }
+
+    let partnerId: PartnerId;
+    try {
+      partnerId = mapTicketProviderToPartnerId(option.provider);
+    } catch {
+      Alert.alert("Provider unsupported", "This ticket provider is not mapped yet.");
+      return;
+    }
+
     setOpeningUrl(option.url);
 
     try {
-      if (tripId) {
-        await beginPartnerClick({
-          tripId,
-          partnerId: option.provider as any,
-          url: option.url,
-          savedItemType: "tickets",
-        });
-      } else {
-        await openUntrackedUrl(option.url);
-      }
+      await beginPartnerClick({
+        tripId,
+        partnerId,
+        url: option.url,
+        savedItemType: "tickets",
+        title: option.title || `Tickets: ${home} vs ${away}`,
+        metadata: {
+          fixtureId,
+          leagueId: effectiveLeagueId || undefined,
+          leagueName: clean(trip?.leagueName ?? fixture?.league?.name) || undefined,
+          kickoffIso,
+          homeName: home || undefined,
+          awayName: away || undefined,
+          venueName: venueName || undefined,
+          venueCity: venueCity || undefined,
+          resolvedPriceText: option.priceText ?? null,
+          ticketProvider: option.provider ?? null,
+          exactMatch: Boolean(option.exact),
+          score: option.score,
+          sourceSurface: "match_screen",
+          sourceSection: "tickets",
+        },
+      });
     } catch {
-      Alert.alert("Couldn’t open");
+      Alert.alert("Couldn’t open", "Try again in a moment.");
     } finally {
       setOpeningUrl(null);
     }
@@ -214,13 +334,19 @@ export default function MatchScreen() {
   /* NAV                                                                */
   /* ------------------------------------------------------------------ */
 
-  const goBack = () => (tripId ? router.push(`/trip/${tripId}`) : router.back());
+  const goBack = () => {
+    if (tripId) {
+      router.push({ pathname: "/trip/[id]", params: { id: tripId } } as never);
+      return;
+    }
+    router.back();
+  };
 
   const buildTrip = () => {
     router.push({
       pathname: "/trip/build",
-      params: { fixtureId },
-    });
+      params: tripBuildParams,
+    } as never);
   };
 
   /* ------------------------------------------------------------------ */
@@ -235,9 +361,9 @@ export default function MatchScreen() {
     );
   }
 
-const bg = getBackground("match");
+  const bg = getBackground("match");
   const imageUrl = typeof bg === "string" ? bg : null;
-  const imageSource = typeof bg === "string" ? null : (bg as any);
+  const imageSource = typeof bg === "string" ? null : bg;
 
   return (
     <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.14}>
@@ -278,7 +404,9 @@ const bg = getBackground("match");
               </View>
 
               <View style={styles.heroInfo}>
-                <Text style={styles.heroTitle}>{home && away ? `${home} vs ${away}` : "Match"}</Text>
+                <Text style={styles.heroTitle}>
+                  {home && away ? `${home} vs ${away}` : "Match"}
+                </Text>
                 <Text style={styles.heroMeta}>{kickoffText}</Text>
                 {!!venue && <Text style={styles.heroSub}>{venue}</Text>}
               </View>
@@ -300,7 +428,11 @@ const bg = getBackground("match");
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleWrap}>
                 <Text style={styles.sectionTitle}>Tickets</Text>
-                <Text style={styles.sectionSub}>Start with the strongest current option.</Text>
+                <Text style={styles.sectionSub}>
+                  {ticketsLocked
+                    ? "You can compare options here, but Phase 1 only opens tracked ticket links from a saved trip."
+                    : "Start with the strongest current option."}
+                </Text>
               </View>
             </View>
 
@@ -312,6 +444,7 @@ const bg = getBackground("match");
                     option={option}
                     isBest={index === 0}
                     loading={openingUrl === option.url}
+                    locked={ticketsLocked}
                     onPress={() => openTicket(option)}
                   />
                 ))}
@@ -369,7 +502,7 @@ const bg = getBackground("match");
             <Text style={styles.ctaKicker}>Next step</Text>
             <Text style={styles.ctaTitle}>Turn this into a trip</Text>
             <Text style={styles.ctaText}>
-              Once the match looks right, build the rest around it and keep everything together.
+              Save the trip first, then book tickets, stay and travel through the tracked trip flow.
             </Text>
 
             <Button
