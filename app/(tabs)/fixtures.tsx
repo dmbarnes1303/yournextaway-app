@@ -18,16 +18,18 @@ import FixturesCalendarModal from "@/src/features/fixtures/FixturesCalendarModal
 import { useFixturesScreenData } from "@/src/features/fixtures/useFixturesScreenData";
 import type { RankedFixtureRow } from "@/src/features/fixtures/types";
 
-function cleanString(value: unknown) {
+type RouteParams = Record<string, string | string[] | undefined>;
+
+function cleanString(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function getSingleParam(value: unknown) {
+function getSingleParam(value: unknown): string {
   if (Array.isArray(value)) return cleanString(value[0]);
   return cleanString(value);
 }
 
-function getCsvParamSet(value: unknown) {
+function getCsvParamSet(value: unknown): Set<string> {
   const raw = Array.isArray(value) ? value.join(",") : cleanString(value);
   return new Set(
     raw
@@ -35,6 +37,53 @@ function getCsvParamSet(value: unknown) {
       .map((part) => cleanString(part))
       .filter(Boolean)
   );
+}
+
+function fixtureDateOnly(iso?: string | null): string {
+  const value = cleanString(iso);
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] ?? "";
+}
+
+function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string; to?: string } {
+  const dateOnly = fixtureDateOnly(kickoffIso);
+  if (!dateOnly) return {};
+
+  const start = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return {};
+
+  const end = new Date(start);
+  end.setDate(end.getDate() + 2);
+
+  const toIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+    end.getDate()
+  ).padStart(2, "0")}`;
+
+  return {
+    from: dateOnly,
+    to: toIso,
+  };
+}
+
+function buildCanonicalTripStartParams(args: {
+  fixtureId: string;
+  leagueId?: number | string | null;
+  season?: number | string | null;
+  city?: string | null;
+  kickoffIso?: string | null;
+  from?: string | null;
+  to?: string | null;
+}) {
+  const fallbackWindow = inferTripWindowFromKickoff(args.kickoffIso);
+
+  return {
+    fixtureId: cleanString(args.fixtureId),
+    ...(cleanString(args.from) ? { from: cleanString(args.from) } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
+    ...(cleanString(args.to) ? { to: cleanString(args.to) } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
+    ...(cleanString(args.leagueId) ? { leagueId: cleanString(args.leagueId) } : {}),
+    ...(cleanString(args.season) ? { season: cleanString(args.season) } : {}),
+    ...(cleanString(args.city) ? { city: cleanString(args.city) } : {}),
+  };
 }
 
 function Surface({
@@ -62,7 +111,7 @@ function Surface({
 
 export default function FixturesScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const params = useLocalSearchParams() as RouteParams;
 
   const {
     effectiveRange,
@@ -147,7 +196,7 @@ export default function FixturesScreen() {
 
   const goMatch = useCallback(
     (id: string, ctx?: { leagueId?: number | null; season?: number | null }) => {
-      const fid = String(id ?? "").trim();
+      const fid = cleanString(id);
       if (!fid) return;
 
       router.push({
@@ -159,38 +208,39 @@ export default function FixturesScreen() {
           ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
           ...(ctx?.season ? { season: String(ctx.season) } : {}),
         },
-      } as any);
+      } as never);
     },
     [router, effectiveRange.from, effectiveRange.to]
   );
 
   const goTripOrBuild = useCallback(
-    (fixtureId: string, ctx?: { leagueId?: number | null; season?: number | null }) => {
-      const fid = String(fixtureId ?? "").trim();
+    (fixtureId: string, ctx?: { leagueId?: number | null; season?: number | null; city?: string | null; kickoffIso?: string | null }) => {
+      const fid = cleanString(fixtureId);
       if (!fid) return;
 
       const existingTripId = resolveTripForFixture(fid);
 
       if (existingTripId) {
-        router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as any);
+        router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as never);
         return;
       }
 
+      const canonicalParams = buildCanonicalTripStartParams({
+        fixtureId: fid,
+        leagueId: ctx?.leagueId ?? null,
+        season: ctx?.season ?? null,
+        city: ctx?.city ?? null,
+        kickoffIso: ctx?.kickoffIso ?? null,
+        from: effectiveRange.from,
+        to: effectiveRange.to,
+      });
+
       router.push({
         pathname: "/trip/build",
-        params: {
-          fixtureId: fid,
-          from: effectiveRange.from,
-          to: effectiveRange.to,
-          ...(ctx?.leagueId ? { leagueId: String(ctx.leagueId) } : {}),
-          ...(ctx?.season ? { season: String(ctx.season) } : {}),
-          ...(comboMode ? { comboMode: "1" } : {}),
-          ...(comboTitle ? { comboTitle } : {}),
-          ...(comboIdSet.size > 0 ? { comboIds: [...comboIdSet].join(",") } : {}),
-        },
-      } as any);
+        params: canonicalParams,
+      } as never);
     },
-    [router, effectiveRange.from, effectiveRange.to, comboMode, comboTitle, comboIdSet]
+    [router, effectiveRange.from, effectiveRange.to]
   );
 
   const bg = useMemo(() => getBackground("fixtures"), []);
@@ -356,6 +406,14 @@ export default function FixturesScreen() {
       const expanded = expandedKey === rowKey;
       const isFollowed = fixtureId ? followedIdSet.has(fixtureId) : false;
 
+      const leagueId = item?.league?.id ?? null;
+      const season =
+        typeof (item?.league as { season?: unknown } | undefined)?.season === "number"
+          ? (item.league as { season: number }).season
+          : null;
+      const city = cleanString(item?.fixture?.venue?.city);
+      const kickoffIso = cleanString(item?.fixture?.date);
+
       return (
         <FixtureRowCard
           item={item}
@@ -365,7 +423,14 @@ export default function FixturesScreen() {
           onToggleExpanded={() => setExpandedKey(expanded ? null : rowKey)}
           onToggleFollow={() => onToggleFollowFromRow(item)}
           onPressMatch={goMatch}
-          onPressBuildTrip={goTripOrBuild}
+          onPressBuildTrip={(id: string) =>
+            goTripOrBuild(id, {
+              leagueId,
+              season,
+              city: city || null,
+              kickoffIso: kickoffIso || null,
+            })
+          }
         />
       );
     },
