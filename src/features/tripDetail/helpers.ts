@@ -1,3 +1,5 @@
+// src/features/tripDetail/helpers.ts
+
 import {
   canonicalizePartnerId,
   getPartnerOrNull,
@@ -104,7 +106,9 @@ export function clean(value: unknown): string {
 
 export function coerceId(value: unknown): string | null {
   if (typeof value === "string") return value.trim() || null;
-  if (Array.isArray(value) && typeof value[0] === "string") return value[0].trim() || null;
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0].trim() || null;
+  }
   return null;
 }
 
@@ -116,22 +120,21 @@ export function defer(fn: () => void) {
   setTimeout(fn, 60);
 }
 
-export function cleanUpper3(value: unknown, fallback: string) {
+export function cleanUpper3(value: unknown, fallback: string): string {
   const upper = String(value ?? "").trim().toUpperCase();
   return /^[A-Z]{3}$/.test(upper) ? upper : fallback;
 }
 
-export function summaryLine(trip: Trip) {
+export function summaryLine(trip: Trip): string {
   const from = trip.startDate ? formatUkDateOnly(trip.startDate) : "—";
   const to = trip.endDate ? formatUkDateOnly(trip.endDate) : "—";
-  const count = trip.matchIds?.length ?? 0;
+  const count = Array.isArray(trip.matchIds) ? trip.matchIds.length : 0;
   return `${from} → ${to} • ${count} match${count === 1 ? "" : "es"}`;
 }
 
 export function tripStatus(trip: Trip): "Upcoming" | "Past" {
-  const start = trip.startDate ? parseIsoDateOnly(trip.startDate) : null;
   const end = trip.endDate ? parseIsoDateOnly(trip.endDate) : null;
-  if (!start || !end) return "Upcoming";
+  if (!end) return "Upcoming";
 
   const today = parseIsoDateOnly(toIsoDate(new Date()));
   if (!today) return "Upcoming";
@@ -139,22 +142,30 @@ export function tripStatus(trip: Trip): "Upcoming" | "Past" {
   return end.getTime() < today.getTime() ? "Past" : "Upcoming";
 }
 
-export function cleanNoteText(value: string) {
+export function cleanNoteText(value: string): string {
   return String(value ?? "").replace(/\r\n/g, "\n").trim();
 }
 
-export function noteTitleFromText(text: string) {
+export function noteTitleFromText(text: string): string {
   const cleaned = cleanNoteText(text);
   if (!cleaned) return "Note";
+
   const firstLine = cleaned.split("\n")[0]?.trim() || "";
   return firstLine.length > 42 ? `${firstLine.slice(0, 42).trim()}…` : firstLine;
 }
 
-export function statusLabel(status: SavedItem["status"]) {
-  if (status === "pending") return "Pending";
-  if (status === "saved") return "Saved";
-  if (status === "booked") return "Booked";
-  return "Archived";
+export function statusLabel(status: SavedItem["status"]): string {
+  switch (status) {
+    case "pending":
+      return "Pending";
+    case "saved":
+      return "Saved";
+    case "booked":
+      return "Booked";
+    case "archived":
+    default:
+      return "Archived";
+  }
 }
 
 export function providerLabel(provider?: string | null): string {
@@ -193,7 +204,7 @@ export function confidenceLabel(score?: number | null): string {
   return "Available";
 }
 
-export function optionReasonLabel(reason?: TicketResolutionOption["reason"] | string | null) {
+export function optionReasonLabel(reason?: TicketResolutionOption["reason"] | string | null): string {
   if (reason === "exact_event") return "Best match for this fixture";
   if (reason === "partial_match") return "Similar fixture listing";
   return "Search result";
@@ -210,17 +221,9 @@ export function livePriceLine(item: SavedItem): string | null {
     return bookedPrice ? `Booked • ${bookedPrice}` : "Booked";
   }
 
-  if (resolvedPrice && provider) {
-    return `From ${resolvedPrice} • ${provider}`;
-  }
-
-  if (resolvedPrice) {
-    return `From ${resolvedPrice}`;
-  }
-
-  if (provider) {
-    return `View on ${provider}`;
-  }
+  if (resolvedPrice && provider) return `From ${resolvedPrice} • ${provider}`;
+  if (resolvedPrice) return `From ${resolvedPrice}`;
+  if (provider) return `View on ${provider}`;
 
   return "View offer";
 }
@@ -228,6 +231,7 @@ export function livePriceLine(item: SavedItem): string | null {
 export function parseIsoToDate(iso?: string | null): Date | null {
   const raw = clean(iso);
   if (!raw) return null;
+
   const date = new Date(raw);
   return Number.isFinite(date.getTime()) ? date : null;
 }
@@ -265,7 +269,9 @@ export function formatKickoffMeta(
   const midnight = date.getHours() === 0 && date.getMinutes() === 0;
   const tbc = looksTbc || snapTbc || midnight;
 
-  if (tbc) return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso };
+  if (tbc) {
+    return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso };
+  }
 
   return {
     line: `Kickoff: ${datePart} • ${timePart}${long ? ` • ${long}` : ""}`,
@@ -274,7 +280,7 @@ export function formatKickoffMeta(
   };
 }
 
-export function titleCaseCity(value: string) {
+export function titleCaseCity(value: string): string {
   const cleaned = clean(value);
   if (!cleaned) return "Trip";
 
@@ -288,7 +294,7 @@ export function titleCaseCity(value: string) {
     .join(" ");
 }
 
-export function buildMapsSearchUrl(query: string) {
+export function buildMapsSearchUrl(query: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean(query))}`;
 }
 
@@ -296,25 +302,26 @@ export function buildMapsDirectionsUrl(
   origin: string,
   destination: string,
   mode: "transit" | "walking" | "driving" = "transit"
-) {
+): string {
   return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(
     clean(origin)
   )}&destination=${encodeURIComponent(clean(destination))}&travelmode=${encodeURIComponent(mode)}`;
 }
 
-export function isLateKickoff(kickoffIso?: string | null) {
+export function isLateKickoff(kickoffIso?: string | null): boolean {
   const raw = clean(kickoffIso);
   if (!raw) return false;
 
   const date = new Date(raw);
   if (!Number.isFinite(date.getTime())) return false;
 
-  const h = date.getHours();
-  const m = date.getMinutes();
-  return h > 20 || (h === 20 && m >= 30);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+
+  return hours > 20 || (hours === 20 && minutes >= 30);
 }
 
-export function proCapHint(cap: number, tripCount: number) {
+export function proCapHint(cap: number, tripCount: number): string {
   return tripCount < cap
     ? `Free plan: up to ${cap} saved trips.`
     : `Free plan cap reached (${cap}). Pro removes the cap.`;
@@ -323,8 +330,9 @@ export function proCapHint(cap: number, tripCount: number) {
 export function difficultyLabel(value?: TravelDifficulty | null): string | null {
   if (!value) return null;
   if (value === "easy") return "Easy travel";
-  if (value === "medium") return "Moderate travel";
+  if (value === "moderate") return "Moderate travel";
   if (value === "hard") return "Harder travel";
+  if (value === "complex") return "Complex travel";
   return null;
 }
 
@@ -335,8 +343,9 @@ export function confidencePctLabel(value?: number | null): string | null {
 }
 
 export function rankReasonsText(trip: RankedTrip | null): string | null {
-  if (!trip || !Array.isArray(trip.reasons) || trip.reasons.length === 0) return null;
-  return trip.reasons.slice(0, 2).join(" • ");
+  const lines = trip?.breakdown?.reasonLines;
+  if (!Array.isArray(lines) || lines.length === 0) return null;
+  return lines.slice(0, 2).join(" • ");
 }
 
 export function mapTicketProviderToPartnerId(provider?: string | null): PartnerId {
@@ -377,7 +386,7 @@ export function ticketResolverFailureMessage(resolved: TicketResolutionResult | 
   return "No ticket options found for this fixture right now.";
 }
 
-export function smartButtonSubtitle(item: SavedItem | null, fallback: string) {
+export function smartButtonSubtitle(item: SavedItem | null, fallback: string): string {
   return item ? livePriceLine(item) || statusLabel(item.status) : fallback;
 }
 
@@ -466,7 +475,7 @@ export function itemResolvedScore(item: SavedItem | null): number | null {
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
 }
 
-export function getIsoDateOnly(raw?: string | null) {
+export function getIsoDateOnly(raw?: string | null): string | undefined {
   const value = clean(raw);
   if (!value) return undefined;
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
@@ -478,4 +487,4 @@ export function getIsoDateOnly(raw?: string | null) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
+      }
