@@ -28,7 +28,10 @@ import {
   getFixturesByRound,
   type FixtureListRow,
 } from "@/src/services/apiFootball";
-import tripsStore, { type Trip } from "@/src/state/trips";
+import tripsStore, {
+  type Trip,
+  type TripSnapshotPatch,
+} from "@/src/state/trips";
 
 import {
   LEAGUES,
@@ -54,6 +57,26 @@ const FREE_TRIP_CAP = 5;
 const WINDOW_DAYS = 90;
 const LOAD_MORE_STEP = 12;
 
+type RouteParams = {
+  tripId: string | null;
+  fixtureId: string | null;
+  cityArea: string | null;
+  from: string | null;
+  to: string | null;
+  city: string | null;
+  leagueId: number | null;
+  season: number | null;
+  prefMode: string | null;
+  prefFrom: string | null;
+  prefWindow: string | null;
+  prefLength: string | null;
+  prefVibes: string[];
+};
+
+function cleanText(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
 function paramString(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
   if (Array.isArray(v) && typeof v[0] === "string") return v[0].trim() || null;
@@ -72,7 +95,36 @@ function isIsoDateOnly(s?: string | null): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(v);
 }
 
-function fixtureIdStr(r: any): string {
+function parseRouteParams(params: Record<string, unknown>): RouteParams {
+  const seasonRaw = paramNumber(params.season);
+  const season =
+    seasonRaw && Number.isFinite(seasonRaw) && seasonRaw >= 2000 && seasonRaw <= new Date().getFullYear() + 1
+      ? seasonRaw
+      : null;
+
+  const prefVibesRaw = paramString(params.prefVibes);
+
+  return {
+    tripId: paramString(params.tripId),
+    fixtureId: paramString(params.fixtureId),
+    cityArea: paramString(params.cityArea),
+    from: paramString(params.from),
+    to: paramString(params.to),
+    city: paramString(params.city),
+    leagueId: paramNumber(params.leagueId),
+    season,
+    prefMode: paramString(params.prefMode),
+    prefFrom: paramString(params.prefFrom),
+    prefWindow: paramString(params.prefWindow),
+    prefLength: paramString(params.prefLength),
+    prefVibes: String(prefVibesRaw ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean),
+  };
+}
+
+function fixtureIdStr(r: FixtureListRow | null): string {
   const id = r?.fixture?.id;
   return id != null ? String(id) : "";
 }
@@ -85,11 +137,28 @@ function fixtureDateOnly(r: FixtureListRow | null): string | null {
   return m?.[1] ?? null;
 }
 
-function cleanText(v: unknown): string {
-  return String(v ?? "").trim();
+function parseIsoToDate(iso?: string | null): Date | null {
+  const s = cleanText(iso);
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
-function slugifyCityId(cityRaw: string): string {
+function daysBetweenIso(aIso: string, bIso: string) {
+  const a = parseIsoToDate(aIso);
+  const b = parseIsoToDate(bIso);
+  if (!a || !b) return null;
+  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function safeUri(u: unknown): string | null {
+  const s = String(u ?? "").trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) return null;
+  return s;
+}
+
+function slugifyCityId(cityRaw: string) {
   const s = String(cityRaw ?? "").trim().toLowerCase();
   if (!s) return "trip";
   return (
@@ -107,19 +176,12 @@ function safeCityDisplay(cityRaw?: string | null): string {
   return s || "Trip";
 }
 
-function parseIsoToDate(iso?: string | null): Date | null {
-  const s = cleanText(iso);
-  if (!s) return null;
-  const d = new Date(s);
-  return Number.isFinite(d.getTime()) ? d : null;
-}
-
-function daysBetweenIso(aIso: string, bIso: string) {
-  const a = parseIsoToDate(aIso);
-  const b = parseIsoToDate(bIso);
-  if (!a || !b) return null;
-  const d = Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
-  return d;
+function weekendHint(isoMaybe: unknown): "Weekend" | "Midweek" | null {
+  const d = parseIsoToDate(String(isoMaybe ?? ""));
+  if (!d) return null;
+  const day = d.getDay();
+  if (day === 0 || day === 6) return "Weekend";
+  return "Midweek";
 }
 
 function validSeasonOrNull(n: number | null): number | null {
@@ -151,16 +213,19 @@ function certaintyOrder(state: FixtureCertaintyState): number {
   return 3;
 }
 
-function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: Set<string>) {
+function buildPrimarySnapshotFromFixture(
+  selectedFixture: FixtureListRow,
+  placeholderTbcIds: Set<string>
+): { cityId: string; snapshot: TripSnapshotPatch } {
   const displayCity = safeCityDisplay(selectedFixture?.fixture?.venue?.city);
   const cityId = slugifyCityId(displayCity);
 
   const homeName = cleanText(selectedFixture?.teams?.home?.name);
   const awayName = cleanText(selectedFixture?.teams?.away?.name);
   const leagueName = cleanText(selectedFixture?.league?.name);
+  const round = cleanText(selectedFixture?.league?.round);
   const venueName = cleanText(selectedFixture?.fixture?.venue?.name);
   const venueCity = cleanText(selectedFixture?.fixture?.venue?.city);
-
   const kickoffIsoRaw = selectedFixture?.fixture?.date ? String(selectedFixture.fixture.date) : "";
   const kickoffIso = cleanText(kickoffIsoRaw) || undefined;
 
@@ -180,19 +245,22 @@ function buildTripSnapshot(selectedFixture: FixtureListRow, placeholderTbcIds: S
 
   return {
     cityId,
-    displayCity,
-    fixtureIdPrimary:
-      selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : undefined,
-    homeTeamId,
-    awayTeamId,
-    homeName: homeName || undefined,
-    awayName: awayName || undefined,
-    leagueId,
-    leagueName: leagueName || undefined,
-    kickoffIso,
-    kickoffTbc,
-    venueName: venueName || undefined,
-    venueCity: venueCity || undefined,
+    snapshot: {
+      displayCity,
+      fixtureIdPrimary:
+        selectedFixture?.fixture?.id != null ? String(selectedFixture.fixture.id) : undefined,
+      homeTeamId,
+      awayTeamId,
+      homeName: homeName || undefined,
+      awayName: awayName || undefined,
+      leagueId,
+      leagueName: leagueName || undefined,
+      round: round || undefined,
+      kickoffIso,
+      kickoffTbc,
+      venueName: venueName || undefined,
+      venueCity: venueCity || undefined,
+    },
   };
 }
 
@@ -205,9 +273,7 @@ async function computePlaceholderIdsForFixture(
   const leagueId = fx?.league?.id ?? null;
   const season =
     seasonOverride ??
-    (typeof (fx as any)?.league?.season === "number"
-      ? (fx as any).league.season
-      : DEFAULT_SEASON);
+    (typeof fx?.league?.season === "number" ? fx.league.season : DEFAULT_SEASON);
 
   const round = cleanText(fx?.league?.round);
 
@@ -219,21 +285,6 @@ async function computePlaceholderIdsForFixture(
   } catch {
     return new Set();
   }
-}
-
-function safeUri(u: unknown): string | null {
-  const s = String(u ?? "").trim();
-  if (!s) return null;
-  if (!/^https?:\/\//i.test(s)) return null;
-  return s;
-}
-
-function weekendHint(isoMaybe: unknown): "Weekend" | "Midweek" | null {
-  const d = parseIsoToDate(String(isoMaybe ?? ""));
-  if (!d) return null;
-  const day = d.getDay();
-  if (day === 0 || day === 6) return "Weekend";
-  return "Midweek";
 }
 
 function findExistingTripIdForFixture(fixtureId: string): string | null {
@@ -313,38 +364,16 @@ function buildPageSubtitle(isEditing: boolean, matchCount: number) {
 
 export default function TripBuildScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const rawParams = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  const routeTripId = useMemo(() => paramString((params as any)?.tripId), [params]);
-  const isEditing = !!routeTripId;
-
-  const routeFixtureId = useMemo(() => paramString((params as any)?.fixtureId), [params]);
-  const routeCityArea = useMemo(() => paramString((params as any)?.cityArea), [params]);
-
-  const routeFrom = useMemo(() => paramString((params as any)?.from), [params]);
-  const routeTo = useMemo(() => paramString((params as any)?.to), [params]);
-  const routeCity = useMemo(() => paramString((params as any)?.city), [params]);
-  const routeLeagueId = useMemo(() => paramNumber((params as any)?.leagueId), [params]);
-  const routeSeasonRaw = useMemo(() => paramNumber((params as any)?.season), [params]);
-  const routeSeason = useMemo(() => validSeasonOrNull(routeSeasonRaw), [routeSeasonRaw]);
-
-  const prefMode = useMemo(() => paramString((params as any)?.prefMode), [params]);
-  const prefFrom = useMemo(() => paramString((params as any)?.prefFrom), [params]);
-  const prefWindow = useMemo(() => paramString((params as any)?.prefWindow), [params]);
-  const prefLength = useMemo(() => paramString((params as any)?.prefLength), [params]);
-  const prefVibesRaw = useMemo(() => paramString((params as any)?.prefVibes), [params]);
-
-  const prefVibes = useMemo(
-    () =>
-      String(prefVibesRaw ?? "")
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-    [prefVibesRaw]
+  const params = useMemo(
+    () => parseRouteParams(rawParams as Record<string, unknown>),
+    [rawParams]
   );
 
-  const isPrefilledFlow = !!routeFixtureId && !isEditing;
+  const isEditing = !!params.tripId;
+  const isPrefilledFlow = !!params.fixtureId && !isEditing;
 
   const [loading, setLoading] = useState(false);
   const [prefillLoading, setPrefillLoading] = useState(false);
@@ -356,28 +385,26 @@ export default function TripBuildScreen() {
 
   const [search, setSearch] = useState("");
   const [visibleCount, setVisibleCount] = useState(LOAD_MORE_STEP);
-
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
   const defaultWindow = useMemo(() => getRollingWindowIso({ days: WINDOW_DAYS }), []);
   const routeWindow = useMemo<RollingWindowIso>(() => {
-    if (!isIsoDateOnly(routeFrom) && !isIsoDateOnly(routeTo)) return defaultWindow;
+    if (!isIsoDateOnly(params.from) && !isIsoDateOnly(params.to)) return defaultWindow;
 
-    const fromSeed = isIsoDateOnly(routeFrom) ? String(routeFrom) : defaultWindow.from;
-    const toSeed = isIsoDateOnly(routeTo) ? String(routeTo) : defaultWindow.to;
+    const fromSeed = isIsoDateOnly(params.from) ? String(params.from) : defaultWindow.from;
+    const toSeed = isIsoDateOnly(params.to) ? String(params.to) : defaultWindow.to;
 
     return normalizeWindowIso({ from: fromSeed, to: toSeed }, WINDOW_DAYS);
-  }, [routeFrom, routeTo, defaultWindow]);
+  }, [params.from, params.to, defaultWindow]);
 
   const [startIso, setStartIso] = useState(routeWindow.from);
   const [endIso, setEndIso] = useState(routeWindow.to);
   const [notes, setNotes] = useState("");
-  const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(routeTo)));
+  const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(params.to)));
 
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
   const [existingMatchIds, setExistingMatchIds] = useState<string[]>([]);
   const [existingPrimaryId, setExistingPrimaryId] = useState<string | null>(null);
-
   const [setAsPrimaryOnSave, setSetAsPrimaryOnSave] = useState(false);
 
   const setNotesIfEmpty = useCallback((text: string) => {
@@ -401,12 +428,12 @@ export default function TripBuildScreen() {
   const leagueOptions = useMemo(() => [ALL_LEAGUES, ...LEAGUES], [ALL_LEAGUES]);
 
   const [selectedLeague, setSelectedLeague] = useState<LeagueOption>(() => {
-    const opt = findLeagueOptionByLeagueId(routeLeagueId, routeSeason);
+    const opt = findLeagueOptionByLeagueId(params.leagueId, params.season);
     return opt ?? ALL_LEAGUES;
   });
 
   useEffect(() => {
-    if (isIsoDateOnly(routeTo)) return;
+    if (isIsoDateOnly(params.to)) return;
     if (endTouched) return;
 
     const d = parseIsoToDate(startIso);
@@ -417,26 +444,26 @@ export default function TripBuildScreen() {
     const m = String(d2.getMonth() + 1).padStart(2, "0");
     const day = String(d2.getDate()).padStart(2, "0");
     setEndIso(`${y}-${m}-${day}`);
-  }, [startIso, endTouched, routeTo]);
+  }, [startIso, endTouched, params.to]);
 
   useEffect(() => {
     if (isPrefilledFlow) return;
-    const opt = findLeagueOptionByLeagueId(routeLeagueId, routeSeason);
+    const opt = findLeagueOptionByLeagueId(params.leagueId, params.season);
     if (opt) setSelectedLeague(opt);
-    else if (routeLeagueId === 0) setSelectedLeague(ALL_LEAGUES);
-  }, [routeLeagueId, routeSeason, isPrefilledFlow, ALL_LEAGUES]);
+    else if (params.leagueId === 0) setSelectedLeague(ALL_LEAGUES);
+  }, [params.leagueId, params.season, isPrefilledFlow, ALL_LEAGUES]);
 
   const effectiveSeason = useMemo(
-    () => routeSeason ?? selectedLeague.season ?? DEFAULT_SEASON,
-    [routeSeason, selectedLeague]
+    () => validSeasonOrNull(params.season) ?? selectedLeague.season ?? DEFAULT_SEASON,
+    [params.season, selectedLeague]
   );
 
   useEffect(() => {
-    if (routeCity) setNotesIfEmpty(`City: ${routeCity}`);
-  }, [routeCity, setNotesIfEmpty]);
+    if (params.city) setNotesIfEmpty(`City: ${params.city}`);
+  }, [params.city, setNotesIfEmpty]);
 
-useEffect(() => {
-    if (!routeTripId) return;
+  useEffect(() => {
+    if (!params.tripId) return;
 
     let cancelled = false;
 
@@ -448,7 +475,7 @@ useEffect(() => {
         if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
         if (cancelled) return;
 
-        const t = tripsStore.getState().trips.find((x) => x.id === routeTripId) ?? null;
+        const t = tripsStore.getState().trips.find((x) => x.id === params.tripId) ?? null;
 
         if (!t) {
           setError("Trip not found.");
@@ -457,15 +484,15 @@ useEffect(() => {
 
         setEditTrip(t);
 
-        const mids = Array.isArray((t as any)?.matchIds)
-          ? (t as any).matchIds.map((x: any) => String(x).trim()).filter(Boolean)
+        const mids = Array.isArray(t.matchIds)
+          ? t.matchIds.map((x) => String(x).trim()).filter(Boolean)
           : [];
         setExistingMatchIds(mids);
 
-        const primary = cleanText((t as any)?.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
+        const primary = cleanText(t.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
         setExistingPrimaryId(primary || null);
 
-        if (isIsoDateOnly(routeFrom) || isIsoDateOnly(routeTo)) {
+        if (isIsoDateOnly(params.from) || isIsoDateOnly(params.to)) {
           setStartIso(routeWindow.from);
           setEndIso(routeWindow.to);
           setEndTouched(true);
@@ -475,7 +502,7 @@ useEffect(() => {
           setEndTouched(true);
         }
 
-        setNotes((t as any).notes ?? "");
+        setNotes(t.notes ?? "");
 
         const loadId = primary || (mids[0] ? String(mids[0]) : "");
         if (loadId) {
@@ -484,11 +511,14 @@ useEffect(() => {
 
           setSelectedFixture(fx);
 
-          const ids = await computePlaceholderIdsForFixture(fx, routeSeason);
+          const ids = await computePlaceholderIdsForFixture(fx, params.season);
           if (!cancelled) setPlaceholderTbcIds(ids);
 
           const lid = fx?.league?.id ?? null;
-          const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null, routeSeason);
+          const opt = findLeagueOptionByLeagueId(
+            typeof lid === "number" ? lid : null,
+            params.season
+          );
           if (opt) setSelectedLeague(opt);
         } else {
           setSelectedFixture(null);
@@ -496,8 +526,10 @@ useEffect(() => {
         }
 
         setSetAsPrimaryOnSave(false);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Failed to load trip.");
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load trip.");
+        }
       } finally {
         if (!cancelled) setPrefillLoading(false);
       }
@@ -507,11 +539,11 @@ useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [routeTripId, routeFrom, routeTo, routeSeason, routeWindow]);
+  }, [params.tripId, params.from, params.to, params.season, routeWindow]);
 
   useEffect(() => {
     if (!isPrefilledFlow) return;
-    if (!routeFixtureId) return;
+    if (!params.fixtureId) return;
 
     let cancelled = false;
 
@@ -520,16 +552,16 @@ useEffect(() => {
       setError(null);
 
       try {
-        const r = await getFixtureById(routeFixtureId);
+        const r = await getFixtureById(params.fixtureId);
         if (cancelled) return;
 
         setSelectedFixture(r);
 
-        const ids = await computePlaceholderIdsForFixture(r, routeSeason);
+        const ids = await computePlaceholderIdsForFixture(r, params.season);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
-        const hasFrom = isIsoDateOnly(routeFrom);
-        const hasTo = isIsoDateOnly(routeTo);
+        const hasFrom = isIsoDateOnly(params.from);
+        const hasTo = isIsoDateOnly(params.to);
 
         if (hasFrom || hasTo) {
           setStartIso(routeWindow.from);
@@ -541,10 +573,13 @@ useEffect(() => {
           setEndTouched(false);
         }
 
-        if (routeCityArea) setNotesIfEmpty(`Stay area: ${routeCityArea}`);
+        if (params.cityArea) setNotesIfEmpty(`Stay area: ${params.cityArea}`);
 
         const lid = r?.league?.id ?? null;
-        const opt = findLeagueOptionByLeagueId(typeof lid === "number" ? lid : null, routeSeason);
+        const opt = findLeagueOptionByLeagueId(
+          typeof lid === "number" ? lid : null,
+          params.season
+        );
         if (opt) setSelectedLeague(opt);
       } catch {
         if (!cancelled) setError("Couldn’t load that fixture.");
@@ -558,13 +593,13 @@ useEffect(() => {
       cancelled = true;
     };
   }, [
-    routeFixtureId,
+    params.fixtureId,
     isPrefilledFlow,
-    routeCityArea,
+    params.cityArea,
     setNotesIfEmpty,
-    routeFrom,
-    routeTo,
-    routeSeason,
+    params.from,
+    params.to,
+    params.season,
     routeWindow,
   ]);
 
@@ -588,7 +623,7 @@ useEffect(() => {
             LEAGUES.map((l) =>
               getFixtures({
                 league: l.leagueId,
-                season: routeSeason ?? l.season,
+                season: params.season ?? l.season,
                 from,
                 to,
               })
@@ -635,7 +670,7 @@ useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [selectedLeague, isPrefilledFlow, routeWindow, effectiveSeason, routeSeason]);
+  }, [selectedLeague, isPrefilledFlow, routeWindow, effectiveSeason, params.season]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -656,7 +691,7 @@ useEffect(() => {
   useEffect(() => {
     if (!selectedFixture) return;
 
-    if (!isIsoDateOnly(routeFrom) && !isIsoDateOnly(routeTo)) {
+    if (!isIsoDateOnly(params.from) && !isIsoDateOnly(params.to)) {
       const d0 = fixtureDateOnly(selectedFixture);
       if (d0) {
         const start = clampFromIsoToTomorrow(d0);
@@ -666,41 +701,42 @@ useEffect(() => {
     }
 
     if (isEditing) setSetAsPrimaryOnSave(false);
-  }, [selectedFixture, isEditing, routeFrom, routeTo]);
+  }, [selectedFixture, isEditing, params.from, params.to]);
 
   const selectedRankedTrip = useMemo<RankedTrip | null>(() => {
     if (!selectedFixture) return null;
-    const ranked = rankTrips([selectedFixture] as any);
+    const ranked = rankTrips([selectedFixture] as never[]);
     return ranked[0] ?? null;
   }, [selectedFixture]);
 
   const visibleRankMap = useMemo(() => {
-    const ranked = rankTrips(visibleRows as any);
+    const ranked = rankTrips(visibleRows as never[]);
     return new Map<string, RankedTrip>(
-      ranked.map((trip) => [fixtureIdStr((trip as any).fixture), trip])
+      ranked.map((trip) => [fixtureIdStr((trip as unknown as { fixture: FixtureListRow }).fixture), trip])
     );
   }, [visibleRows]);
 
   const discoverSummary = useMemo(() => {
     const parts: string[] = [];
 
-    if (prefMode === "surprise") parts.push("Surprise me");
-    if (prefMode === "hidden") parts.push("Hidden gems");
+    if (params.prefMode === "surprise") parts.push("Surprise me");
+    if (params.prefMode === "hidden") parts.push("Hidden gems");
+    if (params.prefMode === "discover") parts.push("Discover");
+    if (params.prefMode === "random") parts.push("Random route");
 
-    const w = prefWindowLabel(prefWindow);
+    const w = prefWindowLabel(params.prefWindow);
     if (w) parts.push(w);
 
-    const l = prefLengthLabel(prefLength);
+    const l = prefLengthLabel(params.prefLength);
     if (l) parts.push(l);
 
-    if (prefFrom) parts.push(`From ${prefFrom}`);
-
-    if (prefVibes.length) {
-      parts.push(prefVibes.map(prefVibeLabel).join(" • "));
+    if (params.prefFrom) parts.push(`From ${params.prefFrom}`);
+    if (params.prefVibes.length) {
+      parts.push(params.prefVibes.map(prefVibeLabel).join(" • "));
     }
 
     return parts;
-  }, [prefMode, prefWindow, prefLength, prefFrom, prefVibes]);
+  }, [params.prefMode, params.prefWindow, params.prefLength, params.prefFrom, params.prefVibes]);
 
   const validateDateOrder = useCallback((): string | null => {
     const a = parseIsoToDate(startIso);
@@ -726,55 +762,47 @@ useEffect(() => {
     setError(null);
 
     const fixtureId = String(selectedFixture.fixture.id).trim();
-    const snap = buildTripSnapshot(selectedFixture, placeholderTbcIds);
+    const { cityId, snapshot } = buildPrimarySnapshotFromFixture(
+      selectedFixture,
+      placeholderTbcIds
+    );
 
     try {
       if (!tripsStore.getState().loaded) await tripsStore.loadTrips();
 
-      if (isEditing && routeTripId) {
-        const basePatch: any = {
+      if (isEditing && params.tripId) {
+        const basePatch = {
           startDate: startIso,
           endDate: endIso,
-          notes: cleanText(notes),
+          notes: cleanText(notes) || undefined,
         };
 
-        if (routeCityArea && !cleanText(basePatch.notes)) {
-          basePatch.notes = `Stay area: ${routeCityArea}`;
-        }
+        const baseNotes =
+          params.cityArea && !cleanText(basePatch.notes)
+            ? `Stay area: ${params.cityArea}`
+            : basePatch.notes;
 
-        await tripsStore.updateTrip(routeTripId, basePatch);
+        await tripsStore.updateTrip(params.tripId, {
+          ...basePatch,
+          notes: baseNotes,
+        });
 
         const alreadyInTrip = existingMatchIds.includes(fixtureId);
 
-        if (!alreadyInTrip) {
-          await tripsStore.addMatchToTrip(routeTripId, fixtureId, {
-            setPrimary: !!setAsPrimaryOnSave,
-          });
-        } else if (setAsPrimaryOnSave) {
-          await tripsStore.setPrimaryMatchForTrip(routeTripId, fixtureId);
-        }
-
         if (setAsPrimaryOnSave) {
-          const primaryPatch: any = {
-            cityId: snap.cityId,
-            displayCity: snap.displayCity,
-            fixtureIdPrimary: fixtureId,
-            homeTeamId: snap.homeTeamId,
-            awayTeamId: snap.awayTeamId,
-            homeName: snap.homeName,
-            awayName: snap.awayName,
-            leagueId: snap.leagueId,
-            leagueName: snap.leagueName,
-            kickoffIso: snap.kickoffIso,
-            kickoffTbc: snap.kickoffTbc,
-            venueName: snap.venueName,
-            venueCity: snap.venueCity,
-          };
+          await tripsStore.updateTrip(params.tripId, {
+            cityId,
+            displayCity: snapshot.displayCity,
+          });
 
-          await tripsStore.updateTrip(routeTripId, primaryPatch);
+          await tripsStore.applyPrimaryMatchSelection(params.tripId, fixtureId, snapshot);
+        } else if (!alreadyInTrip) {
+          await tripsStore.addMatchToTrip(params.tripId, fixtureId, {
+            setPrimary: false,
+          });
         }
 
-        router.replace({ pathname: "/trip/[id]", params: { id: routeTripId } } as any);
+        router.replace({ pathname: "/trip/[id]", params: { id: params.tripId } } as never);
         return;
       }
 
@@ -784,7 +812,7 @@ useEffect(() => {
           "Trip already exists",
           "You already have a trip for this match — opening it now."
         );
-        router.replace({ pathname: "/trip/[id]", params: { id: existingId } } as any);
+        router.replace({ pathname: "/trip/[id]", params: { id: existingId } } as never);
         return;
       }
 
@@ -797,34 +825,25 @@ useEffect(() => {
         return;
       }
 
-      const patch: any = {
-        cityId: snap.cityId,
+      const finalNotes =
+        params.cityArea && !cleanText(notes)
+          ? `Stay area: ${params.cityArea}`
+          : cleanText(notes) || undefined;
+
+      const t = await tripsStore.addTrip({
+        cityId,
+        displayCity: snapshot.displayCity,
         startDate: startIso,
         endDate: endIso,
         matchIds: [fixtureId],
         fixtureIdPrimary: fixtureId,
-        notes: cleanText(notes),
-        displayCity: snap.displayCity,
-        homeTeamId: snap.homeTeamId,
-        awayTeamId: snap.awayTeamId,
-        homeName: snap.homeName,
-        awayName: snap.awayName,
-        leagueId: snap.leagueId,
-        leagueName: snap.leagueName,
-        kickoffIso: snap.kickoffIso,
-        kickoffTbc: snap.kickoffTbc,
-        venueName: snap.venueName,
-        venueCity: snap.venueCity,
-      };
+        notes: finalNotes,
+        ...snapshot,
+      });
 
-      if (routeCityArea && !cleanText(patch.notes)) {
-        patch.notes = `Stay area: ${routeCityArea}`;
-      }
-
-      const t = await tripsStore.addTrip(patch);
-      router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as any);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to save trip.");
+      router.replace({ pathname: "/trip/[id]", params: { id: t.id } } as never);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save trip.");
     } finally {
       setSaving(false);
     }
@@ -835,9 +854,9 @@ useEffect(() => {
     startIso,
     endIso,
     notes,
-    routeCityArea,
+    params.cityArea,
     isEditing,
-    routeTripId,
+    params.tripId,
     router,
     setAsPrimaryOnSave,
     existingMatchIds,
@@ -1161,10 +1180,10 @@ useEffect(() => {
                 </View>
               ) : null}
 
-              {routeCityArea ? (
+              {params.cityArea ? (
                 <View style={styles.infoBar}>
                   <Text style={styles.infoText}>
-                    Prefilled stay area: <Text style={styles.infoTextStrong}>{routeCityArea}</Text>
+                    Prefilled stay area: <Text style={styles.infoTextStrong}>{params.cityArea}</Text>
                   </Text>
                 </View>
               ) : null}
@@ -1201,7 +1220,7 @@ useEffect(() => {
                   const active = l.leagueId === selectedLeague.leagueId;
                   return (
                     <Pressable
-                      key={(l as any).key ?? String(l.leagueId)}
+                      key={String((l as LeagueOption & { key?: string }).key ?? l.leagueId)}
                       onPress={() => {
                         setSelectedLeague(l);
                         setVisibleCount(LOAD_MORE_STEP);
@@ -1248,7 +1267,7 @@ useEffect(() => {
                   const vc = [v, c].filter(Boolean).join(" • ");
 
                   const leagueName = cleanText(r?.league?.name);
-                  const leagueFlag = safeUri((r as any)?.league?.flag);
+                  const leagueFlag = safeUri(r?.league?.flag);
 
                   const homeLogo = safeUri(r?.teams?.home?.logo);
                   const awayLogo = safeUri(r?.teams?.away?.logo);
@@ -1258,7 +1277,7 @@ useEffect(() => {
                       key={id || String(i)}
                       onPress={async () => {
                         setSelectedFixture(r);
-                        const ids = await computePlaceholderIdsForFixture(r, routeSeason);
+                        const ids = await computePlaceholderIdsForFixture(r, params.season);
                         setPlaceholderTbcIds(ids);
                         setError(null);
                       }}
