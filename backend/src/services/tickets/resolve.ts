@@ -327,8 +327,9 @@ function parsePriceAmount(priceText?: string | null): number | null {
 
 function reasonRank(reason: TicketCandidate["reason"]): number {
   if (reason === "exact_event") return 1;
-  if (reason === "partial_match") return 2;
-  return 3;
+  if (reason === "partial_match") return 3;
+  if (reason === "search_fallback") return 5;
+  return 10;
 }
 
 function providerRank(provider: TicketProviderId): number {
@@ -342,14 +343,14 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
     if (aReasonRank !== bReasonRank) return aReasonRank - bReasonRank;
 
+    if (b.score !== a.score) return b.score - a.score;
+
     const aPrice = parsePriceAmount(a.priceText);
     const bPrice = parsePriceAmount(b.priceText);
 
-    if (aPrice != null && bPrice != null && Math.abs(a.score - b.score) <= 12) {
+    if (aPrice != null && bPrice != null) {
       if (aPrice !== bPrice) return aPrice - bPrice;
     }
-
-    if (b.score !== a.score) return b.score - a.score;
 
     const aHasPrice = Boolean(clean(a.priceText));
     const bHasPrice = Boolean(clean(b.priceText));
@@ -545,4 +546,4 @@ export async function resolveTicket(
   }
 
   return result;
-                     }
+}
