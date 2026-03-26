@@ -548,4 +548,4 @@ export async function resolveFtnCandidate(
     priceText: normalizedPrice,
     reason: exact ? "exact_event" : "search_fallback",
   };
-    }
+}
