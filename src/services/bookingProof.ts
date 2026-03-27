@@ -1,7 +1,7 @@
 import { Alert } from "react-native";
 
 import savedItemsStore from "@/src/state/savedItems";
-import type { SavedItem } from "@/src/core/savedItemTypes";
+import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
 import { writeJson } from "@/src/state/persist";
 
@@ -27,7 +27,7 @@ async function ensureSavedItemsLoaded() {
   }
 }
 
-function getAttachments(item?: SavedItem | null) {
+function getAttachments(item?: SavedItem | null): WalletAttachment[] {
   return Array.isArray(item?.attachments) ? item.attachments : [];
 }
 
@@ -48,11 +48,11 @@ async function persistLastBookedPointer(item?: SavedItem | null) {
       at: Date.now(),
     });
   } catch {
-    // best-effort
+    // best-effort only
   }
 }
 
-async function promptAddProof(itemId: string) {
+async function addProofIfMissing(itemId: string) {
   const id = cleanString(itemId);
   if (!id) return;
 
@@ -62,23 +62,44 @@ async function promptAddProof(itemId: string) {
   try {
     await ensureSavedItemsLoaded();
 
-    const existingBefore = savedItemsStore.getById(id) ?? null;
-    if (existingBefore && getAttachments(existingBefore).length > 0) {
+    const before = savedItemsStore.getById(id) ?? null;
+    if (!before) {
+      showOkAlert("Booking not found", "This booking could not be found.");
+      return;
+    }
+
+    if (before.status !== "booked") {
+      showOkAlert("Not booked", "Only booked items can store booking proof.");
+      return;
+    }
+
+    if (getAttachments(before).length > 0) {
       showOkAlert("Already added", "This booking already has proof stored in Wallet.");
       return;
     }
 
     const attachment = await pickAndStoreAttachmentForItem(id);
 
+    // Defensive: the picker may throw or may return nothing on cancel in some implementations.
+    if (!attachment) return;
+
     await ensureSavedItemsLoaded();
-    await savedItemsStore.addAttachment(id, attachment);
+
+    const afterPick = savedItemsStore.getById(id) ?? null;
+    const alreadyAttached = getAttachments(afterPick).some(
+      (existing) => existing.id === attachment.id || existing.uri === attachment.uri
+    );
+
+    if (!alreadyAttached) {
+      await savedItemsStore.addAttachment(id, attachment);
+    }
 
     showOkAlert("Saved", "Booking proof stored in Wallet for offline access.");
   } catch (error: unknown) {
     const message =
       error instanceof Error ? cleanString(error.message) : cleanString(error);
 
-    if (message === "cancelled") return;
+    if (message.toLowerCase() === "cancelled") return;
 
     showOkAlert("Couldn’t add attachment", message || "Try again.");
   } finally {
@@ -88,8 +109,8 @@ async function promptAddProof(itemId: string) {
 
 /**
  * Call after an item is marked "booked".
- * - stores a "last booked" pointer for Wallet highlighting
- * - confirms Wallet presence
+ * - stores a last-booked pointer for Wallet highlighting
+ * - confirms wallet state
  * - offers proof upload if no proof exists yet
  */
 export async function confirmBookedAndOfferProof(itemId: string) {
@@ -100,10 +121,7 @@ export async function confirmBookedAndOfferProof(itemId: string) {
 
   const item = savedItemsStore.getById(id) ?? null;
   if (!item) return;
-
-  if (item.status !== "booked") {
-    return;
-  }
+  if (item.status !== "booked") return;
 
   await persistLastBookedPointer(item);
 
@@ -117,7 +135,7 @@ export async function confirmBookedAndOfferProof(itemId: string) {
 
   const message =
     `"${title}" is now marked as booked.\n\n` +
-    `Want to add booking proof (PDF/screenshot) for offline access?`;
+    `Want to add booking proof (PDF or screenshot) for offline access?`;
 
   Alert.alert(
     "Added to Wallet",
@@ -126,7 +144,7 @@ export async function confirmBookedAndOfferProof(itemId: string) {
       { text: "Not now", style: "cancel" },
       {
         text: "Add booking proof",
-        onPress: () => defer(() => void promptAddProof(id)),
+        onPress: () => defer(() => void addProofIfMissing(id)),
       },
     ],
     { cancelable: true }
