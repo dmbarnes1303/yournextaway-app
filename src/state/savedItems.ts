@@ -25,42 +25,66 @@ const VALID_STATUS: ReadonlySet<SavedItemStatus> = new Set([
   "archived",
 ]);
 
-function now() {
+function now(): number {
   return Date.now();
 }
 
-function isPlainObject(v: unknown): v is Record<string, any> {
-  return !!v && typeof v === "object" && !Array.isArray(v);
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-function cleanString(v: unknown) {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-function cleanOptionalString(v: unknown) {
-  const s = cleanString(v);
-  return s ? s : undefined;
+function cleanOptionalString(value: unknown): string | undefined {
+  const next = cleanString(value);
+  return next || undefined;
 }
 
-function cleanPositiveNumber(v: unknown): number | undefined {
-  const n = Number(v);
+function cleanPositiveNumber(value: unknown): number | undefined {
+  const n = Number(value);
   if (!Number.isFinite(n) || n < 0) return undefined;
   return n;
 }
 
-function defaultPriceTextForType(type: SavedItemType): string | undefined {
-  if (type === "note") return undefined;
+function safeUrl(value: unknown): string | undefined {
+  const raw = cleanString(value);
+  if (!raw) return undefined;
+
+  try {
+    const parsed = new URL(raw);
+    if (!/^https?:$/i.test(parsed.protocol)) return undefined;
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function defaultPriceTextForItem(args: {
+  type: SavedItemType;
+  status: SavedItemStatus;
+  incoming?: unknown;
+}): string | undefined {
+  const explicit = cleanOptionalString(args.incoming);
+  if (explicit) return explicit;
+
+  if (args.type === "note") return undefined;
+  if (args.status === "booked") return undefined;
+
   return "View live price";
 }
 
 function sortAttachments(items: WalletAttachment[]): WalletAttachment[] {
-  const copy = [...items];
-  copy.sort((a, b) => (Number(b.createdAt ?? 0) || 0) - (Number(a.createdAt ?? 0) || 0));
-  return copy;
+  return [...items].sort((a, b) => {
+    const bTime = Number(b.createdAt ?? 0) || 0;
+    const aTime = Number(a.createdAt ?? 0) || 0;
+    return bTime - aTime;
+  });
 }
 
-function normalizeAttachment(raw: any): WalletAttachment | null {
-  if (!raw || typeof raw !== "object") return null;
+function normalizeAttachment(raw: unknown): WalletAttachment | null {
+  if (!isPlainObject(raw)) return null;
 
   const id = cleanString(raw.id);
   const uri = cleanString(raw.uri);
@@ -86,30 +110,51 @@ function normalizeAttachments(raw: unknown): WalletAttachment[] | undefined {
   if (!Array.isArray(raw)) return undefined;
 
   const seen = new Set<string>();
-  const cleaned: WalletAttachment[] = [];
+  const out: WalletAttachment[] = [];
 
   for (const entry of raw) {
-    const attachment = normalizeAttachment(entry);
-    if (!attachment) continue;
-    if (seen.has(attachment.id)) continue;
-    seen.add(attachment.id);
-    cleaned.push(attachment);
+    const next = normalizeAttachment(entry);
+    if (!next) continue;
+    if (seen.has(next.id)) continue;
+    seen.add(next.id);
+    out.push(next);
   }
 
-  if (!cleaned.length) return undefined;
-  return sortAttachments(cleaned);
+  if (out.length === 0) return undefined;
+  return sortAttachments(out);
 }
 
-function cleanLoadedItem(raw: any): SavedItem | null {
+function cloneItem(item: SavedItem): SavedItem {
+  return {
+    ...item,
+    metadata: item.metadata ? { ...item.metadata } : undefined,
+    attachments: item.attachments ? [...item.attachments] : undefined,
+  };
+}
+
+function cloneItems(items: SavedItem[]): SavedItem[] {
+  return items.map(cloneItem);
+}
+
+function sortItems(items: SavedItem[]): SavedItem[] {
+  return [...items].sort((a, b) => {
+    const bTime = Number(b.updatedAt ?? 0) || 0;
+    const aTime = Number(a.updatedAt ?? 0) || 0;
+    return bTime - aTime;
+  });
+}
+
+function cleanLoadedItem(raw: unknown): SavedItem | null {
   if (!isPlainObject(raw)) return null;
 
   const id = cleanString(raw.id);
   const type = normalizeSavedItemType(raw.type);
   const status = normalizeSavedItemStatus(raw.status);
 
-  if (!id) return null;
-  if (!type) return null;
-  if (!status || !VALID_STATUS.has(status)) return null;
+  if (!id || !type || !status || !VALID_STATUS.has(status)) return null;
+
+  const title = cleanString(raw.title);
+  if (!title) return null;
 
   const createdAt =
     Number.isFinite(Number(raw.createdAt)) && Number(raw.createdAt) > 0
@@ -121,70 +166,40 @@ function cleanLoadedItem(raw: any): SavedItem | null {
       ? Number(raw.updatedAt)
       : createdAt;
 
-  const title = cleanString(raw.title);
-  if (!title) return null;
-
-  const priceText =
-    typeof raw.priceText === "string" && raw.priceText.trim()
-      ? raw.priceText.trim()
-      : defaultPriceTextForType(type);
-
-  const item: SavedItem = {
-    ...(raw as any),
-
+  return {
+    ...(raw as SavedItem),
     id,
     type,
     status,
     title,
-
     tripId: cleanOptionalString(raw.tripId),
-
     partnerId: cleanOptionalString(raw.partnerId),
-    partnerUrl: cleanOptionalString(raw.partnerUrl),
-
-    priceText,
+    partnerUrl: safeUrl(raw.partnerUrl),
+    priceText: defaultPriceTextForItem({
+      type,
+      status,
+      incoming: raw.priceText,
+    }),
     currency: cleanOptionalString(raw.currency),
-
     metadata: isPlainObject(raw.metadata) ? raw.metadata : undefined,
     attachments: normalizeAttachments(raw.attachments),
-
     createdAt,
     updatedAt,
   };
-
-  return item;
 }
 
 async function persistItems(items: SavedItem[]) {
   await writeJson(STORAGE_KEY, items);
 }
 
-function sortItems(items: SavedItem[]) {
-  const copy = [...items];
-  copy.sort((a, b) => {
-    const bTime = Number(b.updatedAt ?? 0) || 0;
-    const aTime = Number(a.updatedAt ?? 0) || 0;
-    return bTime - aTime;
-  });
-  return copy;
-}
-
-function cloneItems(items: SavedItem[]) {
-  return items.map((item) => ({
-    ...item,
-    metadata: item.metadata ? { ...item.metadata } : undefined,
-    attachments: item.attachments ? [...item.attachments] : undefined,
-  }));
-}
-
 async function deleteOwnedFilesForItems(items: SavedItem[]) {
   for (const item of items) {
     const attachments = Array.isArray(item.attachments) ? item.attachments : [];
-    for (const att of attachments) {
+    for (const attachment of attachments) {
       try {
-        await deleteAttachmentFile(att);
+        await deleteAttachmentFile(attachment);
       } catch {
-        // best-effort
+        // best-effort only
       }
     }
   }
@@ -201,13 +216,10 @@ type SavedItemsState = {
     type: SavedItemType;
     status?: SavedItemStatus;
     title: string;
-
     partnerId?: string;
     partnerUrl?: string;
-
     priceText?: string;
     currency?: string;
-
     metadata?: Record<string, any>;
     attachments?: WalletAttachment[];
   }) => Promise<SavedItem>;
@@ -237,19 +249,30 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     if (inflightLoad) return inflightLoad;
 
     inflightLoad = (async () => {
-      const raw = await readJson<any>(STORAGE_KEY, []);
+      const raw = await readJson<unknown>(STORAGE_KEY, []);
       const arr = Array.isArray(raw) ? raw : [];
-      const cleaned = arr.map(cleanLoadedItem).filter(Boolean) as SavedItem[];
+      const cleaned = arr
+        .map(cleanLoadedItem)
+        .filter((item): item is SavedItem => item !== null);
+
       const sorted = sortItems(cleaned);
 
-      set({ items: sorted, loaded: true });
+      set({
+        items: sorted,
+        loaded: true,
+      });
 
       try {
         await persistItems(sorted);
-      } catch {}
+      } catch {
+        // best-effort only
+      }
     })()
       .catch(() => {
-        set({ items: [], loaded: true });
+        set({
+          items: [],
+          loaded: true,
+        });
       })
       .finally(() => {
         inflightLoad = null;
@@ -273,11 +296,6 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     const createdAt = now();
     const updatedAt = createdAt;
 
-    const priceText =
-      typeof args.priceText === "string" && args.priceText.trim()
-        ? args.priceText.trim()
-        : defaultPriceTextForType(type);
-
     const item: SavedItem = {
       id: makeSavedItemId(),
       tripId: cleanOptionalString(args.tripId),
@@ -285,8 +303,12 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
       status,
       title,
       partnerId: cleanOptionalString(args.partnerId),
-      partnerUrl: cleanOptionalString(args.partnerUrl),
-      priceText,
+      partnerUrl: safeUrl(args.partnerUrl),
+      priceText: defaultPriceTextForItem({
+        type,
+        status,
+        incoming: args.priceText,
+      }),
       currency: cleanOptionalString(args.currency),
       metadata: isPlainObject(args.metadata) ? args.metadata : undefined,
       attachments: normalizeAttachments(args.attachments),
@@ -295,13 +317,19 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     };
 
     const next = sortItems([item, ...get().items]);
-    set({ items: next, loaded: true });
+
+    set({
+      items: next,
+      loaded: true,
+    });
 
     try {
       await persistItems(next);
-    } catch {}
+    } catch {
+      // best-effort only
+    }
 
-    return item;
+    return cloneItem(item);
   },
 
   update: async (id, patch) => {
@@ -310,31 +338,35 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     const cleanId = cleanString(id);
     if (!cleanId) return;
 
-    let changed = false;
+    let didChange = false;
 
-    const next = get().items.map((it) => {
-      if (it.id !== cleanId) return it;
+    const next = get().items.map((item) => {
+      if (item.id !== cleanId) return item;
 
-      const p: any = { ...(patch as any) };
+      const p: Record<string, unknown> = { ...(patch as Record<string, unknown>) };
 
       if ("tripId" in p) p.tripId = cleanOptionalString(p.tripId);
-      if ("title" in p) p.title = cleanString(p.title);
-
+      if ("title" in p) p.title = cleanString(p.title) || item.title;
       if ("partnerId" in p) p.partnerId = cleanOptionalString(p.partnerId);
-      if ("partnerUrl" in p) p.partnerUrl = cleanOptionalString(p.partnerUrl);
-
-      if ("priceText" in p) p.priceText = cleanOptionalString(p.priceText);
+      if ("partnerUrl" in p) p.partnerUrl = safeUrl(p.partnerUrl);
+      if ("priceText" in p) {
+        p.priceText = defaultPriceTextForItem({
+          type: ("type" in p && normalizeSavedItemType(p.type)) || item.type,
+          status: ("status" in p && normalizeSavedItemStatus(p.status)) || item.status,
+          incoming: p.priceText,
+        });
+      }
       if ("currency" in p) p.currency = cleanOptionalString(p.currency);
 
       if ("type" in p) {
-        const t = normalizeSavedItemType(p.type);
-        if (t) p.type = t;
+        const nextType = normalizeSavedItemType(p.type);
+        if (nextType) p.type = nextType;
         else delete p.type;
       }
 
       if ("status" in p) {
-        const s = normalizeSavedItemStatus(p.status);
-        if (s && VALID_STATUS.has(s)) p.status = s;
+        const nextStatus = normalizeSavedItemStatus(p.status);
+        if (nextStatus && VALID_STATUS.has(nextStatus)) p.status = nextStatus;
         else delete p.status;
       }
 
@@ -346,22 +378,29 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
         p.attachments = normalizeAttachments(p.attachments);
       }
 
-      if ("title" in p && !p.title) {
-        p.title = it.title;
-      }
+      didChange = true;
 
-      changed = true;
-      return { ...it, ...p, updatedAt: now() } as SavedItem;
+      return {
+        ...item,
+        ...p,
+        updatedAt: now(),
+      } as SavedItem;
     });
 
-    if (!changed) return;
+    if (!didChange) return;
 
     const sorted = sortItems(next);
-    set({ items: sorted, loaded: true });
+
+    set({
+      items: sorted,
+      loaded: true,
+    });
 
     try {
       await persistItems(sorted);
-    } catch {}
+    } catch {
+      // best-effort only
+    }
   },
 
   transitionStatus: async (id, to) => {
@@ -371,13 +410,16 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     if (!cleanId) return;
 
     const target = normalizeSavedItemStatus(to);
-    if (!target || !VALID_STATUS.has(target)) throw new Error("Invalid target status");
+    if (!target || !VALID_STATUS.has(target)) {
+      throw new Error("Invalid target status");
+    }
 
-    const cur = get().items.find((x) => x.id === cleanId);
-    if (!cur) return;
-    if (cur.status === target) return;
+    const current = get().items.find((x) => x.id === cleanId);
+    if (!current) return;
+    if (current.status === target) return;
 
-    assertTransition(cur.status, target);
+    assertTransition(current.status, target);
+
     await get().update(cleanId, { status: target });
   },
 
@@ -394,10 +436,13 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     if (!item) throw new Error("Saved item not found");
 
     const current = Array.isArray(item.attachments) ? [...item.attachments] : [];
-    const deduped = current.filter((x) => x.id !== normalized.id && x.uri !== normalized.uri);
-    const nextAttachments = sortAttachments([...deduped, normalized]);
+    const deduped = current.filter(
+      (x) => x.id !== normalized.id && x.uri !== normalized.uri
+    );
 
-    await get().update(cleanId, { attachments: nextAttachments });
+    await get().update(cleanId, {
+      attachments: sortAttachments([...deduped, normalized]),
+    });
   },
 
   removeAttachment: async (id, attachmentId) => {
@@ -405,7 +450,6 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
 
     const cleanId = cleanString(id);
     const cleanAttachmentId = cleanString(attachmentId);
-
     if (!cleanId || !cleanAttachmentId) return;
 
     const item = get().items.find((x) => x.id === cleanId);
@@ -419,7 +463,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
       try {
         await deleteAttachmentFile(toRemove);
       } catch {
-        // best-effort
+        // best-effort only
       }
     }
 
@@ -434,77 +478,106 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     const cleanId = cleanString(id);
     if (!cleanId) return;
 
-    const item = get().items.find((x) => x.id === cleanId);
+    const current = get().items;
+    const item = current.find((x) => x.id === cleanId);
     if (item) {
       await deleteOwnedFilesForItems([item]);
     }
 
-    const next = get().items.filter((x) => x.id !== cleanId);
-    set({ items: next, loaded: true });
+    const next = current.filter((x) => x.id !== cleanId);
+
+    set({
+      items: next,
+      loaded: true,
+    });
 
     try {
       await persistItems(next);
-    } catch {}
+    } catch {
+      // best-effort only
+    }
   },
 
   clearAll: async (opts) => {
+    if (!get().loaded) await get().load();
+
     const existing = get().items;
+
     if (opts?.deleteAttachmentFiles) {
       await deleteOwnedFilesForItems(existing);
     }
 
-    set({ items: [], loaded: true });
+    set({
+      items: [],
+      loaded: true,
+    });
+
     try {
       await persistItems([]);
-    } catch {}
+    } catch {
+      // best-effort only
+    }
   },
 
   clearTrip: async (tripId, opts) => {
     if (!get().loaded) await get().load();
 
-    const t = cleanString(tripId);
-    if (!t) return;
+    const tripKey = cleanString(tripId);
+    if (!tripKey) return;
 
     const current = get().items;
-    const removed = current.filter((x) => x.tripId === t);
-    const next = current.filter((x) => x.tripId !== t);
+    const removed = current.filter((x) => x.tripId === tripKey);
+    const next = current.filter((x) => x.tripId !== tripKey);
 
     if (opts?.deleteAttachmentFiles) {
       await deleteOwnedFilesForItems(removed);
     }
 
-    set({ items: next, loaded: true });
+    set({
+      items: next,
+      loaded: true,
+    });
 
     try {
       await persistItems(next);
-    } catch {}
+    } catch {
+      // best-effort only
+    }
   },
 
   clearOrphans: async (validTripIds, opts) => {
     if (!get().loaded) await get().load();
 
-    const setIds = new Set((validTripIds ?? []).map((x) => cleanString(x)).filter(Boolean));
+    const validIds = new Set(
+      (validTripIds ?? []).map((x) => cleanString(x)).filter(Boolean)
+    );
+
     const current = get().items;
 
-    const removed = current.filter((x) => x.tripId && !setIds.has(String(x.tripId)));
-    const next = current.filter((x) => !x.tripId || setIds.has(String(x.tripId)));
+    const removed = current.filter(
+      (x) => x.tripId && !validIds.has(cleanString(x.tripId))
+    );
+
+    const next = current.filter(
+      (x) => !x.tripId || validIds.has(cleanString(x.tripId))
+    );
 
     if (opts?.deleteAttachmentFiles) {
       await deleteOwnedFilesForItems(removed);
     }
 
-    set({ items: next, loaded: true });
+    set({
+      items: next,
+      loaded: true,
+    });
 
     try {
       await persistItems(next);
-    } catch {}
+    } catch {
+      // best-effort only
+    }
   },
 }));
-
-function cleanOptionalString2(v: unknown) {
-  const s = cleanString(v);
-  return s ? s : undefined;
-}
 
 const savedItemsStore = {
   getState: useSavedItemsStore.getState,
@@ -555,37 +628,26 @@ const savedItemsStore = {
   },
 
   getAll: () => {
-    const s = useSavedItemsStore.getState();
-    return cloneItems(s.items);
+    return cloneItems(useSavedItemsStore.getState().items);
   },
 
   getById: (id?: string) => {
-    const cleanId = cleanOptionalString2(id);
+    const cleanId = cleanOptionalString(id);
     if (!cleanId) return undefined;
 
-    const s = useSavedItemsStore.getState();
-    const item = s.items.find((x) => x.id === cleanId);
-    if (!item) return undefined;
-
-    return {
-      ...item,
-      metadata: item.metadata ? { ...item.metadata } : undefined,
-      attachments: item.attachments ? [...item.attachments] : undefined,
-    };
+    const item = useSavedItemsStore.getState().items.find((x) => x.id === cleanId);
+    return item ? cloneItem(item) : undefined;
   },
 
   getByTripId: (tripId?: string) => {
-    const t = cleanOptionalString2(tripId);
-    const s = useSavedItemsStore.getState();
-    if (!t) return [];
+    const cleanTripId = cleanOptionalString(tripId);
+    if (!cleanTripId) return [];
 
-    return s.items
-      .filter((x) => x.tripId === t)
-      .map((item) => ({
-        ...item,
-        metadata: item.metadata ? { ...item.metadata } : undefined,
-        attachments: item.attachments ? [...item.attachments] : undefined,
-      }));
+    return useSavedItemsStore
+      .getState()
+      .items
+      .filter((x) => x.tripId === cleanTripId)
+      .map(cloneItem);
   },
 };
 
