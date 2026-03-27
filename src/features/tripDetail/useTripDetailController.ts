@@ -1,5 +1,3 @@
-// src/features/tripDetail/useTripDetailController.ts
-
 import React from "react";
 import { Alert, type AlertButton } from "react-native";
 import { useRouter } from "expo-router";
@@ -1113,4 +1111,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-  }
+        }
