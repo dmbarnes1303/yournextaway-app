@@ -1,5 +1,3 @@
-// app/trip/[id].tsx
-
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -333,10 +331,7 @@ export default function TripDetailScreen() {
       return "Lock tickets first — that confirms the trip. Until then, everything else is softer planning.";
     }
 
-    return (
-      dominantAction?.body ||
-      "Move the trip forward by completing the next core booking step."
-    );
+    return dominantAction?.body || "Move the trip forward by completing the next core booking step.";
   }, [vm.hasTickets, dominantAction]);
 
   const ticketHeadline = headlineTicketText(vm.hasTickets, data.ticketsPriceFrom);
