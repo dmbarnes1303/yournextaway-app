@@ -50,14 +50,13 @@ const PLAN_STORAGE_KEY = "yna:plan";
 type PlannerCardItem = {
   key: Extract<WorkspaceSectionKey, "tickets" | "stay" | "travel" | "things">;
   label: string;
-  emptyLabel: string;
 };
 
 const PLANNER_ITEMS: PlannerCardItem[] = [
-  { key: "tickets", label: "Tickets", emptyLabel: "Not secured" },
-  { key: "travel", label: "Travel", emptyLabel: "Not added" },
-  { key: "stay", label: "Stay", emptyLabel: "Not added" },
-  { key: "things", label: "Extras", emptyLabel: "Optional" },
+  { key: "tickets", label: "Tickets" },
+  { key: "travel", label: "Travel" },
+  { key: "stay", label: "Stay" },
+  { key: "things", label: "Extras" },
 ];
 
 function statusLabel(status: string) {
@@ -67,12 +66,6 @@ function statusLabel(status: string) {
   return "Upcoming";
 }
 
-function sectionCountLabel(count: number, emptyLabel: string) {
-  if (count <= 0) return emptyLabel;
-  if (count === 1) return "1 added";
-  return `${count} added`;
-}
-
 function nextStepLabel(stepKey?: string | null) {
   if (stepKey === "tickets") return "Secure tickets";
   if (stepKey === "flight") return "Sort flights";
@@ -80,6 +73,64 @@ function nextStepLabel(stepKey?: string | null) {
   if (stepKey === "transfer") return "Sort transport";
   if (stepKey === "things") return "Add extras";
   return "Continue planning";
+}
+
+function plannerSubtitle(args: {
+  key: PlannerCardItem["key"];
+  count: number;
+  ticketsPriceFrom?: string | null;
+  flightsPriceFrom?: string | null;
+  hotelsPriceFrom?: string | null;
+  experiencesPriceFrom?: string | null;
+}) {
+  const { key, count, ticketsPriceFrom, flightsPriceFrom, hotelsPriceFrom, experiencesPriceFrom } =
+    args;
+
+  if (key === "tickets") {
+    if (ticketsPriceFrom) return ticketsPriceFrom;
+    if (count > 0) return count === 1 ? "1 ticket option saved" : `${count} ticket options saved`;
+    return "Compare live prices";
+  }
+
+  if (key === "travel") {
+    if (flightsPriceFrom) return flightsPriceFrom;
+    if (count > 0) return count === 1 ? "1 travel option added" : `${count} travel options added`;
+    return "Search routes";
+  }
+
+  if (key === "stay") {
+    if (hotelsPriceFrom) return hotelsPriceFrom;
+    if (count > 0) return count === 1 ? "1 stay option added" : `${count} stay options added`;
+    return "Explore stays";
+  }
+
+  if (experiencesPriceFrom) return experiencesPriceFrom;
+  if (count > 0) return count === 1 ? "1 extra added" : `${count} extras added`;
+  return "Optional";
+}
+
+function headlineTicketText(price?: string | null) {
+  return price || "Compare live ticket prices";
+}
+
+function headlineTripText(price?: string | null, fallback?: string | null) {
+  return price || fallback || "Build your full trip estimate";
+}
+
+function urgencyLine(hasTickets: boolean, kickoffTbc: boolean) {
+  if (!hasTickets && kickoffTbc) {
+    return "Kickoff can still move. Secure tickets first, then keep travel flexible.";
+  }
+
+  if (!hasTickets) {
+    return "Tickets may get harder or more expensive closer to match day.";
+  }
+
+  if (kickoffTbc) {
+    return "Kickoff is still TBC, so avoid locking inflexible travel too early.";
+  }
+
+  return "Prices and availability can change quickly once you start booking.";
 }
 
 export default function TripDetailScreen() {
@@ -253,13 +304,19 @@ export default function TripDetailScreen() {
 
   const dominantAction = vm.nextAction;
   const dominantTitle = dominantAction?.title || "Continue planning";
-  const dominantBody =
-    dominantAction?.body ||
-    "Move the trip forward by securing the next core booking step.";
   const dominantCta = dominantAction?.cta || "Continue planning";
 
-  const ticketHeadline = data.ticketsPriceFrom || "Tickets not priced yet";
-  const tripHeadline = data.tripPriceFrom || vm.commercialSummaryLine || "Trip estimate building";
+  const decisionBody = useMemo(() => {
+    if (!vm.hasTickets) {
+      return "Lock tickets first — this confirms the trip. Flights and hotels drop into place after.";
+    }
+
+    return dominantAction?.body || "Move the trip forward by completing the next core booking step.";
+  }, [vm.hasTickets, dominantAction]);
+
+  const ticketHeadline = headlineTicketText(data.ticketsPriceFrom);
+  const tripHeadline = headlineTripText(data.tripPriceFrom, vm.commercialSummaryLine);
+  const pressureText = urgencyLine(vm.hasTickets, data.kickoffMeta.tbc);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -317,21 +374,27 @@ export default function TripDetailScreen() {
                 </View>
 
                 <View style={styles.priceRow}>
-                  <View style={styles.priceCard}>
+                  <Pressable
+                    style={styles.priceCard}
+                    onPress={() => controller.onOpenSection("tickets")}
+                  >
                     <Text style={styles.priceLabel}>Tickets</Text>
                     <Text style={styles.priceValue}>{ticketHeadline}</Text>
-                  </View>
+                  </Pressable>
 
-                  <View style={styles.priceCard}>
+                  <Pressable
+                    style={styles.priceCard}
+                    onPress={() => controller.onEditTrip()}
+                  >
                     <Text style={styles.priceLabel}>Trip</Text>
                     <Text style={styles.priceValue}>{tripHeadline}</Text>
-                  </View>
+                  </Pressable>
                 </View>
 
                 <View style={styles.decisionCard}>
-                  <Text style={styles.decisionEyebrow}>Right now</Text>
+                  <Text style={styles.decisionEyebrow}>Do this next</Text>
                   <Text style={styles.decisionTitle}>{dominantTitle}</Text>
-                  <Text style={styles.decisionBody}>{dominantBody}</Text>
+                  <Text style={styles.decisionBody}>{decisionBody}</Text>
 
                   <View style={styles.decisionMetaRow}>
                     <Text style={styles.decisionMetaText}>
@@ -339,11 +402,11 @@ export default function TripDetailScreen() {
                     </Text>
 
                     {vm.tripCompletionPct != null ? (
-                      <Text style={styles.decisionMetaText}>
-                        {vm.tripCompletionPct}% ready
-                      </Text>
+                      <Text style={styles.decisionMetaText}>{vm.tripCompletionPct}% ready</Text>
                     ) : null}
                   </View>
+
+                  <Text style={styles.pressureText}>{pressureText}</Text>
 
                   <Pressable
                     style={styles.primaryActionBtn}
@@ -371,18 +434,14 @@ export default function TripDetailScreen() {
                 <View style={styles.plannerGrid}>
                   {PLANNER_ITEMS.map((item) => {
                     const count = groupedBySection[item.key]?.length || 0;
-
-                    let sub = sectionCountLabel(count, item.emptyLabel);
-
-                    if (item.key === "tickets" && data.ticketsPriceFrom) {
-                      sub = data.ticketsPriceFrom;
-                    } else if (item.key === "travel" && data.flightsPriceFrom) {
-                      sub = data.flightsPriceFrom;
-                    } else if (item.key === "stay" && data.hotelsPriceFrom) {
-                      sub = data.hotelsPriceFrom;
-                    } else if (item.key === "things" && data.experiencesPriceFrom) {
-                      sub = data.experiencesPriceFrom;
-                    }
+                    const sub = plannerSubtitle({
+                      key: item.key,
+                      count,
+                      ticketsPriceFrom: data.ticketsPriceFrom,
+                      flightsPriceFrom: data.flightsPriceFrom,
+                      hotelsPriceFrom: data.hotelsPriceFrom,
+                      experiencesPriceFrom: data.experiencesPriceFrom,
+                    });
 
                     return (
                       <Pressable
@@ -579,6 +638,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: theme.colors.textMuted,
+    fontWeight: "700",
+  },
+
+  pressureText: {
+    marginTop: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textSecondary,
     fontWeight: "700",
   },
 
