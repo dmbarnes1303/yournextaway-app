@@ -80,12 +80,12 @@ function plannerSubtitle(args: {
 
   if (key === "travel") {
     if (count > 0) return count === 1 ? "1 travel item added" : `${count} travel items added`;
-    return "Search flights or transport";
+    return "Flights or rail around your trip dates";
   }
 
   if (key === "stay") {
     if (count > 0) return count === 1 ? "1 stay item added" : `${count} stay items added`;
-    return "Find a place to stay";
+    return "Hotels for this trip window";
   }
 
   if (count > 0) return count === 1 ? "1 extra added" : `${count} extras added`;
@@ -96,9 +96,19 @@ function headlineTicketText(hasTickets: boolean) {
   return hasTickets ? "Ticket route started" : "Compare live ticket options";
 }
 
-function headlineTripText(hasTickets: boolean, completionSummary?: string | null) {
-  if (!hasTickets) return "Trip not anchored yet";
-  return completionSummary || "Trip planning in progress";
+function headlineTripText(args: {
+  tripStartDate?: string | null;
+  tripEndDate?: string | null;
+  hasTickets: boolean;
+}) {
+  const { tripStartDate, tripEndDate, hasTickets } = args;
+
+  const start = clean(tripStartDate);
+  const end = clean(tripEndDate);
+
+  if (start && end) return `${start} → ${end}`;
+  if (hasTickets) return "Trip dates set";
+  return "Set your trip window";
 }
 
 function urgencyLine(hasTickets: boolean, kickoffTbc: boolean) {
@@ -114,7 +124,14 @@ function urgencyLine(hasTickets: boolean, kickoffTbc: boolean) {
     return "Kickoff is still TBC, so avoid locking inflexible travel too early.";
   }
 
-  return "Work through the trip in order: tickets, travel, stay, then extras.";
+  return "Your saved trip dates now drive flights and stays. Edit the trip if you want a longer or shorter window.";
+}
+
+function dateWindowLine(startDate?: string | null, endDate?: string | null) {
+  const start = clean(startDate);
+  const end = clean(endDate);
+  if (!start || !end) return "Trip dates not set";
+  return `${start} → ${end}`;
 }
 
 export default function TripDetailScreen() {
@@ -295,12 +312,20 @@ export default function TripDetailScreen() {
       return "Lock tickets first — that confirms the trip. Until then, everything else is softer planning.";
     }
 
-    return dominantAction?.body || "Move the trip forward by completing the next core booking step.";
+    return (
+      dominantAction?.body ||
+      "Move the trip forward by completing the next core booking step."
+    );
   }, [vm.hasTickets, dominantAction]);
 
   const ticketHeadline = headlineTicketText(vm.hasTickets);
-  const tripHeadline = headlineTripText(vm.hasTickets, vm.completionSummary);
+  const tripHeadline = headlineTripText({
+    tripStartDate: trip?.startDate,
+    tripEndDate: trip?.endDate,
+    hasTickets: vm.hasTickets,
+  });
   const pressureText = urgencyLine(vm.hasTickets, data.kickoffMeta.tbc);
+  const tripDatesText = dateWindowLine(trip?.startDate, trip?.endDate);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -355,6 +380,19 @@ export default function TripDetailScreen() {
                       <Text style={styles.warningPillText}>Kickoff TBC</Text>
                     </View>
                   ) : null}
+                </View>
+
+                <View style={styles.tripWindowCard}>
+                  <View style={styles.tripWindowHeader}>
+                    <Text style={styles.tripWindowLabel}>Trip dates</Text>
+                    <Pressable onPress={controller.onEditTrip} hitSlop={8}>
+                      <Text style={styles.tripWindowEdit}>Edit</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
+                  <Text style={styles.tripWindowHint}>
+                    Flights and stays should follow this window, not a fixed fixture-only default.
+                  </Text>
                 </View>
 
                 <View style={styles.summaryRow}>
@@ -536,6 +574,51 @@ const styles = StyleSheet.create({
     color: "rgba(255,200,90,1)",
     fontSize: 12,
     fontWeight: "800",
+  },
+
+  tripWindowCard: {
+    marginTop: theme.spacing.md,
+    borderRadius: 16,
+    padding: theme.spacing.md,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  tripWindowHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.sm,
+  },
+
+  tripWindowLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: theme.colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+
+  tripWindowEdit: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: theme.colors.accent,
+  },
+
+  tripWindowValue: {
+    marginTop: 6,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: "800",
+    color: theme.colors.text,
+  },
+
+  tripWindowHint: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textSecondary,
   },
 
   summaryRow: {
