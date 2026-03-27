@@ -851,10 +851,15 @@ export default function useTripDetailController({
     }
 
     const existing = ticketsByMatchId[mid];
+
+    // Critical fix:
+    // Only reopen directly when the ticket route is actually booked.
+    // Saved/pending must always return to comparison, not lock the user
+    // back into the first provider they opened.
     if (
       existing &&
       existing.type === "tickets" &&
-      existing.status !== "archived" &&
+      existing.status === "booked" &&
       existing.partnerUrl
     ) {
       await openSavedItem(existing);
@@ -1033,8 +1038,7 @@ export default function useTripDetailController({
         savedItemType: candidate.itemType,
         title,
         sourceSurface: "workspace_cta",
-        sourceSection:
-          candidate.itemType === "transfer" ? "transfers" : "travel",
+        sourceSection: candidate.itemType === "transfer" ? "transfers" : "travel",
         metadata: {
           travelMode: candidate.titleKind,
         },
@@ -1093,4 +1097,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-                                             }
+         }
