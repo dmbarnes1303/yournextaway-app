@@ -1,3 +1,5 @@
+// src/features/tripDetail/useTripDetailController.ts
+
 import React from "react";
 import { Alert, type AlertButton } from "react-native";
 import { useRouter } from "expo-router";
@@ -734,6 +736,8 @@ export default function useTripDetailController({
         kickoffIso: args.kickoffIso,
         homeName: args.homeName,
         awayName: args.awayName,
+        tripStartDate: trip?.startDate ?? null,
+        tripEndDate: trip?.endDate ?? null,
         priceMode: "live",
         ticketProvider: args.option.provider ?? null,
         resolvedPriceText: args.option.priceText ?? null,
@@ -781,6 +785,8 @@ export default function useTripDetailController({
                 kickoffIso: args.kickoffIso,
                 homeName: args.homeName,
                 awayName: args.awayName,
+                tripStartDate: trip?.startDate ?? null,
+                tripEndDate: trip?.endDate ?? null,
                 ticketProvider: "official_site",
                 officialFallback: true,
               },
@@ -852,10 +858,6 @@ export default function useTripDetailController({
 
     const existing = ticketsByMatchId[mid];
 
-    // Critical fix:
-    // Only reopen directly when the ticket route is actually booked.
-    // Saved/pending must always return to comparison, not lock the user
-    // back into the first provider they opened.
     if (
       existing &&
       existing.type === "tickets" &&
@@ -1010,6 +1012,10 @@ export default function useTripDetailController({
         title: `Stays in ${cityName}`,
         sourceSurface: "workspace_cta",
         sourceSection: "stay",
+        metadata: {
+          tripStartDate: trip?.startDate ?? null,
+          tripEndDate: trip?.endDate ?? null,
+        },
         missingTitle: "Hotels not ready",
         missingMessage: "No hotel search available yet.",
       });
@@ -1041,6 +1047,8 @@ export default function useTripDetailController({
         sourceSection: candidate.itemType === "transfer" ? "transfers" : "travel",
         metadata: {
           travelMode: candidate.titleKind,
+          tripStartDate: trip?.startDate ?? null,
+          tripEndDate: trip?.endDate ?? null,
         },
         missingTitle: "Travel not ready",
         missingMessage: "No travel search available yet.",
@@ -1056,6 +1064,10 @@ export default function useTripDetailController({
         title: `Things to do in ${cityName}`,
         sourceSurface: "workspace_cta",
         sourceSection: "things",
+        metadata: {
+          tripStartDate: trip?.startDate ?? null,
+          tripEndDate: trip?.endDate ?? null,
+        },
         missingTitle: "Experiences not ready",
         missingMessage: "No activities available yet.",
       });
@@ -1070,6 +1082,10 @@ export default function useTripDetailController({
         title: `Transfers in ${cityName}`,
         sourceSurface: "workspace_cta",
         sourceSection: "transfers",
+        metadata: {
+          tripStartDate: trip?.startDate ?? null,
+          tripEndDate: trip?.endDate ?? null,
+        },
         missingTitle: "Transfers not ready",
         missingMessage: "No transfer booking link is available yet.",
       });
@@ -1097,4 +1113,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-         }
+      }
