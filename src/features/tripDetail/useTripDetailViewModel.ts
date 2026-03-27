@@ -24,7 +24,7 @@ type PartnerActionConfig = {
   partnerId: PartnerId;
   savedItemType: SavedItemType;
   title: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 type PartnerActionBundle = {
@@ -55,11 +55,15 @@ type ProgressMap = {
   things: ProgressState;
 };
 
+type PricePointSource = "saved_item" | "metadata" | "price_text" | null;
+type PriceDisplayMode = "booked" | "live_from" | "est_from";
+
 type PricePoint = {
   amount: number | null;
   currency: string | null;
   text: string | null;
-  source: "saved_item" | "metadata" | "price_text" | null;
+  source: PricePointSource;
+  displayMode: PriceDisplayMode;
 };
 
 type BookingPriceBoard = {
@@ -91,7 +95,6 @@ type Params = {
   kickoffTbc: boolean;
   controller: Controller;
   setActiveWorkspaceSection?: (section: WorkspaceSectionKey) => Promise<void> | void;
-
   bookingPriceBoard?: BookingPriceBoard | null;
   ticketsPriceFrom?: string | null;
   flightsPriceFrom?: string | null;
@@ -131,8 +134,8 @@ function completionLabel(
 }
 
 function cleanPriceLabel(value?: string | null): string | null {
-  const v = String(value ?? "").trim();
-  return v || null;
+  const next = String(value ?? "").trim();
+  return next || null;
 }
 
 function pricingOrFallback(priceLine: string | null | undefined, fallback: string): string {
@@ -226,20 +229,23 @@ export default function useTripDetailViewModel({
     return pending.length > 0 || saved.length > 0 || booked.length > 0;
   }, [pending.length, saved.length, booked.length]);
 
-  const baseMeta = useMemo(
-    () => ({
+  const baseMeta = useMemo(() => {
+    return {
       tripId: trip?.id ?? null,
       city: cityName,
       startDate: trip?.startDate ?? null,
       endDate: trip?.endDate ?? null,
       originIata: cleanUpper3(originIata, "LON"),
       primaryMatchId: primaryMatchId ?? null,
-    }),
-    [trip?.id, cityName, trip?.startDate, trip?.endDate, originIata, primaryMatchId]
-  );
+    };
+  }, [trip?.id, cityName, trip?.startDate, trip?.endDate, originIata, primaryMatchId]);
 
   const buildMeta = useCallback(
-    (sourceSurface: SourceSurface, sourceSection: SourceSection, extra?: Record<string, any>) => {
+    (
+      sourceSurface: SourceSurface,
+      sourceSection: SourceSection,
+      extra?: Record<string, unknown>
+    ) => {
       return {
         ...baseMeta,
         sourceSurface,
@@ -261,8 +267,8 @@ export default function useTripDetailViewModel({
     [setActiveWorkspaceSection]
   );
 
-  const flightAction = useMemo<PartnerActionBundle>(
-    () => ({
+  const flightAction = useMemo<PartnerActionBundle>(() => {
+    return {
       url: affiliateUrls?.flightsUrl,
       message: "We need a city + dates saved to build booking links.",
       config: {
@@ -275,12 +281,11 @@ export default function useTripDetailViewModel({
           priceFrom: cleanPriceLabel(flightsPriceFrom),
         }),
       },
-    }),
-    [affiliateUrls?.flightsUrl, cityName, buildMeta, flightsPriceFrom]
-  );
+    };
+  }, [affiliateUrls?.flightsUrl, cityName, buildMeta, flightsPriceFrom]);
 
-  const hotelAction = useMemo<PartnerActionBundle>(
-    () => ({
+  const hotelAction = useMemo<PartnerActionBundle>(() => {
+    return {
       url: affiliateUrls?.hotelsUrl || affiliateUrls?.staysUrl,
       message: "We need a city + dates saved to build booking links.",
       config: {
@@ -293,51 +298,50 @@ export default function useTripDetailViewModel({
           priceFrom: cleanPriceLabel(hotelsPriceFrom),
         }),
       },
-    }),
-    [affiliateUrls?.hotelsUrl, affiliateUrls?.staysUrl, cityName, buildMeta, hotelsPriceFrom]
-  );
+    };
+  }, [affiliateUrls?.hotelsUrl, affiliateUrls?.staysUrl, cityName, buildMeta, hotelsPriceFrom]);
 
-  const transportAction = useMemo<PartnerActionBundle>(
-    () => ({
+  const transportAction = useMemo<PartnerActionBundle>(() => {
+    const hasOmio = Boolean(affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl);
+
+    return {
       url: affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl || affiliateUrls?.transfersUrl,
       message: "We need a city + dates saved to build booking links.",
-      config:
-        affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl
-          ? {
-              partnerId: "omio",
-              savedItemType: "train",
-              title: `Rail & bus for ${cityName}`,
-              metadata: buildMeta("unknown", "travel", {
-                provider: "omio",
-                priceMode: "live",
-                transportMode: "rail_bus",
-                priceFrom: cleanPriceLabel(transfersPriceFrom),
-              }),
-            }
-          : {
-              partnerId: "kiwitaxi",
-              savedItemType: "transfer",
-              title: `Transfers in ${cityName}`,
-              metadata: buildMeta("unknown", "transfers", {
-                provider: "kiwitaxi",
-                priceMode: "live",
-                transportMode: "transfer",
-                priceFrom: cleanPriceLabel(transfersPriceFrom),
-              }),
-            },
-    }),
-    [
-      affiliateUrls?.omioUrl,
-      affiliateUrls?.trainsUrl,
-      affiliateUrls?.transfersUrl,
-      cityName,
-      buildMeta,
-      transfersPriceFrom,
-    ]
-  );
+      config: hasOmio
+        ? {
+            partnerId: "omio",
+            savedItemType: "train",
+            title: `Rail & bus for ${cityName}`,
+            metadata: buildMeta("unknown", "travel", {
+              provider: "omio",
+              priceMode: "live",
+              transportMode: "rail_bus",
+              priceFrom: cleanPriceLabel(transfersPriceFrom),
+            }),
+          }
+        : {
+            partnerId: "kiwitaxi",
+            savedItemType: "transfer",
+            title: `Transfers in ${cityName}`,
+            metadata: buildMeta("unknown", "transfers", {
+              provider: "kiwitaxi",
+              priceMode: "live",
+              transportMode: "transfer",
+              priceFrom: cleanPriceLabel(transfersPriceFrom),
+            }),
+          },
+    };
+  }, [
+    affiliateUrls?.omioUrl,
+    affiliateUrls?.trainsUrl,
+    affiliateUrls?.transfersUrl,
+    cityName,
+    buildMeta,
+    transfersPriceFrom,
+  ]);
 
-  const thingsAction = useMemo<PartnerActionBundle>(
-    () => ({
+  const thingsAction = useMemo<PartnerActionBundle>(() => {
+    return {
       url: affiliateUrls?.experiencesUrl || affiliateUrls?.thingsUrl,
       message: "We need a city saved to build booking links.",
       config: {
@@ -350,9 +354,14 @@ export default function useTripDetailViewModel({
           priceFrom: cleanPriceLabel(experiencesPriceFrom),
         }),
       },
-    }),
-    [affiliateUrls?.experiencesUrl, affiliateUrls?.thingsUrl, cityName, buildMeta, experiencesPriceFrom]
-  );
+    };
+  }, [
+    affiliateUrls?.experiencesUrl,
+    affiliateUrls?.thingsUrl,
+    cityName,
+    buildMeta,
+    experiencesPriceFrom,
+  ]);
 
   const openFlights = useCallback(
     async (sourceSurface: SourceSurface = "unknown") => {
@@ -465,16 +474,15 @@ export default function useTripDetailViewModel({
     [controller, hasMatch, primaryMatchId, setWorkspaceSection]
   );
 
-  const bookingSteps = useMemo<BookingStep[]>(
-    () => [
+  const bookingSteps = useMemo<BookingStep[]>(() => {
+    return [
       { key: "tickets", complete: isComplete(ticketState), state: ticketState },
       { key: "flight", complete: isComplete(flightState), state: flightState },
       { key: "hotel", complete: isComplete(hotelState), state: hotelState },
       { key: "transfer", complete: isComplete(transportState), state: transportState },
       { key: "things", complete: isComplete(thingsState), state: thingsState },
-    ],
-    [ticketState, flightState, hotelState, transportState, thingsState]
-  );
+    ];
+  }, [ticketState, flightState, hotelState, transportState, thingsState]);
 
   const completeCoreCount = useMemo(() => {
     return bookingSteps.filter((step) => step.key !== "things" && step.complete).length;
@@ -500,8 +508,8 @@ export default function useTripDetailViewModel({
     );
   }, [bookingSteps]);
 
-  const progressItems = useMemo<TripProgressItem[]>(
-    () => [
+  const progressItems = useMemo<TripProgressItem[]>(() => {
+    return [
       {
         key: "tickets",
         label: "Tickets",
@@ -542,22 +550,21 @@ export default function useTripDetailViewModel({
           void openThings("progress_strip");
         },
       },
-    ],
-    [
-      affiliateUrls?.omioUrl,
-      affiliateUrls?.trainsUrl,
-      openTickets,
-      openFlights,
-      openHotels,
-      openTransport,
-      openThings,
-      ticketState,
-      flightState,
-      hotelState,
-      transportState,
-      thingsState,
-    ]
-  );
+    ];
+  }, [
+    affiliateUrls?.omioUrl,
+    affiliateUrls?.trainsUrl,
+    openTickets,
+    openFlights,
+    openHotels,
+    openTransport,
+    openThings,
+    ticketState,
+    flightState,
+    hotelState,
+    transportState,
+    thingsState,
+  ]);
 
   const nextAction = useMemo<NextAction | null>(() => {
     if (!hasMatch) {
@@ -722,7 +729,11 @@ export default function useTripDetailViewModel({
     if (!hasTickets && primaryMatchId) {
       add(
         "Tickets",
-        ticketButtonSubtitle({ primaryTicketItem, ticketState, ticketsPriceFrom }),
+        ticketButtonSubtitle({
+          primaryTicketItem,
+          ticketState,
+          ticketsPriceFrom,
+        }),
         () => {
           void openTickets("smart_booking");
         },
@@ -873,14 +884,13 @@ export default function useTripDetailViewModel({
     return !isPro ? proCapHint(FREE_TRIP_CAP, tripCount) : undefined;
   }, [isPro, tripCount]);
 
-  const heroBannerCounts = useMemo(
-    () => ({
+  const heroBannerCounts = useMemo(() => {
+    return {
       pending: pending.length,
       saved: saved.length,
       booked: booked.length,
-    }),
-    [pending.length, saved.length, booked.length]
-  );
+    };
+  }, [pending.length, saved.length, booked.length]);
 
   const bookingFunnelLabel = useMemo(() => {
     if (!hasMatch) return "No fixture selected";
@@ -942,4 +952,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-    }
+            }
