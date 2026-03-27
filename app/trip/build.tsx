@@ -143,6 +143,12 @@ function fixtureDateOnly(r: FixtureListRow | null): string | null {
 function parseIsoToDate(iso?: string | null): Date | null {
   const s = cleanText(iso);
   if (!s) return null;
+
+  if (isIsoDateOnly(s)) {
+    const d = new Date(`${s}T00:00:00`);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
   const d = new Date(s);
   return Number.isFinite(d.getTime()) ? d : null;
 }
@@ -178,6 +184,10 @@ function defaultTripWindowFromFixtureDate(iso: string | null): {
     start: start ? clampFromIsoToTomorrow(start) : null,
     end,
   };
+}
+
+function normalizeIsoInput(value: string): string {
+  return value.replace(/[^\d-]/g, "").slice(0, 10);
 }
 
 function daysBetweenIso(aIso: string, bIso: string) {
@@ -798,12 +808,41 @@ export default function TripBuildScreen() {
   }, [params.prefMode, params.prefWindow, params.prefLength, params.prefFrom, params.prefVibes]);
 
   const validateDateOrder = useCallback((): string | null => {
+    if (!isIsoDateOnly(startIso) || !isIsoDateOnly(endIso)) {
+      return "Trip dates must be in YYYY-MM-DD format.";
+    }
+
     const a = parseIsoToDate(startIso);
     const b = parseIsoToDate(endIso);
     if (!a || !b) return "Invalid trip dates.";
     if (b.getTime() < a.getTime()) return "End date must be on or after start date.";
     return null;
   }, [startIso, endIso]);
+
+  const onChangeStartDate = useCallback((value: string) => {
+    setHasManualDateOverride(true);
+    setStartIso(normalizeIsoInput(value));
+  }, []);
+
+  const onChangeEndDate = useCallback((value: string) => {
+    setHasManualDateOverride(true);
+    setEndTouched(true);
+    setEndIso(normalizeIsoInput(value));
+  }, []);
+
+  const onResetToFixtureWindow = useCallback(() => {
+    if (!selectedFixture) return;
+
+    const d0 = fixtureDateOnly(selectedFixture);
+    const derived = defaultTripWindowFromFixtureDate(d0);
+
+    if (derived.start) setStartIso(derived.start);
+    if (derived.end) setEndIso(derived.end);
+
+    setHasManualDateOverride(false);
+    setEndTouched(false);
+    setError(null);
+  }, [selectedFixture]);
 
   const onSave = useCallback(async () => {
     if (!selectedFixture?.fixture?.id) {
@@ -1041,7 +1080,7 @@ export default function TripBuildScreen() {
               <View style={styles.flowDivider} />
               <View style={styles.flowStep}>
                 <Text style={styles.flowStepNumber}>2</Text>
-                <Text style={styles.flowStepText}>Save trip</Text>
+                <Text style={styles.flowStepText}>Set trip dates</Text>
               </View>
               <View style={styles.flowDivider} />
               <View style={styles.flowStep}>
@@ -1125,6 +1164,16 @@ export default function TripBuildScreen() {
                   </View>
                 ) : null}
 
+                {hasManualDateOverride ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>Custom trip dates</Text>
+                  </View>
+                ) : (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>Default fixture window</Text>
+                  </View>
+                )}
+
                 {isEditing ? (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>
@@ -1138,6 +1187,58 @@ export default function TripBuildScreen() {
                     <Text style={styles.badgeText}>Main match</Text>
                   </View>
                 ) : null}
+              </View>
+
+              <View style={styles.dateCard}>
+                <View style={styles.dateCardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.dateCardTitle}>Trip dates</Text>
+                    <Text style={styles.dateCardSub}>
+                      Default is 1 day before to 1 day after the match. Change these if needed.
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    onPress={onResetToFixtureWindow}
+                    style={styles.resetDateBtn}
+                  >
+                    <Text style={styles.resetDateBtnText}>Reset</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.dateInputsRow}>
+                  <View style={styles.dateField}>
+                    <Text style={styles.dateFieldLabel}>Start date</Text>
+                    <TextInput
+                      value={startIso}
+                      onChangeText={onChangeStartDate}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="numbers-and-punctuation"
+                      style={styles.dateInput}
+                    />
+                  </View>
+
+                  <View style={styles.dateField}>
+                    <Text style={styles.dateFieldLabel}>End date</Text>
+                    <TextInput
+                      value={endIso}
+                      onChangeText={onChangeEndDate}
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="numbers-and-punctuation"
+                      style={styles.dateInput}
+                    />
+                  </View>
+                </View>
+
+                <Text style={styles.dateHint}>
+                  Hotels and flights should follow this saved trip window.
+                </Text>
               </View>
 
               {selectedRankedTrip ? (
@@ -1771,6 +1872,85 @@ const styles = StyleSheet.create({
 
   badgeTextConfirmed: {
     color: "rgba(140,255,190,0.92)",
+  },
+
+  dateCard: {
+    marginTop: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+
+  dateCardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  dateCardTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 15,
+  },
+
+  dateCardSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
+  resetDateBtn: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+
+  resetDateBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  dateInputsRow: {
+    marginTop: 12,
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  dateField: {
+    flex: 1,
+  },
+
+  dateFieldLabel: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 12,
+    marginBottom: 6,
+  },
+
+  dateInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderRadius: 14,
+    padding: 12,
+    color: theme.colors.text,
+    fontWeight: "800",
+  },
+
+  dateHint: {
+    marginTop: 8,
+    color: theme.colors.textTertiary,
+    fontWeight: "800",
+    fontSize: 11,
+    lineHeight: 15,
   },
 
   intelCard: {
