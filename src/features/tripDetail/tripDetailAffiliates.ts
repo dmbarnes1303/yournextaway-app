@@ -51,15 +51,15 @@ export function getBookingWindow(args: {
   const tripStart = clean(args.trip?.startDate) || null;
   const tripEnd = clean(args.trip?.endDate) || null;
 
-  const matchStart = addDays(kickoffDate ?? null, -1);
-  const matchEnd = addDays(kickoffDate ?? null, 1);
+  const defaultStart = addDays(kickoffDate ?? null, -1);
+  const defaultEnd = addDays(kickoffDate ?? null, 1);
 
   // Truth:
-  // - default trip window is kickoff -1 / +1
-  // - once saved or edited, the trip dates are the source of truth
+  // - New trip default is fixture -1 day / +1 day
+  // - Once trip dates exist, they are the source of truth
   return {
-    startDate: tripStart || matchStart,
-    endDate: tripEnd || matchEnd,
+    startDate: tripStart || defaultStart,
+    endDate: tripEnd || defaultEnd,
   };
 }
 
