@@ -44,8 +44,13 @@ import walletStore, {
 } from "@/src/state/walletStore";
 import savedItemsStore from "@/src/state/savedItems";
 import tripsStore, { type Trip } from "@/src/state/trips";
-import { getSavedItemTypeLabel, type SavedItemType } from "@/src/core/savedItemTypes";
+import {
+  getSavedItemTypeLabel,
+  type SavedItemType,
+  type WalletAttachment,
+} from "@/src/core/savedItemTypes";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
+import { openAttachment } from "@/src/services/walletAttachments";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
 type WalletDoc = {
@@ -231,6 +236,14 @@ function iconForType(type: SavedItemType): React.ComponentProps<typeof Ionicons>
   }
 }
 
+function iconForAttachmentKind(
+  kind?: WalletAttachment["kind"]
+): React.ComponentProps<typeof Ionicons>["name"] {
+  if (kind === "pdf") return "document-text-outline";
+  if (kind === "image") return "image-outline";
+  return "attach-outline";
+}
+
 function statusLabel(status: WalletBooking["status"]) {
   switch (status) {
     case "booked":
@@ -334,6 +347,16 @@ function buildWalletProgress(items: WalletBooking[]) {
 
 function clamp2(n: number) {
   return Math.max(0, Math.min(99, n));
+}
+
+function getItemAttachments(itemId: string): WalletAttachment[] {
+  const item = savedItemsStore.getById(itemId);
+  return Array.isArray(item?.attachments) ? item.attachments : [];
+}
+
+function latestAttachment(itemId: string): WalletAttachment | null {
+  const attachments = getItemAttachments(itemId);
+  return attachments[0] ?? null;
 }
 
 export default function WalletScreen() {
@@ -660,6 +683,52 @@ export default function WalletScreen() {
     }
   }
 
+  async function onViewProof(itemId: string) {
+    try {
+      await savedItemsStore.load();
+      const attachment = latestAttachment(itemId);
+
+      if (!attachment) {
+        Alert.alert("No proof", "This booking has no proof file attached.");
+        return;
+      }
+
+      await openAttachment(attachment);
+    } catch (e: any) {
+      Alert.alert("Couldn’t open proof", e?.message || "Try again.");
+    }
+  }
+
+  async function onDeleteProof(itemId: string) {
+    await savedItemsStore.load();
+    const attachment = latestAttachment(itemId);
+
+    if (!attachment) {
+      Alert.alert("No proof", "There is no proof file to delete.");
+      return;
+    }
+
+    Alert.alert(
+      "Delete proof?",
+      "This removes the attached proof file from this booking.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await savedItemsStore.removeAttachment(itemId, attachment.id);
+              await loadWallet();
+            } catch (e: any) {
+              Alert.alert("Delete failed", e?.message || "Could not delete proof.");
+            }
+          },
+        },
+      ]
+    );
+  }
+
   async function onArchive(itemId: string) {
     Alert.alert("Archive item?", "This will hide it from the main Wallet view.", [
       { text: "Cancel", style: "cancel" },
@@ -946,6 +1015,8 @@ export default function WalletScreen() {
                     focused={group.tripId === focusedTripIdParam}
                     onOpenTrip={onOpenTrip}
                     onAddProof={onAddProof}
+                    onViewProof={onViewProof}
+                    onDeleteProof={onDeleteProof}
                     onMoveBackToSaved={onMoveBackToSaved}
                     onArchive={onArchive}
                   />
@@ -1189,6 +1260,8 @@ function WalletGroupCard({
   focused,
   onOpenTrip,
   onAddProof,
+  onViewProof,
+  onDeleteProof,
   onMoveBackToSaved,
   onArchive,
 }: {
@@ -1197,6 +1270,8 @@ function WalletGroupCard({
   focused: boolean;
   onOpenTrip: (tripId?: string) => void;
   onAddProof: (itemId: string) => Promise<void>;
+  onViewProof: (itemId: string) => Promise<void>;
+  onDeleteProof: (itemId: string) => Promise<void>;
   onMoveBackToSaved: (itemId: string) => Promise<void>;
   onArchive: (itemId: string) => Promise<void>;
 }) {
@@ -1253,6 +1328,8 @@ function WalletGroupCard({
               item={item}
               onOpenTrip={onOpenTrip}
               onAddProof={onAddProof}
+              onViewProof={onViewProof}
+              onDeleteProof={onDeleteProof}
               onMoveBackToSaved={onMoveBackToSaved}
               onArchive={onArchive}
             />
@@ -1267,12 +1344,16 @@ function WalletBookingCard({
   item,
   onOpenTrip,
   onAddProof,
+  onViewProof,
+  onDeleteProof,
   onMoveBackToSaved,
   onArchive,
 }: {
   item: WalletBooking;
   onOpenTrip: (tripId?: string) => void;
   onAddProof: (itemId: string) => Promise<void>;
+  onViewProof: (itemId: string) => Promise<void>;
+  onDeleteProof: (itemId: string) => Promise<void>;
   onMoveBackToSaved: (itemId: string) => Promise<void>;
   onArchive: (itemId: string) => Promise<void>;
 }) {
@@ -1280,6 +1361,7 @@ function WalletBookingCard({
   const kickoff = formatKickoff(item.kickoffIso);
   const typeLabel = getSavedItemTypeLabel(item.type);
   const tone = statusChipTone(item.status);
+  const attachment = latestAttachment(item.id);
 
   return (
     <GlassCard style={styles.docCard} strength="subtle" noPadding>
@@ -1319,6 +1401,19 @@ function WalletBookingCard({
                 ? "No proof attached yet"
                 : "No proof needed yet"}
           </Text>
+
+          {attachment ? (
+            <View style={styles.attachmentRow}>
+              <Ionicons
+                name={iconForAttachmentKind(attachment.kind)}
+                size={14}
+                color={theme.colors.textSecondary}
+              />
+              <Text style={styles.attachmentText} numberOfLines={1}>
+                {cleanString(attachment.name) || "Attached proof"}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -1332,6 +1427,18 @@ function WalletBookingCard({
         {item.status === "booked" && !item.hasProof ? (
           <Pressable style={styles.smallBtnPrimary} onPress={() => onAddProof(item.id)}>
             <Text style={styles.smallBtnPrimaryText}>Add proof</Text>
+          </Pressable>
+        ) : null}
+
+        {item.hasProof ? (
+          <Pressable style={styles.smallBtn} onPress={() => onViewProof(item.id)}>
+            <Text style={styles.smallBtnText}>View proof</Text>
+          </Pressable>
+        ) : null}
+
+        {item.hasProof ? (
+          <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => onDeleteProof(item.id)}>
+            <Text style={styles.smallBtnDangerText}>Delete proof</Text>
           </Pressable>
         ) : null}
 
@@ -2027,6 +2134,20 @@ const styles = StyleSheet.create({
   docSubMeta: {
     marginTop: 4,
     color: theme.colors.textTertiary,
+    fontWeight: theme.fontWeight.bold,
+    fontSize: 12,
+  },
+
+  attachmentRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  attachmentText: {
+    flex: 1,
+    color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.bold,
     fontSize: 12,
   },
