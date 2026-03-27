@@ -24,8 +24,6 @@ export type FlightSearchState = {
   pricePoint: PricePoint | null;
 };
 
-/* ----------------------------- utils ----------------------------- */
-
 function addDays(ymd: string | null, offset: number): string | null {
   const raw = clean(ymd);
   if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
@@ -55,8 +53,6 @@ function safeUrl(value: unknown): string | null {
   }
 }
 
-/* ----------------------------- booking window ----------------------------- */
-
 export function getBookingWindow(args: {
   trip: Trip | null;
   primaryKickoffIso: string | null;
@@ -76,8 +72,6 @@ export function getBookingWindow(args: {
     endDate: tripEnd || defaultEnd,
   };
 }
-
-/* ----------------------------- affiliate urls ----------------------------- */
 
 export function buildAffiliateUrls(args: {
   trip: Trip | null;
@@ -146,8 +140,6 @@ export function buildAffiliateUrls(args: {
   };
 }
 
-/* ----------------------------- flights ----------------------------- */
-
 export function resolveFlightDestinationIata(cityName: string): string {
   return clean(getIataCityCodeForCity(cityName)).toUpperCase();
 }
@@ -189,8 +181,8 @@ export async function fetchLiveFlightPrice(args: {
     if (!result.ok || !result.cheapest) return null;
 
     const cheapest = result.cheapest;
-
     const amount = Number(cheapest.price);
+
     if (!Number.isFinite(amount) || amount <= 0) return null;
 
     const currency = clean(cheapest.currency).toUpperCase() || null;
