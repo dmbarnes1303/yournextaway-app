@@ -163,8 +163,9 @@ export function statusLabel(status: SavedItem["status"]): string {
     case "booked":
       return "Booked";
     case "archived":
-    default:
       return "Archived";
+    default:
+      return "Unknown";
   }
 }
 
@@ -244,15 +245,15 @@ export function formatKickoffMeta(
   row?: FixtureListRow | null,
   trip?: Trip | null
 ): { line: string; tbc: boolean; iso: string | null } {
-  const isoRaw = (row as any)?.fixture?.date ?? (trip as any)?.kickoffIso;
+  const isoRaw = row?.fixture?.date ?? trip?.kickoffIso;
   const iso = clean(isoRaw) || null;
 
   const date = parseIsoToDate(iso);
-  const short = clean((row as any)?.fixture?.status?.short).toUpperCase();
-  const long = clean((row as any)?.fixture?.status?.long);
+  const short = clean(row?.fixture?.status?.short).toUpperCase();
+  const long = clean(row?.fixture?.status?.long);
 
   const looksTbc = short === "TBD" || short === "TBA" || short === "NS" || short === "PST";
-  const snapTbc = Boolean((trip as any)?.kickoffTbc);
+  const snapTbc = Boolean(trip?.kickoffTbc);
 
   if (!date) {
     const tbc = looksTbc || snapTbc;
@@ -299,7 +300,8 @@ export function titleCaseCity(value: string): string {
 }
 
 export function buildMapsSearchUrl(query: string): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clean(query))}`;
+  const q = clean(query);
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
 export function buildMapsDirectionsUrl(
@@ -381,7 +383,7 @@ export function ticketResolverFailureMessage(
 ): string {
   if (!resolved) return "Ticket options are unavailable right now.";
 
-  const error = clean((resolved as any)?.error);
+  const error = clean((resolved as { error?: unknown })?.error);
 
   if (error === "network_error") {
     return "We couldn’t reach ticket providers right now. Please try again.";
@@ -503,4 +505,4 @@ export function getIsoDateOnly(raw?: string | null): string | undefined {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-        }
+    }
