@@ -1,5 +1,3 @@
-// src/features/tripDetail/tripDetailPricing.ts
-
 import type { SavedItem } from "@/src/core/savedItemTypes";
 
 export type PricePointSource = "saved_item" | "metadata" | "price_text" | null;
@@ -186,7 +184,10 @@ function choosePreferredPoint(points: PricePoint[]): PricePoint | null {
   if (points.length === 0) return null;
 
   const withAmounts = points.filter(
-    (point) => typeof point.amount === "number" && Number.isFinite(point.amount) && point.amount > 0
+    (point) =>
+      typeof point.amount === "number" &&
+      Number.isFinite(point.amount) &&
+      point.amount > 0
   );
 
   if (withAmounts.length === 0) return null;
@@ -202,13 +203,15 @@ function choosePreferredPoint(points: PricePoint[]): PricePoint | null {
 
   const pool = samePreferredCurrency.length > 0 ? samePreferredCurrency : withAmounts;
 
-  return pool.sort((a, b) => {
-    if (rankDisplayMode(a.displayMode) !== rankDisplayMode(b.displayMode)) {
-      return rankDisplayMode(a.displayMode) - rankDisplayMode(b.displayMode);
-    }
+  return (
+    pool.sort((a, b) => {
+      if (rankDisplayMode(a.displayMode) !== rankDisplayMode(b.displayMode)) {
+        return rankDisplayMode(a.displayMode) - rankDisplayMode(b.displayMode);
+      }
 
-    return (a.amount ?? Number.POSITIVE_INFINITY) - (b.amount ?? Number.POSITIVE_INFINITY);
-  })[0] ?? null;
+      return (a.amount ?? Number.POSITIVE_INFINITY) - (b.amount ?? Number.POSITIVE_INFINITY);
+    })[0] ?? null
+  );
 }
 
 export function chooseBestPricePoint(
@@ -235,7 +238,11 @@ export function sumTripCorePrice(args: {
 }): PricePoint | null {
   const { tickets, flights, hotels } = args;
 
-  if (!isPositiveAmount(tickets?.amount) || !isPositiveAmount(flights?.amount) || !isPositiveAmount(hotels?.amount)) {
+  if (
+    !isPositiveAmount(tickets?.amount) ||
+    !isPositiveAmount(flights?.amount) ||
+    !isPositiveAmount(hotels?.amount)
+  ) {
     return null;
   }
 
