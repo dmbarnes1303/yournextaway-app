@@ -1,3 +1,5 @@
+// src/services/flights.ts
+
 import { getBackendBaseUrl } from "@/src/config/env";
 
 export type FlightOffer = {
@@ -91,7 +93,9 @@ function safeUrl(value: unknown): string {
   if (!raw) return "";
 
   try {
-    return new URL(raw).toString();
+    const parsed = new URL(raw);
+    if (!/^https?:$/i.test(parsed.protocol)) return "";
+    return parsed.toString();
   } catch {
     return "";
   }
@@ -149,8 +153,8 @@ function buildUrl(params: {
   limit?: number;
   page?: number;
   market?: string;
-}) {
-  const base = getBackendBaseUrl();
+}): string | null {
+  const base = clean(getBackendBaseUrl());
   if (!base) return null;
 
   const originIata = upper(params.originIata);
@@ -206,10 +210,10 @@ function normalizeOffer(input: BackendFlightOffer | null | undefined): FlightOff
     duration != null
       ? Math.max(0, Math.floor(duration))
       : durationTo != null
-      ? Math.max(0, Math.floor(durationTo))
-      : null;
+        ? Math.max(0, Math.floor(durationTo))
+        : null;
 
-  if (!origin || !destination || price == null || !departureTime || !deepLink) {
+  if (!origin || !destination || price == null || price <= 0 || !departureTime || !deepLink) {
     return null;
   }
 
@@ -250,6 +254,39 @@ function sortOffers(a: FlightOffer, b: FlightOffer): number {
   return a.departureTime.localeCompare(b.departureTime);
 }
 
+function dedupeOffers(offers: FlightOffer[]): FlightOffer[] {
+  const seen = new Map<string, FlightOffer>();
+
+  for (const offer of offers) {
+    const key = [
+      offer.origin,
+      offer.destination,
+      offer.departureTime,
+      offer.returnDepartureTime ?? "",
+      offer.airline,
+      offer.flightNumber ?? "",
+      String(offer.price),
+    ].join("|");
+
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, offer);
+      continue;
+    }
+
+    const existingStops =
+      typeof existing.stops === "number" ? existing.stops : Number.POSITIVE_INFINITY;
+    const nextStops =
+      typeof offer.stops === "number" ? offer.stops : Number.POSITIVE_INFINITY;
+
+    if (nextStops < existingStops) {
+      seen.set(key, offer);
+    }
+  }
+
+  return Array.from(seen.values()).sort(sortOffers);
+}
+
 function normalizeSearchResult(parsed: BackendFlightSearchResult | null): FlightSearchResult {
   if (!parsed) {
     return {
@@ -262,20 +299,23 @@ function normalizeSearchResult(parsed: BackendFlightSearchResult | null): Flight
     };
   }
 
-  const offers = Array.isArray(parsed.offers)
-    ? parsed.offers
-        .map((offer) => normalizeOffer(offer))
-        .filter((offer): offer is FlightOffer => offer !== null)
-        .sort(sortOffers)
-    : [];
+  const offers = dedupeOffers(
+    Array.isArray(parsed.offers)
+      ? parsed.offers
+          .map((offer) => normalizeOffer(offer))
+          .filter((offer): offer is FlightOffer => offer !== null)
+      : []
+  );
 
   const cheapest =
     normalizeOffer(parsed.cheapest) ??
     offers[0] ??
     null;
 
+  const hasUsableData = offers.length > 0 || cheapest !== null;
+
   return {
-    ok: Boolean(parsed.ok),
+    ok: hasUsableData ? true : Boolean(parsed.ok),
     offers,
     cheapest,
     cached: Boolean(parsed.cached),
@@ -344,7 +384,7 @@ export async function searchFlights(params: {
     if (!res.ok) {
       return {
         ...normalized,
-        ok: false,
+        ok: normalized.offers.length > 0 || normalized.cheapest !== null,
         error: normalized.error || `http_${res.status}`,
       };
     }
