@@ -164,7 +164,10 @@ function addDaysToIsoDate(iso: string, offset: number): string | null {
   return `${y}-${m}-${day}`;
 }
 
-function defaultTripWindowFromFixtureDate(iso: string | null): { start: string | null; end: string | null } {
+function defaultTripWindowFromFixtureDate(iso: string | null): {
+  start: string | null;
+  end: string | null;
+} {
   const dateOnly = cleanText(iso);
   if (!dateOnly) return { start: null, end: null };
 
@@ -434,6 +437,9 @@ export default function TripBuildScreen() {
   const [endIso, setEndIso] = useState(routeWindow.to);
   const [notes, setNotes] = useState("");
   const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(params.to)));
+  const [hasManualDateOverride, setHasManualDateOverride] = useState<boolean>(
+    Boolean(isIsoDateOnly(params.from) || isIsoDateOnly(params.to))
+  );
 
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
   const [existingMatchIds, setExistingMatchIds] = useState<string[]>([]);
@@ -531,10 +537,12 @@ export default function TripBuildScreen() {
           setStartIso(routeWindow.from);
           setEndIso(routeWindow.to);
           setEndTouched(true);
+          setHasManualDateOverride(true);
         } else {
           setStartIso(t.startDate);
           setEndIso(t.endDate);
           setEndTouched(true);
+          setHasManualDateOverride(true);
         }
 
         setNotes(t.notes ?? "");
@@ -602,13 +610,16 @@ export default function TripBuildScreen() {
           setStartIso(routeWindow.from);
           setEndIso(routeWindow.to);
           setEndTouched(true);
+          setHasManualDateOverride(true);
         } else {
           const d0 = fixtureDateOnly(r);
           const derived = defaultTripWindowFromFixtureDate(d0);
 
           if (derived.start) setStartIso(derived.start);
           if (derived.end) setEndIso(derived.end);
+
           setEndTouched(false);
+          setHasManualDateOverride(false);
         }
 
         if (params.cityArea) setNotesIfEmpty(`Stay area: ${params.cityArea}`);
@@ -729,17 +740,24 @@ export default function TripBuildScreen() {
   useEffect(() => {
     if (!selectedFixture) return;
 
-    if (!isIsoDateOnly(params.from) && !isIsoDateOnly(params.to)) {
-      const d0 = fixtureDateOnly(selectedFixture);
-      const derived = defaultTripWindowFromFixtureDate(d0);
-
-      if (derived.start) setStartIso(derived.start);
-      if (derived.end) setEndIso(derived.end);
-      setEndTouched(false);
+    if (
+      isEditing ||
+      hasManualDateOverride ||
+      isIsoDateOnly(params.from) ||
+      isIsoDateOnly(params.to)
+    ) {
+      if (isEditing) setSetAsPrimaryOnSave(false);
+      return;
     }
 
-    if (isEditing) setSetAsPrimaryOnSave(false);
-  }, [selectedFixture, isEditing, params.from, params.to]);
+    const d0 = fixtureDateOnly(selectedFixture);
+    const derived = defaultTripWindowFromFixtureDate(d0);
+
+    if (derived.start) setStartIso(derived.start);
+    if (derived.end) setEndIso(derived.end);
+
+    setEndTouched(false);
+  }, [selectedFixture, isEditing, hasManualDateOverride, params.from, params.to]);
 
   const selectedRankedTrip = useMemo<RankedTrip | null>(() => {
     if (!selectedFixture) return null;
@@ -1318,9 +1336,24 @@ export default function TripBuildScreen() {
                       key={id || String(i)}
                       onPress={async () => {
                         setSelectedFixture(r);
+
                         const ids = await computePlaceholderIdsForFixture(r, params.season);
                         setPlaceholderTbcIds(ids);
                         setError(null);
+
+                        if (
+                          !isEditing &&
+                          !hasManualDateOverride &&
+                          !isIsoDateOnly(params.from) &&
+                          !isIsoDateOnly(params.to)
+                        ) {
+                          const d0 = fixtureDateOnly(r);
+                          const derived = defaultTripWindowFromFixtureDate(d0);
+
+                          if (derived.start) setStartIso(derived.start);
+                          if (derived.end) setEndIso(derived.end);
+                          setEndTouched(false);
+                        }
                       }}
                       style={({ pressed }) => [
                         styles.fxCard,
