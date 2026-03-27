@@ -1,5 +1,3 @@
-// src/features/tripDetail/tripDetailAffiliates.ts
-
 import type { AffiliateUrls } from "@/src/features/tripDetail/helpers";
 import {
   buildMapsSearchUrl,
@@ -44,7 +42,6 @@ function addDays(ymd: string | null, offset: number): string | null {
   return `${y}-${m}-${day}`;
 }
 
-// CRITICAL FIX → return null, not ""
 function safeUrl(value: unknown): string | null {
   const raw = clean(value);
   if (!raw) return null;
