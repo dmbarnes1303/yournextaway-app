@@ -54,9 +54,12 @@ export function getBookingWindow(args: {
   const matchStart = addDays(kickoffDate ?? null, -1);
   const matchEnd = addDays(kickoffDate ?? null, 1);
 
+  // Truth:
+  // - default trip window is kickoff -1 / +1
+  // - once saved or edited, the trip dates are the source of truth
   return {
-    startDate: matchStart || tripStart,
-    endDate: matchEnd || tripEnd,
+    startDate: tripStart || matchStart,
+    endDate: tripEnd || matchEnd,
   };
 }
 
@@ -87,22 +90,22 @@ export function buildAffiliateUrls(args: {
   return {
     ticketsUrl: built.ticketsUrl || "",
     flightsUrl: built.flightsUrl || "",
-    staysUrl: built.staysUrl || "",
-    trainsUrl: built.trainsUrl || "",
-    busesUrl: built.busesUrl || "",
+    staysUrl: built.hotelsUrl || "",
+    trainsUrl: built.transportUrl || built.omioUrl || "",
+    busesUrl: built.transportUrl || built.omioUrl || "",
     transfersUrl: built.transfersUrl || "",
     insuranceUrl: built.insuranceUrl || "",
-    thingsUrl: built.thingsUrl || "",
-    carHireUrl: built.carHireUrl || "",
+    thingsUrl: built.experiencesUrl || "",
+    carHireUrl: "",
     mapsUrl: built.mapsUrl || buildMapsSearchUrl(`${clean(cityName)} travel`),
-    officialSiteUrl: built.officialSiteUrl || "",
+    officialSiteUrl: "",
     claimsUrl: built.claimsUrl || "",
 
     // compatibility
-    hotelsUrl: built.hotelsUrl || built.staysUrl || "",
-    experiencesUrl: built.experiencesUrl || built.thingsUrl || "",
-    transportUrl: built.transportUrl || built.trainsUrl || "",
-    omioUrl: built.omioUrl || built.trainsUrl || "",
+    hotelsUrl: built.hotelsUrl || "",
+    experiencesUrl: built.experiencesUrl || "",
+    transportUrl: built.transportUrl || built.omioUrl || "",
+    omioUrl: built.omioUrl || built.transportUrl || "",
   };
 }
 
