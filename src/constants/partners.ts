@@ -48,7 +48,6 @@ export const CANONICAL_PARTNER_IDS = [
   "footballticketnet",
   "sportsevents365",
   "gigsberg",
-  "seatpick",
 
   // Flights
   "aviasales",
@@ -172,7 +171,6 @@ export const AffiliateConfig = {
   sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=yna",
   footballticketnetTracked: "",
   gigsbergTracked: "",
-  seatpickTracked: "",
 
   // Things
   getyourguidePartnerId: "YNA123",
@@ -213,7 +211,7 @@ export const PARTNER_REGISTRY = [
     fallback: {
       mode: "partner_fallback",
       reason: "Use other ticket marketplaces if direct routing is unavailable.",
-      partnerIds: ["sportsevents365", "gigsberg", "seatpick"],
+      partnerIds: ["sportsevents365", "gigsberg"],
       baseUrl: "https://www.footballticketnet.com/",
     },
   },
@@ -230,7 +228,7 @@ export const PARTNER_REGISTRY = [
     fallback: {
       mode: "partner_fallback",
       reason: "Fallback to other live ticket providers if needed.",
-      partnerIds: ["footballticketnet", "gigsberg", "seatpick"],
+      partnerIds: ["footballticketnet", "gigsberg"],
       baseUrl: "https://www.sportsevents365.com/",
     },
   },
@@ -247,25 +245,8 @@ export const PARTNER_REGISTRY = [
     fallback: {
       mode: "partner_fallback",
       reason: "Fallback ticket marketplace.",
-      partnerIds: ["sportsevents365", "footballticketnet", "seatpick"],
+      partnerIds: ["sportsevents365", "footballticketnet"],
       baseUrl: "https://www.gigsberg.com/",
-    },
-  },
-  {
-    id: "seatpick",
-    display: { name: "SeatPick", badgeText: "SP" },
-    categories: ["tickets"],
-    primaryCategory: "tickets",
-    live: false,
-    capabilities: { affiliate: false, api: false, utility: false, internal: false },
-    aliases: ["seatpick", "seat_pick"],
-    baseUrl: "https://seatpick.com/",
-    trackedConfigKey: "seatpickTracked",
-    fallback: {
-      mode: "partner_fallback",
-      reason: "Kept only for compatibility while not live.",
-      partnerIds: ["sportsevents365", "footballticketnet", "gigsberg"],
-      baseUrl: "https://seatpick.com/",
     },
   },
   {
@@ -642,7 +623,9 @@ export function getCanonicalPartnerId(input: PartnerId | string): PartnerId {
 /* Registry lookups                                                           */
 /* -------------------------------------------------------------------------- */
 
-export function getPartnerOrNull(input: PartnerId | string | null | undefined): PartnerDefinition | null {
+export function getPartnerOrNull(
+  input: PartnerId | string | null | undefined
+): PartnerDefinition | null {
   const canonical = canonicalizePartnerId(input);
   return canonical ? PARTNER_REGISTRY_BY_ID[canonical] ?? null : null;
 }
