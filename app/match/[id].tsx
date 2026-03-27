@@ -32,13 +32,10 @@ import {
 
 import { getStadiumByTeamFromRegistry } from "@/src/data/stadiumRegistry";
 import { normalizeTeamKey } from "@/src/data/teams";
+import { normalizeCityKey } from "@/src/utils/city";
 
 import { mapTicketProviderToPartnerId } from "@/src/features/tripDetail/helpers";
 import type { PartnerId } from "@/src/core/partners";
-
-/* -------------------------------------------------------------------------- */
-/* CORE HELPERS                                                               */
-/* -------------------------------------------------------------------------- */
 
 type RouteParams = Record<string, string | string[] | undefined>;
 
@@ -54,6 +51,7 @@ function getParam(params: RouteParams, key: string): string {
 
 function formatKickoff(iso?: string | null): string {
   if (!iso) return "Kick-off TBC";
+
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Kick-off TBC";
 
@@ -66,7 +64,7 @@ function formatKickoff(iso?: string | null): string {
   });
 }
 
-function formatPrice(price?: string | null): string {
+function formatTicketPrice(price?: string | null): string {
   const p = clean(price);
   if (!p) return "View price";
   if (/^[£€$]/.test(p)) return `From ${p}`;
@@ -115,14 +113,18 @@ function buildCanonicalTripBuildParams(args: {
     ...(clean(args.leagueId) ? { leagueId: clean(args.leagueId) } : {}),
     ...(clean(args.season) ? { season: clean(args.season) } : {}),
     ...(clean(args.city) ? { city: clean(args.city) } : {}),
-    ...(clean(args.from) ? { from: clean(args.from) } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
-    ...(clean(args.to) ? { to: clean(args.to) } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
+    ...(clean(args.from)
+      ? { from: clean(args.from) }
+      : fallbackWindow.from
+        ? { from: fallbackWindow.from }
+        : {}),
+    ...(clean(args.to)
+      ? { to: clean(args.to) }
+      : fallbackWindow.to
+        ? { to: fallbackWindow.to }
+        : {}),
   };
 }
-
-/* -------------------------------------------------------------------------- */
-/* UI COMPONENTS                                                              */
-/* -------------------------------------------------------------------------- */
 
 function Crest({ name, uri }: { name: string; uri?: string | null }) {
   return (
@@ -130,8 +132,39 @@ function Crest({ name, uri }: { name: string; uri?: string | null }) {
       {uri ? (
         <Image source={{ uri }} style={styles.crestImg} />
       ) : (
-        <Text style={styles.crestFallback}>{name.slice(0, 2)}</Text>
+        <Text style={styles.crestFallback}>{name.slice(0, 2).toUpperCase()}</Text>
       )}
+    </View>
+  );
+}
+
+function GuideCard({
+  title,
+  subtitle,
+  buttonLabel,
+  onPress,
+  disabled,
+}: {
+  title: string;
+  subtitle: string;
+  buttonLabel: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View style={[styles.guideCard, disabled && styles.guideCardDisabled]}>
+      <View style={styles.guideCardTextWrap}>
+        <Text style={styles.guideCardTitle}>{title}</Text>
+        <Text style={styles.guideCardText}>{subtitle}</Text>
+      </View>
+
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        style={[styles.guideButton, disabled && styles.guideButtonDisabled]}
+      >
+        <Text style={styles.guideButtonText}>{buttonLabel}</Text>
+      </Pressable>
     </View>
   );
 }
@@ -150,28 +183,21 @@ function TicketCard({
   locked: boolean;
 }) {
   return (
-    <Pressable
-      style={[styles.ticketCard, isBest && styles.ticketBest]}
-      onPress={onPress}
-    >
-      <Text style={styles.ticketPrice}>{formatPrice(option.priceText)}</Text>
+    <Pressable style={[styles.ticketCard, isBest && styles.ticketBest]} onPress={onPress}>
+      <Text style={styles.ticketPrice}>{formatTicketPrice(option.priceText)}</Text>
 
       <Text style={styles.ticketMeta}>
-        {option.exact ? "Exact match" : "Live availability"}
+        {option.exact ? "Exact fixture match" : "Current ticket option"}
       </Text>
 
       <Text style={styles.ticketProvider}>{option.provider}</Text>
 
       <Text style={styles.ticketCTA}>
-        {loading ? "Opening…" : locked ? "Save trip to open" : "View tickets"}
+        {loading ? "Opening…" : locked ? "Start trip to open" : "View tickets"}
       </Text>
     </Pressable>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* SCREEN                                                                     */
-/* -------------------------------------------------------------------------- */
 
 export default function MatchScreen() {
   const router = useRouter();
@@ -194,10 +220,6 @@ export default function MatchScreen() {
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [openingUrl, setOpeningUrl] = useState<string | null>(null);
 
-  /* ------------------------------------------------------------------ */
-  /* DATA                                                               */
-  /* ------------------------------------------------------------------ */
-
   const home = clean(trip?.homeName ?? fixture?.teams?.home?.name);
   const away = clean(trip?.awayName ?? fixture?.teams?.away?.name);
 
@@ -206,23 +228,27 @@ export default function MatchScreen() {
 
   const venueName = clean(fixture?.fixture?.venue?.name);
   const venueCity = clean(fixture?.fixture?.venue?.city);
-  const venue = [venueName, venueCity].filter(Boolean).join(" • ");
+  const venueLine = [venueName, venueCity].filter(Boolean).join(" • ");
 
   const crestHome = fixture?.teams?.home?.logo;
   const crestAway = fixture?.teams?.away?.logo;
 
-  const effectiveLeagueId =
-    clean(trip?.leagueId) ||
-    clean(fixture?.league?.id) ||
-    routeLeagueId;
+  const effectiveLeagueId = clean(trip?.leagueId) || clean(fixture?.league?.id) || routeLeagueId;
 
   const effectiveSeason =
-    routeSeason ||
-    clean((fixture?.league as { season?: unknown } | undefined)?.season);
+    routeSeason || clean((fixture?.league as { season?: unknown } | undefined)?.season);
 
   const stadium = useMemo(() => {
-    return getStadiumByTeamFromRegistry(normalizeTeamKey(home));
+    return home ? getStadiumByTeamFromRegistry(normalizeTeamKey(home)) : null;
   }, [home]);
+
+  const teamGuideKey = useMemo(() => {
+    return home ? normalizeTeamKey(home) : "";
+  }, [home]);
+
+  const cityGuideKey = useMemo(() => {
+    return venueCity ? normalizeCityKey(venueCity) : "";
+  }, [venueCity]);
 
   const tripBuildParams = useMemo(
     () =>
@@ -235,17 +261,19 @@ export default function MatchScreen() {
         from: routeFrom,
         to: routeTo,
       }),
-    [fixtureId, effectiveLeagueId, effectiveSeason, venueCity, trip?.displayCity, kickoffIso, routeFrom, routeTo]
+    [
+      fixtureId,
+      effectiveLeagueId,
+      effectiveSeason,
+      venueCity,
+      trip?.displayCity,
+      kickoffIso,
+      routeFrom,
+      routeTo,
+    ]
   );
 
-  /* ------------------------------------------------------------------ */
-  /* TICKETS                                                            */
-  /* ------------------------------------------------------------------ */
-
-  const options = useMemo(
-    () => (ticketResult?.options ?? []).slice(0, 3),
-    [ticketResult]
-  );
+  const options = useMemo(() => (ticketResult?.options ?? []).slice(0, 3), [ticketResult]);
 
   const ticketsLocked = !clean(tripId);
 
@@ -282,8 +310,8 @@ export default function MatchScreen() {
 
     if (!tripId) {
       Alert.alert(
-        "Save trip first",
-        "Phase 1 uses tracked partner opens only. Save the trip first, then open tickets from the trip flow."
+        "Start a trip first",
+        "To open ticket partners and track bookings in Wallet, start a trip from this match first."
       );
       buildTrip();
       return;
@@ -330,28 +358,52 @@ export default function MatchScreen() {
     }
   }
 
-  /* ------------------------------------------------------------------ */
-  /* NAV                                                                */
-  /* ------------------------------------------------------------------ */
-
-  const goBack = () => {
+  function goBack() {
     if (tripId) {
       router.push({ pathname: "/trip/[id]", params: { id: tripId } } as never);
       return;
     }
     router.back();
-  };
+  }
 
-  const buildTrip = () => {
+  function buildTrip() {
     router.push({
       pathname: "/trip/build",
       params: tripBuildParams,
     } as never);
-  };
+  }
 
-  /* ------------------------------------------------------------------ */
-  /* GUARD                                                              */
-  /* ------------------------------------------------------------------ */
+  function openTeamGuide() {
+    if (!teamGuideKey) {
+      Alert.alert("Guide unavailable", "No team guide is available for this match yet.");
+      return;
+    }
+
+    router.push({
+      pathname: "/team/[teamKey]",
+      params: {
+        teamKey: teamGuideKey,
+        from: routeFrom || tripBuildParams.from,
+        to: routeTo || tripBuildParams.to,
+      },
+    } as never);
+  }
+
+  function openCityGuide() {
+    if (!cityGuideKey) {
+      Alert.alert("Guide unavailable", "No city guide is available for this match yet.");
+      return;
+    }
+
+    router.push({
+      pathname: "/city/key/[cityKey]",
+      params: {
+        cityKey: cityGuideKey,
+        from: routeFrom || tripBuildParams.from,
+        to: routeTo || tripBuildParams.to,
+      },
+    } as never);
+  }
 
   if (!fixtureId) {
     return (
@@ -375,12 +427,11 @@ export default function MatchScreen() {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <GlassCard level="default" variant="matte" style={styles.heroCard} noPadding>
             <View style={styles.heroGlow} pointerEvents="none" />
+
             <View style={styles.heroInner}>
               <View style={styles.heroTopRow}>
                 <Text style={styles.heroKicker}>Match</Text>
-                {fixture?.league?.name ? (
-                  <Chip label={fixture.league.name} variant="default" />
-                ) : null}
+                {fixture?.league?.name ? <Chip label={fixture.league.name} variant="default" /> : null}
               </View>
 
               <View style={styles.teamsRow}>
@@ -408,7 +459,7 @@ export default function MatchScreen() {
                   {home && away ? `${home} vs ${away}` : "Match"}
                 </Text>
                 <Text style={styles.heroMeta}>{kickoffText}</Text>
-                {!!venue && <Text style={styles.heroSub}>{venue}</Text>}
+                {!!venueLine && <Text style={styles.heroSub}>{venueLine}</Text>}
               </View>
 
               <View style={styles.heroActions}>
@@ -430,8 +481,8 @@ export default function MatchScreen() {
                 <Text style={styles.sectionTitle}>Tickets</Text>
                 <Text style={styles.sectionSub}>
                   {ticketsLocked
-                    ? "You can compare options here, but Phase 1 only opens tracked ticket links from a saved trip."
-                    : "Start with the strongest current option."}
+                    ? "Compare current ticket options here. To open a ticket partner and track the booking, start a trip from this match first."
+                    : "Compare current ticket options and choose the route that makes most sense."}
                 </Text>
               </View>
             </View>
@@ -453,7 +504,7 @@ export default function MatchScreen() {
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyTitle}>No ticket options loaded yet</Text>
                 <Text style={styles.emptyText}>
-                  Tap “Compare tickets” and the best live options will appear here.
+                  Tap “Compare tickets” and the best current options will appear here.
                 </Text>
               </View>
             )}
@@ -462,55 +513,68 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleWrap}>
-                <Text style={styles.sectionTitle}>Quick local info</Text>
-                <Text style={styles.sectionSub}>Only the basics you actually need.</Text>
+                <Text style={styles.sectionTitle}>About this trip</Text>
+                <Text style={styles.sectionSub}>
+                  A few useful planning links before you commit.
+                </Text>
               </View>
             </View>
 
+            <View style={styles.guideList}>
+              <GuideCard
+                title="Home team guide"
+                subtitle={
+                  home
+                    ? `Matchday feel, stadium context and planning notes for ${home}.`
+                    : "Open the home team guide."
+                }
+                buttonLabel="Open guide"
+                onPress={openTeamGuide}
+                disabled={!teamGuideKey}
+              />
+
+              <GuideCard
+                title="City guide"
+                subtitle={
+                  venueCity
+                    ? `Stay areas, getting around and city-break context for ${venueCity}.`
+                    : "Open the city guide."
+                }
+                buttonLabel="Open guide"
+                onPress={openCityGuide}
+                disabled={!cityGuideKey}
+              />
+            </View>
+
             {stadium ? (
-              <View style={styles.quickInfo}>
-                {!!stadium.airport && (
-                  <Text style={styles.quickLine}>Airport: {stadium.airport}</Text>
-                )}
+              <View style={styles.localInfoWrap}>
+                {!!stadium.airport ? (
+                  <Text style={styles.localInfoLine}>Airport: {stadium.airport}</Text>
+                ) : null}
 
                 {Array.isArray(stadium.transit) && stadium.transit.length > 0 ? (
-                  <Text style={styles.quickLine}>
+                  <Text style={styles.localInfoLine}>
                     Getting there: {stadium.transit[0].label}
                     {typeof stadium.transit[0].minutes === "number"
-                      ? ` • ${stadium.transit[0].minutes} min walk`
+                      ? ` • ${stadium.transit[0].minutes} min`
                       : ""}
                   </Text>
                 ) : null}
 
                 {Array.isArray(stadium.stayAreas) && stadium.stayAreas.length > 0 ? (
-                  <Text style={styles.quickLine}>
-                    Stay area: {stadium.stayAreas[0].area}
+                  <Text style={styles.localInfoLine}>
+                    Best area to stay: {stadium.stayAreas[0].area}
                   </Text>
                 ) : null}
               </View>
             ) : (
               <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>No local guide yet</Text>
+                <Text style={styles.emptyTitle}>Local basics not available yet</Text>
                 <Text style={styles.emptyText}>
-                  You can still plan from this match and check directions later.
+                  You can still compare tickets and build the trip from this match.
                 </Text>
               </View>
             )}
-          </GlassCard>
-
-          <GlassCard level="default" variant="brand" style={styles.ctaCard}>
-            <Text style={styles.ctaKicker}>Next step</Text>
-            <Text style={styles.ctaTitle}>Turn this into a trip</Text>
-            <Text style={styles.ctaText}>
-              Save the trip first, then book tickets, stay and travel through the tracked trip flow.
-            </Text>
-
-            <Button
-              label="Plan trip from this match"
-              tone="gold"
-              onPress={buildTrip}
-              glow
-            />
           </GlassCard>
 
           {loading ? (
@@ -765,11 +829,66 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
   },
 
-  quickInfo: {
+  guideList: {
     gap: 10,
   },
 
-  quickLine: {
+  guideCard: {
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    gap: 10,
+  },
+
+  guideCardDisabled: {
+    opacity: 0.65,
+  },
+
+  guideCardTextWrap: {
+    gap: 4,
+  },
+
+  guideCardTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  guideCardText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  guideButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(87,162,56,0.28)",
+    backgroundColor: "rgba(87,162,56,0.10)",
+  },
+
+  guideButtonDisabled: {
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+
+  guideButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  localInfoWrap: {
+    gap: 10,
+  },
+
+  localInfoLine: {
     color: theme.colors.textPrimary,
     fontSize: 13,
     lineHeight: 18,
@@ -779,61 +898,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
     backgroundColor: "rgba(255,255,255,0.03)",
-  },
-
-  providerBadgeWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  providerBadgeWrapLabeled: {
-    maxWidth: 180,
-  },
-
-  providerBadgeCircle: {
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  providerBadgeCircleText: {
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.4,
-  },
-
-  providerBadgeLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  ctaCard: {
-    padding: 16,
-    borderRadius: 24,
-    gap: 12,
-  },
-
-  ctaKicker: {
-    color: "#8EF2A5",
-    fontSize: 11,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.65,
-    textTransform: "uppercase",
-  },
-
-  ctaTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 22,
-    lineHeight: 27,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  ctaText: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: theme.fontWeight.medium,
   },
 
   loadingWrap: {
