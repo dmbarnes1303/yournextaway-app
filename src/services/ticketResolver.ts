@@ -1,3 +1,5 @@
+// src/services/ticketResolver.ts
+
 import { getBackendBaseUrl } from "../config/env";
 
 export type TicketResolutionOption = {
@@ -36,8 +38,8 @@ export type ResolveTicketArgs = {
 
 const REQUEST_TIMEOUT_MS = 20000;
 
-function clean(v: unknown): string {
-  return typeof v === "string" ? v.trim() : String(v ?? "").trim();
+function clean(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
 function safeJsonParse<T>(value: string): T | null {
@@ -53,23 +55,27 @@ function safeUrl(value: unknown): string | null {
   if (!raw) return null;
 
   try {
-    return new URL(raw).toString();
+    const parsed = new URL(raw);
+    if (!/^https?:$/i.test(parsed.protocol)) return null;
+    return parsed.toString();
   } catch {
     return null;
   }
 }
 
 function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
+  const normalizedBase = clean(base);
   const homeName = clean(args.homeName);
   const awayName = clean(args.awayName);
   const kickoffIso = clean(args.kickoffIso);
 
-  if (!base || !homeName || !awayName || !kickoffIso) return null;
+  if (!normalizedBase || !homeName || !awayName || !kickoffIso) return null;
 
   const qs = new URLSearchParams({
     homeName,
     awayName,
     kickoffIso,
+    _ts: String(Date.now()),
   });
 
   const fixtureId = clean(args.fixtureId);
@@ -81,33 +87,45 @@ function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
   if (leagueId) qs.set("leagueId", leagueId);
   if (args.debugNoCache) qs.set("debugNoCache", "1");
 
-  qs.set("_ts", String(Date.now()));
+  return `${normalizedBase}/tickets/resolve?${qs.toString()}`;
+}
 
-  return `${base}/tickets/resolve?${qs.toString()}`;
+function normalizeReason(value: unknown): TicketResolutionOption["reason"] {
+  const raw = clean(value);
+  if (raw === "exact_event") return "exact_event";
+  if (raw === "partial_match") return "partial_match";
+  return "search_fallback";
+}
+
+function normalizeTopLevelReason(
+  value: unknown,
+  hasProvider: boolean
+): TicketResolutionResult["reason"] {
+  const raw = clean(value);
+
+  if (raw === "exact_event") return "exact_event";
+  if (raw === "search_fallback") return "search_fallback";
+  if (raw === "not_found") return "not_found";
+
+  return hasProvider ? "search_fallback" : "not_found";
+}
+
+function normalizeScore(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 function normalizeOption(input: unknown): TicketResolutionOption | null {
-  if (!input || typeof input !== "object") return null;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
 
   const obj = input as Record<string, unknown>;
+
   const provider = clean(obj.provider);
   const url = safeUrl(obj.url);
   const title = clean(obj.title);
-  const reason = clean(obj.reason);
-
-  const score =
-    typeof obj.score === "number" && Number.isFinite(obj.score)
-      ? obj.score
-      : null;
+  const score = normalizeScore(obj.score);
 
   if (!provider || !url || !title || score == null) return null;
-
-  const normalizedReason =
-    reason === "exact_event" ||
-    reason === "search_fallback" ||
-    reason === "partial_match"
-      ? (reason as TicketResolutionOption["reason"])
-      : "search_fallback";
 
   return {
     provider,
@@ -116,8 +134,64 @@ function normalizeOption(input: unknown): TicketResolutionOption | null {
     url,
     title,
     priceText: clean(obj.priceText) || null,
-    reason: normalizedReason,
+    reason: normalizeReason(obj.reason),
   };
+}
+
+function dedupeAndSortOptions(options: TicketResolutionOption[]): TicketResolutionOption[] {
+  const byKey = new Map<string, TicketResolutionOption>();
+
+  for (const option of options) {
+    const key = `${option.provider.toLowerCase()}|${option.url}`;
+
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, option);
+      continue;
+    }
+
+    const shouldReplace =
+      (option.exact && !existing.exact) ||
+      option.score > existing.score ||
+      (option.score === existing.score &&
+        Boolean(clean(option.priceText)) &&
+        !Boolean(clean(existing.priceText)));
+
+    if (shouldReplace) {
+      byKey.set(key, option);
+    }
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => {
+    if (a.exact && !b.exact) return -1;
+    if (!a.exact && b.exact) return 1;
+    if (b.score !== a.score) return b.score - a.score;
+
+    const aHasPrice = Boolean(clean(a.priceText));
+    const bHasPrice = Boolean(clean(b.priceText));
+    if (aHasPrice && !bHasPrice) return -1;
+    if (!aHasPrice && bHasPrice) return 1;
+
+    return a.provider.localeCompare(b.provider);
+  });
+}
+
+function normalizeCheckedProviders(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const entry of value) {
+    const next = clean(entry);
+    if (!next) continue;
+    const key = next.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(next);
+  }
+
+  return out;
 }
 
 function normalizeResolutionResult(
@@ -125,11 +199,13 @@ function normalizeResolutionResult(
 ): TicketResolutionResult | null {
   if (!input) return null;
 
-  const normalizedOptions = Array.isArray(input.options)
-    ? (input.options
-        .map((x) => normalizeOption(x))
-        .filter(Boolean) as TicketResolutionOption[])
-    : [];
+  const normalizedOptions = dedupeAndSortOptions(
+    Array.isArray(input.options)
+      ? input.options
+          .map((x) => normalizeOption(x))
+          .filter((x): x is TicketResolutionOption => x !== null)
+      : []
+  );
 
   const fallbackTop = normalizedOptions[0] ?? null;
 
@@ -139,39 +215,28 @@ function normalizeResolutionResult(
   const priceText = clean(input.priceText) || fallbackTop?.priceText || null;
 
   const score =
-    typeof input.score === "number" && Number.isFinite(input.score)
-      ? input.score
-      : typeof fallbackTop?.score === "number"
-      ? fallbackTop.score
-      : null;
+    normalizeScore(input.score) ??
+    fallbackTop?.score ??
+    null;
 
   const exact =
     typeof input.exact === "boolean"
       ? input.exact
       : Boolean(fallbackTop?.exact);
 
-  const rawReason = clean(input.reason);
-  const reason =
-    rawReason === "exact_event" ||
-    rawReason === "search_fallback" ||
-    rawReason === "not_found"
-      ? (rawReason as TicketResolutionResult["reason"])
-      : provider
-      ? "search_fallback"
-      : "not_found";
+  const hasUsablePrimary = Boolean(provider && url && title);
+  const hasUsableOptions = normalizedOptions.length > 0;
 
   return {
-    ok: Boolean(input.ok),
+    ok: hasUsablePrimary || hasUsableOptions ? true : Boolean(input.ok),
     provider,
     exact,
     score,
     url,
     title,
     priceText,
-    reason,
-    checkedProviders: Array.isArray(input.checkedProviders)
-      ? input.checkedProviders.map((x) => clean(x)).filter(Boolean)
-      : [],
+    reason: normalizeTopLevelReason(input.reason, Boolean(provider)),
+    checkedProviders: normalizeCheckedProviders(input.checkedProviders),
     options: normalizedOptions,
     error: clean(input.error) || undefined,
   };
@@ -196,7 +261,7 @@ function makeErrorResult(error: string): TicketResolutionResult {
 export async function resolveTicketForFixture(
   args: ResolveTicketArgs
 ): Promise<TicketResolutionResult | null> {
-  const base = getBackendBaseUrl();
+  const base = clean(getBackendBaseUrl());
 
   if (!base) {
     return makeErrorResult("missing_backend_url");
@@ -236,16 +301,20 @@ export async function resolveTicketForFixture(
     }
 
     if (!res.ok) {
+      const hasUsableData =
+        Boolean(normalized.url && normalized.title && normalized.provider) ||
+        Boolean(normalized.options && normalized.options.length > 0);
+
       return {
         ...normalized,
-        ok: false,
+        ok: hasUsableData,
         error: normalized.error || `http_${res.status}`,
       };
     }
 
     return normalized;
-  } catch (e: any) {
-    const name = String(e?.name ?? "");
+  } catch (error: any) {
+    const name = String(error?.name ?? "");
 
     if (name === "AbortError") {
       return makeErrorResult("timeout");
