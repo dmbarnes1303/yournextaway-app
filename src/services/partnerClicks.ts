@@ -85,7 +85,7 @@ export function mapPartnerCategoryToSavedItemType(category: PartnerCategory): Sa
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
 
-function now() {
+function now(): number {
   return Date.now();
 }
 
@@ -136,10 +136,6 @@ function isDeterministicallyReusable(item: SavedItem): boolean {
   return item.status === "pending" || item.status === "saved" || item.status === "booked";
 }
 
-function isValidSavedItemStatus(value: unknown): value is SavedItemStatus {
-  return value === "saved" || value === "pending" || value === "booked" || value === "archived";
-}
-
 function isValidSavedItemType(value: unknown): value is SavedItemType {
   return (
     value === "tickets" ||
@@ -155,21 +151,21 @@ function isValidSavedItemType(value: unknown): value is SavedItemType {
   );
 }
 
-async function persistLastClick(next: LastPartnerClick | null) {
+async function persistLastClick(next: LastPartnerClick | null): Promise<void> {
   lastClick = next;
 
   try {
     await writeJson(STORAGE_KEY, next);
   } catch {
-    // best-effort only
+    // best effort only
   }
 }
 
-async function clearLastClickState() {
+async function clearLastClickState(): Promise<void> {
   await persistLastClick(null);
 }
 
-async function loadLastClickOnce() {
+async function loadLastClickOnce(): Promise<void> {
   if (lastClickLoaded) return;
   lastClickLoaded = true;
 
@@ -193,7 +189,7 @@ async function loadLastClickOnce() {
     const createdAt = Number(record.createdAt);
     const openedAt = Number(record.openedAt);
 
-    if (!itemId || !tripId || !partnerId || !url) return;
+    if (!itemId || !tripId || !url) return;
     if (!Number.isFinite(createdAt) || createdAt <= 0) return;
     if (!Number.isFinite(openedAt) || openedAt <= 0) return;
 
@@ -219,7 +215,7 @@ async function loadLastClickOnce() {
   }
 }
 
-async function ensureSavedItemsLoaded() {
+async function ensureSavedItemsLoaded(): Promise<void> {
   if (savedItemsStore.getState().loaded) return;
 
   try {
@@ -237,7 +233,7 @@ async function transitionIfCurrent(
   itemId: string,
   fromStatus: SavedItemStatus,
   toStatus: SavedItemStatus
-) {
+): Promise<void> {
   const id = cleanString(itemId);
   if (!id) return;
 
@@ -284,10 +280,15 @@ async function openBrowserGuarded(url: string) {
 function buildDefaultTitle(args: {
   partnerName: string;
   type: SavedItemType;
-  metadata?: Record<string, any>;
-}) {
+  metadata?: Record<string, unknown>;
+}): string {
   const city =
-    cleanString(args.metadata?.city ?? args.metadata?.destination ?? args.metadata?.place) || null;
+    cleanString(
+      (args.metadata as Record<string, unknown> | undefined)?.city ??
+        (args.metadata as Record<string, unknown> | undefined)?.destination ??
+        (args.metadata as Record<string, unknown> | undefined)?.place
+    ) || null;
+
   const label = getSavedItemTypeLabel(args.type);
 
   switch (args.type) {
@@ -353,7 +354,7 @@ function findReusableItem(args: {
   );
 }
 
-async function triggerReturnIfPresent(_reason: "appstate" | "browser_dismiss") {
+async function triggerReturnIfPresent(_reason: "appstate" | "browser_dismiss"): Promise<void> {
   const ts = now();
   if (returnInFlight) return;
   if (ts - lastReturnHandledAt < RETURN_DEDUPE_MS) return;
@@ -424,7 +425,7 @@ export function ensurePartnerReturnWatcher(
 
     if (!becameActive) return;
     void triggerReturnIfPresent("appstate");
-  }) as any;
+  }) as { remove: () => void };
 
   return () => {
     onReturnHandler = null;
@@ -460,7 +461,7 @@ export async function beginPartnerClick(args: {
   url: string;
   savedItemType?: SavedItemType;
   title?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }): Promise<SavedItem> {
   const tripId = cleanString(args.tripId);
   if (!tripId) throw new Error("tripId is required");
@@ -559,7 +560,7 @@ export async function beginPartnerClick(args: {
   }
 }
 
-export async function markBooked(itemId: string) {
+export async function markBooked(itemId: string): Promise<void> {
   const id = cleanString(itemId);
   if (!id) return;
 
@@ -579,7 +580,7 @@ export async function markBooked(itemId: string) {
   lastReturnHandledAt = now();
 }
 
-export async function markNotBooked(itemId: string) {
+export async function markNotBooked(itemId: string): Promise<void> {
   const id = cleanString(itemId);
   if (!id) return;
 
@@ -592,7 +593,7 @@ export async function markNotBooked(itemId: string) {
   lastReturnHandledAt = now();
 }
 
-export async function dismissReturnPrompt(itemId?: string) {
+export async function dismissReturnPrompt(itemId?: string): Promise<void> {
   await loadLastClickOnce();
 
   if (!lastClick) return;
@@ -610,7 +611,7 @@ export async function dismissReturnPrompt(itemId?: string) {
   }
 }
 
-export function clearLastClick(itemId?: string) {
+export function clearLastClick(itemId?: string): void {
   void dismissReturnPrompt(itemId);
 }
 
@@ -618,7 +619,7 @@ export function getLastClick(): LastPartnerClick | null {
   return lastClick;
 }
 
-export function __unsafeResetPartnerClickStateForDevOnly() {
+export function __unsafeResetPartnerClickStateForDevOnly(): void {
   try {
     appStateSub?.remove?.();
   } catch {
