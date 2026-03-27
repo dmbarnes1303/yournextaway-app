@@ -1,3 +1,5 @@
+// src/features/tripDetail/tripDetailAffiliates.ts
+
 import type { AffiliateUrls } from "@/src/features/tripDetail/helpers";
 import {
   buildMapsSearchUrl,
@@ -40,6 +42,19 @@ function addDays(ymd: string | null, offset: number): string | null {
   return `${y}-${m}-${day}`;
 }
 
+function safeUrl(value: unknown): string {
+  const raw = clean(value);
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    if (!/^https?:$/i.test(url.protocol)) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
 export function getBookingWindow(args: {
   trip: Trip | null;
   primaryKickoffIso: string | null;
@@ -54,9 +69,6 @@ export function getBookingWindow(args: {
   const defaultStart = addDays(kickoffDate ?? null, -1);
   const defaultEnd = addDays(kickoffDate ?? null, 1);
 
-  // Truth:
-  // - New trip default is fixture -1 day / +1 day
-  // - Once trip dates exist, they are the source of truth
   return {
     startDate: tripStart || defaultStart,
     endDate: tripEnd || defaultEnd,
@@ -87,25 +99,36 @@ export function buildAffiliateUrls(args: {
     cabinClass: "economy",
   });
 
+  const ticketsUrl = safeUrl(built.ticketsUrl);
+  const flightsUrl = safeUrl(built.flightsUrl);
+  const hotelsUrl = safeUrl(built.hotelsUrl);
+  const transfersUrl = safeUrl(built.transfersUrl);
+  const insuranceUrl = safeUrl(built.insuranceUrl);
+  const experiencesUrl = safeUrl(built.experiencesUrl);
+  const transportUrl = safeUrl(built.transportUrl) || safeUrl(built.omioUrl);
+  const omioUrl = safeUrl(built.omioUrl) || safeUrl(built.transportUrl);
+  const mapsUrl = safeUrl(built.mapsUrl) || safeUrl(buildMapsSearchUrl(`${clean(cityName)} travel`));
+  const claimsUrl = safeUrl(built.claimsUrl);
+
   return {
-    ticketsUrl: built.ticketsUrl || "",
-    flightsUrl: built.flightsUrl || "",
-    staysUrl: built.hotelsUrl || "",
-    trainsUrl: built.transportUrl || built.omioUrl || "",
-    busesUrl: built.transportUrl || built.omioUrl || "",
-    transfersUrl: built.transfersUrl || "",
-    insuranceUrl: built.insuranceUrl || "",
-    thingsUrl: built.experiencesUrl || "",
+    ticketsUrl,
+    flightsUrl,
+    staysUrl: hotelsUrl,
+    trainsUrl: transportUrl,
+    busesUrl: transportUrl,
+    transfersUrl,
+    insuranceUrl,
+    thingsUrl: experiencesUrl,
     carHireUrl: "",
-    mapsUrl: built.mapsUrl || buildMapsSearchUrl(`${clean(cityName)} travel`),
+    mapsUrl,
     officialSiteUrl: "",
-    claimsUrl: built.claimsUrl || "",
+    claimsUrl,
 
     // compatibility
-    hotelsUrl: built.hotelsUrl || "",
-    experiencesUrl: built.experiencesUrl || "",
-    transportUrl: built.transportUrl || built.omioUrl || "",
-    omioUrl: built.omioUrl || built.transportUrl || "",
+    hotelsUrl,
+    experiencesUrl,
+    transportUrl,
+    omioUrl,
   };
 }
 
@@ -150,11 +173,17 @@ export async function fetchLiveFlightPrice(args: {
     if (!result.ok || !result.cheapest) return null;
 
     const cheapest = result.cheapest;
+    if (!Number.isFinite(Number(cheapest.price)) || Number(cheapest.price) <= 0) {
+      return null;
+    }
+
+    const currency = clean(cheapest.currency).toUpperCase() || null;
+    const amount = Number(cheapest.price);
 
     return {
-      amount: cheapest.price,
-      currency: cheapest.currency,
-      text: `${cheapest.currency} ${cheapest.price}`,
+      amount,
+      currency,
+      text: currency ? `${currency} ${amount}` : `${amount}`,
       source: "metadata",
     };
   } catch {
