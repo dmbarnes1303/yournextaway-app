@@ -1,19 +1,26 @@
 import { Alert } from "react-native";
 
 import savedItemsStore from "@/src/state/savedItems";
+import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
 
 /**
  * Legacy compatibility wrapper.
  * Some older flows still call attachTicketProof(itemId).
  *
- * This now behaves as:
- * - load saved items
+ * Behaviour:
+ * - ensure saved items are loaded
  * - verify item exists
- * - pick and store attachment
- * - attach proof to the saved item
+ * - verify item is booked
+ * - pick/store attachment
+ * - attach only if not already attached
  * - return boolean for simple call sites
  */
+
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
+}
+
 async function ensureSavedItemsLoaded() {
   if (savedItemsStore.getState().loaded) return;
 
@@ -24,33 +31,60 @@ async function ensureSavedItemsLoaded() {
   }
 }
 
+function getAttachments(item?: SavedItem | null): WalletAttachment[] {
+  return Array.isArray(item?.attachments) ? item.attachments : [];
+}
+
+function showError(message: string) {
+  Alert.alert("Couldn’t add attachment", message || "Try again.", [{ text: "OK" }], {
+    cancelable: true,
+  });
+}
+
 export async function attachTicketProof(itemId: string): Promise<boolean> {
-  const id = String(itemId ?? "").trim();
+  const id = cleanString(itemId);
   if (!id) return false;
 
   try {
     await ensureSavedItemsLoaded();
 
-    const item = savedItemsStore.getById(id);
-    if (!item) {
-      Alert.alert("Couldn’t add attachment", "This booking could not be found.", [{ text: "OK" }], {
-        cancelable: true,
-      });
+    const before = savedItemsStore.getById(id) ?? null;
+    if (!before) {
+      showError("This booking could not be found.");
       return false;
     }
 
-    const att = await pickAndStoreAttachmentForItem(id);
-    await savedItemsStore.addAttachment(id, att);
+    if (before.status !== "booked") {
+      showError("Only booked items can store proof.");
+      return false;
+    }
+
+    const attachment = await pickAndStoreAttachmentForItem(id);
+    if (!attachment) return false;
+
+    await ensureSavedItemsLoaded();
+
+    const afterPick = savedItemsStore.getById(id) ?? null;
+    if (!afterPick) {
+      showError("This booking could not be found.");
+      return false;
+    }
+
+    const alreadyAttached = getAttachments(afterPick).some(
+      (existing) => existing.id === attachment.id || existing.uri === attachment.uri
+    );
+
+    if (!alreadyAttached) {
+      await savedItemsStore.addAttachment(id, attachment);
+    }
 
     return true;
-  } catch (e: any) {
-    const msg = String(e?.message ?? "");
+  } catch (error: any) {
+    const message = cleanString(error?.message);
 
-    if (msg === "cancelled") return false;
+    if (message.toLowerCase() === "cancelled") return false;
 
-    Alert.alert("Couldn’t add attachment", msg || "Try again.", [{ text: "OK" }], {
-      cancelable: true,
-    });
+    showError(message || "Try again.");
     return false;
   }
 }
