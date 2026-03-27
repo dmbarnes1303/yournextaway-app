@@ -1,3 +1,5 @@
+// src/features/tripDetail/useTripDetailData.ts
+
 import { useEffect, useMemo, useState } from "react";
 
 import type { SavedItem } from "@/src/core/savedItemTypes";
@@ -65,7 +67,7 @@ type Props = {
 
 type FlightState = {
   loading: boolean;
-  pricePoint: PricePoint | null;
+  pricePoint: Omit<PricePoint, "displayMode"> | null;
 };
 
 export default function useTripDetailData({
@@ -91,9 +93,6 @@ export default function useTripDetailData({
     return pickPrimaryMatchId(trip, numericMatchIds);
   }, [trip, numericMatchIds]);
 
-  /**
-   * Fetch fixtures
-   */
   useEffect(() => {
     let cancelled = false;
 
@@ -155,9 +154,6 @@ export default function useTripDetailData({
     return getPrimaryKickoffIso(trip, primaryFixture);
   }, [trip, primaryFixture]);
 
-  /**
-   * Flight price
-   */
   useEffect(() => {
     let cancelled = false;
 
@@ -196,9 +192,6 @@ export default function useTripDetailData({
     };
   }, [trip, cityName, originIata, primaryKickoffIso]);
 
-  /**
-   * Affiliate URLs
-   */
   const affiliateUrls = useMemo<AffiliateUrls | null>(() => {
     return buildAffiliateUrls({
       trip,
@@ -212,9 +205,6 @@ export default function useTripDetailData({
     return formatKickoffMeta(primaryFixture, trip);
   }, [primaryFixture, trip]);
 
-  /**
-   * Logistics
-   */
   const primaryLogistics = useMemo(() => {
     return getPrimaryLogistics({
       primaryHomeName,
@@ -279,9 +269,6 @@ export default function useTripDetailData({
     [primaryLogistics, primaryKickoffIso]
   );
 
-  /**
-   * Ranking
-   */
   const rankedTrip = useMemo(() => {
     return getRankedTrip({
       trip,
@@ -297,9 +284,6 @@ export default function useTripDetailData({
     [rankedTrip]
   );
 
-  /**
-   * Tickets
-   */
   const ticketsByMatchId = useMemo<TicketMap>(() => {
     return buildTicketsByMatchId({
       numericMatchIds,
@@ -312,9 +296,6 @@ export default function useTripDetailData({
     [primaryMatchId, ticketsByMatchId]
   );
 
-  /**
-   * Pricing
-   */
   const bookingPriceBoard = useMemo<BookingPriceBoard>(() => {
     const base = buildBookingPriceBoard(savedItems);
 
@@ -354,9 +335,6 @@ export default function useTripDetailData({
     [bookingPriceBoard.tripTotal]
   );
 
-  /**
-   * Progress + readiness
-   */
   const progress = useMemo(() => {
     if (!activeTripId) {
       return {
@@ -423,4 +401,4 @@ export default function useTripDetailData({
     flightSearchLoading: flightState.loading,
     liveFlightPricePoint: flightState.pricePoint,
   };
-}
+    }
