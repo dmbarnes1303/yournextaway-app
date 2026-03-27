@@ -52,9 +52,10 @@ const PLANNER_ITEMS: PlannerCardItem[] = [
 ];
 
 function statusLabel(status: string) {
-  const v = String(status ?? "").toLowerCase();
-  if (v === "completed") return "Completed";
-  if (v === "in progress") return "In progress";
+  const value = String(status ?? "").toLowerCase();
+
+  if (value === "completed") return "Completed";
+  if (value === "in progress") return "In progress";
   return "Upcoming";
 }
 
@@ -149,6 +150,7 @@ function urgencyLine(hasTickets: boolean, kickoffTbc: boolean) {
 function dateWindowLine(startDate?: string | null, endDate?: string | null) {
   const start = clean(startDate);
   const end = clean(endDate);
+
   if (!start || !end) return "Trip dates not set";
   return `${start} → ${end}`;
 }
@@ -198,7 +200,7 @@ export default function TripDetailScreen() {
     const sync = () => {
       const state = tripsStore.getState();
       setTripsLoaded(state.loaded);
-      setTrip(state.trips.find((x) => x.id === routeTripId) ?? null);
+      setTrip(state.trips.find((item) => item.id === routeTripId) ?? null);
     };
 
     const unsub = tripsStore.subscribe(sync);
@@ -253,20 +255,17 @@ export default function TripDetailScreen() {
     return allSavedItems.filter((item) => clean(item.tripId) === activeTripId);
   }, [allSavedItems, activeTripId]);
 
-  const pendingItems = useMemo(
-    () => savedItems.filter((item) => item.status === "pending"),
-    [savedItems]
-  );
+  const pendingItems = useMemo(() => {
+    return savedItems.filter((item) => item.status === "pending");
+  }, [savedItems]);
 
-  const savedOnlyItems = useMemo(
-    () => savedItems.filter((item) => item.status === "saved"),
-    [savedItems]
-  );
+  const savedOnlyItems = useMemo(() => {
+    return savedItems.filter((item) => item.status === "saved");
+  }, [savedItems]);
 
-  const bookedItems = useMemo(
-    () => savedItems.filter((item) => item.status === "booked"),
-    [savedItems]
-  );
+  const bookedItems = useMemo(() => {
+    return savedItems.filter((item) => item.status === "booked");
+  }, [savedItems]);
 
   const groupedBySection = useMemo(() => {
     return groupSavedItemsBySection(savedItems);
@@ -423,10 +422,7 @@ export default function TripDetailScreen() {
                     <Text style={styles.summaryValue}>{ticketHeadline}</Text>
                   </Pressable>
 
-                  <Pressable
-                    style={styles.summaryCard}
-                    onPress={() => controller.onEditTrip()}
-                  >
+                  <Pressable style={styles.summaryCard} onPress={() => controller.onEditTrip()}>
                     <Text style={styles.summaryLabel}>Trip</Text>
                     <Text style={styles.summaryValue}>{tripHeadline}</Text>
                   </Pressable>
@@ -475,7 +471,8 @@ export default function TripDetailScreen() {
                 <View style={styles.plannerGrid}>
                   {PLANNER_ITEMS.map((item) => {
                     const count = groupedBySection[item.key]?.length || 0;
-                    const sub = plannerSubtitle({
+
+                    const subtitle = plannerSubtitle({
                       key: item.key,
                       count,
                       ticketsPriceFrom: data.ticketsPriceFrom,
@@ -491,7 +488,7 @@ export default function TripDetailScreen() {
                         onPress={() => controller.onOpenSection(item.key)}
                       >
                         <Text style={styles.plannerCardTitle}>{item.label}</Text>
-                        <Text style={styles.plannerCardSub}>{sub}</Text>
+                        <Text style={styles.plannerCardSub}>{subtitle}</Text>
                       </Pressable>
                     );
                   })}
