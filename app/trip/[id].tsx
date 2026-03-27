@@ -70,29 +70,45 @@ function nextStepLabel(stepKey?: string | null) {
 function plannerSubtitle(args: {
   key: PlannerCardItem["key"];
   count: number;
+  ticketsPriceFrom?: string | null;
+  flightsPriceFrom?: string | null;
+  hotelsPriceFrom?: string | null;
+  experiencesPriceFrom?: string | null;
 }) {
-  const { key, count } = args;
+  const {
+    key,
+    count,
+    ticketsPriceFrom,
+    flightsPriceFrom,
+    hotelsPriceFrom,
+    experiencesPriceFrom,
+  } = args;
 
   if (key === "tickets") {
+    if (ticketsPriceFrom) return ticketsPriceFrom;
     if (count > 0) return count === 1 ? "1 ticket item saved" : `${count} ticket items saved`;
     return "Compare ticket options";
   }
 
   if (key === "travel") {
+    if (flightsPriceFrom) return flightsPriceFrom;
     if (count > 0) return count === 1 ? "1 travel item added" : `${count} travel items added`;
     return "Flights or rail around your trip dates";
   }
 
   if (key === "stay") {
+    if (hotelsPriceFrom) return hotelsPriceFrom;
     if (count > 0) return count === 1 ? "1 stay item added" : `${count} stay items added`;
     return "Hotels for this trip window";
   }
 
+  if (experiencesPriceFrom) return experiencesPriceFrom;
   if (count > 0) return count === 1 ? "1 extra added" : `${count} extras added`;
   return "Optional";
 }
 
-function headlineTicketText(hasTickets: boolean) {
+function headlineTicketText(hasTickets: boolean, ticketsPriceFrom?: string | null) {
+  if (ticketsPriceFrom) return ticketsPriceFrom;
   return hasTickets ? "Ticket route started" : "Compare live ticket options";
 }
 
@@ -100,8 +116,11 @@ function headlineTripText(args: {
   tripStartDate?: string | null;
   tripEndDate?: string | null;
   hasTickets: boolean;
+  tripPriceFrom?: string | null;
 }) {
-  const { tripStartDate, tripEndDate, hasTickets } = args;
+  const { tripStartDate, tripEndDate, hasTickets, tripPriceFrom } = args;
+
+  if (tripPriceFrom) return tripPriceFrom;
 
   const start = clean(tripStartDate);
   const end = clean(tripEndDate);
@@ -318,11 +337,12 @@ export default function TripDetailScreen() {
     );
   }, [vm.hasTickets, dominantAction]);
 
-  const ticketHeadline = headlineTicketText(vm.hasTickets);
+  const ticketHeadline = headlineTicketText(vm.hasTickets, data.ticketsPriceFrom);
   const tripHeadline = headlineTripText({
     tripStartDate: trip?.startDate,
     tripEndDate: trip?.endDate,
     hasTickets: vm.hasTickets,
+    tripPriceFrom: data.tripPriceFrom,
   });
   const pressureText = urgencyLine(vm.hasTickets, data.kickoffMeta.tbc);
   const tripDatesText = dateWindowLine(trip?.startDate, trip?.endDate);
@@ -389,9 +409,11 @@ export default function TripDetailScreen() {
                       <Text style={styles.tripWindowEdit}>Edit</Text>
                     </Pressable>
                   </View>
+
                   <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
+
                   <Text style={styles.tripWindowHint}>
-                    Flights and stays should follow this window, not a fixed fixture-only default.
+                    Flights and stays should follow this saved trip window, not a hardcoded fixture-only range.
                   </Text>
                 </View>
 
@@ -404,7 +426,10 @@ export default function TripDetailScreen() {
                     <Text style={styles.summaryValue}>{ticketHeadline}</Text>
                   </Pressable>
 
-                  <Pressable style={styles.summaryCard} onPress={() => controller.onEditTrip()}>
+                  <Pressable
+                    style={styles.summaryCard}
+                    onPress={() => controller.onEditTrip()}
+                  >
                     <Text style={styles.summaryLabel}>Trip</Text>
                     <Text style={styles.summaryValue}>{tripHeadline}</Text>
                   </Pressable>
@@ -456,6 +481,10 @@ export default function TripDetailScreen() {
                     const sub = plannerSubtitle({
                       key: item.key,
                       count,
+                      ticketsPriceFrom: data.ticketsPriceFrom,
+                      flightsPriceFrom: data.flightsPriceFrom,
+                      hotelsPriceFrom: data.hotelsPriceFrom,
+                      experiencesPriceFrom: data.experiencesPriceFrom,
                     });
 
                     return (
