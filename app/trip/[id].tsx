@@ -1,3 +1,5 @@
+// app/trip/[id].tsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -12,7 +14,6 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
-import NextBestActionCard from "@/src/components/NextBestActionCard";
 import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
 
 import { getBackground } from "@/src/constants/backgrounds";
@@ -46,16 +47,17 @@ import {
 
 const PLAN_STORAGE_KEY = "yna:plan";
 
-type PlannerRailItem = {
+type PlannerCardItem = {
   key: Extract<WorkspaceSectionKey, "tickets" | "stay" | "travel" | "things">;
   label: string;
+  emptyLabel: string;
 };
 
-const PLANNER_RAIL_ITEMS: PlannerRailItem[] = [
-  { key: "tickets", label: "Tickets" },
-  { key: "stay", label: "Stay" },
-  { key: "travel", label: "Travel" },
-  { key: "things", label: "Extras" },
+const PLANNER_ITEMS: PlannerCardItem[] = [
+  { key: "tickets", label: "Tickets", emptyLabel: "Not secured" },
+  { key: "travel", label: "Travel", emptyLabel: "Not added" },
+  { key: "stay", label: "Stay", emptyLabel: "Not added" },
+  { key: "things", label: "Extras", emptyLabel: "Optional" },
 ];
 
 function statusLabel(status: string) {
@@ -65,18 +67,19 @@ function statusLabel(status: string) {
   return "Upcoming";
 }
 
+function sectionCountLabel(count: number, emptyLabel: string) {
+  if (count <= 0) return emptyLabel;
+  if (count === 1) return "1 added";
+  return `${count} added`;
+}
+
 function nextStepLabel(stepKey?: string | null) {
-  if (stepKey === "tickets") return "Add tickets";
-  if (stepKey === "flight") return "Check travel";
-  if (stepKey === "hotel") return "Find a stay";
+  if (stepKey === "tickets") return "Secure tickets";
+  if (stepKey === "flight") return "Sort flights";
+  if (stepKey === "hotel") return "Lock hotel";
   if (stepKey === "transfer") return "Sort transport";
   if (stepKey === "things") return "Add extras";
   return "Continue planning";
-}
-
-function sectionCountLabel(count: number) {
-  if (count <= 0) return "Not added";
-  return `${count} added`;
 }
 
 export default function TripDetailScreen() {
@@ -109,7 +112,7 @@ export default function TripDetailScreen() {
         if (value === "premium") setPlan("premium");
         else if (value === "free") setPlan("free");
       } catch {
-        // ignore storage failure
+        // ignore
       }
     }
 
@@ -248,6 +251,16 @@ export default function TripDetailScreen() {
 
   const isMissingTrip = !trip && tripsLoaded;
 
+  const dominantAction = vm.nextAction;
+  const dominantTitle = dominantAction?.title || "Continue planning";
+  const dominantBody =
+    dominantAction?.body ||
+    "Move the trip forward by securing the next core booking step.";
+  const dominantCta = dominantAction?.cta || "Continue planning";
+
+  const ticketHeadline = data.ticketsPriceFrom || "Tickets not priced yet";
+  const tripHeadline = data.tripPriceFrom || vm.commercialSummaryLine || "Trip estimate building";
+
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen options={{ headerShown: true, title: "Trip" }} />
@@ -280,68 +293,109 @@ export default function TripDetailScreen() {
           ) : (
             <>
               <GlassCard>
-                <Text style={styles.city}>{data.cityName}</Text>
-                <Text style={styles.meta}>{summaryLine(trip)}</Text>
-
-                <View style={styles.heroRow}>
-                  <Text style={styles.statusBadge}>{statusLabel(status)}</Text>
+                <View style={styles.headerTopRow}>
+                  <View style={styles.headerTitleWrap}>
+                    <Text style={styles.city}>{data.cityName}</Text>
+                    <Text style={styles.meta}>{summaryLine(trip)}</Text>
+                  </View>
 
                   <Pressable onPress={controller.onViewWallet} hitSlop={8}>
                     <Text style={styles.walletLink}>Wallet</Text>
                   </Pressable>
                 </View>
 
-                <View style={styles.progressBox}>
-                  <Text style={styles.progressText}>{vm.tripCompletionPct ?? 0}% ready</Text>
-                  <Text style={styles.nextText}>{nextStepLabel(vm.nextIncompleteStep?.key)}</Text>
+                <View style={styles.badgeRow}>
+                  <View style={styles.statusPill}>
+                    <Text style={styles.statusPillText}>{statusLabel(status)}</Text>
+                  </View>
 
-                  {vm.bookingFunnelLabel ? (
-                    <Text style={styles.funnelText}>{vm.bookingFunnelLabel}</Text>
-                  ) : null}
-
-                  {vm.commercialSummaryLine ? (
-                    <Text style={styles.commercialText}>{vm.commercialSummaryLine}</Text>
+                  {data.kickoffMeta.tbc ? (
+                    <View style={styles.warningPill}>
+                      <Text style={styles.warningPillText}>Kickoff TBC</Text>
+                    </View>
                   ) : null}
                 </View>
 
-                <View style={styles.heroActions}>
-                  <Pressable style={styles.primaryBtn} onPress={controller.onEditTrip}>
-                    <Text style={styles.primaryBtnText}>Continue planning</Text>
+                <View style={styles.priceRow}>
+                  <View style={styles.priceCard}>
+                    <Text style={styles.priceLabel}>Tickets</Text>
+                    <Text style={styles.priceValue}>{ticketHeadline}</Text>
+                  </View>
+
+                  <View style={styles.priceCard}>
+                    <Text style={styles.priceLabel}>Trip</Text>
+                    <Text style={styles.priceValue}>{tripHeadline}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.decisionCard}>
+                  <Text style={styles.decisionEyebrow}>Right now</Text>
+                  <Text style={styles.decisionTitle}>{dominantTitle}</Text>
+                  <Text style={styles.decisionBody}>{dominantBody}</Text>
+
+                  <View style={styles.decisionMetaRow}>
+                    <Text style={styles.decisionMetaText}>
+                      {vm.bookingFunnelLabel || `Next: ${nextStepLabel(vm.nextIncompleteStep?.key)}`}
+                    </Text>
+
+                    {vm.tripCompletionPct != null ? (
+                      <Text style={styles.decisionMetaText}>
+                        {vm.tripCompletionPct}% ready
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  <Pressable
+                    style={styles.primaryActionBtn}
+                    onPress={
+                      dominantAction?.onPress
+                        ? () => dominantAction.onPress()
+                        : controller.onEditTrip
+                    }
+                  >
+                    <Text style={styles.primaryActionBtnText}>{dominantCta}</Text>
                   </Pressable>
-                </View>
 
-                {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
+                  {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
+                </View>
               </GlassCard>
 
-              <NextBestActionCard
-                action={vm.nextAction}
-                isPro={isPro}
-                onUpgradePress={controller.onUpgradePress}
-              />
-
               <GlassCard>
-                <Text style={styles.sectionTitle}>Plan your trip</Text>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Trip planner</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    {vm.completionSummary || "Move the trip forward one step at a time."}
+                  </Text>
+                </View>
 
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.railScrollContent}
-                >
-                  {PLANNER_RAIL_ITEMS.map((item) => {
+                <View style={styles.plannerGrid}>
+                  {PLANNER_ITEMS.map((item) => {
                     const count = groupedBySection[item.key]?.length || 0;
+
+                    let sub = sectionCountLabel(count, item.emptyLabel);
+
+                    if (item.key === "tickets" && data.ticketsPriceFrom) {
+                      sub = data.ticketsPriceFrom;
+                    } else if (item.key === "travel" && data.flightsPriceFrom) {
+                      sub = data.flightsPriceFrom;
+                    } else if (item.key === "stay" && data.hotelsPriceFrom) {
+                      sub = data.hotelsPriceFrom;
+                    } else if (item.key === "things" && data.experiencesPriceFrom) {
+                      sub = data.experiencesPriceFrom;
+                    }
 
                     return (
                       <Pressable
                         key={item.key}
-                        style={styles.railCard}
+                        style={styles.plannerCard}
                         onPress={() => controller.onOpenSection(item.key)}
                       >
-                        <Text style={styles.railTitle}>{item.label}</Text>
-                        <Text style={styles.railSub}>{sectionCountLabel(count)}</Text>
+                        <Text style={styles.plannerCardTitle}>{item.label}</Text>
+                        <Text style={styles.plannerCardSub}>{sub}</Text>
                       </Pressable>
                     );
                   })}
-                </ScrollView>
+                </View>
               </GlassCard>
 
               <TripMatchesCard
@@ -379,11 +433,22 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+  },
+
+  headerTitleWrap: {
+    flex: 1,
+  },
+
   city: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "800",
     color: theme.colors.text,
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
   },
 
   meta: {
@@ -393,86 +458,143 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  heroRow: {
-    marginTop: theme.spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing.md,
+  walletLink: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: theme.colors.accent,
+    paddingTop: 8,
   },
 
-  statusBadge: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: theme.colors.text,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  badgeRow: {
+    marginTop: theme.spacing.md,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+
+  statusPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.10)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
-    overflow: "hidden",
   },
 
-  walletLink: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: theme.colors.accent,
+  statusPillText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: "800",
   },
 
-  progressBox: {
+  warningPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,170,0,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,170,0,0.28)",
+  },
+
+  warningPillText: {
+    color: "rgba(255,200,90,1)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  priceRow: {
     marginTop: theme.spacing.md,
-    padding: theme.spacing.md,
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+
+  priceCard: {
+    flex: 1,
     borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    padding: theme.spacing.md,
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    gap: 4,
   },
 
-  progressText: {
+  priceLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: theme.colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+
+  priceValue: {
+    marginTop: 6,
     fontSize: 18,
+    lineHeight: 24,
     fontWeight: "800",
     color: theme.colors.text,
   },
 
-  nextText: {
+  decisionCard: {
+    marginTop: theme.spacing.md,
+    borderRadius: 18,
+    padding: theme.spacing.md,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  decisionEyebrow: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: theme.colors.accent,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+
+  decisionTitle: {
+    marginTop: 8,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "800",
+    color: theme.colors.text,
+    letterSpacing: -0.4,
+  },
+
+  decisionBody: {
+    marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
     color: theme.colors.textSecondary,
   },
 
-  funnelText: {
-    marginTop: 4,
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
+  decisionMetaRow: {
+    marginTop: theme.spacing.sm,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: theme.spacing.md,
   },
 
-  commercialText: {
-    marginTop: 4,
+  decisionMetaText: {
+    flex: 1,
     fontSize: 13,
     lineHeight: 18,
     color: theme.colors.textMuted,
+    fontWeight: "700",
   },
 
-  heroActions: {
+  primaryActionBtn: {
     marginTop: theme.spacing.md,
-  },
-
-  primaryBtn: {
-    minHeight: 48,
+    minHeight: 52,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 14,
     backgroundColor: theme.colors.accent,
     paddingHorizontal: 16,
   },
 
-  primaryBtnText: {
-    fontSize: 15,
-    fontWeight: "800",
+  primaryActionBtnText: {
+    fontSize: 16,
+    fontWeight: "900",
     color: "#0B1020",
   },
 
@@ -483,40 +605,52 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
 
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: theme.colors.text,
+  sectionHeaderRow: {
     marginBottom: theme.spacing.md,
+    gap: 4,
   },
 
-  railScrollContent: {
-    paddingRight: 4,
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: theme.colors.text,
+    letterSpacing: -0.3,
+  },
+
+  sectionSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textSecondary,
+  },
+
+  plannerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.spacing.sm,
   },
 
-  railCard: {
-    width: 132,
-    minHeight: 88,
+  plannerCard: {
+    width: "48%",
+    minHeight: 98,
     borderRadius: 16,
     padding: theme.spacing.md,
-    marginRight: theme.spacing.sm,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     justifyContent: "space-between",
   },
 
-  railTitle: {
-    fontSize: 15,
-    fontWeight: "700",
+  plannerCardTitle: {
+    fontSize: 16,
+    fontWeight: "800",
     color: theme.colors.text,
   },
 
-  railSub: {
-    marginTop: 8,
+  plannerCardSub: {
+    marginTop: 10,
     fontSize: 13,
     lineHeight: 18,
     color: theme.colors.textSecondary,
+    fontWeight: "700",
   },
 });
