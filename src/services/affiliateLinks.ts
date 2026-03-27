@@ -26,8 +26,6 @@ export type BuiltAffiliateLinks = {
   mapsUrl: string | null;
 };
 
-/* ----------------------------- utils ----------------------------- */
-
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -40,9 +38,7 @@ function normalizeYmd(value: unknown): string | null {
   const raw = clean(value);
   if (!raw) return null;
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return raw;
-  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
   try {
     return formatIsoToYmd(raw);
@@ -55,12 +51,7 @@ function toCompactYmd(value: string | null): string | null {
   return value ? value.replace(/-/g, "") : null;
 }
 
-function clampInt(
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number
-): number {
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, Math.floor(parsed)));
@@ -68,7 +59,6 @@ function clampInt(
 
 function normalizeCabinClass(value: unknown): CabinClass {
   const raw = clean(value).toLowerCase();
-
   if (raw === "premium") return "premium";
   if (raw === "business") return "business";
   if (raw === "first") return "first";
@@ -125,8 +115,6 @@ function trackedOrFallbackUrl(
   return safeUrl(trackedValue) || safeUrl(fallback);
 }
 
-/* ----------------------------- flights ----------------------------- */
-
 function buildFlightsUrl(args: {
   city: string;
   originIata: string;
@@ -141,9 +129,12 @@ function buildFlightsUrl(args: {
   const outbound = toCompactYmd(args.startDate);
   const inbound = toCompactYmd(args.endDate);
   const marker = clean(AffiliateConfig.aviasalesMarker);
+  const fallback =
+    trackedOrFallbackUrl(AffiliateConfig.aviasalesFallback) ||
+    trackedOrFallbackUrl("https://www.aviasales.com/");
 
   if (!destination || !outbound) {
-    return trackedOrFallbackUrl("https://www.aviasales.com/", "https://www.aviasales.com/");
+    return fallback;
   }
 
   const routeToken = `${origin}${outbound}${destination}${inbound || ""}${Math.max(
@@ -159,8 +150,6 @@ function buildFlightsUrl(args: {
   });
 }
 
-/* ----------------------------- hotels ----------------------------- */
-
 function buildHotelsUrl(args: {
   city: string;
   startDate: string | null;
@@ -172,7 +161,9 @@ function buildHotelsUrl(args: {
 
   const base =
     trackedOrFallbackUrl(AffiliateConfig.expediaTracked) ||
-    "https://www.expedia.co.uk/Hotel-Search";
+    trackedOrFallbackUrl("https://www.expedia.co.uk/Hotel-Search");
+
+  if (!base) return null;
 
   return appendQuery(base, {
     destination: city,
@@ -182,8 +173,6 @@ function buildHotelsUrl(args: {
     rooms: "1",
   });
 }
-
-/* ----------------------------- rail / bus ----------------------------- */
 
 function omioOriginLabel(originIata: string): string {
   if (originIata === "LON") return "London";
@@ -214,23 +203,22 @@ function buildOmioUrl(args: {
   });
 }
 
-/* ----------------------------- transfers ----------------------------- */
-
 function buildTransfersUrl(args: {
   city: string;
   date: string | null;
 }): string | null {
+  const city = clean(args.city);
+  if (!city) return null;
+
   const base = trackedOrFallbackUrl(AffiliateConfig.kiwitaxiTracked);
   if (!base) return null;
 
   return appendQuery(base, {
-    to: clean(args.city),
-    destination: clean(args.city),
+    to: city,
+    destination: city,
     date: args.date,
   });
 }
-
-/* ----------------------------- tickets ----------------------------- */
 
 function buildTicketsUrl(args: {
   city: string;
@@ -250,8 +238,6 @@ function buildTicketsUrl(args: {
   });
 }
 
-/* ----------------------------- experiences ----------------------------- */
-
 function buildExperiencesUrl(city: string): string | null {
   const cityName = clean(city);
   const partnerId = clean(AffiliateConfig.getyourguidePartnerId);
@@ -260,8 +246,6 @@ function buildExperiencesUrl(city: string): string | null {
 
   return `https://www.getyourguide.com/s/?q=${enc(cityName)}&partner_id=${enc(partnerId)}`;
 }
-
-/* ----------------------------- insurance / claims ----------------------------- */
 
 function buildInsuranceUrl(): string | null {
   return trackedOrFallbackUrl(AffiliateConfig.ektaTracked);
@@ -275,11 +259,7 @@ function buildClaimsUrl(): string | null {
   );
 }
 
-/* ----------------------------- main ----------------------------- */
-
-export function buildAffiliateLinks(
-  args: BuildAffiliateLinksArgs
-): BuiltAffiliateLinks {
+export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffiliateLinks {
   const city = clean(args.city);
   const startDate = normalizeYmd(args.startDate);
   const endDate = normalizeYmd(args.endDate);
