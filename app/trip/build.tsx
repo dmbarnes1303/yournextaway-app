@@ -98,7 +98,10 @@ function isIsoDateOnly(s?: string | null): boolean {
 function parseRouteParams(params: Record<string, unknown>): RouteParams {
   const seasonRaw = paramNumber(params.season);
   const season =
-    seasonRaw && Number.isFinite(seasonRaw) && seasonRaw >= 2000 && seasonRaw <= new Date().getFullYear() + 1
+    seasonRaw &&
+    Number.isFinite(seasonRaw) &&
+    seasonRaw >= 2000 &&
+    seasonRaw <= new Date().getFullYear() + 1
       ? seasonRaw
       : null;
 
@@ -142,6 +145,36 @@ function parseIsoToDate(iso?: string | null): Date | null {
   if (!s) return null;
   const d = new Date(s);
   return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function isoDateOnlyToLocalDate(iso?: string | null): Date | null {
+  const s = cleanText(iso);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const d = new Date(`${s}T00:00:00`);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function addDaysToIsoDate(iso: string, offset: number): string | null {
+  const d = isoDateOnlyToLocalDate(iso);
+  if (!d) return null;
+  d.setDate(d.getDate() + offset);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function defaultTripWindowFromFixtureDate(iso: string | null): { start: string | null; end: string | null } {
+  const dateOnly = cleanText(iso);
+  if (!dateOnly) return { start: null, end: null };
+
+  const start = addDaysToIsoDate(dateOnly, -1);
+  const end = addDaysToIsoDate(dateOnly, 1);
+
+  return {
+    start: start ? clampFromIsoToTomorrow(start) : null,
+    end,
+  };
 }
 
 function daysBetweenIso(aIso: string, bIso: string) {
@@ -438,8 +471,10 @@ export default function TripBuildScreen() {
 
     const d = parseIsoToDate(startIso);
     if (!d) return;
+
     const d2 = new Date(d);
     d2.setDate(d2.getDate() + 2);
+
     const y = d2.getFullYear();
     const m = String(d2.getMonth() + 1).padStart(2, "0");
     const day = String(d2.getDate()).padStart(2, "0");
@@ -569,7 +604,10 @@ export default function TripBuildScreen() {
           setEndTouched(true);
         } else {
           const d0 = fixtureDateOnly(r);
-          if (d0) setStartIso(clampFromIsoToTomorrow(d0));
+          const derived = defaultTripWindowFromFixtureDate(d0);
+
+          if (derived.start) setStartIso(derived.start);
+          if (derived.end) setEndIso(derived.end);
           setEndTouched(false);
         }
 
@@ -693,11 +731,11 @@ export default function TripBuildScreen() {
 
     if (!isIsoDateOnly(params.from) && !isIsoDateOnly(params.to)) {
       const d0 = fixtureDateOnly(selectedFixture);
-      if (d0) {
-        const start = clampFromIsoToTomorrow(d0);
-        setStartIso(start);
-        setEndTouched(false);
-      }
+      const derived = defaultTripWindowFromFixtureDate(d0);
+
+      if (derived.start) setStartIso(derived.start);
+      if (derived.end) setEndIso(derived.end);
+      setEndTouched(false);
     }
 
     if (isEditing) setSetAsPrimaryOnSave(false);
@@ -712,7 +750,10 @@ export default function TripBuildScreen() {
   const visibleRankMap = useMemo(() => {
     const ranked = rankTrips(visibleRows as never[]);
     return new Map<string, RankedTrip>(
-      ranked.map((trip) => [fixtureIdStr((trip as unknown as { fixture: FixtureListRow }).fixture), trip])
+      ranked.map((trip) => [
+        fixtureIdStr((trip as unknown as { fixture: FixtureListRow }).fixture),
+        trip,
+      ])
     );
   }, [visibleRows]);
 
