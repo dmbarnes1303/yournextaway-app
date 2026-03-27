@@ -1,12 +1,10 @@
-// src/core/savedItemTypes.ts
-
 export type TripId = string;
 export type SavedItemId = string;
 
 /**
- * Canonical types used by the app going forward.
- * IMPORTANT: keep this list stable. If you rename a type, add a legacy alias
- * to SavedItemTypeInput + normalizeSavedItemType to preserve old persisted data.
+ * Canonical saved item types.
+ * Keep this list stable.
+ * If older builds used aliases, add them to SavedItemTypeInput and normalizeSavedItemType.
  */
 export type SavedItemType =
   | "tickets"
@@ -21,23 +19,20 @@ export type SavedItemType =
   | "other";
 
 /**
- * Inputs we may encounter from:
- * - old persisted storage
+ * Inputs that may appear from:
+ * - persisted legacy data
  * - older builds
- * - sloppy callers
- *
- * These MUST normalize into a canonical SavedItemType.
+ * - loose callers
  */
 export type SavedItemTypeInput = SavedItemType | "stay" | "stays" | "hotels";
 
 /**
- * Canonical item status.
- * (archived is used by Trip workspace + Wallet hiding)
+ * Canonical status values.
  */
 export type SavedItemStatus = "saved" | "pending" | "booked" | "archived";
 
 /* -------------------------------------------------------------------------- */
-/* Constants + guards                                                          */
+/* Canonical constants + guards                                               */
 /* -------------------------------------------------------------------------- */
 
 export const SAVED_ITEM_TYPES: readonly SavedItemType[] = [
@@ -63,37 +58,50 @@ export const SAVED_ITEM_STATUS: readonly SavedItemStatus[] = [
 const TYPE_SET = new Set<string>(SAVED_ITEM_TYPES);
 const STATUS_SET = new Set<string>(SAVED_ITEM_STATUS);
 
-export function isSavedItemType(v: unknown): v is SavedItemType {
-  return typeof v === "string" && TYPE_SET.has(v);
+function cleanString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
-export function isSavedItemStatus(v: unknown): v is SavedItemStatus {
-  return typeof v === "string" && STATUS_SET.has(v);
+export function isSavedItemType(value: unknown): value is SavedItemType {
+  return typeof value === "string" && TYPE_SET.has(value);
+}
+
+export function isSavedItemStatus(value: unknown): value is SavedItemStatus {
+  return typeof value === "string" && STATUS_SET.has(value);
 }
 
 /**
- * Normalise “type” at the boundary.
- * This is what prevents “stay” vs “hotel” bugs across Trips/Wallet/Progress strips.
+ * Normalise type input at boundaries.
+ * This is what prevents stay/stays/hotels drift from poisoning Trips/Wallet/UI.
  */
 export function normalizeSavedItemType(input: unknown): SavedItemType | null {
-  const raw = String(input ?? "").trim().toLowerCase();
+  const raw = cleanString(input).toLowerCase();
   if (!raw) return null;
 
-  if (raw === "stay" || raw === "stays" || raw === "hotels") return "hotel";
-  if (TYPE_SET.has(raw)) return raw as SavedItemType;
+  if (raw === "stay" || raw === "stays" || raw === "hotels") {
+    return "hotel";
+  }
+
+  if (TYPE_SET.has(raw)) {
+    return raw as SavedItemType;
+  }
 
   return null;
 }
 
 export function normalizeSavedItemStatus(input: unknown): SavedItemStatus | null {
-  const raw = String(input ?? "").trim().toLowerCase();
+  const raw = cleanString(input).toLowerCase();
   if (!raw) return null;
-  if (STATUS_SET.has(raw)) return raw as SavedItemStatus;
+
+  if (STATUS_SET.has(raw)) {
+    return raw as SavedItemStatus;
+  }
+
   return null;
 }
 
 /* -------------------------------------------------------------------------- */
-/* Grouping helpers                                                            */
+/* UI grouping                                                                */
 /* -------------------------------------------------------------------------- */
 
 export type SavedItemUiGroup =
@@ -153,14 +161,15 @@ export function getSavedItemUiGroupLabel(group: SavedItemUiGroup): string {
     case "claim":
       return "Claims & compensation";
     case "note":
+      return "Notes";
     case "other":
     default:
-      return "Notes";
+      return "Other";
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* Wallet Attachments (Phase 1)                                                */
+/* Wallet attachments                                                         */
 /* -------------------------------------------------------------------------- */
 
 export type WalletAttachmentKind = "pdf" | "image" | "file";
@@ -173,12 +182,13 @@ export const WALLET_ATTACHMENT_KINDS: readonly WalletAttachmentKind[] = [
 
 const ATTACHMENT_KIND_SET = new Set<string>(WALLET_ATTACHMENT_KINDS);
 
-export function isWalletAttachmentKind(v: unknown): v is WalletAttachmentKind {
-  return typeof v === "string" && ATTACHMENT_KIND_SET.has(v);
+export function isWalletAttachmentKind(value: unknown): value is WalletAttachmentKind {
+  return typeof value === "string" && ATTACHMENT_KIND_SET.has(value);
 }
 
 export function normalizeWalletAttachmentKind(input: unknown): WalletAttachmentKind {
-  const raw = String(input ?? "").trim().toLowerCase();
+  const raw = cleanString(input).toLowerCase();
+
   if (raw === "pdf") return "pdf";
   if (raw === "image") return "image";
   return "file";
@@ -188,7 +198,7 @@ export type WalletAttachment = {
   id: string;
   kind: WalletAttachmentKind;
 
-  /** Original filename when known (nice to show in UI) */
+  /** Original filename when known */
   name?: string;
 
   /** MIME type when known */
@@ -198,8 +208,8 @@ export type WalletAttachment = {
   size?: number;
 
   /**
-   * Local, app-owned URI (FileSystem.documentDirectory/...)
-   * This is what we open/share.
+   * App-owned local URI.
+   * This is what the app opens/shares offline.
    */
   uri: string;
 
@@ -208,31 +218,30 @@ export type WalletAttachment = {
 
 export function isWalletAttachment(value: unknown): value is WalletAttachment {
   if (!value || typeof value !== "object") return false;
+
   const v = value as Record<string, unknown>;
 
   return (
     typeof v.id === "string" &&
-    !!v.id.trim() &&
+    Boolean(v.id.trim()) &&
     typeof v.uri === "string" &&
-    !!v.uri.trim() &&
+    Boolean(v.uri.trim()) &&
     isWalletAttachmentKind(v.kind) &&
     Number.isFinite(Number(v.createdAt)) &&
     Number(v.createdAt) > 0
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Saved item model                                                           */
+/* -------------------------------------------------------------------------- */
+
 /**
- * SavedItem model
- *
- * NOTE: tripId is optional at type-level because:
- * - the store loader explicitly allows missing tripId (legacy/orphan items)
- * - clearOrphans keeps items with no tripId
- *
- * Screens should treat tripId as required for trip-scoped views.
+ * tripId stays optional at type level because legacy/orphan items can still exist.
+ * Trip-scoped screens should still treat tripId as effectively required.
  */
 export type SavedItem = {
   id: SavedItemId;
-
   tripId?: TripId;
 
   type: SavedItemType;
@@ -248,29 +257,21 @@ export type SavedItem = {
 
   metadata?: Record<string, any>;
 
-  /** Phase-1: offline proof (PDF/screenshots/etc) */
+  /** Offline proof / confirmations / screenshots */
   attachments?: WalletAttachment[];
 
   createdAt: number;
   updatedAt: number;
 };
 
-/**
- * Display labels (what users see).
- */
+/* -------------------------------------------------------------------------- */
+/* Display labels                                                             */
+/* -------------------------------------------------------------------------- */
+
 export function getSavedItemTypeLabel(type: SavedItemType): string {
   switch (type) {
     case "tickets":
       return "Match tickets";
-    case "things":
-      return "Experiences";
-    case "claim":
-      return "Claims & compensation";
-    case "insurance":
-      return "Protect yourself";
-    case "note":
-    case "other":
-      return "Notes";
     case "hotel":
       return "Hotels";
     case "flight":
@@ -279,26 +280,40 @@ export function getSavedItemTypeLabel(type: SavedItemType): string {
       return "Trains & buses";
     case "transfer":
       return "Transfers";
-    default:
+    case "things":
+      return "Experiences";
+    case "insurance":
+      return "Protect yourself";
+    case "claim":
+      return "Claims & compensation";
+    case "note":
       return "Notes";
+    case "other":
+    default:
+      return "Other";
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* Status transitions                                                          */
+/* Status transitions                                                         */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Option B policy:
- * - "pending": opened partner, outcome unknown
- * - user answers "No": pending -> saved
- * - user answers "Not now": stays pending
+ * Transition policy:
+ * - saved: shortlisted / not opened recently
+ * - pending: opened partner, outcome unknown
+ * - booked: explicitly confirmed booked
+ * - archived: hidden from active workspace
  *
- * Users can book later from a Saved shortlist, so allow saved -> booked directly.
+ * Rules:
+ * - saved -> pending/booked/archived
+ * - pending -> saved/booked/archived
+ * - booked -> archived
+ * - archived -> saved
  */
-const TRANSITIONS: Record<SavedItemStatus, SavedItemStatus[]> = {
+const TRANSITIONS: Record<SavedItemStatus, readonly SavedItemStatus[]> = {
   saved: ["pending", "booked", "archived"],
-  pending: ["booked", "archived", "saved"],
+  pending: ["saved", "booked", "archived"],
   booked: ["archived"],
   archived: ["saved"],
 };
