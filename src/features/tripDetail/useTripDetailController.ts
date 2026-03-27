@@ -1113,4 +1113,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-      }
+  }
