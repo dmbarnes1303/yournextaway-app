@@ -1,13 +1,5 @@
-// app/trip/[id].tsx
-
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-} from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
 
@@ -68,9 +60,9 @@ function statusLabel(status: string) {
 
 function nextStepLabel(stepKey?: string | null) {
   if (stepKey === "tickets") return "Secure tickets";
-  if (stepKey === "flight") return "Sort flights";
-  if (stepKey === "hotel") return "Lock hotel";
-  if (stepKey === "transfer") return "Sort transport";
+  if (stepKey === "flight") return "Sort travel";
+  if (stepKey === "hotel") return "Lock stay";
+  if (stepKey === "transfer") return "Sort local transport";
   if (stepKey === "things") return "Add extras";
   return "Continue planning";
 }
@@ -78,43 +70,35 @@ function nextStepLabel(stepKey?: string | null) {
 function plannerSubtitle(args: {
   key: PlannerCardItem["key"];
   count: number;
-  ticketsPriceFrom?: string | null;
-  flightsPriceFrom?: string | null;
-  hotelsPriceFrom?: string | null;
-  experiencesPriceFrom?: string | null;
 }) {
-  const { key, count, ticketsPriceFrom, flightsPriceFrom, hotelsPriceFrom, experiencesPriceFrom } =
-    args;
+  const { key, count } = args;
 
   if (key === "tickets") {
-    if (ticketsPriceFrom) return ticketsPriceFrom;
-    if (count > 0) return count === 1 ? "1 ticket option saved" : `${count} ticket options saved`;
-    return "Compare live prices";
+    if (count > 0) return count === 1 ? "1 ticket item saved" : `${count} ticket items saved`;
+    return "Compare ticket options";
   }
 
   if (key === "travel") {
-    if (flightsPriceFrom) return flightsPriceFrom;
-    if (count > 0) return count === 1 ? "1 travel option added" : `${count} travel options added`;
-    return "Search routes";
+    if (count > 0) return count === 1 ? "1 travel item added" : `${count} travel items added`;
+    return "Search flights or transport";
   }
 
   if (key === "stay") {
-    if (hotelsPriceFrom) return hotelsPriceFrom;
-    if (count > 0) return count === 1 ? "1 stay option added" : `${count} stay options added`;
-    return "Explore stays";
+    if (count > 0) return count === 1 ? "1 stay item added" : `${count} stay items added`;
+    return "Find a place to stay";
   }
 
-  if (experiencesPriceFrom) return experiencesPriceFrom;
   if (count > 0) return count === 1 ? "1 extra added" : `${count} extras added`;
   return "Optional";
 }
 
-function headlineTicketText(price?: string | null) {
-  return price || "Compare live ticket prices";
+function headlineTicketText(hasTickets: boolean) {
+  return hasTickets ? "Ticket route started" : "Compare live ticket options";
 }
 
-function headlineTripText(price?: string | null, fallback?: string | null) {
-  return price || fallback || "Build your full trip estimate";
+function headlineTripText(hasTickets: boolean, completionSummary?: string | null) {
+  if (!hasTickets) return "Trip not anchored yet";
+  return completionSummary || "Trip planning in progress";
 }
 
 function urgencyLine(hasTickets: boolean, kickoffTbc: boolean) {
@@ -123,14 +107,14 @@ function urgencyLine(hasTickets: boolean, kickoffTbc: boolean) {
   }
 
   if (!hasTickets) {
-    return "Tickets may get harder or more expensive closer to match day.";
+    return "Tickets come first. Flights and stays are weaker decisions until the match is anchored.";
   }
 
   if (kickoffTbc) {
     return "Kickoff is still TBC, so avoid locking inflexible travel too early.";
   }
 
-  return "Prices and availability can change quickly once you start booking.";
+  return "Work through the trip in order: tickets, travel, stay, then extras.";
 }
 
 export default function TripDetailScreen() {
@@ -308,14 +292,14 @@ export default function TripDetailScreen() {
 
   const decisionBody = useMemo(() => {
     if (!vm.hasTickets) {
-      return "Lock tickets first — this confirms the trip. Flights and hotels drop into place after.";
+      return "Lock tickets first — that confirms the trip. Until then, everything else is softer planning.";
     }
 
     return dominantAction?.body || "Move the trip forward by completing the next core booking step.";
   }, [vm.hasTickets, dominantAction]);
 
-  const ticketHeadline = headlineTicketText(data.ticketsPriceFrom);
-  const tripHeadline = headlineTripText(data.tripPriceFrom, vm.commercialSummaryLine);
+  const ticketHeadline = headlineTicketText(vm.hasTickets);
+  const tripHeadline = headlineTripText(vm.hasTickets, vm.completionSummary);
   const pressureText = urgencyLine(vm.hasTickets, data.kickoffMeta.tbc);
 
   return (
@@ -373,21 +357,18 @@ export default function TripDetailScreen() {
                   ) : null}
                 </View>
 
-                <View style={styles.priceRow}>
+                <View style={styles.summaryRow}>
                   <Pressable
-                    style={styles.priceCard}
+                    style={styles.summaryCard}
                     onPress={() => controller.onOpenSection("tickets")}
                   >
-                    <Text style={styles.priceLabel}>Tickets</Text>
-                    <Text style={styles.priceValue}>{ticketHeadline}</Text>
+                    <Text style={styles.summaryLabel}>Tickets</Text>
+                    <Text style={styles.summaryValue}>{ticketHeadline}</Text>
                   </Pressable>
 
-                  <Pressable
-                    style={styles.priceCard}
-                    onPress={() => controller.onEditTrip()}
-                  >
-                    <Text style={styles.priceLabel}>Trip</Text>
-                    <Text style={styles.priceValue}>{tripHeadline}</Text>
+                  <Pressable style={styles.summaryCard} onPress={() => controller.onEditTrip()}>
+                    <Text style={styles.summaryLabel}>Trip</Text>
+                    <Text style={styles.summaryValue}>{tripHeadline}</Text>
                   </Pressable>
                 </View>
 
@@ -437,10 +418,6 @@ export default function TripDetailScreen() {
                     const sub = plannerSubtitle({
                       key: item.key,
                       count,
-                      ticketsPriceFrom: data.ticketsPriceFrom,
-                      flightsPriceFrom: data.flightsPriceFrom,
-                      hotelsPriceFrom: data.hotelsPriceFrom,
-                      experiencesPriceFrom: data.experiencesPriceFrom,
                     });
 
                     return (
@@ -561,13 +538,13 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  priceRow: {
+  summaryRow: {
     marginTop: theme.spacing.md,
     flexDirection: "row",
     gap: theme.spacing.sm,
   },
 
-  priceCard: {
+  summaryCard: {
     flex: 1,
     borderRadius: 16,
     padding: theme.spacing.md,
@@ -576,7 +553,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
   },
 
-  priceLabel: {
+  summaryLabel: {
     fontSize: 12,
     fontWeight: "800",
     color: theme.colors.textMuted,
@@ -584,7 +561,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
 
-  priceValue: {
+  summaryValue: {
     marginTop: 6,
     fontSize: 18,
     lineHeight: 24,
