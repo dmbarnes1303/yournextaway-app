@@ -17,8 +17,6 @@ import {
   initials,
   safeFixtureTitle,
   formatKickoffMeta,
-  providerShort,
-  providerBadgeStyle,
   statusLabel,
   ticketConfidenceLabel,
 } from "@/src/components/trip/tripUi";
@@ -52,27 +50,6 @@ function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
   );
 }
 
-function ProviderBadge({ provider }: { provider?: string | null }) {
-  const badge = providerBadgeStyle(provider);
-  const short = providerShort(provider);
-
-  return (
-    <View style={styles.providerBadgeWrap}>
-      <View
-        style={[
-          styles.providerBadgeCircle,
-          {
-            borderColor: badge.borderColor,
-            backgroundColor: badge.backgroundColor,
-          },
-        ]}
-      >
-        <Text style={[styles.providerBadgeCircleText, { color: badge.textColor }]}>{short}</Text>
-      </View>
-    </View>
-  );
-}
-
 function StatusBadge({ status }: { status: SavedItem["status"] }) {
   const style =
     status === "pending"
@@ -93,8 +70,8 @@ function StatusBadge({ status }: { status: SavedItem["status"] }) {
 function ticketStateLine(ticketItem: SavedItem | null, livePrice: string | null) {
   if (!ticketItem) return "No ticket route saved yet";
   if (ticketItem.status === "booked") return livePrice || "Ticket booked";
-  if (ticketItem.status === "pending") return livePrice || "Ticket route pending";
-  if (ticketItem.status === "saved") return livePrice || "Ticket option saved";
+  if (ticketItem.status === "pending") return "Ticket click opened — compare again if needed";
+  if (ticketItem.status === "saved") return "Ticket option saved";
   return "Archived ticket route";
 }
 
@@ -106,8 +83,8 @@ function urgencyLine(args: {
   const { isPrimary, ticketItem, certaintyLine } = args;
 
   if (isPrimary && !ticketItem) return "Primary match not ticketed yet";
-  if (isPrimary && ticketItem?.status === "pending") return "Primary match ticket still pending";
-  if (isPrimary && ticketItem?.status === "saved") return "Primary match ticket route saved";
+  if (isPrimary && ticketItem?.status === "pending") return "Primary match still needs ticket confirmation";
+  if (isPrimary && ticketItem?.status === "saved") return "Primary match has ticket options saved";
   if (isPrimary && ticketItem?.status === "booked") return "Primary match anchored";
   return certaintyLine;
 }
@@ -211,8 +188,9 @@ export default function TripMatchesCard({
             const ticketItem = ticketsByMatchId[String(matchId)] ?? null;
             const isPrimary = String(primaryMatchId ?? "") === String(matchId);
             const ticketProvider = getTicketProviderFromItem(ticketItem);
+            const showBookedProvider = Boolean(ticketItem && ticketItem.status === "booked" && ticketProvider);
             const ticketScore = getTicketScoreFromItem(ticketItem);
-            const livePrice = ticketItem ? getLivePriceLine(ticketItem) : null;
+            const livePrice = ticketItem && ticketItem.status === "booked" ? getLivePriceLine(ticketItem) : null;
 
             const data = buildMatchCardData(trip, matchId, fixture);
             const urgency = urgencyLine({
@@ -226,10 +204,7 @@ export default function TripMatchesCard({
                 <Pressable
                   onPress={() => onOpenTicketsForMatch(matchId)}
                   onLongPress={() => onOpenMatchActions(matchId)}
-                  style={[
-                    styles.matchRow,
-                    isPrimary && styles.matchRowPrimary,
-                  ]}
+                  style={[styles.matchRow, isPrimary && styles.matchRowPrimary]}
                 >
                   <TeamCrest name={data.homeName} logo={data.homeLogo} />
 
@@ -248,7 +223,10 @@ export default function TripMatchesCard({
                       {ticketItem ? <StatusBadge status={ticketItem.status} /> : null}
                     </View>
 
-                    <Text style={[styles.matchUrgency, isPrimary && styles.matchUrgencyPrimary]} numberOfLines={1}>
+                    <Text
+                      style={[styles.matchUrgency, isPrimary && styles.matchUrgencyPrimary]}
+                      numberOfLines={1}
+                    >
                       {urgency}
                     </Text>
 
@@ -275,13 +253,16 @@ export default function TripMatchesCard({
                     ) : null}
 
                     <View style={styles.ticketSignalRow}>
-                      {ticketProvider ? <ProviderBadge provider={ticketProvider} /> : null}
                       <Text style={styles.matchHint} numberOfLines={1}>
                         {ticketStateLine(ticketItem, livePrice)}
                       </Text>
                     </View>
 
-                    {ticketScore != null ? (
+                    {showBookedProvider ? (
+                      <Text style={styles.ticketQualityMeta} numberOfLines={1}>
+                        Booked provider saved
+                      </Text>
+                    ) : ticketScore != null && ticketItem?.status === "booked" ? (
                       <Text style={styles.ticketQualityMeta} numberOfLines={1}>
                         {ticketConfidenceLabel(ticketScore)}
                       </Text>
@@ -306,7 +287,7 @@ export default function TripMatchesCard({
                     ]}
                   >
                     <Text style={styles.smallBtnText}>
-                      {ticketItem ? "Open tickets" : "Find tickets"}
+                      {ticketItem?.status === "booked" ? "Open booked ticket" : "Find tickets"}
                     </Text>
                   </Pressable>
 
@@ -515,27 +496,6 @@ const styles = StyleSheet.create({
   crestFallback: {
     color: theme.colors.textSecondary,
     fontWeight: "900",
-  },
-
-  providerBadgeWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  providerBadgeCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  providerBadgeCircleText: {
-    fontWeight: "900",
-    letterSpacing: 0.4,
-    fontSize: 11,
   },
 
   smallBtn: {
