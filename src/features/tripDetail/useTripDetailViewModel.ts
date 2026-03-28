@@ -55,7 +55,7 @@ type ProgressMap = {
   things: ProgressState;
 };
 
-type PricePointSource = "saved_item" | "metadata" | "price_text" | null;
+type PricePointSource = "saved_item" | "metadata" | "price_text" | "live_api" | null;
 type PriceDisplayMode = "booked" | "live_from" | "est_from";
 
 type PricePoint = {
@@ -115,6 +115,10 @@ type BookingStep = {
 
 const FREE_TRIP_CAP = 5;
 
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function isStarted(state: ProgressState): boolean {
   return state !== "empty";
 }
@@ -158,7 +162,7 @@ function ticketButtonSubtitle(args: {
 
   return smartButtonSubtitle(
     primaryTicketItem,
-    pricingOrFallback(ticketsPriceFrom, "Compare live ticket options")
+    pricingOrFallback(ticketsPriceFrom, "Compare ticket options")
   );
 }
 
@@ -168,6 +172,41 @@ function stepPriorityScore(step: BookingStepKey): number {
   if (step === "hotel") return 3;
   if (step === "transfer") return 4;
   return 5;
+}
+
+function inferPriceMode(
+  point: PricePoint | null | undefined
+): "live" | "estimate" | "booked" | "unknown" {
+  if (!point) return "unknown";
+  if (point.displayMode === "booked") return "booked";
+  if (point.displayMode === "live_from") return "live";
+  if (point.displayMode === "est_from") return "estimate";
+  return "unknown";
+}
+
+function genericPricingFallback(kind: "flights" | "hotels" | "transport" | "activities"): string {
+  if (kind === "flights") return "Check current fares";
+  if (kind === "hotels") return "Check current hotel options";
+  if (kind === "transport") return "Check current transport options";
+  return "Check current activity options";
+}
+
+function tripTotalSummaryLine(
+  tripPriceFrom?: string | null,
+  ticketsPriceFrom?: string | null,
+  flightsPriceFrom?: string | null,
+  hotelsPriceFrom?: string | null
+): string | null {
+  const total = cleanPriceLabel(tripPriceFrom);
+  if (total) return total;
+
+  const parts = [ticketsPriceFrom, flightsPriceFrom, hotelsPriceFrom]
+    .map((value) => cleanPriceLabel(value))
+    .filter(Boolean) as string[];
+
+  if (parts.length >= 2) return parts.join(" • ");
+  if (parts.length === 1) return parts[0];
+  return null;
 }
 
 export default function useTripDetailViewModel({
@@ -230,6 +269,26 @@ export default function useTripDetailViewModel({
     return pending.length > 0 || saved.length > 0 || booked.length > 0;
   }, [pending.length, saved.length, booked.length]);
 
+  const flightPriceMode = useMemo(
+    () => inferPriceMode(bookingPriceBoard?.flights),
+    [bookingPriceBoard?.flights]
+  );
+
+  const hotelPriceMode = useMemo(
+    () => inferPriceMode(bookingPriceBoard?.hotels),
+    [bookingPriceBoard?.hotels]
+  );
+
+  const transportPriceMode = useMemo(
+    () => inferPriceMode(bookingPriceBoard?.transfers),
+    [bookingPriceBoard?.transfers]
+  );
+
+  const thingsPriceMode = useMemo(
+    () => inferPriceMode(bookingPriceBoard?.experiences),
+    [bookingPriceBoard?.experiences]
+  );
+
   const baseMeta = useMemo(() => {
     return {
       tripId: trip?.id ?? null,
@@ -271,43 +330,50 @@ export default function useTripDetailViewModel({
   const flightAction = useMemo<PartnerActionBundle>(() => {
     return {
       url: affiliateUrls?.flightsUrl,
-      message: "We need a city + dates saved to build booking links.",
+      message: "We need a city + dates saved to build flight links.",
       config: {
         partnerId: "aviasales",
         savedItemType: "flight",
         title: `Flights to ${cityName}`,
         metadata: buildMeta("unknown", "travel", {
           provider: "aviasales",
-          priceMode: "live",
+          priceMode: flightPriceMode,
           priceFrom: cleanPriceLabel(flightsPriceFrom),
         }),
       },
     };
-  }, [affiliateUrls?.flightsUrl, cityName, buildMeta, flightsPriceFrom]);
+  }, [affiliateUrls?.flightsUrl, cityName, buildMeta, flightsPriceFrom, flightPriceMode]);
 
   const hotelAction = useMemo<PartnerActionBundle>(() => {
     return {
       url: affiliateUrls?.hotelsUrl || affiliateUrls?.staysUrl,
-      message: "We need a city + dates saved to build booking links.",
+      message: "We need a city + dates saved to build hotel links.",
       config: {
         partnerId: "expedia",
         savedItemType: "hotel",
         title: `Hotels in ${cityName}`,
         metadata: buildMeta("unknown", "stay", {
           provider: "expedia",
-          priceMode: "live",
+          priceMode: hotelPriceMode,
           priceFrom: cleanPriceLabel(hotelsPriceFrom),
         }),
       },
     };
-  }, [affiliateUrls?.hotelsUrl, affiliateUrls?.staysUrl, cityName, buildMeta, hotelsPriceFrom]);
+  }, [
+    affiliateUrls?.hotelsUrl,
+    affiliateUrls?.staysUrl,
+    cityName,
+    buildMeta,
+    hotelsPriceFrom,
+    hotelPriceMode,
+  ]);
 
   const transportAction = useMemo<PartnerActionBundle>(() => {
     const hasOmio = Boolean(affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl);
 
     return {
       url: affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl || affiliateUrls?.transfersUrl,
-      message: "We need a city + dates saved to build booking links.",
+      message: "We need a city + dates saved to build transport links.",
       config: hasOmio
         ? {
             partnerId: "omio",
@@ -315,7 +381,7 @@ export default function useTripDetailViewModel({
             title: `Rail & bus for ${cityName}`,
             metadata: buildMeta("unknown", "travel", {
               provider: "omio",
-              priceMode: "live",
+              priceMode: transportPriceMode,
               transportMode: "rail_bus",
               priceFrom: cleanPriceLabel(transfersPriceFrom),
             }),
@@ -326,7 +392,7 @@ export default function useTripDetailViewModel({
             title: `Transfers in ${cityName}`,
             metadata: buildMeta("unknown", "transfers", {
               provider: "kiwitaxi",
-              priceMode: "live",
+              priceMode: transportPriceMode,
               transportMode: "transfer",
               priceFrom: cleanPriceLabel(transfersPriceFrom),
             }),
@@ -339,19 +405,20 @@ export default function useTripDetailViewModel({
     cityName,
     buildMeta,
     transfersPriceFrom,
+    transportPriceMode,
   ]);
 
   const thingsAction = useMemo<PartnerActionBundle>(() => {
     return {
       url: affiliateUrls?.experiencesUrl || affiliateUrls?.thingsUrl,
-      message: "We need a city saved to build booking links.",
+      message: "We need a city saved to build activity links.",
       config: {
         partnerId: "getyourguide",
         savedItemType: "things",
         title: `Experiences in ${cityName}`,
         metadata: buildMeta("unknown", "things", {
           provider: "getyourguide",
-          priceMode: "live",
+          priceMode: thingsPriceMode,
           priceFrom: cleanPriceLabel(experiencesPriceFrom),
         }),
       },
@@ -362,6 +429,7 @@ export default function useTripDetailViewModel({
     cityName,
     buildMeta,
     experiencesPriceFrom,
+    thingsPriceMode,
   ]);
 
   const openFlights = useCallback(
@@ -795,7 +863,7 @@ export default function useTripDetailViewModel({
         "Flights",
         completionLabel(
           flightState,
-          pricingOrFallback(flightsPriceFrom, "Aviasales • live fares"),
+          pricingOrFallback(flightsPriceFrom, genericPricingFallback("flights")),
           "Flight option saved",
           "Flight booked"
         ),
@@ -812,7 +880,7 @@ export default function useTripDetailViewModel({
         "Hotels",
         completionLabel(
           hotelState,
-          pricingOrFallback(hotelsPriceFrom, "Expedia • live rates"),
+          pricingOrFallback(hotelsPriceFrom, genericPricingFallback("hotels")),
           "Hotel option saved",
           "Hotel booked"
         ),
@@ -829,7 +897,7 @@ export default function useTripDetailViewModel({
         "Rail / Bus",
         completionLabel(
           transportState,
-          pricingOrFallback(transfersPriceFrom, "Omio • live routes"),
+          pricingOrFallback(transfersPriceFrom, genericPricingFallback("transport")),
           "Transport option saved",
           "Transport booked"
         ),
@@ -844,7 +912,7 @@ export default function useTripDetailViewModel({
         "Transfers",
         completionLabel(
           transportState,
-          pricingOrFallback(transfersPriceFrom, "Kiwitaxi • live pricing"),
+          pricingOrFallback(transfersPriceFrom, genericPricingFallback("transport")),
           "Transfer option saved",
           "Transfer booked"
         ),
@@ -861,7 +929,7 @@ export default function useTripDetailViewModel({
         "Activities",
         completionLabel(
           thingsState,
-          pricingOrFallback(experiencesPriceFrom, "GetYourGuide • live options"),
+          pricingOrFallback(experiencesPriceFrom, genericPricingFallback("activities")),
           "Activity saved",
           "Activity booked"
         ),
@@ -879,7 +947,7 @@ export default function useTripDetailViewModel({
       if (affiliateUrls.omioUrl || affiliateUrls.trainsUrl) {
         add(
           "Rail / Bus",
-          pricingOrFallback(transfersPriceFrom, "Omio • live routes"),
+          pricingOrFallback(transfersPriceFrom, genericPricingFallback("transport")),
           () => {
             void openTransport("smart_booking");
           },
@@ -889,7 +957,7 @@ export default function useTripDetailViewModel({
       } else {
         add(
           "Activities",
-          pricingOrFallback(experiencesPriceFrom, "GetYourGuide • live options"),
+          pricingOrFallback(experiencesPriceFrom, genericPricingFallback("activities")),
           () => {
             void openThings("smart_booking");
           },
@@ -945,17 +1013,12 @@ export default function useTripDetailViewModel({
   }, [hasMatch, ticketState, flightState, hotelState, transportState]);
 
   const commercialSummaryLine = useMemo(() => {
-    if (cleanPriceLabel(tripPriceFrom)) {
-      return `${tripPriceFrom} total for core trip`;
-    }
-
-    const parts = [ticketsPriceFrom, flightsPriceFrom, hotelsPriceFrom]
-      .map((value) => cleanPriceLabel(value))
-      .filter(Boolean) as string[];
-
-    if (parts.length >= 2) return parts.join(" • ");
-    if (parts.length === 1) return parts[0];
-    return null;
+    return tripTotalSummaryLine(
+      tripPriceFrom,
+      ticketsPriceFrom,
+      flightsPriceFrom,
+      hotelsPriceFrom
+    );
   }, [tripPriceFrom, ticketsPriceFrom, flightsPriceFrom, hotelsPriceFrom]);
 
   const completionSummary = useMemo(() => {
