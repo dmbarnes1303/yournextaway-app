@@ -26,9 +26,22 @@ type FtnListResponse = {
   message?: string;
 };
 
+type ScoredEvent = {
+  ev: FtnEvent;
+  score: number;
+  exactTeams: boolean;
+  sameDay: boolean;
+  hasDirectUrl: boolean;
+  penalty: number;
+};
+
 const FTN_FETCH_TIMEOUT_MS = 6000;
 const FTN_CANONICAL_HOST = "www.footballticketnet.com";
-const FTN_SEARCH_FALLBACK_PENALTY = 40;
+
+const FTN_MIN_STRONG_SCORE = 60;
+const FTN_MIN_EXACT_SCORE = 92;
+const FTN_SEARCH_FALLBACK_PENALTY = 45;
+const FTN_WEAK_DIRECT_URL_PENALTY = 10;
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -51,6 +64,10 @@ function absDays(a: Date, b: Date): number {
 
 function sha256(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function eventId(ev: FtnEvent): string {
+  return clean(ev.event_id) || clean(ev.id);
 }
 
 function eventTitle(ev: FtnEvent): string {
@@ -144,7 +161,22 @@ function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
     return homeMatch && awayMatch;
   }
 
-  return teamsMatchLoose(eventTitle(ev), inputHomeVariants, inputAwayVariants);
+  return false;
+}
+
+function reversedTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
+  const inputHomeVariants = expandTeamAliases(input.homeName);
+  const inputAwayVariants = expandTeamAliases(input.awayName);
+
+  const evHome = norm(eventHome(ev));
+  const evAway = norm(eventAway(ev));
+
+  if (!evHome || !evAway) return false;
+
+  const homeReversed = inputAwayVariants.some((variant) => evHome === norm(variant));
+  const awayReversed = inputHomeVariants.some((variant) => evAway === norm(variant));
+
+  return homeReversed && awayReversed;
 }
 
 function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
@@ -195,52 +227,6 @@ function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
   return penalty;
 }
 
-function scoreEvent(ev: FtnEvent, input: TicketResolveInput): number {
-  let score = 0;
-
-  const title = eventTitle(ev);
-  const evHome = eventHome(ev);
-  const evAway = eventAway(ev);
-
-  const inputHomeVariants = expandTeamAliases(input.homeName);
-  const inputAwayVariants = expandTeamAliases(input.awayName);
-
-  if (evHome && evAway) {
-    const homeExact = inputHomeVariants.some((variant) => norm(evHome) === norm(variant));
-    const awayExact = inputAwayVariants.some((variant) => norm(evAway) === norm(variant));
-
-    const homeReversed = inputAwayVariants.some((variant) => norm(evHome) === norm(variant));
-    const awayReversed = inputHomeVariants.some((variant) => norm(evAway) === norm(variant));
-
-    if (homeExact && awayExact) score += 80;
-    else if (homeReversed && awayReversed) score += 20;
-  } else if (title && teamsMatchLoose(title, inputHomeVariants, inputAwayVariants)) {
-    score += 55;
-  }
-
-  const kickoff = safeDate(input.kickoffIso);
-  const evDt = safeDate(eventDate(ev));
-  if (kickoff && evDt) {
-    const diff = absDays(kickoff, evDt);
-
-    if (diff === 0) score += 25;
-    else if (diff === 1) score += 15;
-    else if (diff === 2) score += 8;
-    else if (diff === 3) score += 3;
-    else if (diff > 3) score -= 1000;
-  }
-
-  if (eventPrice(ev)) score += 2;
-
-  score -= variantPenalty(ev, input);
-
-  return score;
-}
-
-function isStrongEnough(score: number): boolean {
-  return score >= 50;
-}
-
 function formatYmd(date: Date): string {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -269,7 +255,7 @@ function buildDateWindow(kickoffIso: string): { fromDate?: string; toDate?: stri
 
 function summarizeEvent(ev: FtnEvent) {
   return {
-    eventId: clean(ev.event_id) || clean(ev.id) || null,
+    eventId: eventId(ev) || null,
     title: eventTitle(ev) || null,
     home: eventHome(ev) || null,
     away: eventAway(ev) || null,
@@ -320,10 +306,12 @@ function hasUsableEventUrl(ev: FtnEvent): boolean {
   try {
     const parsed = new URL(normalized);
     const path = parsed.pathname.toLowerCase();
+    const query = parsed.search.toLowerCase();
 
     if (!path || path === "/") return false;
     if (path.startsWith("/search")) return false;
     if (path.includes("404")) return false;
+    if (query.includes("text=") || query.includes("q=")) return false;
 
     return true;
   } catch {
@@ -337,7 +325,10 @@ function buildStableSearchUrl(input: TicketResolveInput): string {
   return `https://${FTN_CANONICAL_HOST}/search?text=${encoded}`;
 }
 
-function buildOutboundUrl(ev: FtnEvent, input: TicketResolveInput): {
+function buildOutboundUrl(
+  ev: FtnEvent,
+  input: TicketResolveInput
+): {
   url: string;
   isSearchFallback: boolean;
 } {
@@ -400,6 +391,106 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function scoreEvent(ev: FtnEvent, input: TicketResolveInput): ScoredEvent {
+  let score = 0;
+
+  const title = eventTitle(ev);
+  const evHome = eventHome(ev);
+  const evAway = eventAway(ev);
+
+  const inputHomeVariants = expandTeamAliases(input.homeName);
+  const inputAwayVariants = expandTeamAliases(input.awayName);
+
+  const exactTeams = exactTeamsMatch(ev, input);
+  const reversedTeams = reversedTeamsMatch(ev, input);
+  const looseTeams = title
+    ? teamsMatchLoose(title, inputHomeVariants, inputAwayVariants)
+    : false;
+
+  if (exactTeams) score += 82;
+  else if (reversedTeams) score += 8;
+  else if (evHome && evAway) score -= 50;
+  else if (looseTeams) score += 42;
+
+  const kickoff = safeDate(input.kickoffIso);
+  const evDt = safeDate(eventDate(ev));
+  let sameDay = false;
+
+  if (kickoff && evDt) {
+    const diff = absDays(kickoff, evDt);
+
+    if (diff === 0) {
+      score += 24;
+      sameDay = true;
+    } else if (diff === 1) {
+      score += 10;
+    } else if (diff === 2) {
+      score += 3;
+    } else {
+      score -= 1000;
+    }
+  } else {
+    score -= 20;
+  }
+
+  if (eventPrice(ev)) score += 3;
+
+  const penalty = variantPenalty(ev, input);
+  score -= penalty;
+
+  const hasDirectUrl = hasUsableEventUrl(ev);
+  if (hasDirectUrl) score += 8;
+
+  if (!exactTeams && !looseTeams) score -= 1000;
+
+  return {
+    ev,
+    score,
+    exactTeams,
+    sameDay,
+    hasDirectUrl,
+    penalty,
+  };
+}
+
+function dedupeEvents(events: FtnEvent[]): FtnEvent[] {
+  const map = new Map<string, FtnEvent>();
+
+  for (const ev of events) {
+    const key = [
+      eventId(ev),
+      eventTitle(ev),
+      eventDate(ev),
+      eventHome(ev),
+      eventAway(ev),
+    ]
+      .join("|")
+      .toLowerCase();
+
+    if (!key.replace(/\|/g, "")) continue;
+    if (!map.has(key)) {
+      map.set(key, ev);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+function pickBestEvent(events: FtnEvent[], input: TicketResolveInput): ScoredEvent | null {
+  const scored = dedupeEvents(events)
+    .map((ev) => scoreEvent(ev, input))
+    .filter((x) => x.score >= FTN_MIN_STRONG_SCORE)
+    .sort((a, b) => {
+      if (a.exactTeams !== b.exactTeams) return a.exactTeams ? -1 : 1;
+      if (a.sameDay !== b.sameDay) return a.sameDay ? -1 : 1;
+      if (a.hasDirectUrl !== b.hasDirectUrl) return a.hasDirectUrl ? -1 : 1;
+      return b.score - a.score;
+    });
+
+  if (!scored.length) return null;
+  return scored[0];
 }
 
 export async function resolveFtnCandidate(
@@ -502,31 +593,27 @@ export async function resolveFtnCandidate(
     sample: events.slice(0, 5).map(summarizeEvent),
   });
 
-  const scored = events
-    .map((ev) => ({
-      ev,
-      score: scoreEvent(ev, input),
-      penalty: variantPenalty(ev, input),
-    }))
-    .filter((x) => isStrongEnough(x.score))
-    .sort((a, b) => b.score - a.score);
+  const best = pickBestEvent(events, input);
 
-  if (!scored.length) {
+  if (!best) {
     console.log("[FTN] events returned but no strong match", {
       count: events.length,
-      sample: events.slice(0, 5).map((ev) => ({
-        ...summarizeEvent(ev),
-        score: scoreEvent(ev, input),
-        penalty: variantPenalty(ev, input),
-      })),
+      sample: events.slice(0, 5).map((ev) => {
+        const scored = scoreEvent(ev, input);
+        return {
+          ...summarizeEvent(ev),
+          score: scored.score,
+          exactTeams: scored.exactTeams,
+          sameDay: scored.sameDay,
+          hasDirectUrl: scored.hasDirectUrl,
+          penalty: scored.penalty,
+        };
+      }),
     });
     return null;
   }
 
-  const best = scored[0];
-  const exact = exactTeamsMatch(best.ev, input) && best.score >= 80;
   const normalizedPrice = eventPrice(best.ev);
-
   const outbound = buildOutboundUrl(best.ev, input);
   const affiliateUrl = appendAffiliate(outbound.url);
 
@@ -535,15 +622,26 @@ export async function resolveFtnCandidate(
       best: {
         ...summarizeEvent(best.ev),
         score: best.score,
+        exactTeams: best.exactTeams,
+        sameDay: best.sameDay,
         penalty: best.penalty,
       },
     });
     return null;
   }
 
-  const finalScore = outbound.isSearchFallback
-    ? Math.max(0, best.score - FTN_SEARCH_FALLBACK_PENALTY)
-    : best.score;
+  let finalScore = best.score;
+  if (outbound.isSearchFallback) {
+    finalScore = Math.max(0, finalScore - FTN_SEARCH_FALLBACK_PENALTY);
+  } else if (!best.hasDirectUrl) {
+    finalScore = Math.max(0, finalScore - FTN_WEAK_DIRECT_URL_PENALTY);
+  }
+
+  const exact =
+    best.exactTeams &&
+    best.sameDay &&
+    !outbound.isSearchFallback &&
+    finalScore >= FTN_MIN_EXACT_SCORE;
 
   const reason: TicketCandidate["reason"] = outbound.isSearchFallback
     ? "search_fallback"
@@ -556,7 +654,10 @@ export async function resolveFtnCandidate(
       ...summarizeEvent(best.ev),
       score: best.score,
       finalScore,
+      exactTeams: best.exactTeams,
+      sameDay: best.sameDay,
       penalty: best.penalty,
+      hasDirectUrl: best.hasDirectUrl,
       exact,
       isSearchFallback: outbound.isSearchFallback,
       affiliateUrl,
@@ -572,4 +673,4 @@ export async function resolveFtnCandidate(
     priceText: normalizedPrice,
     reason,
   };
-}
+      }
