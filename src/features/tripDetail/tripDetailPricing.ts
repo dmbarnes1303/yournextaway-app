@@ -87,10 +87,37 @@ function rankDisplayMode(mode: PriceDisplayMode): number {
   return 2;
 }
 
+function rankSource(source: PricePointSource): number {
+  if (source === "saved_item") return 0;
+  if (source === "live_api") return 1;
+  if (source === "metadata") return 2;
+  if (source === "price_text") return 3;
+  return 4;
+}
+
 function isTotalEligible(point: PricePoint | null): point is PricePoint {
   if (!point) return false;
   if (!isPositiveAmount(point.amount)) return false;
-  return point.displayMode === "booked" || point.displayMode === "live_from";
+
+  if (point.displayMode === "booked") {
+    return point.source === "saved_item" || point.source === "metadata";
+  }
+
+  if (point.displayMode === "live_from") {
+    return point.source === "live_api";
+  }
+
+  return false;
+}
+
+function withDisplayMode(
+  point: Omit<PricePoint, "displayMode">,
+  displayMode: PriceDisplayMode
+): PricePoint {
+  return {
+    ...point,
+    displayMode,
+  };
 }
 
 export function parsePriceText(raw: unknown): Omit<PricePoint, "displayMode"> | null {
@@ -138,9 +165,21 @@ export function parsePriceText(raw: unknown): Omit<PricePoint, "displayMode"> | 
   return null;
 }
 
-export function buildPricePointFromItem(item: SavedItem | null): PricePoint | null {
-  if (!item) return null;
+function buildSavedItemPricePoint(item: SavedItem): PricePoint | null {
+  const directText = parsePriceText(item.priceText);
 
+  if (!directText) return null;
+
+  return {
+    amount: directText.amount,
+    currency: directText.currency,
+    text: directText.text,
+    source: "saved_item",
+    displayMode: displayModeForItem(item),
+  };
+}
+
+function buildMetadataNumericPricePoint(item: SavedItem): PricePoint | null {
   const meta = (item.metadata ?? {}) as Record<string, unknown>;
 
   const numericCandidates = [
@@ -155,21 +194,27 @@ export function buildPricePointFromItem(item: SavedItem | null): PricePoint | nu
   for (const candidate of numericCandidates) {
     const amount = toPositiveAmount(candidate);
 
-    if (amount != null) {
-      const currency =
-        normalizeCurrency(meta.currency) ||
-        normalizeCurrency(meta.priceCurrency) ||
-        normalizeCurrency(meta.resolvedCurrency);
+    if (amount == null) continue;
 
-      return {
-        amount,
-        currency,
-        text: formatPriceText(currency, amount),
-        source: "metadata",
-        displayMode: displayModeForItem(item),
-      };
-    }
+    const currency =
+      normalizeCurrency(meta.currency) ||
+      normalizeCurrency(meta.priceCurrency) ||
+      normalizeCurrency(meta.resolvedCurrency);
+
+    return {
+      amount,
+      currency,
+      text: formatPriceText(currency, amount),
+      source: "metadata",
+      displayMode: displayModeForItem(item),
+    };
   }
+
+  return null;
+}
+
+function buildMetadataTextPricePoint(item: SavedItem): PricePoint | null {
+  const meta = (item.metadata ?? {}) as Record<string, unknown>;
 
   const textCandidates = [
     meta.resolvedPriceText,
@@ -181,15 +226,31 @@ export function buildPricePointFromItem(item: SavedItem | null): PricePoint | nu
 
   for (const candidate of textCandidates) {
     const parsed = parsePriceText(candidate);
-    if (parsed) {
-      return {
-        ...parsed,
-        displayMode: displayModeForItem(item),
-      };
-    }
+    if (!parsed) continue;
+
+    return {
+      ...parsed,
+      displayMode: displayModeForItem(item),
+    };
   }
 
   return null;
+}
+
+export function buildPricePointFromItem(item: SavedItem | null): PricePoint | null {
+  if (!item) return null;
+
+  const savedPoint = buildSavedItemPricePoint(item);
+  const metadataNumericPoint = buildMetadataNumericPricePoint(item);
+  const metadataTextPoint = buildMetadataTextPricePoint(item);
+
+  const candidates = [savedPoint, metadataNumericPoint, metadataTextPoint].filter(
+    (point): point is PricePoint => point !== null
+  );
+
+  if (candidates.length === 0) return null;
+
+  return choosePreferredPoint(candidates);
 }
 
 function choosePreferredPoint(points: PricePoint[]): PricePoint | null {
@@ -217,11 +278,19 @@ function choosePreferredPoint(points: PricePoint[]): PricePoint | null {
 
   return (
     pool.sort((a, b) => {
-      if (rankDisplayMode(a.displayMode) !== rankDisplayMode(b.displayMode)) {
-        return rankDisplayMode(a.displayMode) - rankDisplayMode(b.displayMode);
-      }
+      const modeRankDiff = rankDisplayMode(a.displayMode) - rankDisplayMode(b.displayMode);
+      if (modeRankDiff !== 0) return modeRankDiff;
 
-      return (a.amount ?? Number.POSITIVE_INFINITY) - (b.amount ?? Number.POSITIVE_INFINITY);
+      const sourceRankDiff = rankSource(a.source) - rankSource(b.source);
+      if (sourceRankDiff !== 0) return sourceRankDiff;
+
+      const aAmount = a.amount ?? Number.POSITIVE_INFINITY;
+      const bAmount = b.amount ?? Number.POSITIVE_INFINITY;
+      if (aAmount !== bAmount) return aAmount - bAmount;
+
+      const aText = clean(a.text);
+      const bText = clean(b.text);
+      return aText.localeCompare(bText);
     })[0] ?? null
   );
 }
@@ -271,7 +340,7 @@ export function sumTripCorePrice(args: {
     amount,
     currency,
     text: formatPriceText(currency, amount),
-    source: "saved_item",
+    source: displayMode === "live_from" ? "live_api" : "saved_item",
     displayMode,
   };
 }
@@ -320,11 +389,15 @@ export function withFlightPriceOverride(args: {
   flightPricePoint: Omit<PricePoint, "displayMode"> | null;
 }): BookingPriceBoard {
   const override = args.flightPricePoint
-    ? {
-        ...args.flightPricePoint,
-        source: "live_api" as const,
-        displayMode: "live_from" as const,
-      }
+    ? withDisplayMode(
+        {
+          amount: args.flightPricePoint.amount,
+          currency: args.flightPricePoint.currency,
+          text: args.flightPricePoint.text,
+          source: "live_api",
+        },
+        "live_from"
+      )
     : null;
 
   const flights = override || args.board.flights;
