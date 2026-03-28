@@ -212,6 +212,53 @@ function normalizeCheckedProviders(value: unknown): string[] {
   return out;
 }
 
+function hasUsablePrimaryFields(args: {
+  provider: string | null;
+  url: string | null;
+  title: string | null;
+}): boolean {
+  return Boolean(args.provider && args.url && args.title);
+}
+
+function isStrongOption(option: TicketResolutionOption | null | undefined): boolean {
+  if (!option) return false;
+  if (!option.provider || !option.url || !option.title) return false;
+
+  const reason = option.reason;
+  const urlQuality = normalizeUrlQuality(option.urlQuality);
+
+  if (option.exact || reason === "exact_event") {
+    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
+  }
+
+  if (reason === "partial_match") {
+    return urlQuality === "event" || urlQuality === "listing";
+  }
+
+  return false;
+}
+
+function isStrongPrimary(args: {
+  provider: string | null;
+  url: string | null;
+  title: string | null;
+  exact: boolean;
+  reason: TicketResolutionResult["reason"];
+  urlQuality: TicketUrlQuality;
+}): boolean {
+  if (!hasUsablePrimaryFields(args)) return false;
+
+  if (args.exact || args.reason === "exact_event") {
+    return args.urlQuality === "event" || args.urlQuality === "listing" || args.urlQuality === "unknown";
+  }
+
+  if (args.reason === "partial_match") {
+    return args.urlQuality === "event" || args.urlQuality === "listing";
+  }
+
+  return false;
+}
+
 function normalizeResolutionResult(
   input: TicketResolutionResult | null
 ): TicketResolutionResult | null {
@@ -233,19 +280,37 @@ function normalizeResolutionResult(
   const priceText = clean(input.priceText) || fallbackTop?.priceText || null;
 
   const score = normalizeScore(input.score) ?? fallbackTop?.score ?? null;
-  const rawScore =
-    normalizeScore(input.rawScore) ?? fallbackTop?.rawScore ?? null;
+  const rawScore = normalizeScore(input.rawScore) ?? fallbackTop?.rawScore ?? null;
 
   const exact =
     typeof input.exact === "boolean"
       ? input.exact
       : Boolean(fallbackTop?.exact);
 
-  const hasUsablePrimary = Boolean(provider && url && title);
+  const topLevelReason = normalizeTopLevelReason(
+    input.reason,
+    Boolean(provider),
+    normalizedOptions.length > 0
+  );
+
+  const topLevelUrlQuality = normalizeUrlQuality(input.urlQuality ?? fallbackTop?.urlQuality);
+
+  const hasUsablePrimary = hasUsablePrimaryFields({ provider, url, title });
   const hasUsableOptions = normalizedOptions.length > 0;
 
+  const hasStrongPrimary = isStrongPrimary({
+    provider,
+    url,
+    title,
+    exact,
+    reason: topLevelReason,
+    urlQuality: topLevelUrlQuality,
+  });
+
+  const hasStrongOptions = normalizedOptions.some((option) => isStrongOption(option));
+
   return {
-    ok: hasUsablePrimary || hasUsableOptions ? true : Boolean(input.ok),
+    ok: hasStrongPrimary || hasStrongOptions,
     provider,
     exact,
     score,
@@ -253,11 +318,13 @@ function normalizeResolutionResult(
     url,
     title,
     priceText,
-    reason: normalizeTopLevelReason(input.reason, Boolean(provider), hasUsableOptions),
-    urlQuality: normalizeUrlQuality(input.urlQuality ?? fallbackTop?.urlQuality),
+    reason: topLevelReason,
+    urlQuality: topLevelUrlQuality,
     checkedProviders: normalizeCheckedProviders(input.checkedProviders),
     options: normalizedOptions,
-    error: clean(input.error) || undefined,
+    error:
+      clean(input.error) ||
+      (!hasUsablePrimary && !hasUsableOptions ? "not_found" : undefined),
   };
 }
 
@@ -322,13 +389,11 @@ export async function resolveTicketForFixture(
     }
 
     if (!res.ok) {
-      const hasUsableData =
-        Boolean(normalized.url && normalized.title && normalized.provider) ||
-        Boolean(normalized.options && normalized.options.length > 0);
+      const hasStrongData = Boolean(normalized.ok);
 
       return {
         ...normalized,
-        ok: hasUsableData,
+        ok: hasStrongData,
         error: normalized.error || `http_${res.status}`,
       };
     }
@@ -345,4 +410,4 @@ export async function resolveTicketForFixture(
   } finally {
     if (timeout) clearTimeout(timeout);
   }
-                                           }
+}
