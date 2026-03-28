@@ -14,6 +14,7 @@ import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
 import TripMatchesCard from "@/src/components/trip/TripMatchesCard";
+import TicketOptionsSheet from "@/src/components/tickets/TicketOptionsSheet";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
@@ -387,6 +388,12 @@ export default function TripDetailScreen() {
     data.experiencesPriceFrom,
   ]);
 
+  const ticketSheetMatchLabel = useMemo(() => {
+    const payload = controller.ticketSheet.payload;
+    if (!payload) return "Match tickets";
+    return `${payload.homeName} vs ${payload.awayName}`;
+  }, [controller.ticketSheet.payload]);
+
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen options={{ headerShown: true, title: "Trip" }} />
@@ -618,6 +625,25 @@ export default function TripDetailScreen() {
             </>
           )}
         </ScrollView>
+
+        <TicketOptionsSheet
+          visible={controller.ticketSheet.visible}
+          matchLabel={ticketSheetMatchLabel}
+          subtitle="Compare ticket providers"
+          options={controller.ticketSheet.payload?.options || []}
+          onClose={controller.closeTicketSheet}
+          onSelect={(option) => {
+            void controller.onSelectTicketSheetOption(option);
+          }}
+          onCompareAll={controller.onCompareAllTickets}
+          onOpenOfficial={
+            controller.ticketSheet.payload?.officialTicketUrl
+              ? () => {
+                  void controller.onOpenOfficialFromSheet();
+                }
+              : null
+          }
+        />
       </SafeAreaView>
     </Background>
   );
