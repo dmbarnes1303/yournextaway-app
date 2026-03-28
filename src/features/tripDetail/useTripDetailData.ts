@@ -10,10 +10,7 @@ import {
   isNumericId,
 } from "@/src/features/tripDetail/helpers";
 
-import {
-  buildAffiliateUrls,
-  fetchLiveFlightPrice,
-} from "@/src/features/tripDetail/tripDetailAffiliates";
+import { buildAffiliateUrls } from "@/src/features/tripDetail/tripDetailAffiliates";
 
 import {
   getLateTransportNote,
@@ -32,10 +29,7 @@ import {
 
 import {
   buildBookingPriceBoard,
-  priceLine,
-  withFlightPriceOverride,
   type BookingPriceBoard,
-  type PricePoint,
 } from "@/src/features/tripDetail/tripDetailPricing";
 
 import {
@@ -63,11 +57,6 @@ type Props = {
   originIata: string;
 };
 
-type FlightState = {
-  loading: boolean;
-  pricePoint: Omit<PricePoint, "displayMode"> | null;
-};
-
 export default function useTripDetailData({
   trip,
   savedItems,
@@ -75,10 +64,6 @@ export default function useTripDetailData({
 }: Props) {
   const [fixturesById, setFixturesById] = useState<FixtureMap>({});
   const [fxLoading, setFxLoading] = useState(false);
-  const [flightState, setFlightState] = useState<FlightState>({
-    loading: false,
-    pricePoint: null,
-  });
 
   const activeTripId = useMemo(() => clean(trip?.id) || null, [trip?.id]);
 
@@ -155,56 +140,6 @@ export default function useTripDetailData({
   const primaryKickoffIso = useMemo(() => {
     return getPrimaryKickoffIso(trip, primaryFixture);
   }, [trip, primaryFixture]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      if (!trip || !cityName || cityName === "Trip") {
-        if (!cancelled) {
-          setFlightState({
-            loading: false,
-            pricePoint: null,
-          });
-        }
-        return;
-      }
-
-      setFlightState({
-        loading: true,
-        pricePoint: null,
-      });
-
-      try {
-        const pricePoint = await fetchLiveFlightPrice({
-          trip,
-          cityName,
-          originIata: cleanUpper3(originIata, "LON"),
-          primaryKickoffIso,
-        });
-
-        if (!cancelled) {
-          setFlightState({
-            loading: false,
-            pricePoint,
-          });
-        }
-      } catch {
-        if (!cancelled) {
-          setFlightState({
-            loading: false,
-            pricePoint: null,
-          });
-        }
-      }
-    }
-
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [trip, cityName, originIata, primaryKickoffIso]);
 
   const affiliateUrls = useMemo<AffiliateUrls | null>(() => {
     return buildAffiliateUrls({
@@ -297,37 +232,8 @@ export default function useTripDetailData({
   }, [primaryMatchId, ticketsByMatchId]);
 
   const bookingPriceBoard = useMemo<BookingPriceBoard>(() => {
-    const base = buildBookingPriceBoard(savedItems);
-
-    return withFlightPriceOverride({
-      board: base,
-      flightPricePoint: flightState.pricePoint,
-    });
-  }, [savedItems, flightState.pricePoint]);
-
-  const ticketsPriceFrom = useMemo(() => {
-    return priceLine(bookingPriceBoard.tickets);
-  }, [bookingPriceBoard.tickets]);
-
-  const flightsPriceFrom = useMemo(() => {
-    return priceLine(bookingPriceBoard.flights);
-  }, [bookingPriceBoard.flights]);
-
-  const hotelsPriceFrom = useMemo(() => {
-    return priceLine(bookingPriceBoard.hotels);
-  }, [bookingPriceBoard.hotels]);
-
-  const transfersPriceFrom = useMemo(() => {
-    return priceLine(bookingPriceBoard.transfers);
-  }, [bookingPriceBoard.transfers]);
-
-  const experiencesPriceFrom = useMemo(() => {
-    return priceLine(bookingPriceBoard.experiences);
-  }, [bookingPriceBoard.experiences]);
-
-  const tripPriceFrom = useMemo(() => {
-    return priceLine(bookingPriceBoard.tripTotal);
-  }, [bookingPriceBoard.tripTotal]);
+    return buildBookingPriceBoard(savedItems);
+  }, [savedItems]);
 
   const progress = useMemo(() => {
     if (!activeTripId) {
@@ -386,16 +292,8 @@ export default function useTripDetailData({
     ticketsByMatchId,
     primaryTicketItem,
     bookingPriceBoard,
-    ticketsPriceFrom,
-    flightsPriceFrom,
-    hotelsPriceFrom,
-    transfersPriceFrom,
-    experiencesPriceFrom,
-    tripPriceFrom,
     progress,
     readiness,
     dateIsoForPrimaryMatch,
-    flightSearchLoading: flightState.loading,
-    liveFlightPricePoint: flightState.pricePoint,
   };
 }
