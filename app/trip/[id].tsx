@@ -42,13 +42,14 @@ const PLAN_STORAGE_KEY = "yna:plan";
 type PlannerCardItem = {
   key: Extract<WorkspaceSectionKey, "tickets" | "stay" | "travel" | "things">;
   label: string;
+  eyebrow: string;
 };
 
 const PLANNER_ITEMS: PlannerCardItem[] = [
-  { key: "tickets", label: "Tickets" },
-  { key: "travel", label: "Travel" },
-  { key: "stay", label: "Stay" },
-  { key: "things", label: "Extras" },
+  { key: "tickets", label: "Tickets", eyebrow: "Anchor the trip" },
+  { key: "travel", label: "Travel", eyebrow: "Get there" },
+  { key: "stay", label: "Stay", eyebrow: "Choose location" },
+  { key: "things", label: "Extras", eyebrow: "Optional add-ons" },
 ];
 
 function statusLabel(status: string) {
@@ -88,47 +89,24 @@ function plannerSubtitle(args: {
   if (key === "tickets") {
     if (ticketsPriceFrom) return ticketsPriceFrom;
     if (count > 0) return count === 1 ? "1 ticket item saved" : `${count} ticket items saved`;
-    return "Compare ticket options";
+    return "Compare live ticket options";
   }
 
   if (key === "travel") {
     if (flightsPriceFrom) return flightsPriceFrom;
     if (count > 0) return count === 1 ? "1 travel item added" : `${count} travel items added`;
-    return "Flights or rail around your trip dates";
+    return "Flights or rail for these trip dates";
   }
 
   if (key === "stay") {
     if (hotelsPriceFrom) return hotelsPriceFrom;
     if (count > 0) return count === 1 ? "1 stay item added" : `${count} stay items added`;
-    return "Hotels for this trip window";
+    return "Hotels for your trip window";
   }
 
   if (experiencesPriceFrom) return experiencesPriceFrom;
   if (count > 0) return count === 1 ? "1 extra added" : `${count} extras added`;
   return "Optional";
-}
-
-function headlineTicketText(hasTickets: boolean, ticketsPriceFrom?: string | null) {
-  if (ticketsPriceFrom) return ticketsPriceFrom;
-  return hasTickets ? "Ticket route started" : "Compare live ticket options";
-}
-
-function headlineTripText(args: {
-  tripStartDate?: string | null;
-  tripEndDate?: string | null;
-  hasTickets: boolean;
-  tripPriceFrom?: string | null;
-}) {
-  const { tripStartDate, tripEndDate, hasTickets, tripPriceFrom } = args;
-
-  if (tripPriceFrom) return tripPriceFrom;
-
-  const start = clean(tripStartDate);
-  const end = clean(tripEndDate);
-
-  if (start && end) return `${start} → ${end}`;
-  if (hasTickets) return "Trip dates set";
-  return "Set your trip window";
 }
 
 function urgencyLine(hasTickets: boolean, kickoffTbc: boolean) {
@@ -153,6 +131,19 @@ function dateWindowLine(startDate?: string | null, endDate?: string | null) {
 
   if (!start || !end) return "Trip dates not set";
   return `${start} → ${end}`;
+}
+
+function sectionCountLabel(count: number, singular: string, plural: string) {
+  if (count <= 0) return `No ${plural}`;
+  if (count === 1) return `1 ${singular}`;
+  return `${count} ${plural}`;
+}
+
+function completionTone(pct?: number | null) {
+  const value = typeof pct === "number" ? pct : 0;
+  if (value >= 90) return "ready";
+  if (value >= 50) return "progress";
+  return "early";
 }
 
 export default function TripDetailScreen() {
@@ -333,15 +324,58 @@ export default function TripDetailScreen() {
     return dominantAction?.body || "Move the trip forward by completing the next core booking step.";
   }, [vm.hasTickets, dominantAction]);
 
-  const ticketHeadline = headlineTicketText(vm.hasTickets, data.ticketsPriceFrom);
-  const tripHeadline = headlineTripText({
-    tripStartDate: trip?.startDate,
-    tripEndDate: trip?.endDate,
-    hasTickets: vm.hasTickets,
-    tripPriceFrom: data.tripPriceFrom,
-  });
   const pressureText = urgencyLine(vm.hasTickets, data.kickoffMeta.tbc);
   const tripDatesText = dateWindowLine(trip?.startDate, trip?.endDate);
+
+  const ticketCount = groupedBySection.tickets?.length || 0;
+  const travelCount = groupedBySection.travel?.length || 0;
+  const stayCount = groupedBySection.stay?.length || 0;
+  const thingsCount = groupedBySection.things?.length || 0;
+
+  const tripStageTitle = useMemo(() => {
+    if ((vm.tripCompletionPct ?? 0) >= 90) return "Trip nearly complete";
+    if ((vm.tripCompletionPct ?? 0) >= 50) return "Trip taking shape";
+    return "Trip still early";
+  }, [vm.tripCompletionPct]);
+
+  const tripStageBody = useMemo(() => {
+    if ((vm.tripCompletionPct ?? 0) >= 90) {
+      return "Core bookings are largely covered. Final job is to store proof, clean up the trip, and stop second-guessing finished decisions.";
+    }
+
+    if ((vm.tripCompletionPct ?? 0) >= 50) {
+      return "The trip has real structure now, but it is not finished. Keep following the next step instead of jumping around.";
+    }
+
+    return "This trip is not properly anchored yet. Keep working in order: tickets, travel, stay, then extras.";
+  }, [vm.tripCompletionPct]);
+
+  const plannerCards = useMemo(() => {
+    return PLANNER_ITEMS.map((item) => {
+      const count = groupedBySection[item.key]?.length || 0;
+
+      const subtitle = plannerSubtitle({
+        key: item.key,
+        count,
+        ticketsPriceFrom: data.ticketsPriceFrom,
+        flightsPriceFrom: data.flightsPriceFrom,
+        hotelsPriceFrom: data.hotelsPriceFrom,
+        experiencesPriceFrom: data.experiencesPriceFrom,
+      });
+
+      return {
+        ...item,
+        count,
+        subtitle,
+      };
+    });
+  }, [
+    groupedBySection,
+    data.ticketsPriceFrom,
+    data.flightsPriceFrom,
+    data.hotelsPriceFrom,
+    data.experiencesPriceFrom,
+  ]);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -396,6 +430,21 @@ export default function TripDetailScreen() {
                       <Text style={styles.warningPillText}>Kickoff TBC</Text>
                     </View>
                   ) : null}
+
+                  {vm.tripCompletionPct != null ? (
+                    <View
+                      style={[
+                        styles.completionPill,
+                        completionTone(vm.tripCompletionPct) === "ready"
+                          ? styles.completionPillReady
+                          : completionTone(vm.tripCompletionPct) === "progress"
+                            ? styles.completionPillProgress
+                            : styles.completionPillEarly,
+                      ]}
+                    >
+                      <Text style={styles.completionPillText}>{vm.tripCompletionPct}% ready</Text>
+                    </View>
+                  ) : null}
                 </View>
 
                 <View style={styles.tripWindowCard}>
@@ -409,89 +458,94 @@ export default function TripDetailScreen() {
                   <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
 
                   <Text style={styles.tripWindowHint}>
-                    Flights and stays should follow this saved trip window, not a hardcoded fixture-only range.
+                    This is the real trip window. Flights and stays should follow these saved dates.
                   </Text>
-                </View>
-
-                <View style={styles.summaryRow}>
-                  <Pressable
-                    style={styles.summaryCard}
-                    onPress={() => controller.onOpenSection("tickets")}
-                  >
-                    <Text style={styles.summaryLabel}>Tickets</Text>
-                    <Text style={styles.summaryValue}>{ticketHeadline}</Text>
-                  </Pressable>
-
-                  <Pressable style={styles.summaryCard} onPress={() => controller.onEditTrip()}>
-                    <Text style={styles.summaryLabel}>Trip</Text>
-                    <Text style={styles.summaryValue}>{tripHeadline}</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.decisionCard}>
-                  <Text style={styles.decisionEyebrow}>Do this next</Text>
-                  <Text style={styles.decisionTitle}>{dominantTitle}</Text>
-                  <Text style={styles.decisionBody}>{decisionBody}</Text>
-
-                  <View style={styles.decisionMetaRow}>
-                    <Text style={styles.decisionMetaText}>
-                      {vm.bookingFunnelLabel || `Next: ${nextStepLabel(vm.nextIncompleteStep?.key)}`}
-                    </Text>
-
-                    {vm.tripCompletionPct != null ? (
-                      <Text style={styles.decisionMetaText}>{vm.tripCompletionPct}% ready</Text>
-                    ) : null}
-                  </View>
-
-                  <Text style={styles.pressureText}>{pressureText}</Text>
-
-                  <Pressable
-                    style={styles.primaryActionBtn}
-                    onPress={
-                      dominantAction?.onPress
-                        ? () => dominantAction.onPress()
-                        : controller.onEditTrip
-                    }
-                  >
-                    <Text style={styles.primaryActionBtnText}>{dominantCta}</Text>
-                  </Pressable>
-
-                  {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
                 </View>
               </GlassCard>
 
               <GlassCard>
+                <Text style={styles.stageEyebrow}>Trip status</Text>
+                <Text style={styles.stageTitle}>{tripStageTitle}</Text>
+                <Text style={styles.stageBody}>{tripStageBody}</Text>
+
+                <View style={styles.coreStatusGrid}>
+                  <View style={styles.coreStatusCard}>
+                    <Text style={styles.coreStatusLabel}>Tickets</Text>
+                    <Text style={styles.coreStatusValue}>
+                      {sectionCountLabel(ticketCount, "ticket item", "ticket items")}
+                    </Text>
+                  </View>
+
+                  <View style={styles.coreStatusCard}>
+                    <Text style={styles.coreStatusLabel}>Travel</Text>
+                    <Text style={styles.coreStatusValue}>
+                      {sectionCountLabel(travelCount, "travel item", "travel items")}
+                    </Text>
+                  </View>
+
+                  <View style={styles.coreStatusCard}>
+                    <Text style={styles.coreStatusLabel}>Stay</Text>
+                    <Text style={styles.coreStatusValue}>
+                      {sectionCountLabel(stayCount, "stay item", "stay items")}
+                    </Text>
+                  </View>
+
+                  <View style={styles.coreStatusCard}>
+                    <Text style={styles.coreStatusLabel}>Extras</Text>
+                    <Text style={styles.coreStatusValue}>
+                      {sectionCountLabel(thingsCount, "extra", "extras")}
+                    </Text>
+                  </View>
+                </View>
+              </GlassCard>
+
+              <GlassCard>
+                <Text style={styles.decisionEyebrow}>Do this next</Text>
+                <Text style={styles.decisionTitle}>{dominantTitle}</Text>
+                <Text style={styles.decisionBody}>{decisionBody}</Text>
+
+                <View style={styles.decisionMetaRow}>
+                  <Text style={styles.decisionMetaText}>
+                    {vm.bookingFunnelLabel || `Next: ${nextStepLabel(vm.nextIncompleteStep?.key)}`}
+                  </Text>
+                </View>
+
+                <Text style={styles.pressureText}>{pressureText}</Text>
+
+                <Pressable
+                  style={styles.primaryActionBtn}
+                  onPress={
+                    dominantAction?.onPress
+                      ? () => dominantAction.onPress()
+                      : controller.onEditTrip
+                  }
+                >
+                  <Text style={styles.primaryActionBtnText}>{dominantCta}</Text>
+                </Pressable>
+
+                {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
+              </GlassCard>
+
+              <GlassCard>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Trip planner</Text>
+                  <Text style={styles.sectionTitle}>Plan this trip</Text>
                   <Text style={styles.sectionSubtitle}>
-                    {vm.completionSummary || "Move the trip forward one step at a time."}
+                    {vm.completionSummary || "Work through the trip in the right order."}
                   </Text>
                 </View>
 
                 <View style={styles.plannerGrid}>
-                  {PLANNER_ITEMS.map((item) => {
-                    const count = groupedBySection[item.key]?.length || 0;
-
-                    const subtitle = plannerSubtitle({
-                      key: item.key,
-                      count,
-                      ticketsPriceFrom: data.ticketsPriceFrom,
-                      flightsPriceFrom: data.flightsPriceFrom,
-                      hotelsPriceFrom: data.hotelsPriceFrom,
-                      experiencesPriceFrom: data.experiencesPriceFrom,
-                    });
-
-                    return (
-                      <Pressable
-                        key={item.key}
-                        style={styles.plannerCard}
-                        onPress={() => controller.onOpenSection(item.key)}
-                      >
-                        <Text style={styles.plannerCardTitle}>{item.label}</Text>
-                        <Text style={styles.plannerCardSub}>{subtitle}</Text>
-                      </Pressable>
-                    );
-                  })}
+                  {plannerCards.map((item) => (
+                    <Pressable
+                      key={item.key}
+                      style={styles.plannerCard}
+                      onPress={() => controller.onOpenSection(item.key)}
+                    >
+                      <Text style={styles.plannerCardEyebrow}>{item.eyebrow}</Text>
+                      <Text style={styles.plannerCardTitle}>{item.label}</Text>
+                      <Text style={styles.plannerCardSub}>{item.subtitle}</Text>
+                    </Pressable>
+                  ))}
                 </View>
               </GlassCard>
 
@@ -511,6 +565,39 @@ export default function TripDetailScreen() {
                 getTicketScoreFromItem={itemResolvedScore}
                 getLivePriceLine={livePriceLine}
               />
+
+              <GlassCard>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>What this trip still needs</Text>
+                  <Text style={styles.sectionSubtitle}>
+                    Don’t leave the page with no clear next move.
+                  </Text>
+                </View>
+
+                <View style={styles.guidanceList}>
+                  {!vm.hasTickets ? (
+                    <Text style={styles.guidanceText}>• Tickets still need locking in.</Text>
+                  ) : null}
+
+                  {!vm.hasFlight ? (
+                    <Text style={styles.guidanceText}>• Travel is not sorted yet.</Text>
+                  ) : null}
+
+                  {!vm.hasHotel ? (
+                    <Text style={styles.guidanceText}>• Stay location still needs deciding.</Text>
+                  ) : null}
+
+                  {!vm.hasTransport ? (
+                    <Text style={styles.guidanceText}>• Local transport is still weak.</Text>
+                  ) : null}
+
+                  {vm.hasTickets && vm.hasFlight && vm.hasHotel && vm.hasTransport ? (
+                    <Text style={styles.guidanceText}>
+                      • Core trip is covered. Final step is proof, confirmations and cleanup in Wallet.
+                    </Text>
+                  ) : null}
+                </View>
+              </GlassCard>
             </>
           )}
         </ScrollView>
@@ -599,6 +686,34 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  completionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+
+  completionPillEarly: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+
+  completionPillProgress: {
+    backgroundColor: "rgba(87,162,56,0.10)",
+    borderColor: "rgba(87,162,56,0.26)",
+  },
+
+  completionPillReady: {
+    backgroundColor: "rgba(69,182,122,0.12)",
+    borderColor: "rgba(69,182,122,0.30)",
+  },
+
+  completionPillText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
   tripWindowCard: {
     marginTop: theme.spacing.md,
     borderRadius: 16,
@@ -644,14 +759,39 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  summaryRow: {
+  stageEyebrow: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: theme.colors.accent,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+
+  stageTitle: {
+    marginTop: 8,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "800",
+    color: theme.colors.text,
+    letterSpacing: -0.3,
+  },
+
+  stageBody: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textSecondary,
+  },
+
+  coreStatusGrid: {
     marginTop: theme.spacing.md,
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.spacing.sm,
   },
 
-  summaryCard: {
-    flex: 1,
+  coreStatusCard: {
+    width: "48%",
     borderRadius: 16,
     padding: theme.spacing.md,
     backgroundColor: "rgba(255,255,255,0.05)",
@@ -659,7 +799,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.10)",
   },
 
-  summaryLabel: {
+  coreStatusLabel: {
     fontSize: 12,
     fontWeight: "800",
     color: theme.colors.textMuted,
@@ -667,21 +807,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
 
-  summaryValue: {
+  coreStatusValue: {
     marginTop: 6,
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 22,
     fontWeight: "800",
     color: theme.colors.text,
-  },
-
-  decisionCard: {
-    marginTop: theme.spacing.md,
-    borderRadius: 18,
-    padding: theme.spacing.md,
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
   },
 
   decisionEyebrow: {
@@ -781,7 +912,7 @@ const styles = StyleSheet.create({
 
   plannerCard: {
     width: "48%",
-    minHeight: 98,
+    minHeight: 118,
     borderRadius: 16,
     padding: theme.spacing.md,
     backgroundColor: "rgba(255,255,255,0.05)",
@@ -790,7 +921,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
+  plannerCardEyebrow: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: theme.colors.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+
   plannerCardTitle: {
+    marginTop: 6,
     fontSize: 16,
     fontWeight: "800",
     color: theme.colors.text,
@@ -800,6 +940,17 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 13,
     lineHeight: 18,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+  },
+
+  guidanceList: {
+    gap: 8,
+  },
+
+  guidanceText: {
+    fontSize: 14,
+    lineHeight: 20,
     color: theme.colors.textSecondary,
     fontWeight: "700",
   },
