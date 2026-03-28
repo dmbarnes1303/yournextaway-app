@@ -35,9 +35,10 @@ import { normalizeTeamKey } from "@/src/data/teams";
 import { normalizeCityKey } from "@/src/utils/city";
 
 import { mapTicketProviderToPartnerId } from "@/src/features/tripDetail/helpers";
-import type { PartnerId } from "@/src/core/partners";
+import type { PartnerId } from "@/src/constants/partners";
 
 type RouteParams = Record<string, string | string[] | undefined>;
+type TicketUrlQuality = "event" | "listing" | "search" | "unknown";
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -55,6 +56,15 @@ function formatKickoff(iso?: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Kick-off TBC";
 
+  const midnight = d.getHours() === 0 && d.getMinutes() === 0;
+  if (midnight) {
+    return d.toLocaleDateString("en-GB", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+    }) + " • TBC";
+  }
+
   return d.toLocaleString("en-GB", {
     weekday: "short",
     day: "2-digit",
@@ -66,8 +76,9 @@ function formatKickoff(iso?: string | null): string {
 
 function formatTicketPrice(price?: string | null): string {
   const p = clean(price);
-  if (!p) return "View price";
+  if (!p) return "View live price";
   if (/^[£€$]/.test(p)) return `From ${p}`;
+  if (/^(GBP|EUR|USD)\s/i.test(p)) return `From ${p}`;
   return p;
 }
 
@@ -126,6 +137,154 @@ function buildCanonicalTripBuildParams(args: {
   };
 }
 
+function providerLabel(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketsnet") return "FootballTicketNet";
+  if (raw === "sportsevents365") return "SportsEvents365";
+  if (raw === "gigsberg") return "Gigsberg";
+
+  return clean(provider) || "Provider";
+}
+
+function providerShort(provider?: string | null): string {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketsnet") return "FTN";
+  if (raw === "sportsevents365") return "365";
+  if (raw === "gigsberg") return "G";
+
+  return "P";
+}
+
+function providerBadgeStyle(provider?: string | null) {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketsnet") {
+    return {
+      borderColor: "rgba(120,170,255,0.35)",
+      backgroundColor: "rgba(120,170,255,0.12)",
+      textColor: "rgba(205,225,255,1)",
+    };
+  }
+
+  if (raw === "sportsevents365") {
+    return {
+      borderColor: "rgba(87,162,56,0.35)",
+      backgroundColor: "rgba(87,162,56,0.12)",
+      textColor: "rgba(208,240,192,1)",
+    };
+  }
+
+  if (raw === "gigsberg") {
+    return {
+      borderColor: "rgba(255,200,80,0.35)",
+      backgroundColor: "rgba(255,200,80,0.12)",
+      textColor: "rgba(255,226,160,1)",
+    };
+  }
+
+  return {
+    borderColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    textColor: theme.colors.text,
+  };
+}
+
+function reasonLabel(reason?: string | null): string {
+  const raw = clean(reason);
+
+  if (raw === "exact_event") return "Exact fixture match";
+  if (raw === "partial_match") return "Strong related match";
+  if (raw === "search_fallback") return "Search fallback";
+
+  return "Ticket result";
+}
+
+function reasonTone(reason?: string | null): "strong" | "medium" | "weak" {
+  const raw = clean(reason);
+
+  if (raw === "exact_event") return "strong";
+  if (raw === "partial_match") return "medium";
+  return "weak";
+}
+
+function detectUrlQualityFromUrl(url?: string | null): TicketUrlQuality {
+  const raw = clean(url);
+  if (!raw) return "unknown";
+
+  try {
+    const parsed = new URL(raw);
+    const path = parsed.pathname.toLowerCase();
+    const query = parsed.search.toLowerCase();
+
+    const looksSearch =
+      path === "/search" ||
+      path.startsWith("/search/") ||
+      path.includes("/events/search") ||
+      path.includes("/event/search") ||
+      path.includes("/search-results") ||
+      query.includes("q=") ||
+      query.includes("query=") ||
+      query.includes("text=");
+
+    if (looksSearch) return "search";
+    if (path.includes("/listing") || path.includes("/listings")) return "listing";
+    if (path.includes("/event") || path.includes("/events")) return "event";
+    if (path.includes("/ticket") || path.includes("/tickets")) return "event";
+
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function getOptionUrlQuality(option: TicketResolutionOption): TicketUrlQuality {
+  const direct = (option as TicketResolutionOption & { urlQuality?: unknown }).urlQuality;
+  const normalized = clean(direct).toLowerCase();
+
+  if (
+    normalized === "event" ||
+    normalized === "listing" ||
+    normalized === "search" ||
+    normalized === "unknown"
+  ) {
+    return normalized;
+  }
+
+  return detectUrlQualityFromUrl(option.url);
+}
+
+function urlQualityLabel(value: TicketUrlQuality): string {
+  if (value === "event") return "Direct event page";
+  if (value === "listing") return "Listing page";
+  if (value === "search") return "Search page";
+  return "Unknown route";
+}
+
+function getOptionRawScore(option: TicketResolutionOption): number | null {
+  const raw = (option as TicketResolutionOption & { rawScore?: unknown }).rawScore;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getTopLevelRawScore(result: TicketResolutionResult | null): number | null {
+  const raw = (result as TicketResolutionResult & { rawScore?: unknown } | null)?.rawScore;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function scoreBandLabel(score?: number | null): string {
+  const value = typeof score === "number" && Number.isFinite(score) ? score : 0;
+
+  if (value >= 95) return "Elite";
+  if (value >= 88) return "Best";
+  if (value >= 78) return "Strong";
+  if (value >= 68) return "Good";
+  if (value >= 60) return "Usable";
+  return "Weak";
+}
+
 function Crest({ name, uri }: { name: string; uri?: string | null }) {
   return (
     <View style={styles.crest}>
@@ -169,6 +328,31 @@ function GuideCard({
   );
 }
 
+function QualityPill({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: "neutral" | "strong" | "medium" | "weak";
+}) {
+  return (
+    <View
+      style={[
+        styles.qualityPill,
+        tone === "strong"
+          ? styles.qualityPillStrong
+          : tone === "medium"
+            ? styles.qualityPillMedium
+            : tone === "weak"
+              ? styles.qualityPillWeak
+              : null,
+      ]}
+    >
+      <Text style={styles.qualityPillText}>{label}</Text>
+    </View>
+  );
+}
+
 function TicketCard({
   option,
   isBest,
@@ -182,18 +366,70 @@ function TicketCard({
   loading: boolean;
   locked: boolean;
 }) {
+  const provider = providerLabel(option.provider);
+  const providerBadge = providerBadgeStyle(option.provider);
+  const urlQuality = getOptionUrlQuality(option);
+  const rawScore = getOptionRawScore(option);
+  const adjustedScore =
+    typeof option.score === "number" && Number.isFinite(option.score) ? option.score : null;
+  const reason = clean(option.reason);
+  const tone = reasonTone(reason);
+
   return (
     <Pressable style={[styles.ticketCard, isBest && styles.ticketBest]} onPress={onPress}>
-      <Text style={styles.ticketPrice}>{formatTicketPrice(option.priceText)}</Text>
+      <View style={styles.ticketTopRow}>
+        <Text style={styles.ticketPrice}>{formatTicketPrice(option.priceText)}</Text>
+
+        <View
+          style={[
+            styles.providerBadge,
+            {
+              borderColor: providerBadge.borderColor,
+              backgroundColor: providerBadge.backgroundColor,
+            },
+          ]}
+        >
+          <Text style={[styles.providerBadgeText, { color: providerBadge.textColor }]}>
+            {providerShort(option.provider)}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.ticketProviderFull}>{provider}</Text>
+
+      <View style={styles.ticketPillRow}>
+        <QualityPill label={reasonLabel(reason)} tone={tone} />
+        <QualityPill
+          label={urlQualityLabel(urlQuality)}
+          tone={urlQuality === "event" ? "strong" : urlQuality === "listing" ? "medium" : "weak"}
+        />
+        {isBest ? <QualityPill label="Top option" tone="strong" /> : null}
+      </View>
+
+      <View style={styles.scoreRow}>
+        {adjustedScore != null ? (
+          <Text style={styles.scoreText}>
+            Resolver score: {adjustedScore} • {scoreBandLabel(adjustedScore)}
+          </Text>
+        ) : (
+          <Text style={styles.scoreText}>Resolver score unavailable</Text>
+        )}
+
+        {rawScore != null && adjustedScore != null && rawScore !== adjustedScore ? (
+          <Text style={styles.scoreSubText}>Raw {rawScore} → adjusted {adjustedScore}</Text>
+        ) : null}
+      </View>
 
       <Text style={styles.ticketMeta}>
-        {option.exact ? "Exact fixture match" : "Current ticket option"}
+        {reason === "exact_event"
+          ? "This looks like a direct match for the exact fixture."
+          : reason === "partial_match"
+            ? "This looks relevant, but it is not as strong as a direct exact match."
+            : "This is a fallback route. Useful if nothing stronger is available, but weaker."}
       </Text>
 
-      <Text style={styles.ticketProvider}>{option.provider}</Text>
-
       <Text style={styles.ticketCTA}>
-        {loading ? "Opening…" : locked ? "Start trip to open" : "View tickets"}
+        {loading ? "Opening…" : locked ? "Start trip to open partner" : "Open ticket partner"}
       </Text>
     </Pressable>
   );
@@ -234,7 +470,7 @@ export default function MatchScreen() {
   const crestAway = fixture?.teams?.away?.logo;
 
   const effectiveLeagueId = clean(trip?.leagueId) || clean(fixture?.league?.id) || routeLeagueId;
-
+  const effectiveLeagueName = clean(trip?.leagueName ?? fixture?.league?.name);
   const effectiveSeason =
     routeSeason || clean((fixture?.league as { season?: unknown } | undefined)?.season);
 
@@ -294,7 +530,7 @@ export default function MatchScreen() {
         awayName: away,
         kickoffIso,
         leagueId: effectiveLeagueId || undefined,
-        leagueName: clean(trip?.leagueName ?? fixture?.league?.name) || undefined,
+        leagueName: effectiveLeagueName || undefined,
       });
 
       setTicketResult(res);
@@ -337,7 +573,7 @@ export default function MatchScreen() {
         metadata: {
           fixtureId,
           leagueId: effectiveLeagueId || undefined,
-          leagueName: clean(trip?.leagueName ?? fixture?.league?.name) || undefined,
+          leagueName: effectiveLeagueName || undefined,
           kickoffIso,
           homeName: home || undefined,
           awayName: away || undefined,
@@ -347,6 +583,9 @@ export default function MatchScreen() {
           ticketProvider: option.provider ?? null,
           exactMatch: Boolean(option.exact),
           score: option.score,
+          rawScore: getOptionRawScore(option),
+          urlQuality: getOptionUrlQuality(option),
+          resolutionReason: option.reason ?? null,
           sourceSurface: "match_screen",
           sourceSection: "tickets",
         },
@@ -417,6 +656,12 @@ export default function MatchScreen() {
   const imageUrl = typeof bg === "string" ? bg : null;
   const imageSource = typeof bg === "string" ? null : bg;
 
+  const topLevelRawScore = getTopLevelRawScore(ticketResult);
+  const topLevelAdjustedScore =
+    typeof ticketResult?.score === "number" && Number.isFinite(ticketResult.score)
+      ? ticketResult.score
+      : null;
+
   return (
     <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.14}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -481,11 +726,43 @@ export default function MatchScreen() {
                 <Text style={styles.sectionTitle}>Tickets</Text>
                 <Text style={styles.sectionSub}>
                   {ticketsLocked
-                    ? "Compare current ticket options here. To open a ticket partner and track the booking, start a trip from this match first."
-                    : "Compare current ticket options and choose the route that makes most sense."}
+                    ? "You can compare ticket routes here, but partner clicks should start from a trip so the booking can be tracked properly."
+                    : "These are the current resolver results ranked by match quality, route quality and provider confidence."}
                 </Text>
               </View>
             </View>
+
+            {ticketResult ? (
+              <View style={styles.resolverSummaryWrap}>
+                <View style={styles.resolverSummaryRow}>
+                  <Text style={styles.resolverSummaryLabel}>Resolver result</Text>
+                  <Text style={styles.resolverSummaryValue}>
+                    {ticketResult.ok ? reasonLabel(ticketResult.reason) : "No strong result"}
+                  </Text>
+                </View>
+
+                <View style={styles.resolverSummaryRow}>
+                  <Text style={styles.resolverSummaryLabel}>Providers checked</Text>
+                  <Text style={styles.resolverSummaryValue}>
+                    {Array.isArray(ticketResult.checkedProviders) && ticketResult.checkedProviders.length > 0
+                      ? ticketResult.checkedProviders.map(providerLabel).join(" • ")
+                      : "—"}
+                  </Text>
+                </View>
+
+                {topLevelAdjustedScore != null ? (
+                  <View style={styles.resolverSummaryRow}>
+                    <Text style={styles.resolverSummaryLabel}>Top score</Text>
+                    <Text style={styles.resolverSummaryValue}>
+                      {topLevelAdjustedScore}
+                      {topLevelRawScore != null && topLevelRawScore !== topLevelAdjustedScore
+                        ? ` (raw ${topLevelRawScore})`
+                        : ""}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
 
             {options.length > 0 ? (
               <View style={styles.ticketList}>
@@ -504,7 +781,8 @@ export default function MatchScreen() {
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyTitle}>No ticket options loaded yet</Text>
                 <Text style={styles.emptyText}>
-                  Tap “Compare tickets” and the best current options will appear here.
+                  Tap “Compare tickets” first. Then you will see whether the resolver found an exact
+                  match, a partial match, or just a fallback route.
                 </Text>
               </View>
             )}
@@ -515,7 +793,7 @@ export default function MatchScreen() {
               <View style={styles.sectionTitleWrap}>
                 <Text style={styles.sectionTitle}>About this trip</Text>
                 <Text style={styles.sectionSub}>
-                  A few useful planning links before you commit.
+                  Useful planning context before you commit.
                 </Text>
               </View>
             </View>
@@ -537,7 +815,7 @@ export default function MatchScreen() {
                 title="City guide"
                 subtitle={
                   venueCity
-                    ? `Stay areas, getting around and city-break context for ${venueCity}.`
+                    ? `Stay areas, transport basics and city-break context for ${venueCity}.`
                     : "Open the city guide."
                 }
                 buttonLabel="Open guide"
@@ -761,6 +1039,34 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
   },
 
+  resolverSummaryWrap: {
+    gap: 8,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+
+  resolverSummaryRow: {
+    gap: 3,
+  },
+
+  resolverSummaryLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+
+  resolverSummaryValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
   ticketList: {
     gap: 10,
   },
@@ -771,7 +1077,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
     backgroundColor: "rgba(255,255,255,0.03)",
-    gap: 6,
+    gap: 8,
   },
 
   ticketBest: {
@@ -779,24 +1085,101 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(87,162,56,0.08)",
   },
 
+  ticketTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
   ticketPrice: {
     color: theme.colors.textPrimary,
     fontSize: 20,
     lineHeight: 24,
     fontWeight: theme.fontWeight.black,
+    flex: 1,
+  },
+
+  providerBadge: {
+    minWidth: 44,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  providerBadgeText: {
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  ticketProviderFull: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.semibold,
+  },
+
+  ticketPillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  qualityPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+
+  qualityPillStrong: {
+    borderColor: "rgba(87,162,56,0.34)",
+    backgroundColor: "rgba(87,162,56,0.12)",
+  },
+
+  qualityPillMedium: {
+    borderColor: "rgba(120,170,255,0.34)",
+    backgroundColor: "rgba(120,170,255,0.12)",
+  },
+
+  qualityPillWeak: {
+    borderColor: "rgba(255,200,80,0.34)",
+    backgroundColor: "rgba(255,200,80,0.12)",
+  },
+
+  qualityPillText: {
+    color: theme.colors.textPrimary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  scoreRow: {
+    gap: 2,
+  },
+
+  scoreText: {
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  scoreSubText: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: theme.fontWeight.medium,
   },
 
   ticketMeta: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    lineHeight: 16,
-    fontWeight: theme.fontWeight.medium,
-  },
-
-  ticketProvider: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 17,
     fontWeight: theme.fontWeight.medium,
   },
 
