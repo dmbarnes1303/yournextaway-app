@@ -19,24 +19,16 @@ import TicketOptionsSheet from "@/src/components/tickets/TicketOptionsSheet";
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
-import tripsStore, { type Trip } from "@/src/state/trips";
-import savedItemsStore from "@/src/state/savedItems";
-import preferencesStore from "@/src/state/preferences";
-
-import type { SavedItem } from "@/src/core/savedItemTypes";
-import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
-import { groupSavedItemsBySection } from "@/src/core/tripWorkspace";
-
 import storage from "@/src/services/storage";
 
 import useTripDetailController from "@/src/features/tripDetail/useTripDetailController";
 import useTripDetailViewModel from "@/src/features/tripDetail/useTripDetailViewModel";
 import useTripDetailData from "@/src/features/tripDetail/useTripDetailData";
+import useTripWorkspace from "@/src/features/tripDetail/useTripWorkspace";
 
 import {
   type PlanValue,
   clean,
-  cleanUpper3,
   coerceId,
   itemResolvedScore,
   livePriceLine,
@@ -48,7 +40,7 @@ import {
 const PLAN_STORAGE_KEY = "yna:plan";
 
 type PlannerCardItem = {
-  key: Extract<WorkspaceSectionKey, "tickets" | "stay" | "travel" | "things">;
+  key: "tickets" | "stay" | "travel" | "things";
   label: string;
   eyebrow: string;
 };
@@ -226,15 +218,19 @@ export default function TripDetailScreen() {
 
   const routeTripId = useMemo(() => coerceId((params as any)?.id), [params]);
 
-  const [trip, setTrip] = useState<Trip | null>(null);
-  const [tripsLoaded, setTripsLoaded] = useState<boolean>(tripsStore.getState().loaded);
+  const workspace = useTripWorkspace({ routeTripId });
 
-  const [savedLoaded, setSavedLoaded] = useState<boolean>(savedItemsStore.getState().loaded);
-  const [allSavedItems, setAllSavedItems] = useState<SavedItem[]>([]);
+  const trip = workspace.trip;
+  const tripsLoaded = workspace.tripsLoaded;
+  const savedLoaded = workspace.savedLoaded;
+  const originIata = workspace.originIata;
+  const activeTripId = workspace.activeTripId;
 
-  const [originIata, setOriginIata] = useState<string>(
-    preferencesStore.getPreferredOriginIata()
-  );
+  const pendingItems = workspace.pending;
+  const savedOnlyItems = workspace.saved;
+  const bookedItems = workspace.booked;
+  const groupedBySection = workspace.grouped;
+  const savedItems = workspace.savedItems;
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [ticketLoading, setTicketLoading] = useState(false);
@@ -262,81 +258,6 @@ export default function TripDetailScreen() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    const sync = () => {
-      const state = tripsStore.getState();
-      setTripsLoaded(state.loaded);
-      setTrip(state.trips.find((item) => item.id === routeTripId) ?? null);
-    };
-
-    const unsub = tripsStore.subscribe(sync);
-    sync();
-
-    if (!tripsStore.getState().loaded) {
-      tripsStore.loadTrips().finally(sync);
-    }
-
-    return () => unsub();
-  }, [routeTripId]);
-
-  useEffect(() => {
-    const sync = () => {
-      const state = savedItemsStore.getState();
-      setSavedLoaded(state.loaded);
-      setAllSavedItems(Array.isArray(state.items) ? state.items : []);
-    };
-
-    const unsub = savedItemsStore.subscribe(sync);
-    sync();
-
-    if (!savedItemsStore.getState().loaded) {
-      savedItemsStore.load().finally(sync);
-    }
-
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
-    const sync = () => {
-      const state = preferencesStore.getState();
-      setOriginIata(cleanUpper3(state.preferredOriginIata, "LON"));
-    };
-
-    const unsub = preferencesStore.subscribe(sync);
-    sync();
-
-    if (!preferencesStore.getState().loaded) {
-      preferencesStore.load().finally(sync);
-    }
-
-    return () => unsub();
-  }, []);
-
-  const activeTripId = useMemo(() => {
-    return clean(trip?.id) || clean(routeTripId) || null;
-  }, [trip?.id, routeTripId]);
-
-  const savedItems = useMemo(() => {
-    if (!activeTripId) return [];
-    return allSavedItems.filter((item) => clean(item.tripId) === activeTripId);
-  }, [allSavedItems, activeTripId]);
-
-  const pendingItems = useMemo(() => {
-    return savedItems.filter((item) => item.status === "pending");
-  }, [savedItems]);
-
-  const savedOnlyItems = useMemo(() => {
-    return savedItems.filter((item) => item.status === "saved");
-  }, [savedItems]);
-
-  const bookedItems = useMemo(() => {
-    return savedItems.filter((item) => item.status === "booked");
-  }, [savedItems]);
-
-  const groupedBySection = useMemo(() => {
-    return groupSavedItemsBySection(savedItems);
-  }, [savedItems]);
 
   const data = useTripDetailData({
     trip,
@@ -572,44 +493,28 @@ export default function TripDetailScreen() {
                   <View style={styles.coreStatusCard}>
                     <Text style={styles.coreStatusLabel}>Tickets</Text>
                     <Text style={styles.coreStatusValue}>
-                      {vm.hasTickets
-                        ? "Booked"
-                        : ticketCount > 0
-                          ? "In progress"
-                          : "Not booked"}
+                      {vm.hasTickets ? "Booked" : ticketCount > 0 ? "In progress" : "Not booked"}
                     </Text>
                   </View>
 
                   <View style={styles.coreStatusCard}>
                     <Text style={styles.coreStatusLabel}>Travel</Text>
                     <Text style={styles.coreStatusValue}>
-                      {vm.hasFlight
-                        ? "Booked"
-                        : travelCount > 0
-                          ? "In progress"
-                          : "Not booked"}
+                      {vm.hasFlight ? "Booked" : travelCount > 0 ? "In progress" : "Not booked"}
                     </Text>
                   </View>
 
                   <View style={styles.coreStatusCard}>
                     <Text style={styles.coreStatusLabel}>Stay</Text>
                     <Text style={styles.coreStatusValue}>
-                      {vm.hasHotel
-                        ? "Booked"
-                        : stayCount > 0
-                          ? "In progress"
-                          : "Not booked"}
+                      {vm.hasHotel ? "Booked" : stayCount > 0 ? "In progress" : "Not booked"}
                     </Text>
                   </View>
 
                   <View style={styles.coreStatusCard}>
                     <Text style={styles.coreStatusLabel}>Extras</Text>
                     <Text style={styles.coreStatusValue}>
-                      {vm.hasThings
-                        ? "Booked"
-                        : thingsCount > 0
-                          ? "Optional / started"
-                          : "Optional"}
+                      {vm.hasThings ? "Booked" : thingsCount > 0 ? "Optional / started" : "Optional"}
                     </Text>
                   </View>
                 </View>
