@@ -29,9 +29,11 @@ type TimedResult<T> = {
   timedOut: boolean;
 };
 
-type CandidateQuality = {
-  urlQuality: "event" | "listing" | "search" | "unknown";
-  qualityScore: number;
+type CandidateUrlQuality = "event" | "listing" | "search" | "unknown";
+
+type CandidateAssessment = {
+  urlQuality: CandidateUrlQuality;
+  adjustedScore: number;
 };
 
 const CACHE = new Map<string, CacheEntry>();
@@ -41,13 +43,13 @@ const PROVIDER_TIMEOUT_MS = 4500;
 const MAX_RETURNED_OPTIONS = 3;
 
 /**
- * Harder gates.
- * Old value 10 was far too weak and let junk through.
+ * Hard floors.
+ * Search results should almost never survive unless everything else fails.
  */
-const MIN_SEARCH_FALLBACK_SCORE = 45;
-const MIN_PARTIAL_MATCH_SCORE = 55;
 const MIN_EXACT_EVENT_SCORE = 70;
-const MIN_SELECTED_SCORE = 55;
+const MIN_PARTIAL_MATCH_SCORE = 58;
+const MIN_SEARCH_FALLBACK_SCORE = 52;
+const MIN_SELECTED_SCORE = 60;
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
   footballticketsnet: 1,
@@ -172,23 +174,15 @@ function summarizeInput(input: TicketResolveInput) {
   };
 }
 
-function summarizeCandidate(candidate: TicketCandidate | null) {
-  if (!candidate) return null;
+function parsePriceAmount(priceText?: string | null): number | null {
+  const raw = clean(priceText);
+  if (!raw) return null;
 
-  const assessed = assessCandidateQuality(candidate);
+  const match = raw.match(/(\d{1,3}(?:[,\d]{0,})(?:\.\d{1,2})?)/);
+  if (!match) return null;
 
-  return {
-    provider: candidate.provider,
-    exact: candidate.exact,
-    score: candidate.score,
-    reason: candidate.reason,
-    title: candidate.title,
-    priceText: candidate.priceText ?? null,
-    hasUrl: Boolean(clean(candidate.url)),
-    url: clean(candidate.url) || null,
-    urlQuality: assessed.urlQuality,
-    qualityScore: assessed.qualityScore,
-  };
+  const value = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(value) ? value : null;
 }
 
 function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean {
@@ -206,49 +200,86 @@ function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean 
   }
 }
 
-function assessCandidateQuality(candidate: TicketCandidate): CandidateQuality {
+function detectUrlQuality(candidate: TicketCandidate): CandidateUrlQuality {
   const raw = clean(candidate.url);
-
-  if (!raw) {
-    return { urlQuality: "unknown", qualityScore: -1000 };
-  }
+  if (!raw) return "unknown";
 
   try {
     const parsed = new URL(raw);
     const path = parsed.pathname.toLowerCase();
     const query = parsed.search.toLowerCase();
 
-    if (
-      path.includes("/search") ||
+    const looksSearch =
+      path === "/search" ||
+      path.startsWith("/search/") ||
       path.includes("/events/search") ||
       path.includes("/event/search") ||
-      path.includes("/events/search-results") ||
-      path === "/search" ||
-      query.includes("query=") ||
+      path.includes("/search-results") ||
       query.includes("q=") ||
-      query.includes("text=")
-    ) {
-      return { urlQuality: "search", qualityScore: -30 };
-    }
+      query.includes("query=") ||
+      query.includes("text=");
 
-    if (
-      path.includes("/ticket") ||
-      path.includes("/tickets") ||
-      path.includes("/event") ||
-      path.includes("/events") ||
-      path.includes("/listing") ||
-      path.includes("/listings")
-    ) {
-      if (path.includes("/listing") || path.includes("/listings")) {
-        return { urlQuality: "listing", qualityScore: 8 };
-      }
-      return { urlQuality: "event", qualityScore: 12 };
-    }
+    if (looksSearch) return "search";
 
-    return { urlQuality: "unknown", qualityScore: -5 };
+    if (path.includes("/listing") || path.includes("/listings")) return "listing";
+    if (path.includes("/event") || path.includes("/events")) return "event";
+    if (path.includes("/ticket") || path.includes("/tickets")) return "event";
+
+    return "unknown";
   } catch {
-    return { urlQuality: "unknown", qualityScore: -1000 };
+    return "unknown";
   }
+}
+
+function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
+  const urlQuality = detectUrlQuality(candidate);
+
+  let adjustedScore = candidate.score;
+
+  if (urlQuality === "event") adjustedScore += 12;
+  else if (urlQuality === "listing") adjustedScore += 8;
+  else if (urlQuality === "unknown") adjustedScore -= 6;
+  else if (urlQuality === "search") adjustedScore -= 24;
+
+  if (candidate.reason === "exact_event") adjustedScore += 6;
+  if (candidate.reason === "partial_match") adjustedScore += 0;
+  if (candidate.reason === "search_fallback") adjustedScore -= 10;
+
+  if (candidate.reason === "exact_event" && urlQuality === "search") {
+    adjustedScore -= 35;
+  }
+
+  if (candidate.reason === "partial_match" && urlQuality === "search") {
+    adjustedScore -= 18;
+  }
+
+  if (candidate.reason === "search_fallback" && urlQuality !== "search") {
+    adjustedScore -= 4;
+  }
+
+  return {
+    urlQuality,
+    adjustedScore: Math.max(0, adjustedScore),
+  };
+}
+
+function summarizeCandidate(candidate: TicketCandidate | null) {
+  if (!candidate) return null;
+
+  const assessment = assessCandidate(candidate);
+
+  return {
+    provider: candidate.provider,
+    exact: candidate.exact,
+    score: candidate.score,
+    adjustedScore: assessment.adjustedScore,
+    reason: candidate.reason,
+    title: candidate.title,
+    priceText: candidate.priceText ?? null,
+    hasUrl: Boolean(clean(candidate.url)),
+    url: clean(candidate.url) || null,
+    urlQuality: assessment.urlQuality,
+  };
 }
 
 function sanitizeCandidate(candidate: TicketCandidate | null): TicketCandidate | null {
@@ -342,186 +373,6 @@ async function withTimeout<T>(
   });
 }
 
-function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
-  const map = new Map<string, TicketCandidate>();
-
-  for (const candidate of candidates) {
-    const key = [
-      normalize(candidate.provider),
-      normalize(candidate.url),
-      normalize(candidate.title),
-      normalize(candidate.reason),
-    ].join("|");
-
-    const existing = map.get(key);
-
-    if (!existing) {
-      map.set(key, candidate);
-      continue;
-    }
-
-    if (candidate.score > existing.score) {
-      map.set(key, candidate);
-      continue;
-    }
-
-    if (candidate.score === existing.score) {
-      const currentQuality = assessCandidateQuality(candidate).qualityScore;
-      const existingQuality = assessCandidateQuality(existing).qualityScore;
-
-      if (currentQuality > existingQuality) {
-        map.set(key, candidate);
-        continue;
-      }
-
-      const currentRank = PROVIDER_PRIORITY[candidate.provider] ?? 99;
-      const existingRank = PROVIDER_PRIORITY[existing.provider] ?? 99;
-
-      if (currentRank < existingRank) {
-        map.set(key, candidate);
-      }
-    }
-  }
-
-  return Array.from(map.values());
-}
-
-function parsePriceAmount(priceText?: string | null): number | null {
-  const raw = clean(priceText);
-  if (!raw) return null;
-
-  const match = raw.match(/(\d{1,3}(?:[,\d]{0,})(?:\.\d{1,2})?)/);
-  if (!match) return null;
-
-  const value = Number(match[1].replace(/,/g, ""));
-  return Number.isFinite(value) ? value : null;
-}
-
-function reasonRank(reason: TicketCandidate["reason"]): number {
-  if (reason === "exact_event") return 1;
-  if (reason === "partial_match") return 2;
-  if (reason === "search_fallback") return 5;
-  return 10;
-}
-
-function providerRank(provider: TicketProviderId): number {
-  return PROVIDER_PRIORITY[provider] ?? 99;
-}
-
-function enforceCandidateThreshold(candidate: TicketCandidate): boolean {
-  if (candidate.reason === "exact_event") {
-    return candidate.score >= MIN_EXACT_EVENT_SCORE;
-  }
-
-  if (candidate.reason === "partial_match") {
-    return candidate.score >= MIN_PARTIAL_MATCH_SCORE;
-  }
-
-  return candidate.score >= MIN_SEARCH_FALLBACK_SCORE;
-}
-
-function applyCandidatePenalty(candidate: TicketCandidate): TicketCandidate {
-  const assessed = assessCandidateQuality(candidate);
-  let adjustedScore = candidate.score + assessed.qualityScore;
-
-  if (candidate.reason === "search_fallback" && assessed.urlQuality === "search") {
-    adjustedScore -= 10;
-  }
-
-  if (candidate.reason === "exact_event" && assessed.urlQuality === "search") {
-    adjustedScore -= 40;
-  }
-
-  if (candidate.reason === "partial_match" && assessed.urlQuality === "search") {
-    adjustedScore -= 20;
-  }
-
-  return {
-    ...candidate,
-    score: Math.max(0, adjustedScore),
-  };
-}
-
-function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
-  return [...candidates].sort((a, b) => {
-    const aReasonRank = reasonRank(a.reason);
-    const bReasonRank = reasonRank(b.reason);
-
-    if (aReasonRank !== bReasonRank) return aReasonRank - bReasonRank;
-
-    const aQuality = assessCandidateQuality(a).qualityScore;
-    const bQuality = assessCandidateQuality(b).qualityScore;
-    if (aQuality !== bQuality) return bQuality - aQuality;
-
-    if (b.score !== a.score) return b.score - a.score;
-
-    const aPrice = parsePriceAmount(a.priceText);
-    const bPrice = parsePriceAmount(b.priceText);
-
-    if (aPrice != null && bPrice != null && aPrice !== bPrice) {
-      return aPrice - bPrice;
-    }
-
-    const aHasPrice = Boolean(clean(a.priceText));
-    const bHasPrice = Boolean(clean(b.priceText));
-
-    if (aHasPrice && !bHasPrice) return -1;
-    if (!aHasPrice && bHasPrice) return 1;
-
-    return providerRank(a.provider) - providerRank(b.provider);
-  });
-}
-
-function filterWeakCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
-  return candidates
-    .map(applyCandidatePenalty)
-    .filter(enforceCandidateThreshold);
-}
-
-function buildResolution(
-  candidates: TicketCandidate[],
-  checkedProviders: TicketResolution["checkedProviders"]
-): TicketResolution {
-  const filtered = filterWeakCandidates(dedupeCandidates(candidates));
-  const sorted = sortCandidates(filtered);
-  const top = sorted.slice(0, MAX_RETURNED_OPTIONS);
-
-  if (top.length === 0) {
-    return buildNotFound(checkedProviders);
-  }
-
-  const best = top[0];
-
-  /**
-   * Final truth gate.
-   * Do not return a fake "ok" result if the best surviving candidate is still weak.
-   */
-  if (best.score < MIN_SELECTED_SCORE) {
-    return buildNotFound(checkedProviders);
-  }
-
-  return {
-    ok: true,
-    provider: best.provider,
-    exact: best.exact,
-    score: best.score,
-    url: best.url,
-    title: best.title,
-    priceText: best.priceText ?? null,
-    reason: best.reason,
-    checkedProviders,
-    options: top.map((candidate) => ({
-      provider: candidate.provider,
-      exact: candidate.exact,
-      score: candidate.score,
-      url: candidate.url,
-      title: candidate.title,
-      priceText: candidate.priceText ?? null,
-      reason: candidate.reason,
-    })),
-  };
-}
-
 async function runProvider(
   provider: TicketProviderId,
   fn: () => Promise<TicketCandidate | null>
@@ -549,6 +400,142 @@ async function runProvider(
 
   recordProviderCall(provider, "success", durationMs);
   return sanitized;
+}
+
+function reasonRank(reason: TicketCandidate["reason"]): number {
+  if (reason === "exact_event") return 1;
+  if (reason === "partial_match") return 2;
+  if (reason === "search_fallback") return 5;
+  return 10;
+}
+
+function providerRank(provider: TicketProviderId): number {
+  return PROVIDER_PRIORITY[provider] ?? 99;
+}
+
+function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
+  const map = new Map<string, TicketCandidate>();
+
+  for (const candidate of candidates) {
+    const key = [
+      normalize(candidate.provider),
+      normalize(candidate.url),
+      normalize(candidate.title),
+      normalize(candidate.reason),
+    ].join("|");
+
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, candidate);
+      continue;
+    }
+
+    const currentAssessment = assessCandidate(candidate);
+    const existingAssessment = assessCandidate(existing);
+
+    if (currentAssessment.adjustedScore > existingAssessment.adjustedScore) {
+      map.set(key, candidate);
+      continue;
+    }
+
+    if (currentAssessment.adjustedScore === existingAssessment.adjustedScore) {
+      const currentRank = PROVIDER_PRIORITY[candidate.provider] ?? 99;
+      const existingRank = PROVIDER_PRIORITY[existing.provider] ?? 99;
+
+      if (currentRank < existingRank) {
+        map.set(key, candidate);
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+function passesReasonFloor(candidate: TicketCandidate): boolean {
+  const adjusted = assessCandidate(candidate).adjustedScore;
+
+  if (candidate.reason === "exact_event") {
+    return adjusted >= MIN_EXACT_EVENT_SCORE;
+  }
+
+  if (candidate.reason === "partial_match") {
+    return adjusted >= MIN_PARTIAL_MATCH_SCORE;
+  }
+
+  return adjusted >= MIN_SEARCH_FALLBACK_SCORE;
+}
+
+function filterWeakCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
+  return candidates.filter(passesReasonFloor);
+}
+
+function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
+  return [...candidates].sort((a, b) => {
+    const aReasonRank = reasonRank(a.reason);
+    const bReasonRank = reasonRank(b.reason);
+    if (aReasonRank !== bReasonRank) return aReasonRank - bReasonRank;
+
+    const aAssessment = assessCandidate(a);
+    const bAssessment = assessCandidate(b);
+    if (aAssessment.adjustedScore !== bAssessment.adjustedScore) {
+      return bAssessment.adjustedScore - aAssessment.adjustedScore;
+    }
+
+    const aPrice = parsePriceAmount(a.priceText);
+    const bPrice = parsePriceAmount(b.priceText);
+
+    if (aPrice != null && bPrice != null && aPrice !== bPrice) {
+      return aPrice - bPrice;
+    }
+
+    const aHasPrice = Boolean(clean(a.priceText));
+    const bHasPrice = Boolean(clean(b.priceText));
+    if (aHasPrice && !bHasPrice) return -1;
+    if (!aHasPrice && bHasPrice) return 1;
+
+    return providerRank(a.provider) - providerRank(b.provider);
+  });
+}
+
+function buildResolution(
+  candidates: TicketCandidate[],
+  checkedProviders: TicketResolution["checkedProviders"]
+): TicketResolution {
+  const filtered = filterWeakCandidates(dedupeCandidates(candidates));
+  const sorted = sortCandidates(filtered);
+  const top = sorted.slice(0, MAX_RETURNED_OPTIONS);
+
+  if (top.length === 0) {
+    return buildNotFound(checkedProviders);
+  }
+
+  const best = top[0];
+  const bestAdjustedScore = assessCandidate(best).adjustedScore;
+
+  if (bestAdjustedScore < MIN_SELECTED_SCORE) {
+    return buildNotFound(checkedProviders);
+  }
+
+  return {
+    ok: true,
+    provider: best.provider,
+    exact: best.exact,
+    score: bestAdjustedScore,
+    url: best.url,
+    title: best.title,
+    priceText: best.priceText ?? null,
+    reason: best.reason,
+    checkedProviders,
+    options: top.map((candidate) => ({
+      provider: candidate.provider,
+      exact: candidate.exact,
+      score: assessCandidate(candidate).adjustedScore,
+      url: candidate.url,
+      title: candidate.title,
+      priceText: candidate.priceText ?? null,
+      reason: candidate.reason,
+    })),
+  };
 }
 
 export async function resolveTicket(
@@ -645,7 +632,7 @@ export async function resolveTicket(
         exact: option.exact,
         priceText: option.priceText ?? null,
         url: option.url,
-        urlQuality: assessCandidateQuality(option).urlQuality,
+        urlQuality: detectUrlQuality(option),
       })),
       debugNoCache,
     });
@@ -663,4 +650,4 @@ export async function resolveTicket(
   }
 
   return result;
-}
+    }
