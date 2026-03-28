@@ -1,6 +1,12 @@
 import type { SavedItem } from "@/src/core/savedItemTypes";
 
-export type PricePointSource = "saved_item" | "metadata" | "price_text" | null;
+export type PricePointSource =
+  | "saved_item"
+  | "metadata"
+  | "price_text"
+  | "live_api"
+  | null;
+
 export type PriceDisplayMode = "booked" | "live_from" | "est_from";
 
 export type PricePoint = {
@@ -79,6 +85,12 @@ function rankDisplayMode(mode: PriceDisplayMode): number {
   if (mode === "booked") return 0;
   if (mode === "live_from") return 1;
   return 2;
+}
+
+function isTotalEligible(point: PricePoint | null): point is PricePoint {
+  if (!point) return false;
+  if (!isPositiveAmount(point.amount)) return false;
+  return point.displayMode === "booked" || point.displayMode === "live_from";
 }
 
 export function parsePriceText(raw: unknown): Omit<PricePoint, "displayMode"> | null {
@@ -238,10 +250,13 @@ export function sumTripCorePrice(args: {
 }): PricePoint | null {
   const { tickets, flights, hotels } = args;
 
+  if (!isTotalEligible(tickets) || !isTotalEligible(flights) || !isTotalEligible(hotels)) {
+    return null;
+  }
+
   if (
-    !isPositiveAmount(tickets?.amount) ||
-    !isPositiveAmount(flights?.amount) ||
-    !isPositiveAmount(hotels?.amount)
+    tickets.displayMode !== flights.displayMode ||
+    flights.displayMode !== hotels.displayMode
   ) {
     return null;
   }
@@ -250,15 +265,7 @@ export function sumTripCorePrice(args: {
   if (!currency) return null;
 
   const amount = tickets.amount + flights.amount + hotels.amount;
-
-  const displayMode: PriceDisplayMode =
-    tickets.displayMode === "booked" &&
-    flights.displayMode === "booked" &&
-    hotels.displayMode === "booked"
-      ? "booked"
-      : flights.displayMode === "live_from"
-        ? "live_from"
-        : "est_from";
+  const displayMode = tickets.displayMode;
 
   return {
     amount,
@@ -315,6 +322,7 @@ export function withFlightPriceOverride(args: {
   const override = args.flightPricePoint
     ? {
         ...args.flightPricePoint,
+        source: "live_api" as const,
         displayMode: "live_from" as const,
       }
     : null;
