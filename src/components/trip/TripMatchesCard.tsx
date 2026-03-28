@@ -10,7 +10,10 @@ import type { Trip } from "@/src/state/trips";
 import type { SavedItem } from "@/src/core/savedItemTypes";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
-import { getMatchdayLogistics, buildLogisticsSnippet } from "@/src/data/matchdayLogistics";
+import {
+  getMatchdayLogistics,
+  buildLogisticsSnippet,
+} from "@/src/data/matchdayLogistics";
 import {
   clean,
   safeUri,
@@ -19,6 +22,7 @@ import {
   formatKickoffMeta,
   statusLabel,
   ticketConfidenceLabel,
+  providerLabel,
 } from "@/src/components/trip/tripUi";
 
 type Props = {
@@ -67,12 +71,72 @@ function StatusBadge({ status }: { status: SavedItem["status"] }) {
   );
 }
 
-function ticketStateLine(ticketItem: SavedItem | null, livePrice: string | null) {
+function ticketStateLine(args: {
+  ticketItem: SavedItem | null;
+  livePrice: string | null;
+  provider: string | null;
+}) {
+  const { ticketItem, livePrice, provider } = args;
+
   if (!ticketItem) return "No ticket route saved yet";
-  if (ticketItem.status === "booked") return livePrice || "Ticket booked";
-  if (ticketItem.status === "pending") return "Ticket click opened — compare again if needed";
-  if (ticketItem.status === "saved") return "Ticket option saved";
+
+  if (ticketItem.status === "booked") {
+    return livePrice || (provider ? `Booked via ${provider}` : "Ticket booked");
+  }
+
+  if (ticketItem.status === "pending") {
+    return provider
+      ? `Booking flow opened with ${provider}`
+      : "Booking flow opened — confirm if you completed it";
+  }
+
+  if (ticketItem.status === "saved") {
+    return provider ? `Saved option from ${provider}` : "Ticket option saved";
+  }
+
   return "Archived ticket route";
+}
+
+function ticketQualityLine(args: {
+  ticketItem: SavedItem | null;
+  provider: string | null;
+  score: number | null;
+}) {
+  const { ticketItem, provider, score } = args;
+
+  if (!ticketItem) {
+    return "Tap to compare live ticket options";
+  }
+
+  if (ticketItem.status === "archived") {
+    return "Archived route";
+  }
+
+  if (ticketItem.status === "booked") {
+    if (provider && score != null) {
+      return `${ticketConfidenceLabel(score)} • ${provider}`;
+    }
+    if (provider) return `Booked provider: ${provider}`;
+    if (score != null) return ticketConfidenceLabel(score);
+    return "Booked route saved";
+  }
+
+  if (ticketItem.status === "pending") {
+    if (provider && score != null) {
+      return `${ticketConfidenceLabel(score)} • ${provider}`;
+    }
+    if (provider) return `Pending with ${provider}`;
+    if (score != null) return ticketConfidenceLabel(score);
+    return "Pending ticket route";
+  }
+
+  if (provider && score != null) {
+    return `${ticketConfidenceLabel(score)} • ${provider}`;
+  }
+  if (provider) return `Saved from ${provider}`;
+  if (score != null) return ticketConfidenceLabel(score);
+
+  return "Saved route";
 }
 
 function urgencyLine(args: {
@@ -83,10 +147,21 @@ function urgencyLine(args: {
   const { isPrimary, ticketItem, certaintyLine } = args;
 
   if (isPrimary && !ticketItem) return "Primary match not ticketed yet";
-  if (isPrimary && ticketItem?.status === "pending") return "Primary match still needs ticket confirmation";
-  if (isPrimary && ticketItem?.status === "saved") return "Primary match has ticket options saved";
+  if (isPrimary && ticketItem?.status === "pending")
+    return "Primary match still needs booking confirmation";
+  if (isPrimary && ticketItem?.status === "saved")
+    return "Primary match has ticket routes saved";
   if (isPrimary && ticketItem?.status === "booked") return "Primary match anchored";
+
   return certaintyLine;
+}
+
+function primaryActionLabel(ticketItem: SavedItem | null) {
+  if (!ticketItem) return "Find tickets";
+  if (ticketItem.status === "booked") return "Open booked ticket";
+  if (ticketItem.status === "pending") return "Resume ticket route";
+  if (ticketItem.status === "saved") return "View saved ticket";
+  return "Find tickets";
 }
 
 function buildMatchCardData(
@@ -103,8 +178,12 @@ function buildMatchCardData(
 
   const kickoff = formatKickoffMeta(fixture, trip);
 
-  const homeName = clean((fixture as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home");
-  const awayName = clean((fixture as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away");
+  const homeName = clean(
+    (fixture as any)?.teams?.home?.name ?? (trip as any)?.homeName ?? "Home"
+  );
+  const awayName = clean(
+    (fixture as any)?.teams?.away?.name ?? (trip as any)?.awayName ?? "Away"
+  );
 
   const homeLogo = safeUri((fixture as any)?.teams?.home?.logo);
   const awayLogo = safeUri((fixture as any)?.teams?.away?.logo);
@@ -136,6 +215,7 @@ function buildMatchCardData(
 function sortMatchIds(matchIds: string[], primaryMatchId: string | null) {
   const primary = String(primaryMatchId ?? "").trim();
   if (!primary) return matchIds;
+
   return [...matchIds].sort((a, b) => {
     if (a === primary) return -1;
     if (b === primary) return 1;
@@ -164,7 +244,7 @@ export default function TripMatchesCard({
   return (
     <GlassCard style={styles.card}>
       <View style={styles.sectionTitleRow}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.sectionHeadingWrap}>
           <Text style={styles.sectionTitle}>Matches</Text>
           <Text style={styles.sectionSub}>
             The primary match should drive the trip. Everything else supports it.
@@ -187,16 +267,35 @@ export default function TripMatchesCard({
             const fixture = fixturesById[String(matchId)];
             const ticketItem = ticketsByMatchId[String(matchId)] ?? null;
             const isPrimary = String(primaryMatchId ?? "") === String(matchId);
-            const ticketProvider = getTicketProviderFromItem(ticketItem);
-            const showBookedProvider = Boolean(ticketItem && ticketItem.status === "booked" && ticketProvider);
+
+            const ticketProviderRaw = getTicketProviderFromItem(ticketItem);
+            const ticketProvider = ticketProviderRaw
+              ? providerLabel(ticketProviderRaw)
+              : null;
+
             const ticketScore = getTicketScoreFromItem(ticketItem);
-            const livePrice = ticketItem && ticketItem.status === "booked" ? getLivePriceLine(ticketItem) : null;
+            const livePrice =
+              ticketItem && ticketItem.status === "booked"
+                ? getLivePriceLine(ticketItem)
+                : null;
 
             const data = buildMatchCardData(trip, matchId, fixture);
             const urgency = urgencyLine({
               isPrimary,
               ticketItem,
               certaintyLine: data.kickoff.line,
+            });
+
+            const ticketState = ticketStateLine({
+              ticketItem,
+              livePrice,
+              provider: ticketProvider,
+            });
+
+            const ticketQuality = ticketQualityLine({
+              ticketItem,
+              provider: ticketProvider,
+              score: ticketScore,
             });
 
             return (
@@ -254,23 +353,18 @@ export default function TripMatchesCard({
 
                     <View style={styles.ticketSignalRow}>
                       <Text style={styles.matchHint} numberOfLines={1}>
-                        {ticketStateLine(ticketItem, livePrice)}
+                        {ticketState}
                       </Text>
                     </View>
 
-                    {showBookedProvider ? (
-                      <Text style={styles.ticketQualityMeta} numberOfLines={1}>
-                        Booked provider saved
-                      </Text>
-                    ) : ticketScore != null && ticketItem?.status === "booked" ? (
-                      <Text style={styles.ticketQualityMeta} numberOfLines={1}>
-                        {ticketConfidenceLabel(ticketScore)}
-                      </Text>
-                    ) : (
-                      <Text style={styles.ticketQualityMetaMuted} numberOfLines={1}>
-                        Tap to compare live ticket options
-                      </Text>
-                    )}
+                    <Text
+                      style={
+                        ticketItem ? styles.ticketQualityMeta : styles.ticketQualityMetaMuted
+                      }
+                      numberOfLines={1}
+                    >
+                      {ticketQuality}
+                    </Text>
                   </View>
 
                   <TeamCrest name={data.awayName} logo={data.awayLogo} />
@@ -286,9 +380,7 @@ export default function TripMatchesCard({
                       isPrimary && styles.smallBtnPrimaryStrong,
                     ]}
                   >
-                    <Text style={styles.smallBtnText}>
-                      {ticketItem?.status === "booked" ? "Open booked ticket" : "Find tickets"}
-                    </Text>
+                    <Text style={styles.smallBtnText}>{primaryActionLabel(ticketItem)}</Text>
                   </Pressable>
 
                   {!isPrimary ? (
@@ -337,6 +429,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 8,
+  },
+
+  sectionHeadingWrap: {
+    flex: 1,
   },
 
   sectionTitle: {
