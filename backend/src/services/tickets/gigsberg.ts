@@ -53,10 +53,23 @@ type GigsbergListingsResponse = {
   lastPage?: string | number | null;
 };
 
+type ScoredEvent = {
+  ev: GigsbergEvent;
+  score: number;
+  exactTeams: boolean;
+  sameDay: boolean;
+  reasons: string[];
+};
+
 const GIGSBERG_FETCH_TIMEOUT_MS = 6500;
 const EVENTS_PER_PAGE = 25;
 const LISTINGS_PER_PAGE = 20;
-const MIN_PUBLIC_FALLBACK_SCORE = 22;
+
+const MIN_PUBLIC_FALLBACK_SCORE = 18;
+const GIGSBERG_MIN_STRONG_EVENT_SCORE = 72;
+const GIGSBERG_MIN_EXACT_EVENT_SCORE = 95;
+const GIGSBERG_SEARCH_FALLBACK_PENALTY = 42;
+const GIGSBERG_LISTING_BONUS_CAP = 10;
 
 const EVENT_ENDPOINT_PATHS = [
   "/search/events",
@@ -171,7 +184,7 @@ function listingEventId(listing: GigsbergListing): string {
 }
 
 function numberFromUnknown(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
 
   const raw = clean(v);
   if (!raw) return null;
@@ -322,8 +335,9 @@ function exactNameMatch(ev: GigsbergEvent, input: TicketResolveInput): boolean {
   return containsTeamsLoose(name, homeVariants, awayVariants);
 }
 
-function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): number {
+function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): ScoredEvent {
   let score = 0;
+  const reasons: string[] = [];
 
   const name = eventName(ev);
   const kickoff = safeDate(input.kickoffIso);
@@ -331,48 +345,78 @@ function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): number {
   const homeVariants = expandTeamAliases(input.homeName);
   const awayVariants = expandTeamAliases(input.awayName);
 
-  if (name && containsTeamsLoose(name, homeVariants, awayVariants)) {
-    score += 65;
+  if (!name || isBadVariant(name)) {
+    return {
+      ev,
+      score: -1000,
+      exactTeams: false,
+      sameDay: false,
+      reasons: ["bad_or_missing_name"],
+    };
   }
 
-  if (name && isBadVariant(name)) {
-    score -= 1000;
+  const exactTeams = containsTeamsLoose(name, homeVariants, awayVariants);
+
+  if (!exactTeams) {
+    return {
+      ev,
+      score: -1000,
+      exactTeams: false,
+      sameDay: false,
+      reasons: ["team_match_failed"],
+    };
   }
 
+  score += 56;
+  reasons.push("teams_matched");
+
+  let sameDay = false;
   if (kickoff && evDt) {
     const diff = absDays(kickoff, evDt);
-    if (diff === 0) score += 25;
-    else if (diff === 1) score += 15;
-    else if (diff === 2) score += 8;
-    else if (diff > 2) score -= 1000;
+    if (diff === 0) {
+      score += 26;
+      sameDay = true;
+      reasons.push("same_day");
+    } else if (diff === 1) {
+      score += 8;
+      reasons.push("one_day_off");
+    } else if (diff === 2) {
+      score += 2;
+      reasons.push("two_days_off");
+    } else {
+      score -= 1000;
+      reasons.push(`date_mismatch_${diff}`);
+    }
+  } else {
+    score -= 15;
+    reasons.push("missing_event_date");
   }
 
   const typeText = `${eventType(ev)} ${eventSubtype(ev)}`.toLowerCase();
-  if (typeText.includes("sport")) score += 3;
-  if (typeText.includes("football")) score += 8;
+  if (typeText.includes("football")) {
+    score += 6;
+    reasons.push("football_type_hint");
+  }
+
   if (eventVenue(ev)) score += 2;
   if (eventCity(ev)) score += 1;
   if (eventCountry(ev)) score += 1;
 
-  return score;
+  return {
+    ev,
+    score,
+    exactTeams,
+    sameDay,
+    reasons,
+  };
 }
 
 function isStrongEnoughEvent(score: number): boolean {
-  return score >= 55;
+  return score >= GIGSBERG_MIN_STRONG_EVENT_SCORE;
 }
 
-function isExactEvent(
-  ev: GigsbergEvent,
-  input: TicketResolveInput,
-  score: number
-): boolean {
-  const kickoff = safeDate(input.kickoffIso);
-  const evDt = safeDate(eventDate(ev));
-
-  if (!exactNameMatch(ev, input)) return false;
-  if (!kickoff || !evDt) return false;
-
-  return absDays(kickoff, evDt) === 0 && score >= 85;
+function isExactEvent(scored: ScoredEvent, finalScore: number): boolean {
+  return scored.exactTeams && scored.sameDay && finalScore >= GIGSBERG_MIN_EXACT_EVENT_SCORE;
 }
 
 function scoreListing(listing: GigsbergListing): number {
@@ -384,25 +428,24 @@ function scoreListing(listing: GigsbergListing): number {
   const category = clean(listing.category);
   const splitType = clean(listing.split_type);
 
-  if (listingId(listing)) score += 5;
-  if (listingEventId(listing)) score += 5;
+  if (listingId(listing)) score += 3;
+  if (listingEventId(listing)) score += 3;
 
   if (qty != null) {
-    if (qty >= 2) score += 10;
-    else if (qty === 1) score += 5;
+    if (qty >= 2) score += 4;
+    else if (qty === 1) score += 2;
   }
 
-  if (price != null) score += 8;
-  if (block) score += 3;
-  if (category) score += 3;
+  if (price != null) score += 4;
+  if (block) score += 2;
+  if (category) score += 2;
 
   if (splitType) {
-    score += 2;
     if (norm(splitType).includes("avoid")) score -= 3;
     if (norm(splitType).includes("none")) score += 1;
   }
 
-  return score;
+  return Math.min(GIGSBERG_LISTING_BONUS_CAP, score);
 }
 
 function summarizeEvent(ev: GigsbergEvent) {
@@ -431,12 +474,7 @@ function summarizeListing(listing: GigsbergListing) {
 }
 
 function eventDedupKey(ev: GigsbergEvent): string {
-  return [
-    eventId(ev),
-    eventName(ev),
-    eventDate(ev),
-    eventVenue(ev),
-  ].join("|").toLowerCase();
+  return [eventId(ev), eventName(ev), eventDate(ev), eventVenue(ev)].join("|").toLowerCase();
 }
 
 function dedupeEvents(events: GigsbergEvent[]): GigsbergEvent[] {
@@ -703,12 +741,13 @@ export async function resolveGigsbergCandidate(
   }
 
   const scoredEvents = events
-    .map((ev) => ({
-      ev,
-      score: scoreEvent(ev, input),
-    }))
+    .map((ev) => scoreEvent(ev, input))
     .filter((x) => isStrongEnoughEvent(x.score))
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => {
+      if (a.exactTeams !== b.exactTeams) return a.exactTeams ? -1 : 1;
+      if (a.sameDay !== b.sameDay) return a.sameDay ? -1 : 1;
+      return b.score - a.score;
+    });
 
   console.log("[Gigsberg] scored events", {
     totalEvents: events.length,
@@ -716,6 +755,9 @@ export async function resolveGigsbergCandidate(
     top: scoredEvents.slice(0, 5).map((x) => ({
       ...summarizeEvent(x.ev),
       score: x.score,
+      exactTeams: x.exactTeams,
+      sameDay: x.sameDay,
+      reasons: x.reasons,
     })),
   });
 
@@ -742,7 +784,6 @@ export async function resolveGigsbergCandidate(
   const bestEvent = scoredEvents[0];
   const bestEventId = eventId(bestEvent.ev);
   const bestEventName = eventName(bestEvent.ev);
-  const exact = isExactEvent(bestEvent.ev, input, bestEvent.score);
 
   if (!bestEventId) {
     const fallbackUrl = buildPublicSearchUrl(input);
@@ -751,7 +792,7 @@ export async function resolveGigsbergCandidate(
       bestEvent: {
         ...summarizeEvent(bestEvent.ev),
         score: bestEvent.score,
-        exact,
+        reasons: bestEvent.reasons,
       },
       fallbackUrl,
     });
@@ -760,12 +801,12 @@ export async function resolveGigsbergCandidate(
 
     return {
       provider: "gigsberg",
-      exact,
-      score: Math.max(25, bestEvent.score - 15),
+      exact: false,
+      score: Math.max(20, bestEvent.score - GIGSBERG_SEARCH_FALLBACK_PENALTY),
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
-      reason: exact ? "partial_match" : "search_fallback",
+      reason: "search_fallback",
     };
   }
 
@@ -778,19 +819,21 @@ export async function resolveGigsbergCandidate(
       bestEvent: {
         ...summarizeEvent(bestEvent.ev),
         score: bestEvent.score,
-        exact,
+        reasons: bestEvent.reasons,
       },
       fallbackUrl,
     });
 
+    const finalScore = Math.max(20, bestEvent.score - GIGSBERG_SEARCH_FALLBACK_PENALTY);
+
     return {
       provider: "gigsberg",
-      exact,
-      score: exact ? bestEvent.score : Math.max(30, bestEvent.score - 10),
+      exact: false,
+      score: finalScore,
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
       priceText: null,
-      reason: exact ? "partial_match" : "search_fallback",
+      reason: "search_fallback",
     };
   }
 
@@ -805,14 +848,17 @@ export async function resolveGigsbergCandidate(
   const listingUrl = buildEventSearchUrl(bestEventName || `${homeName} vs ${awayName}`);
   const combinedScore = Math.min(
     100,
-    bestEvent.score + Math.min(18, bestListing?.score ?? 0)
+    bestEvent.score + Math.min(GIGSBERG_LISTING_BONUS_CAP, bestListing?.score ?? 0)
   );
+
+  const exact = isExactEvent(bestEvent, combinedScore);
 
   console.log("[Gigsberg] matched event/listing", {
     event: {
       ...summarizeEvent(bestEvent.ev),
       eventScore: bestEvent.score,
       exact,
+      reasons: bestEvent.reasons,
     },
     listing: bestListing
       ? {
@@ -833,4 +879,4 @@ export async function resolveGigsbergCandidate(
     priceText: bestListing ? listingPriceText(bestListing.listing) : null,
     reason: exact ? "exact_event" : "partial_match",
   };
-        }
+      }
