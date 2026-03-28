@@ -110,6 +110,7 @@ type TicketSheetPayload = {
   options: TicketResolutionOption[];
   checkedProviders?: string[];
   officialTicketUrl?: string | null;
+  hasStrongOptions: boolean;
 };
 
 type TicketSheetState = {
@@ -296,6 +297,59 @@ function getTravelCandidate(affiliateUrls?: AffiliateUrls | null): {
   }
 
   return null;
+}
+
+function getOptionUrlQuality(option: TicketResolutionOption): "event" | "listing" | "search" | "unknown" {
+  const raw = clean(option.urlQuality).toLowerCase();
+
+  if (raw === "event" || raw === "listing" || raw === "search" || raw === "unknown") {
+    return raw;
+  }
+
+  const url = clean(option.url).toLowerCase();
+  if (!url) return "unknown";
+  if (
+    url.includes("/search") ||
+    url.includes("search-results") ||
+    url.includes("query=") ||
+    url.includes("q=") ||
+    url.includes("text=")
+  ) {
+    return "search";
+  }
+  if (url.includes("/listing") || url.includes("/listings")) return "listing";
+  if (url.includes("/event") || url.includes("/events") || url.includes("/tickets")) return "event";
+  return "unknown";
+}
+
+function isStrongTicketOption(option: TicketResolutionOption): boolean {
+  const reason = clean(option.reason);
+  const urlQuality = getOptionUrlQuality(option);
+
+  if (option.exact || reason === "exact_event") {
+    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
+  }
+
+  if (reason === "partial_match") {
+    return urlQuality === "event" || urlQuality === "listing";
+  }
+
+  return false;
+}
+
+function splitTicketOptions(options: TicketResolutionOption[]): {
+  strong: TicketResolutionOption[];
+  weak: TicketResolutionOption[];
+} {
+  const strong: TicketResolutionOption[] = [];
+  const weak: TicketResolutionOption[] = [];
+
+  for (const option of options) {
+    if (isStrongTicketOption(option)) strong.push(option);
+    else weak.push(option);
+  }
+
+  return { strong, weak };
 }
 
 export default function useTripDetailController({
@@ -741,6 +795,7 @@ export default function useTripDetailController({
     option: TicketResolutionOption;
     checkedProviders?: string[];
     optionCount?: number;
+    hasStrongOptions?: boolean;
   }) {
     let partnerId: PartnerId;
 
@@ -749,6 +804,15 @@ export default function useTripDetailController({
     } catch {
       Alert.alert("Provider unsupported", "This ticket provider is not mapped yet.");
       return;
+    }
+
+    const strongRoute = isStrongTicketOption(args.option);
+
+    if (!strongRoute) {
+      Alert.alert(
+        "Weak fallback route",
+        "This is only a weaker ticket route, not a strong direct match. Check the fixture carefully on the partner page before trusting it."
+      );
     }
 
     await openPartnerLaunch({
@@ -768,7 +832,7 @@ export default function useTripDetailController({
         awayName: args.awayName,
         tripStartDate: trip?.startDate ?? null,
         tripEndDate: trip?.endDate ?? null,
-        priceMode: "live",
+        priceMode: strongRoute ? "live" : "fallback",
         ticketProvider: args.option.provider ?? null,
         resolvedPriceText: args.option.priceText ?? null,
         resolutionReason: args.option.reason ?? null,
@@ -778,9 +842,11 @@ export default function useTripDetailController({
           typeof args.option.rawScore === "number" && Number.isFinite(args.option.rawScore)
             ? args.option.rawScore
             : null,
-        urlQuality: args.option.urlQuality ?? null,
+        urlQuality: getOptionUrlQuality(args.option),
         checkedProviders: args.checkedProviders,
         optionCount: args.optionCount,
+        strongRoute,
+        hasStrongOptions: Boolean(args.hasStrongOptions),
       },
       missingTitle: "Tickets not ready",
       missingMessage: "This ticket option is missing a valid link.",
@@ -800,7 +866,7 @@ export default function useTripDetailController({
 
     Alert.alert(
       "Official club tickets",
-      `No valid reseller ticket options were found right now. Try ${args.homeName}'s official ticket page instead.`,
+      `No strong reseller ticket routes were found right now. Try ${args.homeName}'s official ticket page instead.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -824,6 +890,7 @@ export default function useTripDetailController({
                 tripEndDate: trip?.endDate ?? null,
                 ticketProvider: "official_site",
                 officialFallback: true,
+                strongRoute: false,
               },
               missingTitle: "Official site unavailable",
               missingMessage: "The club ticket page is not available yet.",
@@ -895,11 +962,18 @@ export default function useTripDetailController({
         leagueId,
       });
 
-      const options = normalizeTicketOptions(resolved);
+      const normalizedOptions = normalizeTicketOptions(resolved);
+      const split = splitTicketOptions(normalizedOptions);
+      const strongOptions = split.strong;
+      const weakOptions = split.weak;
+
+      const displayOptions = strongOptions.length > 0 ? strongOptions : weakOptions;
+
       const homeGuide = getTicketGuide(homeName);
       const officialTicketUrl = clean(homeGuide?.officialTicketUrl) || null;
+      const hasStrongOptions = strongOptions.length > 0;
 
-      if (!resolved?.ok || options.length === 0) {
+      if (!hasStrongOptions && displayOptions.length === 0) {
         if (officialTicketUrl) {
           await openOfficialTicketFallback({
             mid,
@@ -920,7 +994,54 @@ export default function useTripDetailController({
         return;
       }
 
-      if (options.length === 1) {
+      if (!hasStrongOptions && officialTicketUrl) {
+        Alert.alert(
+          "Only weak fallback routes found",
+          `No strong reseller ticket routes were found for ${homeName} vs ${awayName}. You can try the weaker fallback route, but the official club ticket page is safer if available.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Official site",
+              onPress: () =>
+                void openOfficialTicketFallback({
+                  mid,
+                  homeName,
+                  awayName,
+                  kickoffIso,
+                  leagueName,
+                  leagueId,
+                  officialTicketUrl,
+                }),
+            },
+            ...(displayOptions.length > 0
+              ? [
+                  {
+                    text: "Fallback route",
+                    onPress: () =>
+                      void openTicketOptionForMatch({
+                        mid,
+                        homeName,
+                        awayName,
+                        kickoffIso,
+                        leagueName,
+                        leagueId,
+                        dateIso,
+                        option: displayOptions[0],
+                        checkedProviders: Array.isArray(resolved?.checkedProviders)
+                          ? resolved?.checkedProviders
+                          : undefined,
+                        optionCount: displayOptions.length,
+                        hasStrongOptions,
+                      }),
+                  },
+                ]
+              : []),
+          ]
+        );
+        return;
+      }
+
+      if (displayOptions.length === 1) {
         await openTicketOptionForMatch({
           mid,
           homeName,
@@ -929,11 +1050,12 @@ export default function useTripDetailController({
           leagueName,
           leagueId,
           dateIso,
-          option: options[0],
-          checkedProviders: Array.isArray(resolved.checkedProviders)
-            ? resolved.checkedProviders
+          option: displayOptions[0],
+          checkedProviders: Array.isArray(resolved?.checkedProviders)
+            ? resolved?.checkedProviders
             : undefined,
-          optionCount: options.length,
+          optionCount: displayOptions.length,
+          hasStrongOptions,
         });
         return;
       }
@@ -946,11 +1068,12 @@ export default function useTripDetailController({
         leagueName,
         leagueId,
         dateIso,
-        options,
-        checkedProviders: Array.isArray(resolved.checkedProviders)
-          ? resolved.checkedProviders
+        options: displayOptions,
+        checkedProviders: Array.isArray(resolved?.checkedProviders)
+          ? resolved?.checkedProviders
           : undefined,
         officialTicketUrl,
+        hasStrongOptions,
       });
     } catch {
       const homeGuide = getTicketGuide(homeName);
@@ -1007,6 +1130,7 @@ export default function useTripDetailController({
       option,
       checkedProviders: payload.checkedProviders,
       optionCount: payload.options.length,
+      hasStrongOptions: payload.hasStrongOptions,
     });
   }
 
@@ -1169,4 +1293,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-          }
+    }
