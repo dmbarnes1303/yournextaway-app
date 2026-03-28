@@ -53,6 +53,15 @@ type PlannerCardItem = {
   eyebrow: string;
 };
 
+type PlannerCardTone = "strong" | "medium" | "weak" | "optional";
+
+type PlannerCardViewModel = PlannerCardItem & {
+  count: number;
+  subtitle: string;
+  status: string;
+  tone: PlannerCardTone;
+};
+
 const PLANNER_ITEMS: PlannerCardItem[] = [
   { key: "tickets", label: "Tickets", eyebrow: "Anchor the trip" },
   { key: "travel", label: "Travel", eyebrow: "Get there" },
@@ -77,53 +86,13 @@ function nextStepLabel(stepKey?: string | null) {
   return "Continue planning";
 }
 
-function plannerSubtitle(args: {
-  key: PlannerCardItem["key"];
-  count: number;
-  ticketsPriceFrom?: string | null;
-  flightsPriceFrom?: string | null;
-  hotelsPriceFrom?: string | null;
-  experiencesPriceFrom?: string | null;
-}) {
-  const {
-    key,
-    count,
-    ticketsPriceFrom,
-    flightsPriceFrom,
-    hotelsPriceFrom,
-    experiencesPriceFrom,
-  } = args;
-
-  if (key === "tickets") {
-    if (ticketsPriceFrom) return ticketsPriceFrom;
-    if (count > 0) return count === 1 ? "1 ticket item saved" : `${count} ticket items saved`;
-    return "Compare live ticket options";
-  }
-
-  if (key === "travel") {
-    if (flightsPriceFrom) return flightsPriceFrom;
-    if (count > 0) return count === 1 ? "1 travel item added" : `${count} travel items added`;
-    return "Flights or rail for these trip dates";
-  }
-
-  if (key === "stay") {
-    if (hotelsPriceFrom) return hotelsPriceFrom;
-    if (count > 0) return count === 1 ? "1 stay item added" : `${count} stay items added`;
-    return "Hotels for your trip window";
-  }
-
-  if (experiencesPriceFrom) return experiencesPriceFrom;
-  if (count > 0) return count === 1 ? "1 extra added" : `${count} extras added`;
-  return "Optional";
-}
-
-function urgencyLine(hasTickets: boolean, kickoffTbc: boolean) {
-  if (!hasTickets && kickoffTbc) {
+function urgencyLine(hasBookedTickets: boolean, kickoffTbc: boolean) {
+  if (!hasBookedTickets && kickoffTbc) {
     return "Kickoff can still move. Secure tickets first, then keep travel flexible.";
   }
 
-  if (!hasTickets) {
-    return "Tickets come first. Flights and stays are weaker decisions until the match is anchored.";
+  if (!hasBookedTickets) {
+    return "Tickets come first. Flights and stays are softer planning until the match is actually locked in.";
   }
 
   if (kickoffTbc) {
@@ -150,8 +119,116 @@ function sectionCountLabel(count: number, singular: string, plural: string) {
 function completionTone(pct?: number | null) {
   const value = typeof pct === "number" ? pct : 0;
   if (value >= 90) return "ready";
-  if (value >= 50) return "progress";
+  if (value >= 65) return "progress";
   return "early";
+}
+
+function plannerCardMeta(args: {
+  key: PlannerCardItem["key"];
+  count: number;
+  hasBooked: boolean;
+  hasStarted: boolean;
+  priceLine?: string | null;
+}): Pick<PlannerCardViewModel, "subtitle" | "status" | "tone"> {
+  const { key, count, hasBooked, hasStarted, priceLine } = args;
+  const line = clean(priceLine);
+
+  if (key === "tickets") {
+    if (hasBooked) {
+      return {
+        subtitle: line || "Tickets booked",
+        status: "Booked",
+        tone: "strong",
+      };
+    }
+
+    if (hasStarted) {
+      return {
+        subtitle:
+          line || (count === 1 ? "Ticket option saved" : `${count} ticket items in progress`),
+        status: "In progress",
+        tone: "medium",
+      };
+    }
+
+    return {
+      subtitle: "Compare ticket options",
+      status: "Not booked",
+      tone: "weak",
+    };
+  }
+
+  if (key === "travel") {
+    if (hasBooked) {
+      return {
+        subtitle: line || "Travel booked",
+        status: "Booked",
+        tone: "strong",
+      };
+    }
+
+    if (hasStarted) {
+      return {
+        subtitle:
+          line || (count === 1 ? "Travel option saved" : `${count} travel items in progress`),
+        status: "In progress",
+        tone: "medium",
+      };
+    }
+
+    return {
+      subtitle: line || "Check current fares or rail options",
+      status: "Not booked",
+      tone: "weak",
+    };
+  }
+
+  if (key === "stay") {
+    if (hasBooked) {
+      return {
+        subtitle: line || "Stay booked",
+        status: "Booked",
+        tone: "strong",
+      };
+    }
+
+    if (hasStarted) {
+      return {
+        subtitle:
+          line || (count === 1 ? "Stay option saved" : `${count} stay items in progress`),
+        status: "In progress",
+        tone: "medium",
+      };
+    }
+
+    return {
+      subtitle: line || "Check current hotel options",
+      status: "Not booked",
+      tone: "weak",
+    };
+  }
+
+  if (hasBooked) {
+    return {
+      subtitle: line || "Extras booked",
+      status: "Booked",
+      tone: "optional",
+    };
+  }
+
+  if (hasStarted) {
+    return {
+      subtitle: line || (count === 1 ? "Extra saved" : `${count} extras in progress`),
+      status: "Optional",
+      tone: "optional",
+    };
+  }
+
+  return {
+    subtitle: line || "Optional once the core trip is covered",
+    status: "Optional",
+    tone: "optional",
+  };
 }
 
 export default function TripDetailScreen() {
@@ -329,7 +406,7 @@ export default function TripDetailScreen() {
 
   const decisionBody = useMemo(() => {
     if (!vm.hasTickets) {
-      return "Lock tickets first — that confirms the trip. Until then, everything else is softer planning.";
+      return "Lock tickets first — that is what properly anchors the trip. Until then, everything else is softer planning.";
     }
 
     return dominantAction?.body || "Move the trip forward by completing the next core booking step.";
@@ -345,7 +422,8 @@ export default function TripDetailScreen() {
 
   const tripStageTitle = useMemo(() => {
     if ((vm.tripCompletionPct ?? 0) >= 90) return "Trip nearly complete";
-    if ((vm.tripCompletionPct ?? 0) >= 50) return "Trip taking shape";
+    if ((vm.tripCompletionPct ?? 0) >= 65) return "Trip materially covered";
+    if ((vm.tripCompletionPct ?? 0) >= 35) return "Trip partly covered";
     return "Trip still early";
   }, [vm.tripCompletionPct]);
 
@@ -354,34 +432,68 @@ export default function TripDetailScreen() {
       return "Core bookings are largely covered. Final job is to store proof, clean up the trip, and stop second-guessing finished decisions.";
     }
 
-    if ((vm.tripCompletionPct ?? 0) >= 50) {
-      return "The trip has real structure now, but it is not finished. Keep following the next step instead of jumping around.";
+    if ((vm.tripCompletionPct ?? 0) >= 65) {
+      return "The core trip is taking real shape now, but anything not actually booked still needs finishing.";
+    }
+
+    if ((vm.tripCompletionPct ?? 0) >= 35) {
+      return "Some parts of the trip are underway, but started does not mean covered. Keep working in order.";
     }
 
     return "This trip is not properly anchored yet. Keep working in order: tickets, travel, stay, then extras.";
   }, [vm.tripCompletionPct]);
 
-  const plannerCards = useMemo(() => {
+  const plannerCards = useMemo<PlannerCardViewModel[]>(() => {
     return PLANNER_ITEMS.map((item) => {
       const count = groupedBySection[item.key]?.length || 0;
 
-      const subtitle = plannerSubtitle({
+      const meta = plannerCardMeta({
         key: item.key,
         count,
-        ticketsPriceFrom: data.ticketsPriceFrom,
-        flightsPriceFrom: data.flightsPriceFrom,
-        hotelsPriceFrom: data.hotelsPriceFrom,
-        experiencesPriceFrom: data.experiencesPriceFrom,
+        hasBooked:
+          item.key === "tickets"
+            ? vm.hasTickets
+            : item.key === "travel"
+              ? vm.hasFlight
+              : item.key === "stay"
+                ? vm.hasHotel
+                : vm.hasThings,
+        hasStarted:
+          item.key === "tickets"
+            ? ticketCount > 0
+            : item.key === "travel"
+              ? travelCount > 0
+              : item.key === "stay"
+                ? stayCount > 0
+                : thingsCount > 0,
+        priceLine:
+          item.key === "tickets"
+            ? data.ticketsPriceFrom
+            : item.key === "travel"
+              ? data.flightsPriceFrom
+              : item.key === "stay"
+                ? data.hotelsPriceFrom
+                : data.experiencesPriceFrom,
       });
 
       return {
         ...item,
         count,
-        subtitle,
+        subtitle: meta.subtitle,
+        status: meta.status,
+        tone: meta.tone,
       };
     });
   }, [
     groupedBySection,
+    vm.hasTickets,
+    vm.hasFlight,
+    vm.hasHotel,
+    vm.hasThings,
+    ticketCount,
+    travelCount,
+    stayCount,
+    thingsCount,
     data.ticketsPriceFrom,
     data.flightsPriceFrom,
     data.hotelsPriceFrom,
@@ -459,7 +571,7 @@ export default function TripDetailScreen() {
                             : styles.completionPillEarly,
                       ]}
                     >
-                      <Text style={styles.completionPillText}>{vm.tripCompletionPct}% ready</Text>
+                      <Text style={styles.completionPillText}>{vm.tripCompletionPct}% covered</Text>
                     </View>
                   ) : null}
                 </View>
@@ -489,28 +601,44 @@ export default function TripDetailScreen() {
                   <View style={styles.coreStatusCard}>
                     <Text style={styles.coreStatusLabel}>Tickets</Text>
                     <Text style={styles.coreStatusValue}>
-                      {sectionCountLabel(ticketCount, "ticket item", "ticket items")}
+                      {vm.hasTickets
+                        ? "Booked"
+                        : ticketCount > 0
+                          ? "In progress"
+                          : "Not booked"}
                     </Text>
                   </View>
 
                   <View style={styles.coreStatusCard}>
                     <Text style={styles.coreStatusLabel}>Travel</Text>
                     <Text style={styles.coreStatusValue}>
-                      {sectionCountLabel(travelCount, "travel item", "travel items")}
+                      {vm.hasFlight
+                        ? "Booked"
+                        : travelCount > 0
+                          ? "In progress"
+                          : "Not booked"}
                     </Text>
                   </View>
 
                   <View style={styles.coreStatusCard}>
                     <Text style={styles.coreStatusLabel}>Stay</Text>
                     <Text style={styles.coreStatusValue}>
-                      {sectionCountLabel(stayCount, "stay item", "stay items")}
+                      {vm.hasHotel
+                        ? "Booked"
+                        : stayCount > 0
+                          ? "In progress"
+                          : "Not booked"}
                     </Text>
                   </View>
 
                   <View style={styles.coreStatusCard}>
                     <Text style={styles.coreStatusLabel}>Extras</Text>
                     <Text style={styles.coreStatusValue}>
-                      {sectionCountLabel(thingsCount, "extra", "extras")}
+                      {vm.hasThings
+                        ? "Booked"
+                        : thingsCount > 0
+                          ? "Optional / started"
+                          : "Optional"}
                     </Text>
                   </View>
                 </View>
@@ -562,15 +690,46 @@ export default function TripDetailScreen() {
                   {plannerCards.map((item) => (
                     <Pressable
                       key={item.key}
-                      style={styles.plannerCard}
+                      style={[
+                        styles.plannerCard,
+                        item.tone === "strong"
+                          ? styles.plannerCardStrong
+                          : item.tone === "medium"
+                            ? styles.plannerCardMedium
+                            : item.tone === "optional"
+                              ? styles.plannerCardOptional
+                              : styles.plannerCardWeak,
+                      ]}
                       onPress={() => controller.onOpenSection(item.key)}
                     >
-                      <Text style={styles.plannerCardEyebrow}>{item.eyebrow}</Text>
+                      <View style={styles.plannerCardTop}>
+                        <Text style={styles.plannerCardEyebrow}>{item.eyebrow}</Text>
+                        <View
+                          style={[
+                            styles.plannerStatusPill,
+                            item.tone === "strong"
+                              ? styles.plannerStatusPillStrong
+                              : item.tone === "medium"
+                                ? styles.plannerStatusPillMedium
+                                : item.tone === "optional"
+                                  ? styles.plannerStatusPillOptional
+                                  : styles.plannerStatusPillWeak,
+                          ]}
+                        >
+                          <Text style={styles.plannerStatusPillText}>{item.status}</Text>
+                        </View>
+                      </View>
+
                       <Text style={styles.plannerCardTitle}>{item.label}</Text>
                       <Text style={styles.plannerCardSub}>{item.subtitle}</Text>
                     </Pressable>
                   ))}
                 </View>
+
+                <Text style={styles.plannerFootnote}>
+                  Tickets and flights are stronger booking steps. Stay, transport and extras may still
+                  be link-based or in-progress until actually booked.
+                </Text>
               </GlassCard>
 
               <TripMatchesCard
@@ -604,15 +763,21 @@ export default function TripDetailScreen() {
                   ) : null}
 
                   {!vm.hasFlight ? (
-                    <Text style={styles.guidanceText}>• Travel is not sorted yet.</Text>
+                    <Text style={styles.guidanceText}>
+                      • Travel is not actually booked yet.
+                    </Text>
                   ) : null}
 
                   {!vm.hasHotel ? (
-                    <Text style={styles.guidanceText}>• Stay location still needs deciding.</Text>
+                    <Text style={styles.guidanceText}>
+                      • Stay location still needs deciding and booking.
+                    </Text>
                   ) : null}
 
                   {!vm.hasTransport ? (
-                    <Text style={styles.guidanceText}>• Local transport is still weak.</Text>
+                    <Text style={styles.guidanceText}>
+                      • Local transport is still weak or unfinished.
+                    </Text>
                   ) : null}
 
                   {vm.hasTickets && vm.hasFlight && vm.hasHotel && vm.hasTransport ? (
@@ -969,16 +1134,42 @@ const styles = StyleSheet.create({
 
   plannerCard: {
     width: "48%",
-    minHeight: 118,
+    minHeight: 132,
     borderRadius: 16,
     padding: theme.spacing.md,
-    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
     justifyContent: "space-between",
   },
 
+  plannerCardWeak: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  plannerCardMedium: {
+    backgroundColor: "rgba(120,170,255,0.08)",
+    borderColor: "rgba(120,170,255,0.18)",
+  },
+
+  plannerCardStrong: {
+    backgroundColor: "rgba(87,162,56,0.10)",
+    borderColor: "rgba(87,162,56,0.22)",
+  },
+
+  plannerCardOptional: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  plannerCardTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
   plannerCardEyebrow: {
+    flex: 1,
     fontSize: 11,
     fontWeight: "900",
     color: theme.colors.textMuted,
@@ -986,8 +1177,41 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
 
+  plannerStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+
+  plannerStatusPillWeak: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+
+  plannerStatusPillMedium: {
+    backgroundColor: "rgba(120,170,255,0.12)",
+    borderColor: "rgba(120,170,255,0.22)",
+  },
+
+  plannerStatusPillStrong: {
+    backgroundColor: "rgba(87,162,56,0.12)",
+    borderColor: "rgba(87,162,56,0.24)",
+  },
+
+  plannerStatusPillOptional: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  plannerStatusPillText: {
+    color: theme.colors.text,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
   plannerCardTitle: {
-    marginTop: 6,
+    marginTop: 8,
     fontSize: 16,
     fontWeight: "800",
     color: theme.colors.text,
@@ -999,6 +1223,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: theme.colors.textSecondary,
     fontWeight: "700",
+  },
+
+  plannerFootnote: {
+    marginTop: theme.spacing.md,
+    fontSize: 12,
+    lineHeight: 18,
+    color: theme.colors.textMuted,
   },
 
   guidanceList: {
