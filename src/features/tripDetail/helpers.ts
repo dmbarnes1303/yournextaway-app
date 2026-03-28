@@ -1,5 +1,3 @@
-// src/features/tripDetail/helpers.ts
-
 import {
   canonicalizePartnerId,
   getPartnerOrNull,
@@ -13,6 +11,7 @@ import { formatUkDateOnly } from "@/src/utils/formatters";
 import type {
   TicketResolutionOption,
   TicketResolutionResult,
+  TicketUrlQuality,
 } from "@/src/services/ticketResolver";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
@@ -203,6 +202,19 @@ export function confidenceLabel(score?: number | null): string {
   if (score >= 75) return "Strong option";
   if (score >= 60) return "Good option";
   return "Available";
+}
+
+export function ticketUrlQualityLabel(
+  value?: TicketUrlQuality | string | null
+): string | null {
+  const raw = clean(value).toLowerCase();
+
+  if (raw === "event") return "Direct event";
+  if (raw === "listing") return "Listing page";
+  if (raw === "search") return "Search result";
+  if (raw === "unknown") return "Link available";
+
+  return null;
 }
 
 export function optionReasonLabel(
@@ -428,6 +440,10 @@ export function normalizeTicketOptions(
       provider,
       exact: Boolean(option.exact),
       score,
+      rawScore:
+        typeof option.rawScore === "number" && Number.isFinite(option.rawScore)
+          ? option.rawScore
+          : null,
       url,
       title,
       priceText: clean(option.priceText) || null,
@@ -435,6 +451,13 @@ export function normalizeTicketOptions(
         option.reason === "exact_event" || option.reason === "partial_match"
           ? option.reason
           : "search_fallback",
+      urlQuality:
+        option.urlQuality === "event" ||
+        option.urlQuality === "listing" ||
+        option.urlQuality === "search" ||
+        option.urlQuality === "unknown"
+          ? option.urlQuality
+          : "unknown",
     };
 
     const key = `${provider.toLowerCase()}|${url}`;
@@ -466,6 +489,10 @@ export function normalizeTicketOptions(
         provider: clean(resolved.provider),
         exact: Boolean(resolved.exact),
         score: typeof resolved.score === "number" ? resolved.score : 0,
+        rawScore:
+          typeof resolved.rawScore === "number" && Number.isFinite(resolved.rawScore)
+            ? resolved.rawScore
+            : null,
         url: clean(resolved.url),
         title: clean(resolved.title),
         priceText: clean(resolved.priceText) || null,
@@ -475,6 +502,13 @@ export function normalizeTicketOptions(
             : resolved.reason === "partial_match"
               ? "partial_match"
               : "search_fallback",
+        urlQuality:
+          resolved.urlQuality === "event" ||
+          resolved.urlQuality === "listing" ||
+          resolved.urlQuality === "search" ||
+          resolved.urlQuality === "unknown"
+            ? resolved.urlQuality
+            : "unknown",
       },
     ];
   }
@@ -493,6 +527,24 @@ export function itemResolvedScore(item: SavedItem | null): number | null {
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
 }
 
+export function itemResolvedRawScore(item: SavedItem | null): number | null {
+  if (!item) return null;
+  const raw = item.metadata?.rawScore;
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
+
+export function itemResolvedUrlQuality(item: SavedItem | null): TicketUrlQuality | null {
+  if (!item) return null;
+  const raw = clean(item.metadata?.urlQuality).toLowerCase();
+
+  if (raw === "event") return "event";
+  if (raw === "listing") return "listing";
+  if (raw === "search") return "search";
+  if (raw === "unknown") return "unknown";
+
+  return null;
+}
+
 export function getIsoDateOnly(raw?: string | null): string | undefined {
   const value = clean(raw);
   if (!value) return undefined;
@@ -505,4 +557,4 @@ export function getIsoDateOnly(raw?: string | null): string | undefined {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-    }
+}
