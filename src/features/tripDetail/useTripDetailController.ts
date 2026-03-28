@@ -125,13 +125,13 @@ function inferSourceSectionFromSavedItemType(type?: SavedItemType): SourceSectio
 }
 
 function safeSourceSurface(value: unknown): SourceSurface {
-  const v = clean(value);
-  return v ? (v as SourceSurface) : "unknown";
+  const next = clean(value);
+  return next ? (next as SourceSurface) : "unknown";
 }
 
 function safeSourceSection(value: unknown, fallback?: SavedItemType): SourceSection {
-  const v = clean(value);
-  return v ? (v as SourceSection) : inferSourceSectionFromSavedItemType(fallback);
+  const next = clean(value);
+  return next ? (next as SourceSection) : inferSourceSectionFromSavedItemType(fallback);
 }
 
 function getTrackedPartnerErrorMessage(error: unknown): string {
@@ -192,17 +192,17 @@ function buildPrimarySnapshotFromFixtureRow(
 
   const statusShort = clean(row.fixture?.status?.short).toUpperCase();
   const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
-  const midnight =
-    kickoffDate && Number.isFinite(kickoffDate.getTime())
-      ? kickoffDate.getHours() === 0 && kickoffDate.getMinutes() === 0
-      : true;
+  const hasExactKickTime =
+    kickoffDate != null &&
+    Number.isFinite(kickoffDate.getTime()) &&
+    !(kickoffDate.getHours() === 0 && kickoffDate.getMinutes() === 0);
 
   const kickoffTbc =
     statusShort === "TBD" ||
     statusShort === "TBA" ||
     statusShort === "NS" ||
     statusShort === "PST" ||
-    midnight;
+    !hasExactKickTime;
 
   return {
     fixtureIdPrimary: String(row.fixture.id),
@@ -857,7 +857,6 @@ export default function useTripDetailController({
     }
 
     const existing = ticketsByMatchId[mid];
-
     if (
       existing &&
       existing.type === "tickets" &&
@@ -869,7 +868,6 @@ export default function useTripDetailController({
     }
 
     const row = fixturesById[mid] ?? null;
-
     const homeName = clean(row?.teams?.home?.name ?? trip?.homeName);
     const awayName = clean(row?.teams?.away?.name ?? trip?.awayName);
     const kickoffIso = clean(row?.fixture?.date ?? trip?.kickoffIso) || null;
@@ -886,7 +884,6 @@ export default function useTripDetailController({
     }
 
     const dateIso = trip?.startDate || getIsoDateOnly(kickoffIso);
-
     setTicketLoading(true);
 
     try {
