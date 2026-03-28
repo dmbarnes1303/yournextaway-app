@@ -99,6 +99,24 @@ type CanonicalTripBuildParams = {
   season?: string;
 };
 
+type TicketSheetPayload = {
+  mid: string;
+  homeName: string;
+  awayName: string;
+  kickoffIso: string;
+  leagueName?: string;
+  leagueId?: string | number;
+  dateIso?: string;
+  options: TicketResolutionOption[];
+  checkedProviders?: string[];
+  officialTicketUrl?: string | null;
+};
+
+type TicketSheetState = {
+  visible: boolean;
+  payload: TicketSheetPayload | null;
+};
+
 function inferSourceSectionFromSavedItemType(type?: SavedItemType): SourceSection {
   switch (type) {
     case "tickets":
@@ -125,13 +143,13 @@ function inferSourceSectionFromSavedItemType(type?: SavedItemType): SourceSectio
 }
 
 function safeSourceSurface(value: unknown): SourceSurface {
-  const next = clean(value);
-  return next ? (next as SourceSurface) : "unknown";
+  const v = clean(value);
+  return v ? (v as SourceSurface) : "unknown";
 }
 
 function safeSourceSection(value: unknown, fallback?: SavedItemType): SourceSection {
-  const next = clean(value);
-  return next ? (next as SourceSection) : inferSourceSectionFromSavedItemType(fallback);
+  const v = clean(value);
+  return v ? (v as SourceSection) : inferSourceSectionFromSavedItemType(fallback);
 }
 
 function getTrackedPartnerErrorMessage(error: unknown): string {
@@ -192,17 +210,17 @@ function buildPrimarySnapshotFromFixtureRow(
 
   const statusShort = clean(row.fixture?.status?.short).toUpperCase();
   const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
-  const hasExactKickTime =
-    kickoffDate != null &&
-    Number.isFinite(kickoffDate.getTime()) &&
-    !(kickoffDate.getHours() === 0 && kickoffDate.getMinutes() === 0);
+  const midnight =
+    kickoffDate && Number.isFinite(kickoffDate.getTime())
+      ? kickoffDate.getHours() === 0 && kickoffDate.getMinutes() === 0
+      : true;
 
   const kickoffTbc =
     statusShort === "TBD" ||
     statusShort === "TBA" ||
     statusShort === "NS" ||
     statusShort === "PST" ||
-    !hasExactKickTime;
+    midnight;
 
   return {
     fixtureIdPrimary: String(row.fixture.id),
@@ -296,6 +314,18 @@ export default function useTripDetailController({
   setActiveWorkspaceSection = () => {},
 }: Props) {
   const router = useRouter();
+
+  const [ticketSheet, setTicketSheet] = React.useState<TicketSheetState>({
+    visible: false,
+    payload: null,
+  });
+
+  function closeTicketSheet() {
+    setTicketSheet({
+      visible: false,
+      payload: null,
+    });
+  }
 
   function getResolvedTripId(): string {
     return clean(trip?.id) || clean(activeTripId);
@@ -726,7 +756,7 @@ export default function useTripDetailController({
       url: args.option.url,
       title: args.option.title || `Tickets: ${args.homeName} vs ${args.awayName}`,
       savedItemType: "tickets",
-      sourceSurface: "ticket_choice_alert",
+      sourceSurface: "ticket_choice_sheet",
       sourceSection: "tickets",
       metadata: {
         fixtureId: args.mid,
@@ -776,7 +806,7 @@ export default function useTripDetailController({
               url: args.officialTicketUrl,
               title,
               savedItemType: "tickets",
-              sourceSurface: "ticket_choice_alert",
+              sourceSurface: "ticket_choice_sheet",
               sourceSection: "tickets",
               metadata: {
                 fixtureId: args.mid,
@@ -798,50 +828,11 @@ export default function useTripDetailController({
     );
   }
 
-  function showTicketChoiceAlert(args: {
-    mid: string;
-    homeName: string;
-    awayName: string;
-    kickoffIso: string;
-    leagueName?: string;
-    leagueId?: string | number;
-    dateIso?: string;
-    options: TicketResolutionOption[];
-    checkedProviders?: string[];
-  }) {
-    const top = args.options.slice(0, 3);
-
-    Alert.alert(
-      "Choose ticket provider",
-      top
-        .map(
-          (option, index) =>
-            `${index + 1}. ${clean(option.provider)}${
-              clean(option.priceText) ? ` • ${clean(option.priceText)}` : ""
-            }`
-        )
-        .join("\n"),
-      [
-        { text: "Cancel", style: "cancel" },
-        ...top.map((option) => ({
-          text: clean(option.provider),
-          onPress: () =>
-            void openTicketOptionForMatch({
-              ...args,
-              option,
-              optionCount: args.options.length,
-            }),
-        })),
-        {
-          text: "Compare all",
-          onPress: () =>
-            router.push({
-              pathname: "/match/[id]",
-              params: { id: args.mid, tripId: activeTripId ?? undefined },
-            } as never),
-        },
-      ] as AlertButton[]
-    );
+  function showTicketChoiceSheet(args: TicketSheetPayload) {
+    setTicketSheet({
+      visible: true,
+      payload: args,
+    });
   }
 
   async function openTicketsForMatch(matchId: string) {
@@ -857,6 +848,7 @@ export default function useTripDetailController({
     }
 
     const existing = ticketsByMatchId[mid];
+
     if (
       existing &&
       existing.type === "tickets" &&
@@ -868,6 +860,7 @@ export default function useTripDetailController({
     }
 
     const row = fixturesById[mid] ?? null;
+
     const homeName = clean(row?.teams?.home?.name ?? trip?.homeName);
     const awayName = clean(row?.teams?.away?.name ?? trip?.awayName);
     const kickoffIso = clean(row?.fixture?.date ?? trip?.kickoffIso) || null;
@@ -884,6 +877,7 @@ export default function useTripDetailController({
     }
 
     const dateIso = trip?.startDate || getIsoDateOnly(kickoffIso);
+
     setTicketLoading(true);
 
     try {
@@ -898,7 +892,7 @@ export default function useTripDetailController({
 
       const options = normalizeTicketOptions(resolved);
       const homeGuide = getTicketGuide(homeName);
-      const officialTicketUrl = clean(homeGuide?.officialTicketUrl);
+      const officialTicketUrl = clean(homeGuide?.officialTicketUrl) || null;
 
       if (!resolved?.ok || options.length === 0) {
         if (officialTicketUrl) {
@@ -939,7 +933,7 @@ export default function useTripDetailController({
         return;
       }
 
-      showTicketChoiceAlert({
+      showTicketChoiceSheet({
         mid,
         homeName,
         awayName,
@@ -951,6 +945,7 @@ export default function useTripDetailController({
         checkedProviders: Array.isArray(resolved.checkedProviders)
           ? resolved.checkedProviders
           : undefined,
+        officialTicketUrl,
       });
     } catch {
       const homeGuide = getTicketGuide(homeName);
@@ -976,6 +971,55 @@ export default function useTripDetailController({
     } finally {
       setTicketLoading(false);
     }
+  }
+
+  function onCompareAllTickets() {
+    const payload = ticketSheet.payload;
+    if (!payload?.mid) return;
+
+    closeTicketSheet();
+
+    router.push({
+      pathname: "/match/[id]",
+      params: { id: payload.mid, tripId: activeTripId ?? undefined },
+    } as never);
+  }
+
+  async function onSelectTicketSheetOption(option: TicketResolutionOption) {
+    const payload = ticketSheet.payload;
+    if (!payload) return;
+
+    closeTicketSheet();
+
+    await openTicketOptionForMatch({
+      mid: payload.mid,
+      homeName: payload.homeName,
+      awayName: payload.awayName,
+      kickoffIso: payload.kickoffIso,
+      leagueName: payload.leagueName,
+      leagueId: payload.leagueId,
+      dateIso: payload.dateIso,
+      option,
+      checkedProviders: payload.checkedProviders,
+      optionCount: payload.options.length,
+    });
+  }
+
+  async function onOpenOfficialFromSheet() {
+    const payload = ticketSheet.payload;
+    if (!payload?.officialTicketUrl) return;
+
+    closeTicketSheet();
+
+    await openOfficialTicketFallback({
+      mid: payload.mid,
+      homeName: payload.homeName,
+      awayName: payload.awayName,
+      kickoffIso: payload.kickoffIso,
+      leagueName: payload.leagueName,
+      leagueId: payload.leagueId,
+      officialTicketUrl: payload.officialTicketUrl,
+    });
   }
 
   async function onOpenSection(section: WorkspaceSectionKey | string) {
@@ -1112,6 +1156,12 @@ export default function useTripDetailController({
     removeMatch,
     openMatchActions,
     openTicketsForMatch,
+    openTicketOptionForMatch,
     addProofForBookedItem,
+    ticketSheet,
+    closeTicketSheet,
+    onCompareAllTickets,
+    onSelectTicketSheetOption,
+    onOpenOfficialFromSheet,
   };
-    }
+         }
