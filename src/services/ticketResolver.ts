@@ -1,15 +1,17 @@
-// src/services/ticketResolver.ts
-
 import { getBackendBaseUrl } from "../config/env";
+
+export type TicketUrlQuality = "event" | "listing" | "search" | "unknown";
 
 export type TicketResolutionOption = {
   provider: string;
   exact: boolean;
   score: number;
+  rawScore?: number | null;
   url: string;
   title: string;
   priceText?: string | null;
   reason: "exact_event" | "search_fallback" | "partial_match";
+  urlQuality?: TicketUrlQuality;
 };
 
 export type TicketResolutionResult = {
@@ -17,10 +19,12 @@ export type TicketResolutionResult = {
   provider: string | null;
   exact: boolean;
   score: number | null;
+  rawScore?: number | null;
   url: string | null;
   title: string | null;
   priceText?: string | null;
-  reason: "exact_event" | "search_fallback" | "not_found";
+  reason: "exact_event" | "search_fallback" | "partial_match" | "not_found";
+  urlQuality?: TicketUrlQuality;
   checkedProviders?: string[];
   options?: TicketResolutionOption[];
   error?: string;
@@ -90,8 +94,18 @@ function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
   return `${normalizedBase}/tickets/resolve?${qs.toString()}`;
 }
 
+function normalizeUrlQuality(value: unknown): TicketUrlQuality {
+  const raw = clean(value).toLowerCase();
+
+  if (raw === "event") return "event";
+  if (raw === "listing") return "listing";
+  if (raw === "search") return "search";
+  return "unknown";
+}
+
 function normalizeReason(value: unknown): TicketResolutionOption["reason"] {
   const raw = clean(value);
+
   if (raw === "exact_event") return "exact_event";
   if (raw === "partial_match") return "partial_match";
   return "search_fallback";
@@ -99,15 +113,17 @@ function normalizeReason(value: unknown): TicketResolutionOption["reason"] {
 
 function normalizeTopLevelReason(
   value: unknown,
-  hasProvider: boolean
+  hasProvider: boolean,
+  hasOptions: boolean
 ): TicketResolutionResult["reason"] {
   const raw = clean(value);
 
   if (raw === "exact_event") return "exact_event";
+  if (raw === "partial_match") return "partial_match";
   if (raw === "search_fallback") return "search_fallback";
   if (raw === "not_found") return "not_found";
 
-  return hasProvider ? "search_fallback" : "not_found";
+  return hasProvider || hasOptions ? "search_fallback" : "not_found";
 }
 
 function normalizeScore(value: unknown): number | null {
@@ -131,10 +147,12 @@ function normalizeOption(input: unknown): TicketResolutionOption | null {
     provider,
     exact: Boolean(obj.exact),
     score,
+    rawScore: normalizeScore(obj.rawScore),
     url,
     title,
     priceText: clean(obj.priceText) || null,
     reason: normalizeReason(obj.reason),
+    urlQuality: normalizeUrlQuality(obj.urlQuality),
   };
 }
 
@@ -214,10 +232,9 @@ function normalizeResolutionResult(
   const title = clean(input.title) || fallbackTop?.title || null;
   const priceText = clean(input.priceText) || fallbackTop?.priceText || null;
 
-  const score =
-    normalizeScore(input.score) ??
-    fallbackTop?.score ??
-    null;
+  const score = normalizeScore(input.score) ?? fallbackTop?.score ?? null;
+  const rawScore =
+    normalizeScore(input.rawScore) ?? fallbackTop?.rawScore ?? null;
 
   const exact =
     typeof input.exact === "boolean"
@@ -232,10 +249,12 @@ function normalizeResolutionResult(
     provider,
     exact,
     score,
+    rawScore,
     url,
     title,
     priceText,
-    reason: normalizeTopLevelReason(input.reason, Boolean(provider)),
+    reason: normalizeTopLevelReason(input.reason, Boolean(provider), hasUsableOptions),
+    urlQuality: normalizeUrlQuality(input.urlQuality ?? fallbackTop?.urlQuality),
     checkedProviders: normalizeCheckedProviders(input.checkedProviders),
     options: normalizedOptions,
     error: clean(input.error) || undefined,
@@ -248,10 +267,12 @@ function makeErrorResult(error: string): TicketResolutionResult {
     provider: null,
     exact: false,
     score: null,
+    rawScore: null,
     url: null,
     title: null,
     priceText: null,
     reason: "not_found",
+    urlQuality: "unknown",
     checkedProviders: [],
     options: [],
     error,
@@ -324,4 +345,4 @@ export async function resolveTicketForFixture(
   } finally {
     if (timeout) clearTimeout(timeout);
   }
-}
+                                           }
