@@ -96,12 +96,6 @@ type Params = {
   controller: Controller;
   setActiveWorkspaceSection?: (section: WorkspaceSectionKey) => Promise<void> | void;
   bookingPriceBoard?: BookingPriceBoard | null;
-  ticketsPriceFrom?: string | null;
-  flightsPriceFrom?: string | null;
-  hotelsPriceFrom?: string | null;
-  transfersPriceFrom?: string | null;
-  experiencesPriceFrom?: string | null;
-  tripPriceFrom?: string | null;
 };
 
 type BookingStepKey = "tickets" | "flight" | "hotel" | "transfer" | "things";
@@ -636,12 +630,11 @@ export default function useTripDetailViewModel({
 
     if (ticketState !== "booked") {
       return {
-        title:
-          ticketState === "empty" ? "Book tickets first" : "Finish ticket booking first",
+        title: ticketState === "empty" ? "Book tickets first" : "Finish ticket booking first",
         body:
           ticketState === "empty"
             ? "Tickets are the anchor. Until that is actually booked, flights and hotels are still softer planning."
-            : "A saved or pending ticket is not the same as a locked ticket. Finish this before pretending the trip is anchored.",
+            : "A saved or pending ticket is not a locked ticket. Finish this before pretending the trip is anchored.",
         cta: "Compare tickets",
         onPress: () => {
           void openTickets("next_best_action");
@@ -673,7 +666,7 @@ export default function useTripDetailViewModel({
         body:
           flightState === "empty"
             ? "The trip is not properly covered until transport in and out is actually booked."
-            : "Travel has been started, not finished. A saved link or tentative plan is not the same as a locked journey.",
+            : "Travel has been started, not finished. A saved link or tentative plan is not a locked journey.",
         cta: "View flights",
         onPress: () => {
           void openFlights("next_best_action");
@@ -705,10 +698,7 @@ export default function useTripDetailViewModel({
 
     if (transportState !== "booked") {
       return {
-        title:
-          transportState === "empty"
-            ? "Sort local transport"
-            : "Finish local transport",
+        title: transportState === "empty" ? "Sort local transport" : "Finish local transport",
         body:
           transportState === "empty"
             ? "Airport, hotel, stadium. Remove that friction now instead of scrambling later."
@@ -725,10 +715,7 @@ export default function useTripDetailViewModel({
 
     if (thingsState !== "booked") {
       return {
-        title:
-          thingsState === "empty"
-            ? "Add extras only if they improve the trip"
-            : "Finish optional extras",
+        title: thingsState === "empty" ? "Add extras only if they improve the trip" : "Finish optional extras",
         body:
           thingsState === "empty"
             ? "Core trip is covered. Extras should improve the trip, not clutter it."
@@ -1011,4 +998,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-}
+        }
