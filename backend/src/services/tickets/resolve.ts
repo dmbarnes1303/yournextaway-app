@@ -34,6 +34,10 @@ type CandidateUrlQuality = "event" | "listing" | "search" | "unknown";
 type CandidateAssessment = {
   urlQuality: CandidateUrlQuality;
   adjustedScore: number;
+  providerBias: number;
+  urlBias: number;
+  reasonBias: number;
+  priceBonus: number;
 };
 
 const CACHE = new Map<string, CacheEntry>();
@@ -41,15 +45,16 @@ const CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 1000 * 60 * 10;
 const PROVIDER_TIMEOUT_MS = 4500;
 const MAX_RETURNED_OPTIONS = 3;
+const RESOLVER_VERSION = "v3-provider-aware";
 
 /**
  * Hard floors.
- * Search results should almost never survive unless everything else fails.
+ * Search fallbacks are allowed only when everything else is weak.
  */
-const MIN_EXACT_EVENT_SCORE = 70;
-const MIN_PARTIAL_MATCH_SCORE = 58;
-const MIN_SEARCH_FALLBACK_SCORE = 52;
-const MIN_SELECTED_SCORE = 60;
+const MIN_EXACT_EVENT_SCORE = 72;
+const MIN_PARTIAL_MATCH_SCORE = 60;
+const MIN_SEARCH_FALLBACK_SCORE = 54;
+const MIN_SELECTED_SCORE = 62;
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
   footballticketsnet: 1,
@@ -111,6 +116,7 @@ function normalize(v: unknown): string {
 
 function buildCacheKey(input: TicketResolveInput): string {
   return [
+    RESOLVER_VERSION,
     clean(input.fixtureId),
     clean(input.homeName),
     clean(input.awayName),
@@ -164,6 +170,7 @@ function buildNotFound(
 
 function summarizeInput(input: TicketResolveInput) {
   return {
+    resolverVersion: RESOLVER_VERSION,
     fixtureId: clean(input.fixtureId) || null,
     homeName: clean(input.homeName) || null,
     awayName: clean(input.awayName) || null,
@@ -183,6 +190,10 @@ function parsePriceAmount(priceText?: string | null): number | null {
 
   const value = Number(match[1].replace(/,/g, ""));
   return Number.isFinite(value) ? value : null;
+}
+
+function hasPriceText(candidate: TicketCandidate): boolean {
+  return Boolean(clean(candidate.priceText));
 }
 
 function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean {
@@ -231,20 +242,83 @@ function detectUrlQuality(candidate: TicketCandidate): CandidateUrlQuality {
   }
 }
 
+/**
+ * Provider-aware logic:
+ * - SE365 gets rewarded more for structured event/listing URLs
+ * - FTN is strongest on event pages, weak on search fallback
+ * - Gigsberg is decent on listing/event, weak on search fallback
+ */
+function getProviderBias(
+  provider: TicketProviderId,
+  reason: TicketCandidate["reason"],
+  urlQuality: CandidateUrlQuality
+): number {
+  if (provider === "sportsevents365") {
+    if (reason === "exact_event" && urlQuality === "event") return 14;
+    if (reason === "partial_match" && urlQuality === "event") return 10;
+    if (urlQuality === "listing") return 8;
+    if (reason === "search_fallback") return -8;
+    if (urlQuality === "search") return -10;
+    return 4;
+  }
+
+  if (provider === "footballticketsnet") {
+    if (reason === "exact_event" && urlQuality === "event") return 11;
+    if (reason === "partial_match" && urlQuality === "event") return 7;
+    if (urlQuality === "listing") return 3;
+    if (reason === "search_fallback") return -12;
+    if (urlQuality === "search") return -14;
+    return 2;
+  }
+
+  // gigsberg
+  if (reason === "exact_event" && (urlQuality === "event" || urlQuality === "listing")) return 9;
+  if (reason === "partial_match" && (urlQuality === "event" || urlQuality === "listing")) return 6;
+  if (urlQuality === "listing") return 7;
+  if (reason === "search_fallback") return -11;
+  if (urlQuality === "search") return -13;
+  return 1;
+}
+
+function getUrlBias(urlQuality: CandidateUrlQuality): number {
+  if (urlQuality === "event") return 12;
+  if (urlQuality === "listing") return 8;
+  if (urlQuality === "unknown") return -6;
+  return -24;
+}
+
+function getReasonBias(reason: TicketCandidate["reason"]): number {
+  if (reason === "exact_event") return 8;
+  if (reason === "partial_match") return 0;
+  return -10;
+}
+
+function getPriceBonus(candidate: TicketCandidate): number {
+  const amount = parsePriceAmount(candidate.priceText);
+  if (amount == null) return 0;
+
+  // modest boost only; price presence helps but should not overpower match quality
+  if (amount > 0 && amount <= 60) return 5;
+  if (amount <= 120) return 4;
+  if (amount <= 250) return 3;
+  return 2;
+}
+
 function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
   const urlQuality = detectUrlQuality(candidate);
+  const urlBias = getUrlBias(urlQuality);
+  const reasonBias = getReasonBias(candidate.reason);
+  const providerBias = getProviderBias(candidate.provider, candidate.reason, urlQuality);
+  const priceBonus = getPriceBonus(candidate);
 
-  let adjustedScore = candidate.score;
+  let adjustedScore =
+    candidate.score +
+    urlBias +
+    reasonBias +
+    providerBias +
+    priceBonus;
 
-  if (urlQuality === "event") adjustedScore += 12;
-  else if (urlQuality === "listing") adjustedScore += 8;
-  else if (urlQuality === "unknown") adjustedScore -= 6;
-  else if (urlQuality === "search") adjustedScore -= 24;
-
-  if (candidate.reason === "exact_event") adjustedScore += 6;
-  if (candidate.reason === "partial_match") adjustedScore += 0;
-  if (candidate.reason === "search_fallback") adjustedScore -= 10;
-
+  // Strong extra penalties for bullshit combinations
   if (candidate.reason === "exact_event" && urlQuality === "search") {
     adjustedScore -= 35;
   }
@@ -260,6 +334,10 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
   return {
     urlQuality,
     adjustedScore: Math.max(0, adjustedScore),
+    providerBias,
+    urlBias,
+    reasonBias,
+    priceBonus,
   };
 }
 
@@ -271,7 +349,7 @@ function summarizeCandidate(candidate: TicketCandidate | null) {
   return {
     provider: candidate.provider,
     exact: candidate.exact,
-    score: candidate.score,
+    rawScore: candidate.score,
     adjustedScore: assessment.adjustedScore,
     reason: candidate.reason,
     title: candidate.title,
@@ -279,6 +357,10 @@ function summarizeCandidate(candidate: TicketCandidate | null) {
     hasUrl: Boolean(clean(candidate.url)),
     url: clean(candidate.url) || null,
     urlQuality: assessment.urlQuality,
+    providerBias: assessment.providerBias,
+    urlBias: assessment.urlBias,
+    reasonBias: assessment.reasonBias,
+    priceBonus: assessment.priceBonus,
   };
 }
 
@@ -477,6 +559,7 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
     const aAssessment = assessCandidate(a);
     const bAssessment = assessCandidate(b);
+
     if (aAssessment.adjustedScore !== bAssessment.adjustedScore) {
       return bAssessment.adjustedScore - aAssessment.adjustedScore;
     }
@@ -488,8 +571,8 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
       return aPrice - bPrice;
     }
 
-    const aHasPrice = Boolean(clean(a.priceText));
-    const bHasPrice = Boolean(clean(b.priceText));
+    const aHasPrice = hasPriceText(a);
+    const bHasPrice = hasPriceText(b);
     if (aHasPrice && !bHasPrice) return -1;
     if (!aHasPrice && bHasPrice) return 1;
 
@@ -650,4 +733,4 @@ export async function resolveTicket(
   }
 
   return result;
-    }
+  }
