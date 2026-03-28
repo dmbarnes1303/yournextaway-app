@@ -110,12 +110,6 @@ function dateWindowLine(startDate?: string | null, endDate?: string | null) {
   return `${start} → ${end}`;
 }
 
-function sectionCountLabel(count: number, singular: string, plural: string) {
-  if (count <= 0) return `No ${plural}`;
-  if (count === 1) return `1 ${singular}`;
-  return `${count} ${plural}`;
-}
-
 function completionTone(pct?: number | null) {
   const value = typeof pct === "number" ? pct : 0;
   if (value >= 90) return "ready";
@@ -128,15 +122,13 @@ function plannerCardMeta(args: {
   count: number;
   hasBooked: boolean;
   hasStarted: boolean;
-  priceLine?: string | null;
 }): Pick<PlannerCardViewModel, "subtitle" | "status" | "tone"> {
-  const { key, count, hasBooked, hasStarted, priceLine } = args;
-  const line = clean(priceLine);
+  const { key, count, hasBooked, hasStarted } = args;
 
   if (key === "tickets") {
     if (hasBooked) {
       return {
-        subtitle: line || "Tickets booked",
+        subtitle: "Tickets booked",
         status: "Booked",
         tone: "strong",
       };
@@ -144,8 +136,7 @@ function plannerCardMeta(args: {
 
     if (hasStarted) {
       return {
-        subtitle:
-          line || (count === 1 ? "Ticket option saved" : `${count} ticket items in progress`),
+        subtitle: count === 1 ? "Ticket option saved" : `${count} ticket items in progress`,
         status: "In progress",
         tone: "medium",
       };
@@ -161,7 +152,7 @@ function plannerCardMeta(args: {
   if (key === "travel") {
     if (hasBooked) {
       return {
-        subtitle: line || "Travel booked",
+        subtitle: "Travel booked",
         status: "Booked",
         tone: "strong",
       };
@@ -169,15 +160,14 @@ function plannerCardMeta(args: {
 
     if (hasStarted) {
       return {
-        subtitle:
-          line || (count === 1 ? "Travel option saved" : `${count} travel items in progress`),
+        subtitle: count === 1 ? "Travel option saved" : `${count} travel items in progress`,
         status: "In progress",
         tone: "medium",
       };
     }
 
     return {
-      subtitle: line || "Check current fares or rail options",
+      subtitle: "Check flight or rail options",
       status: "Not booked",
       tone: "weak",
     };
@@ -186,7 +176,7 @@ function plannerCardMeta(args: {
   if (key === "stay") {
     if (hasBooked) {
       return {
-        subtitle: line || "Stay booked",
+        subtitle: "Stay booked",
         status: "Booked",
         tone: "strong",
       };
@@ -194,15 +184,14 @@ function plannerCardMeta(args: {
 
     if (hasStarted) {
       return {
-        subtitle:
-          line || (count === 1 ? "Stay option saved" : `${count} stay items in progress`),
+        subtitle: count === 1 ? "Stay option saved" : `${count} stay items in progress`,
         status: "In progress",
         tone: "medium",
       };
     }
 
     return {
-      subtitle: line || "Check current hotel options",
+      subtitle: "Check hotel options",
       status: "Not booked",
       tone: "weak",
     };
@@ -210,7 +199,7 @@ function plannerCardMeta(args: {
 
   if (hasBooked) {
     return {
-      subtitle: line || "Extras booked",
+      subtitle: "Extras booked",
       status: "Booked",
       tone: "optional",
     };
@@ -218,14 +207,14 @@ function plannerCardMeta(args: {
 
   if (hasStarted) {
     return {
-      subtitle: line || (count === 1 ? "Extra saved" : `${count} extras in progress`),
+      subtitle: count === 1 ? "Extra saved" : `${count} extras in progress`,
       status: "Optional",
       tone: "optional",
     };
   }
 
   return {
-    subtitle: line || "Optional once the core trip is covered",
+    subtitle: "Optional once the core trip is covered",
     status: "Optional",
     tone: "optional",
   };
@@ -386,12 +375,6 @@ export default function TripDetailScreen() {
     kickoffTbc: data.kickoffMeta.tbc,
     controller,
     bookingPriceBoard: data.bookingPriceBoard,
-    ticketsPriceFrom: data.ticketsPriceFrom,
-    flightsPriceFrom: data.flightsPriceFrom,
-    hotelsPriceFrom: data.hotelsPriceFrom,
-    transfersPriceFrom: data.transfersPriceFrom,
-    experiencesPriceFrom: data.experiencesPriceFrom,
-    tripPriceFrom: data.tripPriceFrom,
   });
 
   const status = useMemo(() => {
@@ -466,14 +449,6 @@ export default function TripDetailScreen() {
               : item.key === "stay"
                 ? stayCount > 0
                 : thingsCount > 0,
-        priceLine:
-          item.key === "tickets"
-            ? data.ticketsPriceFrom
-            : item.key === "travel"
-              ? data.flightsPriceFrom
-              : item.key === "stay"
-                ? data.hotelsPriceFrom
-                : data.experiencesPriceFrom,
       });
 
       return {
@@ -494,10 +469,6 @@ export default function TripDetailScreen() {
     travelCount,
     stayCount,
     thingsCount,
-    data.ticketsPriceFrom,
-    data.flightsPriceFrom,
-    data.hotelsPriceFrom,
-    data.experiencesPriceFrom,
   ]);
 
   const ticketSheetMatchLabel = useMemo(() => {
@@ -728,7 +699,7 @@ export default function TripDetailScreen() {
 
                 <Text style={styles.plannerFootnote}>
                   Tickets and flights are stronger booking steps. Stay, transport and extras may still
-                  be link-based or in-progress until actually booked.
+                  be link-based or in progress until actually booked.
                 </Text>
               </GlassCard>
 
