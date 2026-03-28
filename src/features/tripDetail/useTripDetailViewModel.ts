@@ -109,6 +109,7 @@ type BookingStepKey = "tickets" | "flight" | "hotel" | "transfer" | "things";
 type BookingStep = {
   key: BookingStepKey;
   complete: boolean;
+  started: boolean;
   state: ProgressState;
 };
 
@@ -122,6 +123,15 @@ function isComplete(state: ProgressState): boolean {
   return state === "booked";
 }
 
+function cleanPriceLabel(value?: string | null): string | null {
+  const next = String(value ?? "").trim();
+  return next || null;
+}
+
+function pricingOrFallback(priceLine: string | null | undefined, fallback: string): string {
+  return cleanPriceLabel(priceLine) || fallback;
+}
+
 function completionLabel(
   state: ProgressState,
   emptyLabel: string,
@@ -131,15 +141,6 @@ function completionLabel(
   if (state === "booked") return doneLabel;
   if (state === "pending" || state === "saved") return inProgressLabel;
   return emptyLabel;
-}
-
-function cleanPriceLabel(value?: string | null): string | null {
-  const next = String(value ?? "").trim();
-  return next || null;
-}
-
-function pricingOrFallback(priceLine: string | null | undefined, fallback: string): string {
-  return cleanPriceLabel(priceLine) || fallback;
 }
 
 function ticketButtonSubtitle(args: {
@@ -476,11 +477,36 @@ export default function useTripDetailViewModel({
 
   const bookingSteps = useMemo<BookingStep[]>(() => {
     return [
-      { key: "tickets", complete: isComplete(ticketState), state: ticketState },
-      { key: "flight", complete: isComplete(flightState), state: flightState },
-      { key: "hotel", complete: isComplete(hotelState), state: hotelState },
-      { key: "transfer", complete: isComplete(transportState), state: transportState },
-      { key: "things", complete: isComplete(thingsState), state: thingsState },
+      {
+        key: "tickets",
+        complete: isComplete(ticketState),
+        started: isStarted(ticketState),
+        state: ticketState,
+      },
+      {
+        key: "flight",
+        complete: isComplete(flightState),
+        started: isStarted(flightState),
+        state: flightState,
+      },
+      {
+        key: "hotel",
+        complete: isComplete(hotelState),
+        started: isStarted(hotelState),
+        state: hotelState,
+      },
+      {
+        key: "transfer",
+        complete: isComplete(transportState),
+        started: isStarted(transportState),
+        state: transportState,
+      },
+      {
+        key: "things",
+        complete: isComplete(thingsState),
+        started: isStarted(thingsState),
+        state: thingsState,
+      },
     ];
   }, [ticketState, flightState, hotelState, transportState, thingsState]);
 
@@ -504,7 +530,7 @@ export default function useTripDetailViewModel({
       bookingSteps
         .slice()
         .sort((a, b) => stepPriorityScore(a.key) - stepPriorityScore(b.key))
-        .find((step) => !step.complete && step.state !== "booked") ?? null
+        .find((step) => !step.complete) ?? null
     );
   }, [bookingSteps]);
 
@@ -582,10 +608,14 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (!hasTickets) {
+    if (ticketState !== "booked") {
       return {
-        title: "Book tickets first",
-        body: "Tickets are the anchor. Until that is sorted, flights and hotels are guesswork.",
+        title:
+          ticketState === "empty" ? "Book tickets first" : "Finish ticket booking first",
+        body:
+          ticketState === "empty"
+            ? "Tickets are the anchor. Until that is sorted, flights and hotels are guesswork."
+            : "You already started the ticket step. Finish that before treating the trip as properly anchored.",
         cta: cleanPriceLabel(ticketsPriceFrom)
           ? `Compare tickets • ${ticketsPriceFrom}`
           : "Compare tickets",
@@ -596,10 +626,10 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (kickoffTbc && !hasFlight) {
+    if (kickoffTbc && flightState === "empty") {
       return {
         title: "Kickoff not confirmed — keep travel flexible",
-        body: "You started correctly with tickets. Do not hard-book inflexible travel against an unstable kickoff if you can avoid it.",
+        body: "Tickets are sorted, but the kickoff still looks unstable. If you book travel now, keep it flexible rather than pretending the schedule is locked.",
         cta: cleanPriceLabel(flightsPriceFrom)
           ? `View flights • ${flightsPriceFrom}`
           : "View flights",
@@ -615,10 +645,13 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (!hasFlight) {
+    if (flightState !== "booked") {
       return {
-        title: "Add flights next",
-        body: "The trip is not real until transport in and out is covered.",
+        title: flightState === "empty" ? "Add flights next" : "Finish sorting travel",
+        body:
+          flightState === "empty"
+            ? "The trip is not real until transport in and out is covered."
+            : "Travel has been started but not actually locked in. Finish it instead of skipping ahead.",
         cta: cleanPriceLabel(flightsPriceFrom)
           ? `View flights • ${flightsPriceFrom}`
           : "View flights",
@@ -628,10 +661,13 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (!hasHotel) {
+    if (hotelState !== "booked") {
       return {
-        title: "Lock the hotel",
-        body: "A bad location ruins matchday logistics. Book the stay after tickets and flights, not before.",
+        title: hotelState === "empty" ? "Lock the hotel" : "Finish the stay choice",
+        body:
+          hotelState === "empty"
+            ? "A bad location ruins matchday logistics. Book the stay after tickets and flights, not before."
+            : "You started looking at stays. Finish that choice and stop leaving the trip half-built.",
         cta: cleanPriceLabel(hotelsPriceFrom)
           ? `View hotels • ${hotelsPriceFrom}`
           : "View hotels",
@@ -649,10 +685,16 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (!hasTransport) {
+    if (transportState !== "booked") {
       return {
-        title: "Sort local transport",
-        body: "Airport, hotel, stadium. Remove that friction now instead of scrambling later.",
+        title:
+          transportState === "empty"
+            ? "Sort local transport"
+            : "Finish local transport",
+        body:
+          transportState === "empty"
+            ? "Airport, hotel, stadium. Remove that friction now instead of scrambling later."
+            : "Transport is underway but not properly settled yet. Finish that before drifting into extras.",
         cta: cleanPriceLabel(transfersPriceFrom)
           ? `${
               affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "Rail / bus" : "Transfers"
@@ -666,10 +708,16 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (!hasThings) {
+    if (thingsState !== "booked") {
       return {
-        title: "Add extras only if they improve the trip",
-        body: "Core trip is covered. Extras should improve the trip, not clutter it.",
+        title:
+          thingsState === "empty"
+            ? "Add extras only if they improve the trip"
+            : "Finish optional extras",
+        body:
+          thingsState === "empty"
+            ? "Core trip is covered. Extras should improve the trip, not clutter it."
+            : "Extras are optional, but if you started adding them, finish cleanly rather than leaving loose ends.",
         cta: cleanPriceLabel(experiencesPriceFrom)
           ? `View activities • ${experiencesPriceFrom}`
           : "View activities",
@@ -693,12 +741,12 @@ export default function useTripDetailViewModel({
     controller.onViewWallet,
     experiencesPriceFrom,
     flightsPriceFrom,
-    hasFlight,
-    hasHotel,
+    ticketState,
+    flightState,
+    hotelState,
+    transportState,
+    thingsState,
     hasMatch,
-    hasThings,
-    hasTickets,
-    hasTransport,
     hotelsPriceFrom,
     kickoffTbc,
     openFlights,
@@ -726,7 +774,7 @@ export default function useTripDetailViewModel({
       buttons.push({ title, sub, onPress, kind, provider });
     };
 
-    if (!hasTickets && primaryMatchId) {
+    if (ticketState !== "booked" && primaryMatchId) {
       add(
         "Tickets",
         ticketButtonSubtitle({
@@ -742,7 +790,7 @@ export default function useTripDetailViewModel({
       );
     }
 
-    if (!hasFlight) {
+    if (flightState !== "booked") {
       add(
         "Flights",
         completionLabel(
@@ -754,12 +802,12 @@ export default function useTripDetailViewModel({
         () => {
           void openFlights("smart_booking");
         },
-        hasTickets ? "primary" : "neutral",
+        ticketState === "booked" ? "primary" : "neutral",
         "aviasales"
       );
     }
 
-    if (!hasHotel) {
+    if (hotelState !== "booked") {
       add(
         "Hotels",
         completionLabel(
@@ -771,12 +819,12 @@ export default function useTripDetailViewModel({
         () => {
           void openHotels("smart_booking");
         },
-        hasTickets && hasFlight ? "primary" : "neutral",
+        ticketState === "booked" && flightState === "booked" ? "primary" : "neutral",
         "expedia"
       );
     }
 
-    if (!hasTransport && (affiliateUrls.omioUrl || affiliateUrls.trainsUrl)) {
+    if (transportState !== "booked" && (affiliateUrls.omioUrl || affiliateUrls.trainsUrl)) {
       add(
         "Rail / Bus",
         completionLabel(
@@ -791,7 +839,7 @@ export default function useTripDetailViewModel({
         "neutral",
         "omio"
       );
-    } else if (!hasTransport) {
+    } else if (transportState !== "booked") {
       add(
         "Transfers",
         completionLabel(
@@ -808,7 +856,7 @@ export default function useTripDetailViewModel({
       );
     }
 
-    if (!hasThings) {
+    if (thingsState !== "booked") {
       add(
         "Activities",
         completionLabel(
@@ -857,11 +905,11 @@ export default function useTripDetailViewModel({
     controller.onViewWallet,
     experiencesPriceFrom,
     flightsPriceFrom,
-    hasFlight,
-    hasHotel,
-    hasThings,
-    hasTickets,
-    hasTransport,
+    flightState,
+    hotelState,
+    thingsState,
+    transportState,
+    ticketState,
     hotelsPriceFrom,
     openFlights,
     openHotels,
@@ -870,11 +918,6 @@ export default function useTripDetailViewModel({
     openTransport,
     primaryMatchId,
     primaryTicketItem,
-    ticketState,
-    flightState,
-    hotelState,
-    transportState,
-    thingsState,
     ticketsPriceFrom,
     transfersPriceFrom,
     trip,
@@ -894,12 +937,12 @@ export default function useTripDetailViewModel({
 
   const bookingFunnelLabel = useMemo(() => {
     if (!hasMatch) return "No fixture selected";
-    if (!hasTickets) return "Step 1 of 4 • Tickets";
-    if (!hasFlight) return "Step 2 of 4 • Flights";
-    if (!hasHotel) return "Step 3 of 4 • Hotel";
-    if (!hasTransport) return "Step 4 of 4 • Transport";
+    if (ticketState !== "booked") return "Step 1 of 4 • Tickets";
+    if (flightState !== "booked") return "Step 2 of 4 • Flights";
+    if (hotelState !== "booked") return "Step 3 of 4 • Hotel";
+    if (transportState !== "booked") return "Step 4 of 4 • Transport";
     return "Core trip flow complete";
-  }, [hasMatch, hasTickets, hasFlight, hasHotel, hasTransport]);
+  }, [hasMatch, ticketState, flightState, hotelState, transportState]);
 
   const commercialSummaryLine = useMemo(() => {
     if (cleanPriceLabel(tripPriceFrom)) {
@@ -952,4 +995,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-            }
+    }
