@@ -29,11 +29,25 @@ type TimedResult<T> = {
   timedOut: boolean;
 };
 
+type CandidateQuality = {
+  urlQuality: "event" | "listing" | "search" | "unknown";
+  qualityScore: number;
+};
+
 const CACHE = new Map<string, CacheEntry>();
+
 const CACHE_TTL_MS = 1000 * 60 * 10;
 const PROVIDER_TIMEOUT_MS = 4500;
 const MAX_RETURNED_OPTIONS = 3;
-const MIN_FALLBACK_SCORE = 10;
+
+/**
+ * Harder gates.
+ * Old value 10 was far too weak and let junk through.
+ */
+const MIN_SEARCH_FALLBACK_SCORE = 45;
+const MIN_PARTIAL_MATCH_SCORE = 55;
+const MIN_EXACT_EVENT_SCORE = 70;
+const MIN_SELECTED_SCORE = 55;
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
   footballticketsnet: 1,
@@ -154,12 +168,14 @@ function summarizeInput(input: TicketResolveInput) {
     kickoffIso: clean(input.kickoffIso) || null,
     leagueId: clean(input.leagueId) || null,
     leagueName: clean(input.leagueName) || null,
-    debugNoCache: Boolean((input as any).debugNoCache),
+    debugNoCache: Boolean((input as { debugNoCache?: unknown }).debugNoCache),
   };
 }
 
 function summarizeCandidate(candidate: TicketCandidate | null) {
   if (!candidate) return null;
+
+  const assessed = assessCandidateQuality(candidate);
 
   return {
     provider: candidate.provider,
@@ -170,6 +186,8 @@ function summarizeCandidate(candidate: TicketCandidate | null) {
     priceText: candidate.priceText ?? null,
     hasUrl: Boolean(clean(candidate.url)),
     url: clean(candidate.url) || null,
+    urlQuality: assessed.urlQuality,
+    qualityScore: assessed.qualityScore,
   };
 }
 
@@ -185,6 +203,51 @@ function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean 
     return allowedRoots.some((root) => host === root || host.endsWith(`.${root}`));
   } catch {
     return false;
+  }
+}
+
+function assessCandidateQuality(candidate: TicketCandidate): CandidateQuality {
+  const raw = clean(candidate.url);
+
+  if (!raw) {
+    return { urlQuality: "unknown", qualityScore: -1000 };
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const path = parsed.pathname.toLowerCase();
+    const query = parsed.search.toLowerCase();
+
+    if (
+      path.includes("/search") ||
+      path.includes("/events/search") ||
+      path.includes("/event/search") ||
+      path.includes("/events/search-results") ||
+      path === "/search" ||
+      query.includes("query=") ||
+      query.includes("q=") ||
+      query.includes("text=")
+    ) {
+      return { urlQuality: "search", qualityScore: -30 };
+    }
+
+    if (
+      path.includes("/ticket") ||
+      path.includes("/tickets") ||
+      path.includes("/event") ||
+      path.includes("/events") ||
+      path.includes("/listing") ||
+      path.includes("/listings")
+    ) {
+      if (path.includes("/listing") || path.includes("/listings")) {
+        return { urlQuality: "listing", qualityScore: 8 };
+      }
+      return { urlQuality: "event", qualityScore: 12 };
+    }
+
+    return { urlQuality: "unknown", qualityScore: -5 };
+  } catch {
+    return { urlQuality: "unknown", qualityScore: -1000 };
   }
 }
 
@@ -287,6 +350,7 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
       normalize(candidate.provider),
       normalize(candidate.url),
       normalize(candidate.title),
+      normalize(candidate.reason),
     ].join("|");
 
     const existing = map.get(key);
@@ -302,6 +366,14 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
     }
 
     if (candidate.score === existing.score) {
+      const currentQuality = assessCandidateQuality(candidate).qualityScore;
+      const existingQuality = assessCandidateQuality(existing).qualityScore;
+
+      if (currentQuality > existingQuality) {
+        map.set(key, candidate);
+        continue;
+      }
+
       const currentRank = PROVIDER_PRIORITY[candidate.provider] ?? 99;
       const existingRank = PROVIDER_PRIORITY[existing.provider] ?? 99;
 
@@ -327,13 +399,47 @@ function parsePriceAmount(priceText?: string | null): number | null {
 
 function reasonRank(reason: TicketCandidate["reason"]): number {
   if (reason === "exact_event") return 1;
-  if (reason === "partial_match") return 3;
+  if (reason === "partial_match") return 2;
   if (reason === "search_fallback") return 5;
   return 10;
 }
 
 function providerRank(provider: TicketProviderId): number {
   return PROVIDER_PRIORITY[provider] ?? 99;
+}
+
+function enforceCandidateThreshold(candidate: TicketCandidate): boolean {
+  if (candidate.reason === "exact_event") {
+    return candidate.score >= MIN_EXACT_EVENT_SCORE;
+  }
+
+  if (candidate.reason === "partial_match") {
+    return candidate.score >= MIN_PARTIAL_MATCH_SCORE;
+  }
+
+  return candidate.score >= MIN_SEARCH_FALLBACK_SCORE;
+}
+
+function applyCandidatePenalty(candidate: TicketCandidate): TicketCandidate {
+  const assessed = assessCandidateQuality(candidate);
+  let adjustedScore = candidate.score + assessed.qualityScore;
+
+  if (candidate.reason === "search_fallback" && assessed.urlQuality === "search") {
+    adjustedScore -= 10;
+  }
+
+  if (candidate.reason === "exact_event" && assessed.urlQuality === "search") {
+    adjustedScore -= 40;
+  }
+
+  if (candidate.reason === "partial_match" && assessed.urlQuality === "search") {
+    adjustedScore -= 20;
+  }
+
+  return {
+    ...candidate,
+    score: Math.max(0, adjustedScore),
+  };
 }
 
 function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
@@ -343,13 +449,17 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
     if (aReasonRank !== bReasonRank) return aReasonRank - bReasonRank;
 
+    const aQuality = assessCandidateQuality(a).qualityScore;
+    const bQuality = assessCandidateQuality(b).qualityScore;
+    if (aQuality !== bQuality) return bQuality - aQuality;
+
     if (b.score !== a.score) return b.score - a.score;
 
     const aPrice = parsePriceAmount(a.priceText);
     const bPrice = parsePriceAmount(b.priceText);
 
-    if (aPrice != null && bPrice != null) {
-      if (aPrice !== bPrice) return aPrice - bPrice;
+    if (aPrice != null && bPrice != null && aPrice !== bPrice) {
+      return aPrice - bPrice;
     }
 
     const aHasPrice = Boolean(clean(a.priceText));
@@ -362,19 +472,17 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
   });
 }
 
-function filterFallbacks(candidates: TicketCandidate[]): TicketCandidate[] {
-  return candidates.filter((candidate) => {
-    if (candidate.reason === "exact_event") return true;
-    if (candidate.reason === "partial_match") return true;
-    return candidate.score >= MIN_FALLBACK_SCORE;
-  });
+function filterWeakCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
+  return candidates
+    .map(applyCandidatePenalty)
+    .filter(enforceCandidateThreshold);
 }
 
 function buildResolution(
   candidates: TicketCandidate[],
   checkedProviders: TicketResolution["checkedProviders"]
 ): TicketResolution {
-  const filtered = filterFallbacks(dedupeCandidates(candidates));
+  const filtered = filterWeakCandidates(dedupeCandidates(candidates));
   const sorted = sortCandidates(filtered);
   const top = sorted.slice(0, MAX_RETURNED_OPTIONS);
 
@@ -383,6 +491,14 @@ function buildResolution(
   }
 
   const best = top[0];
+
+  /**
+   * Final truth gate.
+   * Do not return a fake "ok" result if the best surviving candidate is still weak.
+   */
+  if (best.score < MIN_SELECTED_SCORE) {
+    return buildNotFound(checkedProviders);
+  }
 
   return {
     ok: true,
@@ -439,7 +555,7 @@ export async function resolveTicket(
   input: TicketResolveInput
 ): Promise<TicketResolution> {
   const cacheKey = buildCacheKey(input);
-  const debugNoCache = Boolean((input as any).debugNoCache);
+  const debugNoCache = Boolean((input as { debugNoCache?: unknown }).debugNoCache);
 
   if (debugNoCache) {
     deleteCache(cacheKey);
@@ -529,6 +645,7 @@ export async function resolveTicket(
         exact: option.exact,
         priceText: option.priceText ?? null,
         url: option.url,
+        urlQuality: assessCandidateQuality(option).urlQuality,
       })),
       debugNoCache,
     });
