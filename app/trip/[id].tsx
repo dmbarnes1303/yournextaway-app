@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
 
@@ -163,6 +170,8 @@ export default function TripDetailScreen() {
   );
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
+  const [ticketLoading, setTicketLoading] = useState(false);
+
   const isPro = plan === "premium";
 
   useEffect(() => {
@@ -276,6 +285,7 @@ export default function TripDetailScreen() {
     fixturesById: data.fixturesById,
     ticketsByMatchId: data.ticketsByMatchId,
     affiliateUrls: data.affiliateUrls,
+    setTicketLoading,
   });
 
   const vm = useTripDetailViewModel({
@@ -522,6 +532,13 @@ export default function TripDetailScreen() {
                 >
                   <Text style={styles.primaryActionBtnText}>{dominantCta}</Text>
                 </Pressable>
+
+                {ticketLoading ? (
+                  <View style={styles.loadingRow}>
+                    <ActivityIndicator size="small" />
+                    <Text style={styles.loadingText}>Checking ticket availability…</Text>
+                  </View>
+                ) : null}
 
                 {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
               </GlassCard>
@@ -877,6 +894,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
     color: "#0B1020",
+  },
+
+  loadingRow: {
+    marginTop: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  loadingText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
   },
 
   capHint: {
