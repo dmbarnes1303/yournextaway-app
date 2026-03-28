@@ -2,6 +2,7 @@ import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
 import type {
+  CandidateUrlQuality,
   TicketCandidate,
   TicketResolution,
   TicketResolveInput,
@@ -29,8 +30,6 @@ type TimedResult<T> = {
   timedOut: boolean;
 };
 
-type CandidateUrlQuality = "event" | "listing" | "search" | "unknown";
-
 type CandidateAssessment = {
   urlQuality: CandidateUrlQuality;
   adjustedScore: number;
@@ -45,11 +44,11 @@ const CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 1000 * 60 * 10;
 const PROVIDER_TIMEOUT_MS = 4500;
 const MAX_RETURNED_OPTIONS = 3;
-const RESOLVER_VERSION = "v3-provider-aware";
+const RESOLVER_VERSION = "v4-provider-aware-output";
 
 /**
  * Hard floors.
- * Search fallbacks are allowed only when everything else is weak.
+ * Search fallbacks should almost never survive.
  */
 const MIN_EXACT_EVENT_SCORE = 72;
 const MIN_PARTIAL_MATCH_SCORE = 60;
@@ -159,12 +158,14 @@ function buildNotFound(
     provider: null,
     exact: false,
     score: null,
+    rawScore: null,
     url: null,
     title: null,
     priceText: null,
     reason: "not_found",
     checkedProviders,
     options: [],
+    urlQuality: undefined,
   };
 }
 
@@ -211,7 +212,7 @@ function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean 
   }
 }
 
-function detectUrlQuality(candidate: TicketCandidate): CandidateUrlQuality {
+function detectUrlQuality(candidate: Pick<TicketCandidate, "url">): CandidateUrlQuality {
   const raw = clean(candidate.url);
   if (!raw) return "unknown";
 
@@ -231,7 +232,6 @@ function detectUrlQuality(candidate: TicketCandidate): CandidateUrlQuality {
       query.includes("text=");
 
     if (looksSearch) return "search";
-
     if (path.includes("/listing") || path.includes("/listings")) return "listing";
     if (path.includes("/event") || path.includes("/events")) return "event";
     if (path.includes("/ticket") || path.includes("/tickets")) return "event";
@@ -242,12 +242,6 @@ function detectUrlQuality(candidate: TicketCandidate): CandidateUrlQuality {
   }
 }
 
-/**
- * Provider-aware logic:
- * - SE365 gets rewarded more for structured event/listing URLs
- * - FTN is strongest on event pages, weak on search fallback
- * - Gigsberg is decent on listing/event, weak on search fallback
- */
 function getProviderBias(
   provider: TicketProviderId,
   reason: TicketCandidate["reason"],
@@ -271,9 +265,12 @@ function getProviderBias(
     return 2;
   }
 
-  // gigsberg
-  if (reason === "exact_event" && (urlQuality === "event" || urlQuality === "listing")) return 9;
-  if (reason === "partial_match" && (urlQuality === "event" || urlQuality === "listing")) return 6;
+  if (reason === "exact_event" && (urlQuality === "event" || urlQuality === "listing")) {
+    return 9;
+  }
+  if (reason === "partial_match" && (urlQuality === "event" || urlQuality === "listing")) {
+    return 6;
+  }
   if (urlQuality === "listing") return 7;
   if (reason === "search_fallback") return -11;
   if (urlQuality === "search") return -13;
@@ -297,7 +294,6 @@ function getPriceBonus(candidate: TicketCandidate): number {
   const amount = parsePriceAmount(candidate.priceText);
   if (amount == null) return 0;
 
-  // modest boost only; price presence helps but should not overpower match quality
   if (amount > 0 && amount <= 60) return 5;
   if (amount <= 120) return 4;
   if (amount <= 250) return 3;
@@ -318,7 +314,6 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
     providerBias +
     priceBonus;
 
-  // Strong extra penalties for bullshit combinations
   if (candidate.reason === "exact_event" && urlQuality === "search") {
     adjustedScore -= 35;
   }
@@ -580,6 +575,22 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
   });
 }
 
+function toOption(candidate: TicketCandidate) {
+  const assessment = assessCandidate(candidate);
+
+  return {
+    provider: candidate.provider,
+    exact: candidate.exact,
+    score: assessment.adjustedScore,
+    rawScore: candidate.score,
+    url: candidate.url,
+    title: candidate.title,
+    priceText: candidate.priceText ?? null,
+    reason: candidate.reason,
+    urlQuality: assessment.urlQuality,
+  };
+}
+
 function buildResolution(
   candidates: TicketCandidate[],
   checkedProviders: TicketResolution["checkedProviders"]
@@ -593,9 +604,9 @@ function buildResolution(
   }
 
   const best = top[0];
-  const bestAdjustedScore = assessCandidate(best).adjustedScore;
+  const bestAssessment = assessCandidate(best);
 
-  if (bestAdjustedScore < MIN_SELECTED_SCORE) {
+  if (bestAssessment.adjustedScore < MIN_SELECTED_SCORE) {
     return buildNotFound(checkedProviders);
   }
 
@@ -603,21 +614,15 @@ function buildResolution(
     ok: true,
     provider: best.provider,
     exact: best.exact,
-    score: bestAdjustedScore,
+    score: bestAssessment.adjustedScore,
+    rawScore: best.score,
     url: best.url,
     title: best.title,
     priceText: best.priceText ?? null,
     reason: best.reason,
     checkedProviders,
-    options: top.map((candidate) => ({
-      provider: candidate.provider,
-      exact: candidate.exact,
-      score: assessCandidate(candidate).adjustedScore,
-      url: candidate.url,
-      title: candidate.title,
-      priceText: candidate.priceText ?? null,
-      reason: candidate.reason,
-    })),
+    options: top.map(toOption),
+    urlQuality: bestAssessment.urlQuality,
   };
 }
 
@@ -642,6 +647,8 @@ export async function resolveTicket(
         cachedProvider: cached.provider,
         cachedReason: cached.reason,
         cachedScore: cached.score,
+        cachedRawScore: cached.rawScore ?? null,
+        cachedUrlQuality: cached.urlQuality ?? null,
         cachedOk: cached.ok,
         cachedOptions: Array.isArray(cached.options) ? cached.options.length : 0,
       });
@@ -706,16 +713,19 @@ export async function resolveTicket(
       selectedProvider: result.provider,
       selectedReason: result.reason,
       selectedScore: result.score,
+      selectedRawScore: result.rawScore ?? null,
       selectedExact: result.exact,
+      selectedUrlQuality: result.urlQuality ?? null,
       checkedProviders,
       options: (result.options ?? []).map((option) => ({
         provider: option.provider,
         reason: option.reason,
         score: option.score,
+        rawScore: option.rawScore ?? null,
         exact: option.exact,
         priceText: option.priceText ?? null,
         url: option.url,
-        urlQuality: detectUrlQuality(option),
+        urlQuality: option.urlQuality ?? null,
       })),
       debugNoCache,
     });
@@ -733,4 +743,4 @@ export async function resolveTicket(
   }
 
   return result;
-  }
+             }
