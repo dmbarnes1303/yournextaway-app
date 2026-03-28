@@ -56,6 +56,7 @@ import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/typ
 const FREE_TRIP_CAP = 5;
 const WINDOW_DAYS = 90;
 const LOAD_MORE_STEP = 12;
+const NEARBY_FIXTURE_LIMIT = 6;
 
 type RouteParams = {
   tripId: string | null;
@@ -91,8 +92,7 @@ function paramNumber(v: unknown): number | null {
 }
 
 function isIsoDateOnly(s?: string | null): boolean {
-  const v = String(s ?? "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(v);
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s ?? "").trim());
 }
 
 function parseRouteParams(params: Record<string, unknown>): RouteParams {
@@ -199,8 +199,7 @@ function daysBetweenIso(aIso: string, bIso: string) {
 
 function safeUri(u: unknown): string | null {
   const s = String(u ?? "").trim();
-  if (!s) return null;
-  if (!/^https?:\/\//i.test(s)) return null;
+  if (!s || !/^https?:\/\//i.test(s)) return null;
   return s;
 }
 
@@ -226,8 +225,7 @@ function weekendHint(isoMaybe: unknown): "Weekend" | "Midweek" | null {
   const d = parseIsoToDate(String(isoMaybe ?? ""));
   if (!d) return null;
   const day = d.getDay();
-  if (day === 0 || day === 6) return "Weekend";
-  return "Midweek";
+  return day === 0 || day === 6 ? "Weekend" : "Midweek";
 }
 
 function validSeasonOrNull(n: number | null): number | null {
@@ -245,6 +243,7 @@ function findLeagueOptionByLeagueId(leagueId?: number | null, season?: number | 
   if (season && typeof byId.season === "number" && byId.season !== season) {
     return { ...byId, season } as LeagueOption;
   }
+
   return byId;
 }
 
@@ -320,7 +319,6 @@ async function computePlaceholderIdsForFixture(
   const season =
     seasonOverride ??
     (typeof fx?.league?.season === "number" ? fx.league.season : DEFAULT_SEASON);
-
   const round = cleanText(fx?.league?.round);
 
   if (!leagueId || !season || !round) return new Set();
@@ -352,32 +350,6 @@ function certaintyLabel(state: FixtureCertaintyState) {
   return "Kickoff TBC";
 }
 
-function prefWindowLabel(v?: string | null) {
-  if (v === "wknd") return "This weekend";
-  if (v === "d7") return "Next 7 days";
-  if (v === "d14") return "Next 14 days";
-  if (v === "d30") return "Next 30 days";
-  return null;
-}
-
-function prefLengthLabel(v?: string | null) {
-  if (v === "day") return "Day trip";
-  if (v === "1") return "1 night";
-  if (v === "2") return "2 nights";
-  if (v === "3") return "3 nights";
-  return null;
-}
-
-function prefVibeLabel(v: string) {
-  if (v === "easy") return "Easy travel";
-  if (v === "big") return "Big match";
-  if (v === "hidden") return "Different";
-  if (v === "nightlife") return "Nightlife";
-  if (v === "culture") return "Culture";
-  if (v === "warm") return "Warm";
-  return v;
-}
-
 function scoreTone(score?: number | null) {
   const value = typeof score === "number" ? score : 0;
   if (value >= 78) return "strong";
@@ -391,21 +363,31 @@ function bookingReadinessLabel(row: RankedTrip | null) {
   return `${difficulty} travel route`;
 }
 
-function selectedFlowSummary(isEditing: boolean, setAsPrimaryOnSave: boolean) {
-  if (isEditing) {
-    return setAsPrimaryOnSave
-      ? "This match will become the main match for this trip."
-      : "This match will be added to the trip.";
-  }
-
-  return "Save this match first. Tickets, stay and travel come next.";
-}
-
 function buildPageSubtitle(isEditing: boolean, matchCount: number) {
   if (isEditing) {
     return `Update trip dates or add another match. Current matches: ${matchCount}.`;
   }
-  return "Pick the match you want to build the trip around.";
+  return "Build the trip around one clear match, then book tickets, travel and stay around those dates.";
+}
+
+function compactCompetitionLabel(fx: FixtureListRow | null): string {
+  const league = cleanText(fx?.league?.name);
+  const round = cleanText(fx?.league?.round);
+  if (league && round) return `${league} • ${round}`;
+  return league || round || "Competition TBC";
+}
+
+function compactKickoffLabel(
+  fx: FixtureListRow | null,
+  certainty: FixtureCertaintyState
+): string {
+  if (!fx) return "Kickoff TBC";
+  if (isTbcLikeCertainty(certainty)) return "Kickoff TBC";
+  return formatUkDateTimeMaybe(fx?.fixture?.date) || "Kickoff TBC";
+}
+
+function buildNearbyFixturesTitle(city: string, startIso: string, endIso: string) {
+  return `Also during ${city} • ${startIso} → ${endIso}`;
 }
 
 export default function TripBuildScreen() {
@@ -433,6 +415,9 @@ export default function TripBuildScreen() {
   const [visibleCount, setVisibleCount] = useState(LOAD_MORE_STEP);
   const [selectedFixture, setSelectedFixture] = useState<FixtureListRow | null>(null);
 
+  const [nearbyFixtures, setNearbyFixtures] = useState<FixtureListRow[]>([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+
   const defaultWindow = useMemo(() => getRollingWindowIso({ days: WINDOW_DAYS }), []);
   const routeWindow = useMemo<RollingWindowIso>(() => {
     if (!isIsoDateOnly(params.from) && !isIsoDateOnly(params.to)) return defaultWindow;
@@ -446,6 +431,7 @@ export default function TripBuildScreen() {
   const [startIso, setStartIso] = useState(routeWindow.from);
   const [endIso, setEndIso] = useState(routeWindow.to);
   const [notes, setNotes] = useState("");
+  const [showNotes, setShowNotes] = useState(false);
   const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(params.to)));
   const [hasManualDateOverride, setHasManualDateOverride] = useState<boolean>(
     Boolean(isIsoDateOnly(params.from) || isIsoDateOnly(params.to))
@@ -527,7 +513,6 @@ export default function TripBuildScreen() {
         if (cancelled) return;
 
         const t = tripsStore.getState().trips.find((x) => x.id === params.tripId) ?? null;
-
         if (!t) {
           setError("Trip not found.");
           return;
@@ -588,15 +573,14 @@ export default function TripBuildScreen() {
       }
     }
 
-    run();
+    void run();
     return () => {
       cancelled = true;
     };
   }, [params.tripId, params.from, params.to, params.season, routeWindow]);
 
   useEffect(() => {
-    if (!isPrefilledFlow) return;
-    if (!params.fixtureId) return;
+    if (!isPrefilledFlow || !params.fixtureId) return;
 
     let cancelled = false;
 
@@ -647,7 +631,7 @@ export default function TripBuildScreen() {
       }
     }
 
-    run();
+    void run();
     return () => {
       cancelled = true;
     };
@@ -662,7 +646,7 @@ export default function TripBuildScreen() {
     routeWindow,
   ]);
 
-  useEffect(() => {
+useEffect(() => {
     if (isPrefilledFlow) return;
 
     let cancelled = false;
@@ -725,7 +709,7 @@ export default function TripBuildScreen() {
       }
     }
 
-    run();
+    void run();
     return () => {
       cancelled = true;
     };
@@ -784,28 +768,6 @@ export default function TripBuildScreen() {
       ])
     );
   }, [visibleRows]);
-
-  const discoverSummary = useMemo(() => {
-    const parts: string[] = [];
-
-    if (params.prefMode === "surprise") parts.push("Surprise me");
-    if (params.prefMode === "hidden") parts.push("Hidden gems");
-    if (params.prefMode === "discover") parts.push("Discover");
-    if (params.prefMode === "random") parts.push("Random route");
-
-    const w = prefWindowLabel(params.prefWindow);
-    if (w) parts.push(w);
-
-    const l = prefLengthLabel(params.prefLength);
-    if (l) parts.push(l);
-
-    if (params.prefFrom) parts.push(`From ${params.prefFrom}`);
-    if (params.prefVibes.length) {
-      parts.push(params.prefVibes.map(prefVibeLabel).join(" • "));
-    }
-
-    return parts;
-  }, [params.prefMode, params.prefWindow, params.prefLength, params.prefFrom, params.prefVibes]);
 
   const validateDateOrder = useCallback((): string | null => {
     if (!isIsoDateOnly(startIso) || !isIsoDateOnly(endIso)) {
@@ -971,10 +933,7 @@ export default function TripBuildScreen() {
   }, [selectedFixture, placeholderTbcIds]);
 
   const selectedKickLine = useMemo(() => {
-    if (!selectedFixture) return "Kickoff time TBC";
-    if (isTbcLikeCertainty(selectedCertainty)) return "Kickoff time TBC";
-    const f = formatUkDateTimeMaybe(selectedFixture?.fixture?.date);
-    return f ? f : "Kickoff time TBC";
+    return compactKickoffLabel(selectedFixture, selectedCertainty);
   }, [selectedFixture, selectedCertainty]);
 
   const selectedVenueLine = useMemo(() => {
@@ -985,6 +944,14 @@ export default function TripBuildScreen() {
     return parts.length ? parts.join(" • ") : "Venue TBC";
   }, [selectedFixture]);
 
+  const selectedCompetitionLine = useMemo(() => {
+    return compactCompetitionLabel(selectedFixture);
+  }, [selectedFixture]);
+
+  const selectedCity = useMemo(() => {
+    return safeCityDisplay(selectedFixture?.fixture?.venue?.city);
+  }, [selectedFixture]);
+
   const tripLength = useMemo(() => {
     const d = daysBetweenIso(startIso, endIso);
     if (d == null) return null;
@@ -993,15 +960,6 @@ export default function TripBuildScreen() {
   }, [startIso, endIso]);
 
   const headerTitle = useMemo(() => (isEditing ? "Edit trip" : "Plan trip"), [isEditing]);
-  const selectedLeagueLabel = useMemo(() => {
-    if (selectedLeague.leagueId === 0) return "All leagues";
-    return selectedLeague.label;
-  }, [selectedLeague]);
-
-  const dateWindowLabel = useMemo(() => {
-    const nights = tripLength ? ` • ${tripLength}` : "";
-    return `${startIso} → ${endIso}${nights}`;
-  }, [startIso, endIso, tripLength]);
 
   const selectedHomeLogo = useMemo(
     () => safeUri(selectedFixture?.teams?.home?.logo),
@@ -1021,7 +979,84 @@ export default function TripBuildScreen() {
   }, [isEditing, selectedFixtureId, existingMatchIds]);
 
   const showPickerMode = !isPrefilledFlow;
-  const selectedFlowLine = selectedFlowSummary(isEditing, setAsPrimaryOnSave);
+
+  const selectedFlowSteps = useMemo(() => {
+    return [
+      "Save this trip",
+      "Compare ticket options",
+      "Add travel for these dates",
+      "Choose where to stay",
+      "Store proof in Wallet",
+    ];
+  }, []);
+
+  const tripSummaryCards = useMemo(() => {
+    return [
+      { label: "City", value: selectedCity },
+      { label: "Competition", value: selectedCompetitionLine },
+      { label: "Kickoff", value: selectedKickLine },
+      { label: "Trip dates", value: `${startIso} → ${endIso}${tripLength ? ` • ${tripLength}` : ""}` },
+    ];
+  }, [selectedCity, selectedCompetitionLine, selectedKickLine, startIso, endIso, tripLength]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runNearby() {
+      if (!selectedFixture) {
+        if (!cancelled) setNearbyFixtures([]);
+        return;
+      }
+
+      const city = cleanText(selectedFixture?.fixture?.venue?.city).toLowerCase();
+      if (!city || !isIsoDateOnly(startIso) || !isIsoDateOnly(endIso)) {
+        if (!cancelled) setNearbyFixtures([]);
+        return;
+      }
+
+      setNearbyLoading(true);
+
+      try {
+        const leagueRows =
+          selectedLeague.leagueId === 0
+            ? rows
+            : rows.length > 0
+              ? rows
+              : await getFixtures({
+                  league: selectedLeague.leagueId,
+                  season: effectiveSeason,
+                  from: startIso,
+                  to: endIso,
+                });
+
+        const currentId = fixtureIdStr(selectedFixture);
+
+        const matches = (leagueRows || [])
+          .filter((row) => fixtureIdStr(row) !== currentId)
+          .filter((row) => {
+            const rowCity = cleanText(row?.fixture?.venue?.city).toLowerCase();
+            const rowDate = fixtureDateOnly(row);
+            return rowCity === city && !!rowDate && rowDate >= startIso && rowDate <= endIso;
+          })
+          .sort((a, b) =>
+            String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""))
+          )
+          .slice(0, NEARBY_FIXTURE_LIMIT);
+
+        if (!cancelled) setNearbyFixtures(matches);
+      } catch {
+        if (!cancelled) setNearbyFixtures([]);
+      } finally {
+        if (!cancelled) setNearbyLoading(false);
+      }
+    }
+
+    void runNearby();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedFixture, selectedLeague, rows, startIso, endIso, effectiveSeason]);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.84}>
@@ -1031,6 +1066,20 @@ export default function TripBuildScreen() {
           title: headerTitle,
           headerTransparent: true,
           headerTintColor: theme.colors.text,
+          headerRight: () => (
+            <Pressable
+              onPress={onSave}
+              disabled={saving || prefillLoading || !selectedFixture}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.headerSaveBtn,
+                (!selectedFixture || saving || prefillLoading) && styles.headerSaveBtnDisabled,
+                pressed && { opacity: 0.8 },
+              ]}
+            >
+              <Text style={styles.headerSaveBtnText}>{saving ? "Saving…" : "Save"}</Text>
+            </Pressable>
+          ),
         }}
       />
 
@@ -1051,43 +1100,23 @@ export default function TripBuildScreen() {
               {buildPageSubtitle(isEditing, existingMatchIds.length)}
             </Text>
 
-            <View style={styles.chipRow}>
-              <View style={styles.summaryChip}>
-                <Text style={styles.summaryChipKicker}>Trip dates</Text>
-                <Text style={styles.summaryChipValue}>{dateWindowLabel}</Text>
-              </View>
-
-              <View style={styles.summaryChip}>
-                <Text style={styles.summaryChipKicker}>League filter</Text>
-                <Text style={styles.summaryChipValue} numberOfLines={1}>
-                  {selectedLeagueLabel}
+            {selectedFixture ? (
+              <View style={styles.heroSummaryWrap}>
+                <Text style={styles.heroSummaryMatch} numberOfLines={1}>
+                  {selectedTitle}
                 </Text>
-              </View>
-            </View>
-
-            {discoverSummary.length > 0 ? (
-              <View style={styles.prefBar}>
-                <Text style={styles.prefBarLabel}>Starting from Discover</Text>
-                <Text style={styles.prefBarText}>{discoverSummary.join(" • ")}</Text>
+                <View style={styles.heroSummaryGrid}>
+                  {tripSummaryCards.map((item) => (
+                    <View key={item.label} style={styles.heroSummaryCard}>
+                      <Text style={styles.heroSummaryLabel}>{item.label}</Text>
+                      <Text style={styles.heroSummaryValue} numberOfLines={2}>
+                        {item.value}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             ) : null}
-
-            <View style={styles.flowStrip}>
-              <View style={styles.flowStep}>
-                <Text style={styles.flowStepNumber}>1</Text>
-                <Text style={styles.flowStepText}>Pick match</Text>
-              </View>
-              <View style={styles.flowDivider} />
-              <View style={styles.flowStep}>
-                <Text style={styles.flowStepNumber}>2</Text>
-                <Text style={styles.flowStepText}>Set trip dates</Text>
-              </View>
-              <View style={styles.flowDivider} />
-              <View style={styles.flowStep}>
-                <Text style={styles.flowStepNumber}>3</Text>
-                <Text style={styles.flowStepText}>Book around it</Text>
-              </View>
-            </View>
 
             {!isEditing ? (
               <View style={styles.capBar}>
@@ -1112,99 +1141,81 @@ export default function TripBuildScreen() {
           ) : null}
 
           {!prefillLoading && selectedFixture ? (
-            <GlassCard level="default" style={styles.selectedCard}>
-              <Text style={styles.h1}>Selected match</Text>
+            <>
+              <GlassCard level="default" style={styles.selectedCard}>
+                <Text style={styles.sectionTitle}>Selected match</Text>
 
-              <View style={styles.teamRow}>
-                <View style={styles.crestStack}>
-                  {selectedHomeLogo ? (
-                    <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
-                  ) : (
-                    <View style={styles.crestFallback} />
-                  )}
-                  {selectedAwayLogo ? (
-                    <Image
-                      source={{ uri: selectedAwayLogo }}
-                      style={[styles.crest, { marginLeft: -10 }]}
-                    />
-                  ) : (
-                    <View style={[styles.crestFallback, { marginLeft: -10 }]} />
-                  )}
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.selectedTitle} numberOfLines={1}>
-                    {selectedTitle}
-                  </Text>
-                  <Text style={styles.selectedMeta}>{selectedKickLine}</Text>
-                  <Text style={styles.selectedMeta}>{selectedVenueLine}</Text>
-                </View>
-              </View>
-
-              <View style={styles.badgeRow}>
-                {selectedCertainty === "confirmed" ? (
-                  <View style={[styles.badge, styles.badgeConfirmed]}>
-                    <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>
-                      {certaintyLabel(selectedCertainty)}
-                    </Text>
+                <View style={styles.teamRow}>
+                  <View style={styles.crestStack}>
+                    {selectedHomeLogo ? (
+                      <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
+                    ) : (
+                      <View style={styles.crestFallback} />
+                    )}
+                    {selectedAwayLogo ? (
+                      <Image
+                        source={{ uri: selectedAwayLogo }}
+                        style={[styles.crest, { marginLeft: -10 }]}
+                      />
+                    ) : (
+                      <View style={[styles.crestFallback, { marginLeft: -10 }]} />
+                    )}
                   </View>
-                ) : (
-                  <View style={[styles.badge, styles.badgeTbc]}>
-                    <Text style={[styles.badgeText, styles.badgeTextTbc]}>
-                      {certaintyLabel(selectedCertainty)}
-                    </Text>
-                  </View>
-                )}
 
-                {weekendHint(selectedFixture?.fixture?.date) ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {weekendHint(selectedFixture?.fixture?.date)}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {hasManualDateOverride ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>Custom trip dates</Text>
-                  </View>
-                ) : (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>Default fixture window</Text>
-                  </View>
-                )}
-
-                {isEditing ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>
-                      {isAlreadyInTrip ? "Already in this trip" : "Ready to add"}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {editTrip && existingPrimaryId && selectedFixtureId === existingPrimaryId ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>Main match</Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={styles.dateCard}>
-                <View style={styles.dateCardHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.dateCardTitle}>Trip dates</Text>
-                    <Text style={styles.dateCardSub}>
-                      Default is 1 day before to 1 day after the match. Change these if needed.
+                    <Text style={styles.selectedTitle} numberOfLines={1}>
+                      {selectedTitle}
                     </Text>
+                    <Text style={styles.selectedMeta}>{selectedKickLine}</Text>
+                    <Text style={styles.selectedMeta}>{selectedVenueLine}</Text>
+                    <Text style={styles.selectedMeta}>{selectedCompetitionLine}</Text>
                   </View>
-
-                  <Pressable
-                    onPress={onResetToFixtureWindow}
-                    style={styles.resetDateBtn}
-                  >
-                    <Text style={styles.resetDateBtnText}>Reset</Text>
-                  </Pressable>
                 </View>
+
+                <View style={styles.badgeRow}>
+                  {selectedCertainty === "confirmed" ? (
+                    <View style={[styles.badge, styles.badgeConfirmed]}>
+                      <Text style={[styles.badgeText, styles.badgeTextConfirmed]}>
+                        {certaintyLabel(selectedCertainty)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.badge, styles.badgeTbc]}>
+                      <Text style={[styles.badgeText, styles.badgeTextTbc]}>
+                        {certaintyLabel(selectedCertainty)}
+                      </Text>
+                    </View>
+                  )}
+
+                  {weekendHint(selectedFixture?.fixture?.date) ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {weekendHint(selectedFixture?.fixture?.date)}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {isEditing ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>
+                        {isAlreadyInTrip ? "Already in this trip" : "Ready to add"}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {editTrip && existingPrimaryId && selectedFixtureId === existingPrimaryId ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>Main match</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </GlassCard>
+
+              <GlassCard level="default">
+                <Text style={styles.sectionTitle}>Trip dates</Text>
+                <Text style={styles.sectionHint}>
+                  This is the actual trip window. Flights and hotels should follow these dates.
+                </Text>
 
                 <View style={styles.dateInputsRow}>
                   <View style={styles.dateField}>
@@ -1236,13 +1247,21 @@ export default function TripBuildScreen() {
                   </View>
                 </View>
 
-                <Text style={styles.dateHint}>
-                  Hotels and flights should follow this saved trip window.
-                </Text>
-              </View>
+                <View style={styles.tripDateFooterRow}>
+                  <Text style={styles.dateHint}>
+                    {tripLength ? `Current trip length: ${tripLength}` : "Enter valid dates"}
+                  </Text>
+
+                  <Pressable onPress={onResetToFixtureWindow} style={styles.resetDateBtn}>
+                    <Text style={styles.resetDateBtnText}>Reset to match window</Text>
+                  </Pressable>
+                </View>
+              </GlassCard>
 
               {selectedRankedTrip ? (
-                <View style={styles.intelCard}>
+                <GlassCard level="default">
+                  <Text style={styles.sectionTitle}>Trip fit</Text>
+
                   <View style={styles.intelTopRow}>
                     <View
                       style={[
@@ -1261,7 +1280,7 @@ export default function TripBuildScreen() {
                     </View>
 
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.intelTitle}>Trip fit</Text>
+                      <Text style={styles.intelTitle}>How this trip looks</Text>
                       <Text style={styles.intelSub}>
                         {difficultyLabel(selectedRankedTrip.breakdown.travelDifficulty)} travel •{" "}
                         {selectedRankedTrip.city ||
@@ -1305,70 +1324,161 @@ export default function TripBuildScreen() {
                       ))}
                     </View>
                   ) : null}
-                </View>
+                </GlassCard>
               ) : null}
 
-              <View style={styles.nextStageBox}>
-                <Text style={styles.nextStageTitle}>What happens next</Text>
-                <Text style={styles.nextStageText}>{selectedFlowLine}</Text>
+              <GlassCard level="default">
+                <Text style={styles.sectionTitle}>What happens next</Text>
+                <Text style={styles.sectionHint}>
+                  Stop explaining the app. Tell the user what to do.
+                </Text>
 
-                <View style={styles.nextStageRow}>
-                  <View style={styles.nextStagePill}>
-                    <Text style={styles.nextStagePillText}>Tickets</Text>
-                  </View>
-                  <View style={styles.nextStagePill}>
-                    <Text style={styles.nextStagePillText}>Stay</Text>
-                  </View>
-                  <View style={styles.nextStagePill}>
-                    <Text style={styles.nextStagePillText}>Travel</Text>
-                  </View>
-                  <View style={styles.nextStagePill}>
-                    <Text style={styles.nextStagePillText}>Wallet</Text>
-                  </View>
+                <View style={styles.nextStepList}>
+                  {selectedFlowSteps.map((step, idx) => (
+                    <View key={step} style={styles.nextStepRow}>
+                      <View style={styles.nextStepIndex}>
+                        <Text style={styles.nextStepIndexText}>{idx + 1}</Text>
+                      </View>
+                      <Text style={styles.nextStepRowText}>{step}</Text>
+                    </View>
+                  ))}
                 </View>
-              </View>
+              </GlassCard>
+
+              {nearbyLoading || nearbyFixtures.length > 0 ? (
+                <GlassCard level="default">
+                  <Text style={styles.sectionTitle}>Nearby fixtures</Text>
+                  <Text style={styles.sectionHint}>
+                    {buildNearbyFixturesTitle(selectedCity, startIso, endIso)}
+                  </Text>
+
+                  {nearbyLoading ? (
+                    <View style={styles.center}>
+                      <ActivityIndicator />
+                      <Text style={styles.muted}>Checking nearby fixtures…</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.nearbyList}>
+                      {nearbyFixtures.map((r) => {
+                        const id = fixtureIdStr(r);
+                        const home = cleanText(r?.teams?.home?.name) || "Home";
+                        const away = cleanText(r?.teams?.away?.name) || "Away";
+                        const kick = formatUkDateTimeMaybe(r?.fixture?.date) || "Kickoff TBC";
+                        const cert = getFixtureCertainty(r, { placeholderIds: placeholderTbcIds });
+
+                        return (
+                          <Pressable
+                            key={id}
+                            onPress={async () => {
+                              setSelectedFixture(r);
+                              const ids = await computePlaceholderIdsForFixture(r, params.season);
+                              setPlaceholderTbcIds(ids);
+                              setError(null);
+                            }}
+                            style={styles.nearbyCard}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.nearbyTitle} numberOfLines={1}>
+                                {home} vs {away}
+                              </Text>
+                              <Text style={styles.nearbyMeta}>{kick}</Text>
+                            </View>
+
+                            <View
+                              style={[
+                                styles.badge,
+                                cert === "confirmed" ? styles.badgeConfirmed : styles.badgeTbc,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.badgeText,
+                                  cert === "confirmed"
+                                    ? styles.badgeTextConfirmed
+                                    : styles.badgeTextTbc,
+                                ]}
+                              >
+                                {cert === "confirmed" ? "Confirmed" : "TBC"}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+                </GlassCard>
+              ) : null}
 
               {isEditing ? (
-                <View style={styles.primaryRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.primaryTitle}>Make this the main match</Text>
-                    <Text style={styles.primarySub}>
-                      The main match controls the key trip details shown later.
-                    </Text>
+                <GlassCard level="default">
+                  <View style={styles.primaryRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.primaryTitle}>Make this the main match</Text>
+                      <Text style={styles.primarySub}>
+                        The main match controls the headline trip details later.
+                      </Text>
+                    </View>
+                    <Switch value={setAsPrimaryOnSave} onValueChange={setSetAsPrimaryOnSave} />
                   </View>
-                  <Switch value={setAsPrimaryOnSave} onValueChange={setSetAsPrimaryOnSave} />
-                </View>
+                </GlassCard>
               ) : null}
 
               {params.cityArea ? (
-                <View style={styles.infoBar}>
-                  <Text style={styles.infoText}>
-                    Prefilled stay area: <Text style={styles.infoTextStrong}>{params.cityArea}</Text>
-                  </Text>
-                </View>
+                <GlassCard level="default">
+                  <View style={styles.infoBar}>
+                    <Text style={styles.infoText}>
+                      Prefilled stay area:{" "}
+                      <Text style={styles.infoTextStrong}>{params.cityArea}</Text>
+                    </Text>
+                  </View>
+                </GlassCard>
               ) : null}
 
-              <Text style={styles.label}>Trip notes (optional)</Text>
-              <TextInput
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Add anything worth keeping with this trip..."
-                placeholderTextColor={theme.colors.textSecondary}
-                style={styles.notes}
-                multiline
-              />
-            </GlassCard>
+              <GlassCard level="default">
+                <Pressable
+                  onPress={() => setShowNotes((prev) => !prev)}
+                  style={styles.notesToggle}
+                >
+                  <Text style={styles.sectionTitle}>Notes</Text>
+                  <Text style={styles.notesToggleText}>
+                    {showNotes ? "Hide" : cleanText(notes) ? "Edit" : "Add"}
+                  </Text>
+                </Pressable>
+
+                {showNotes ? (
+                  <>
+                    <Text style={styles.sectionHint}>
+                      Low priority. Keep it if useful, otherwise ignore it.
+                    </Text>
+                    <TextInput
+                      value={notes}
+                      onChangeText={setNotes}
+                      placeholder="Add anything worth keeping with this trip..."
+                      placeholderTextColor={theme.colors.textSecondary}
+                      style={styles.notes}
+                      multiline
+                    />
+                  </>
+                ) : cleanText(notes) ? (
+                  <Text style={styles.notesPreview} numberOfLines={3}>
+                    {cleanText(notes)}
+                  </Text>
+                ) : (
+                  <Text style={styles.notesEmpty}>No notes added.</Text>
+                )}
+              </GlassCard>
+            </>
           ) : null}
 
           {showPickerMode && !prefillLoading && !error ? (
             <GlassCard level="default">
-              <Text style={styles.h1}>
+              <Text style={styles.sectionTitle}>
                 {isEditing ? "Choose another match" : "Choose your match"}
               </Text>
-              <Text style={styles.hint}>
+              <Text style={styles.sectionHint}>
                 {isEditing
-                  ? "Pick another match to add to this trip."
-                  : "Pick the match you want the whole trip built around."}
+                  ? "Use this only if you want to add another match."
+                  : "Pick the match you want the trip built around."}
               </Text>
 
               <ScrollView
@@ -1496,7 +1606,7 @@ export default function TripBuildScreen() {
                             ) : null}
 
                             <Text style={styles.fxFlowMeta} numberOfLines={1}>
-                              Save trip, then book around it
+                              Select match, set dates, then save trip
                             </Text>
                           </View>
                         </View>
@@ -1619,7 +1729,7 @@ export default function TripBuildScreen() {
                   ? setAsPrimaryOnSave
                     ? "This match will become the main match for this trip."
                     : "This match will be added to the trip."
-                  : "This saves the trip so you can sort tickets, stay and travel next."
+                  : "Save the trip now, then move into tickets, travel and stay."
                 : "Select a match first"}
             </Text>
           </Pressable>
@@ -1632,6 +1742,28 @@ export default function TripBuildScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerSaveBtn: {
+    minWidth: 68,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.28)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+  },
+
+  headerSaveBtnDisabled: {
+    opacity: 0.45,
+  },
+
+  headerSaveBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
   headerCard: {
     padding: theme.spacing.lg,
     borderRadius: 28,
@@ -1652,14 +1784,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
-  chipRow: {
+  heroSummaryWrap: {
     marginTop: 14,
-    flexDirection: "row",
     gap: 10,
   },
 
-  summaryChip: {
-    flex: 1,
+  heroSummaryMatch: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 18,
+  },
+
+  heroSummaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  heroSummaryCard: {
+    width: "48%",
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -1668,7 +1811,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
 
-  summaryChipKicker: {
+  heroSummaryLabel: {
     color: theme.colors.textTertiary,
     fontWeight: "900",
     fontSize: 11,
@@ -1676,75 +1819,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  summaryChipValue: {
+  heroSummaryValue: {
     marginTop: 4,
     color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  prefBar: {
-    marginTop: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-
-  prefBarLabel: {
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-
-  prefBarText: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
     fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
-  },
-
-  flowStrip: {
-    marginTop: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.07)",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  flowStep: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-
-  flowStepNumber: {
-    color: theme.colors.primary,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  flowStepText: {
-    color: theme.colors.text,
-    fontWeight: "800",
-    fontSize: 11,
-    textAlign: "center",
-  },
-
-  flowDivider: {
-    width: 10,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.18)",
   },
 
   capBar: {
@@ -1763,14 +1843,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  h1: {
+  sectionTitle: {
     fontSize: 18,
     fontWeight: "900",
     color: theme.colors.text,
     marginBottom: 8,
   },
 
-  hint: {
+  sectionHint: {
     color: theme.colors.textSecondary,
     fontWeight: "700",
     fontSize: 13,
@@ -1874,50 +1954,6 @@ const styles = StyleSheet.create({
     color: "rgba(140,255,190,0.92)",
   },
 
-  dateCard: {
-    marginTop: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-
-  dateCardHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-
-  dateCardTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 15,
-  },
-
-  dateCardSub: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 17,
-  },
-
-  resetDateBtn: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-
-  resetDateBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
   dateInputsRow: {
     marginTop: 12,
     flexDirection: "row",
@@ -1945,21 +1981,35 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  tripDateFooterRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+
   dateHint: {
-    marginTop: 8,
+    flex: 1,
     color: theme.colors.textTertiary,
     fontWeight: "800",
     fontSize: 11,
     lineHeight: 15,
   },
 
-  intelCard: {
-    marginTop: 14,
-    borderRadius: 18,
+  resetDateBtn: {
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+
+  resetDateBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
   },
 
   intelTopRow: {
@@ -2080,53 +2130,72 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  nextStageBox: {
-    marginTop: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.07)",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    gap: 8,
+  nextStepList: {
+    marginTop: 8,
+    gap: 10,
   },
 
-  nextStageTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  nextStageText: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  nextStageRow: {
+  nextStepRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+    alignItems: "center",
+    gap: 10,
   },
 
-  nextStagePill: {
+  nextStepIndex: {
+    width: 24,
+    height: 24,
     borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(75,158,57,0.14)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.14)",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    borderColor: "rgba(75,158,57,0.30)",
   },
 
-  nextStagePillText: {
+  nextStepIndexText: {
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 11,
   },
 
+  nextStepRowText: {
+    flex: 1,
+    color: theme.colors.text,
+    fontWeight: "800",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  nearbyList: {
+    marginTop: 8,
+    gap: 10,
+  },
+
+  nearbyCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.18)",
+    padding: 12,
+  },
+
+  nearbyTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 14,
+  },
+
+  nearbyMeta: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    fontSize: 12,
+  },
+
   primaryRow: {
-    marginTop: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -2153,7 +2222,6 @@ const styles = StyleSheet.create({
   },
 
   infoBar: {
-    marginTop: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
@@ -2174,14 +2242,20 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  label: {
-    marginTop: 14,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
+  notesToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  notesToggleText: {
+    color: theme.colors.accent,
+    fontWeight: "900",
+    fontSize: 12,
   },
 
   notes: {
-    marginTop: 8,
+    marginTop: 10,
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: "rgba(0,0,0,0.25)",
@@ -2191,6 +2265,21 @@ const styles = StyleSheet.create({
     minHeight: 84,
     textAlignVertical: "top",
     ...(Platform.OS === "ios" ? { paddingTop: 12 } : null),
+  },
+
+  notesPreview: {
+    marginTop: 8,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+
+  notesEmpty: {
+    marginTop: 8,
+    color: theme.colors.textTertiary,
+    fontWeight: "700",
+    fontSize: 12,
   },
 
   leaguePill: {
