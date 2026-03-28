@@ -7,7 +7,7 @@ export type PricePointSource =
   | "live_api"
   | null;
 
-export type PriceDisplayMode = "booked" | "live_from" | "est_from";
+export type PriceDisplayMode = "booked";
 
 export type PricePoint = {
   amount: number | null;
@@ -77,47 +77,12 @@ function sameCurrency(points: Array<PricePoint | null>): string | null {
   return unique.length === 1 ? unique[0] : null;
 }
 
-function displayModeForItem(item: SavedItem): PriceDisplayMode {
-  return item.status === "booked" ? "booked" : "est_from";
-}
-
-function rankDisplayMode(mode: PriceDisplayMode): number {
-  if (mode === "booked") return 0;
-  if (mode === "live_from") return 1;
-  return 2;
-}
-
 function rankSource(source: PricePointSource): number {
   if (source === "saved_item") return 0;
-  if (source === "live_api") return 1;
-  if (source === "metadata") return 2;
-  if (source === "price_text") return 3;
+  if (source === "metadata") return 1;
+  if (source === "price_text") return 2;
+  if (source === "live_api") return 3;
   return 4;
-}
-
-function isTotalEligible(point: PricePoint | null): point is PricePoint {
-  if (!point) return false;
-  if (!isPositiveAmount(point.amount)) return false;
-
-  if (point.displayMode === "booked") {
-    return point.source === "saved_item" || point.source === "metadata";
-  }
-
-  if (point.displayMode === "live_from") {
-    return point.source === "live_api";
-  }
-
-  return false;
-}
-
-function withDisplayMode(
-  point: Omit<PricePoint, "displayMode">,
-  displayMode: PriceDisplayMode
-): PricePoint {
-  return {
-    ...point,
-    displayMode,
-  };
 }
 
 export function parsePriceText(raw: unknown): Omit<PricePoint, "displayMode"> | null {
@@ -166,8 +131,9 @@ export function parsePriceText(raw: unknown): Omit<PricePoint, "displayMode"> | 
 }
 
 function buildSavedItemPricePoint(item: SavedItem): PricePoint | null {
-  const directText = parsePriceText(item.priceText);
+  if (item.status !== "booked") return null;
 
+  const directText = parsePriceText(item.priceText);
   if (!directText) return null;
 
   return {
@@ -175,11 +141,13 @@ function buildSavedItemPricePoint(item: SavedItem): PricePoint | null {
     currency: directText.currency,
     text: directText.text,
     source: "saved_item",
-    displayMode: displayModeForItem(item),
+    displayMode: "booked",
   };
 }
 
 function buildMetadataNumericPricePoint(item: SavedItem): PricePoint | null {
+  if (item.status !== "booked") return null;
+
   const meta = (item.metadata ?? {}) as Record<string, unknown>;
 
   const numericCandidates = [
@@ -193,7 +161,6 @@ function buildMetadataNumericPricePoint(item: SavedItem): PricePoint | null {
 
   for (const candidate of numericCandidates) {
     const amount = toPositiveAmount(candidate);
-
     if (amount == null) continue;
 
     const currency =
@@ -206,7 +173,7 @@ function buildMetadataNumericPricePoint(item: SavedItem): PricePoint | null {
       currency,
       text: formatPriceText(currency, amount),
       source: "metadata",
-      displayMode: displayModeForItem(item),
+      displayMode: "booked",
     };
   }
 
@@ -214,6 +181,8 @@ function buildMetadataNumericPricePoint(item: SavedItem): PricePoint | null {
 }
 
 function buildMetadataTextPricePoint(item: SavedItem): PricePoint | null {
+  if (item.status !== "booked") return null;
+
   const meta = (item.metadata ?? {}) as Record<string, unknown>;
 
   const textCandidates = [
@@ -230,7 +199,7 @@ function buildMetadataTextPricePoint(item: SavedItem): PricePoint | null {
 
     return {
       ...parsed,
-      displayMode: displayModeForItem(item),
+      displayMode: "booked",
     };
   }
 
@@ -239,6 +208,7 @@ function buildMetadataTextPricePoint(item: SavedItem): PricePoint | null {
 
 export function buildPricePointFromItem(item: SavedItem | null): PricePoint | null {
   if (!item) return null;
+  if (item.status !== "booked") return null;
 
   const savedPoint = buildSavedItemPricePoint(item);
   const metadataNumericPoint = buildMetadataNumericPricePoint(item);
@@ -278,9 +248,6 @@ function choosePreferredPoint(points: PricePoint[]): PricePoint | null {
 
   return (
     pool.sort((a, b) => {
-      const modeRankDiff = rankDisplayMode(a.displayMode) - rankDisplayMode(b.displayMode);
-      if (modeRankDiff !== 0) return modeRankDiff;
-
       const sourceRankDiff = rankSource(a.source) - rankSource(b.source);
       if (sourceRankDiff !== 0) return sourceRankDiff;
 
@@ -301,7 +268,7 @@ export function chooseBestPricePoint(
     includeStatuses?: Array<SavedItem["status"]>;
   }
 ): PricePoint | null {
-  const allowedStatuses = opts?.includeStatuses ?? ["saved", "pending", "booked"];
+  const allowedStatuses = opts?.includeStatuses ?? ["booked"];
 
   const points = items
     .filter((item) => item.status !== "archived")
@@ -319,29 +286,20 @@ export function sumTripCorePrice(args: {
 }): PricePoint | null {
   const { tickets, flights, hotels } = args;
 
-  if (!isTotalEligible(tickets) || !isTotalEligible(flights) || !isTotalEligible(hotels)) {
-    return null;
-  }
-
-  if (
-    tickets.displayMode !== flights.displayMode ||
-    flights.displayMode !== hotels.displayMode
-  ) {
+  if (!tickets || !flights || !hotels) return null;
+  if (!isPositiveAmount(tickets.amount) || !isPositiveAmount(flights.amount) || !isPositiveAmount(hotels.amount)) {
     return null;
   }
 
   const currency = sameCurrency([tickets, flights, hotels]);
   if (!currency) return null;
 
-  const amount = tickets.amount + flights.amount + hotels.amount;
-  const displayMode = tickets.displayMode;
-
   return {
-    amount,
+    amount: tickets.amount + flights.amount + hotels.amount,
     currency,
-    text: formatPriceText(currency, amount),
-    source: displayMode === "live_from" ? "live_api" : "saved_item",
-    displayMode,
+    text: formatPriceText(currency, tickets.amount + flights.amount + hotels.amount),
+    source: "saved_item",
+    displayMode: "booked",
   };
 }
 
@@ -349,23 +307,28 @@ export function buildBookingPriceBoard(savedItems: SavedItem[]): BookingPriceBoa
   const activeItems = savedItems.filter((item) => item.status !== "archived");
 
   const tickets = chooseBestPricePoint(
-    activeItems.filter((item) => item.type === "tickets")
+    activeItems.filter((item) => item.type === "tickets"),
+    { includeStatuses: ["booked"] }
   );
 
   const flights = chooseBestPricePoint(
-    activeItems.filter((item) => item.type === "flight")
+    activeItems.filter((item) => item.type === "flight"),
+    { includeStatuses: ["booked"] }
   );
 
   const hotels = chooseBestPricePoint(
-    activeItems.filter((item) => item.type === "hotel")
+    activeItems.filter((item) => item.type === "hotel"),
+    { includeStatuses: ["booked"] }
   );
 
   const transfers = chooseBestPricePoint(
-    activeItems.filter((item) => item.type === "transfer" || item.type === "train")
+    activeItems.filter((item) => item.type === "transfer" || item.type === "train"),
+    { includeStatuses: ["booked"] }
   );
 
   const experiences = chooseBestPricePoint(
-    activeItems.filter((item) => item.type === "things")
+    activeItems.filter((item) => item.type === "things"),
+    { includeStatuses: ["booked"] }
   );
 
   const tripTotal = sumTripCorePrice({
@@ -388,44 +351,23 @@ export function withFlightPriceOverride(args: {
   board: BookingPriceBoard;
   flightPricePoint: Omit<PricePoint, "displayMode"> | null;
 }): BookingPriceBoard {
-  const override = args.flightPricePoint
-    ? withDisplayMode(
-        {
-          amount: args.flightPricePoint.amount,
-          currency: args.flightPricePoint.currency,
-          text: args.flightPricePoint.text,
-          source: "live_api",
-        },
-        "live_from"
-      )
-    : null;
-
-  const flights = override || args.board.flights;
-
-  const tripTotal = sumTripCorePrice({
-    tickets: args.board.tickets,
-    flights,
-    hotels: args.board.hotels,
-  });
-
-  return {
-    ...args.board,
-    flights,
-    tripTotal,
-  };
+  // Locked decision:
+  // do not surface non-booked pricing in Trip Detail for now,
+  // even if flights are API-backed.
+  return args.board;
 }
 
 export function priceLine(point: PricePoint | null): string | null {
-  if (!isPositiveAmount(point?.amount)) return null;
+  if (!point) return null;
+  if (!isPositiveAmount(point.amount)) return null;
+  if (point.displayMode !== "booked") return null;
 
   const base =
     point.text && /^(GBP|EUR|USD)\s/i.test(point.text)
       ? point.text
       : point.text && /^[£€$]/.test(point.text)
         ? point.text
-        : formatPriceText(point?.currency || null, point.amount);
+        : formatPriceText(point.currency || null, point.amount);
 
-  if (point?.displayMode === "booked") return `Booked ${base}`;
-  if (point?.displayMode === "live_from") return `Live from ${base}`;
-  return `Est. from ${base}`;
+  return `Booked ${base}`;
 }
