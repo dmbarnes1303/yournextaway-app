@@ -756,7 +756,7 @@ export default function useTripDetailController({
       url: args.option.url,
       title: args.option.title || `Tickets: ${args.homeName} vs ${args.awayName}`,
       savedItemType: "tickets",
-      sourceSurface: "ticket_choice_sheet",
+      sourceSurface: "ticket_choice_alert",
       sourceSection: "tickets",
       metadata: {
         fixtureId: args.mid,
@@ -774,6 +774,11 @@ export default function useTripDetailController({
         resolutionReason: args.option.reason ?? null,
         exactMatch: Boolean(args.option.exact),
         score: args.option.score,
+        rawScore:
+          typeof args.option.rawScore === "number" && Number.isFinite(args.option.rawScore)
+            ? args.option.rawScore
+            : null,
+        urlQuality: args.option.urlQuality ?? null,
         checkedProviders: args.checkedProviders,
         optionCount: args.optionCount,
       },
@@ -806,7 +811,7 @@ export default function useTripDetailController({
               url: args.officialTicketUrl,
               title,
               savedItemType: "tickets",
-              sourceSurface: "ticket_choice_sheet",
+              sourceSurface: "ticket_choice_alert",
               sourceSection: "tickets",
               metadata: {
                 fixtureId: args.mid,
@@ -1164,4 +1169,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-         }
+          }
