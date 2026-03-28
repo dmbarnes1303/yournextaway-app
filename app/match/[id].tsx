@@ -39,6 +39,7 @@ import type { PartnerId } from "@/src/constants/partners";
 
 type RouteParams = Record<string, string | string[] | undefined>;
 type TicketUrlQuality = "event" | "listing" | "search" | "unknown";
+type MatchStrengthTone = "strong" | "medium" | "weak";
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -58,11 +59,13 @@ function formatKickoff(iso?: string | null): string {
 
   const midnight = d.getHours() === 0 && d.getMinutes() === 0;
   if (midnight) {
-    return d.toLocaleDateString("en-GB", {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-    }) + " • TBC";
+    return (
+      d.toLocaleDateString("en-GB", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+      }) + " • TBC"
+    );
   }
 
   return d.toLocaleString("en-GB", {
@@ -74,11 +77,25 @@ function formatKickoff(iso?: string | null): string {
   });
 }
 
-function formatTicketPrice(price?: string | null): string {
+function formatTicketPrice(price?: string | null, option?: TicketResolutionOption): string {
   const p = clean(price);
-  if (!p) return "View live price";
-  if (/^[£€$]/.test(p)) return `From ${p}`;
-  if (/^(GBP|EUR|USD)\s/i.test(p)) return `From ${p}`;
+  const quality = option ? getOptionUrlQuality(option) : "unknown";
+  const reason = clean(option?.reason);
+
+  if (!p) {
+    return quality === "search" || reason === "search_fallback"
+      ? "Check price on partner"
+      : "View live price";
+  }
+
+  if (/^[£€$]/.test(p)) {
+    return quality === "search" || reason === "search_fallback" ? p : `From ${p}`;
+  }
+
+  if (/^(GBP|EUR|USD)\s/i.test(p)) {
+    return quality === "search" || reason === "search_fallback" ? p : `From ${p}`;
+  }
+
   return p;
 }
 
@@ -195,13 +212,13 @@ function reasonLabel(reason?: string | null): string {
   const raw = clean(reason);
 
   if (raw === "exact_event") return "Exact fixture match";
-  if (raw === "partial_match") return "Strong related match";
-  if (raw === "search_fallback") return "Search fallback";
+  if (raw === "partial_match") return "Related fixture route";
+  if (raw === "search_fallback") return "Fallback search route";
 
   return "Ticket result";
 }
 
-function reasonTone(reason?: string | null): "strong" | "medium" | "weak" {
+function reasonTone(reason?: string | null): MatchStrengthTone {
   const raw = clean(reason);
 
   if (raw === "exact_event") return "strong";
@@ -285,6 +302,59 @@ function scoreBandLabel(score?: number | null): string {
   return "Weak";
 }
 
+function isStrongOption(option: TicketResolutionOption): boolean {
+  const urlQuality = getOptionUrlQuality(option);
+  const reason = clean(option.reason);
+
+  if (option.exact || reason === "exact_event") {
+    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
+  }
+
+  if (reason === "partial_match") {
+    return urlQuality === "event" || urlQuality === "listing";
+  }
+
+  return false;
+}
+
+function summaryHeadline(result: TicketResolutionResult | null, options: TicketResolutionOption[]): string {
+  if (!result && options.length === 0) return "No results loaded";
+  if (options.length === 0) return "No ticket routes found";
+  if (result?.ok) return "Strong ticket route found";
+  return "Only weak fallback routes found";
+}
+
+function summaryBody(result: TicketResolutionResult | null, options: TicketResolutionOption[]): string {
+  if (!result && options.length === 0) {
+    return "Tap Compare tickets to check providers for this fixture.";
+  }
+
+  if (options.length === 0) {
+    return "No usable ticket routes were returned for this fixture right now.";
+  }
+
+  if (result?.ok) {
+    return "These results include at least one stronger route such as an event page or a useful listing page.";
+  }
+
+  return "These routes are weaker fallbacks. They may still help, but they should not be treated like a clean direct match.";
+}
+
+function resolverTone(result: TicketResolutionResult | null, options: TicketResolutionOption[]): MatchStrengthTone {
+  if (result?.ok) return "strong";
+  if (options.some((option) => clean(option.reason) === "partial_match")) return "medium";
+  return "weak";
+}
+
+function ticketCardTone(option: TicketResolutionOption): MatchStrengthTone {
+  if (isStrongOption(option)) return clean(option.reason) === "exact_event" ? "strong" : "medium";
+  return "weak";
+}
+
+function isOpenBlockedByWeakResult(option: TicketResolutionOption): boolean {
+  return !isStrongOption(option) && getOptionUrlQuality(option) === "search";
+}
+
 function Crest({ name, uri }: { name: string; uri?: string | null }) {
   return (
     <View style={styles.crest}>
@@ -353,6 +423,32 @@ function QualityPill({
   );
 }
 
+function ResolverBanner({
+  tone,
+  headline,
+  body,
+}: {
+  tone: MatchStrengthTone;
+  headline: string;
+  body: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.banner,
+        tone === "strong"
+          ? styles.bannerStrong
+          : tone === "medium"
+            ? styles.bannerMedium
+            : styles.bannerWeak,
+      ]}
+    >
+      <Text style={styles.bannerTitle}>{headline}</Text>
+      <Text style={styles.bannerText}>{body}</Text>
+    </View>
+  );
+}
+
 function TicketCard({
   option,
   isBest,
@@ -374,11 +470,20 @@ function TicketCard({
     typeof option.score === "number" && Number.isFinite(option.score) ? option.score : null;
   const reason = clean(option.reason);
   const tone = reasonTone(reason);
+  const cardTone = ticketCardTone(option);
+  const blockedWeakOpen = isOpenBlockedByWeakResult(option);
 
   return (
-    <Pressable style={[styles.ticketCard, isBest && styles.ticketBest]} onPress={onPress}>
+    <Pressable
+      style={[
+        styles.ticketCard,
+        isBest && styles.ticketBest,
+        cardTone === "weak" ? styles.ticketWeak : null,
+      ]}
+      onPress={onPress}
+    >
       <View style={styles.ticketTopRow}>
-        <Text style={styles.ticketPrice}>{formatTicketPrice(option.priceText)}</Text>
+        <Text style={styles.ticketPrice}>{formatTicketPrice(option.priceText, option)}</Text>
 
         <View
           style={[
@@ -403,7 +508,9 @@ function TicketCard({
           label={urlQualityLabel(urlQuality)}
           tone={urlQuality === "event" ? "strong" : urlQuality === "listing" ? "medium" : "weak"}
         />
-        {isBest ? <QualityPill label="Top option" tone="strong" /> : null}
+        {isBest ? (
+          <QualityPill label={cardTone === "weak" ? "Best fallback" : "Top option"} tone={cardTone} />
+        ) : null}
       </View>
 
       <View style={styles.scoreRow}>
@@ -422,14 +529,26 @@ function TicketCard({
 
       <Text style={styles.ticketMeta}>
         {reason === "exact_event"
-          ? "This looks like a direct match for the exact fixture."
+          ? "This looks like a direct route for the exact fixture."
           : reason === "partial_match"
-            ? "This looks relevant, but it is not as strong as a direct exact match."
-            : "This is a fallback route. Useful if nothing stronger is available, but weaker."}
+            ? "This looks related and may be usable, but it is weaker than a direct exact match."
+            : "This is only a fallback search route. Treat it as a weaker lead, not a clean ticket match."}
       </Text>
 
+      {blockedWeakOpen ? (
+        <Text style={styles.ticketWarning}>
+          Weak search route only. Use this carefully and verify the fixture on the partner page.
+        </Text>
+      ) : null}
+
       <Text style={styles.ticketCTA}>
-        {loading ? "Opening…" : locked ? "Start trip to open partner" : "Open ticket partner"}
+        {loading
+          ? "Opening…"
+          : locked
+            ? "Start trip to open partner"
+            : blockedWeakOpen
+              ? "Open weak fallback route"
+              : "Open ticket partner"}
       </Text>
     </Pressable>
   );
@@ -509,7 +628,16 @@ export default function MatchScreen() {
     ]
   );
 
-  const options = useMemo(() => (ticketResult?.options ?? []).slice(0, 3), [ticketResult]);
+  const allOptions = useMemo(() => ticketResult?.options ?? [], [ticketResult]);
+  const options = useMemo(() => allOptions.slice(0, 3), [allOptions]);
+  const strongOptionCount = useMemo(
+    () => allOptions.filter((option) => isStrongOption(option)).length,
+    [allOptions]
+  );
+  const weakOptionCount = useMemo(
+    () => allOptions.filter((option) => !isStrongOption(option)).length,
+    [allOptions]
+  );
 
   const ticketsLocked = !clean(tripId);
 
@@ -553,6 +681,13 @@ export default function MatchScreen() {
       return;
     }
 
+    if (isOpenBlockedByWeakResult(option)) {
+      Alert.alert(
+        "Weak fallback route",
+        "This is only a search-page fallback, not a strong direct match. Use it carefully and verify the fixture on the partner page before trusting it."
+      );
+    }
+
     let partnerId: PartnerId;
     try {
       partnerId = mapTicketProviderToPartnerId(option.provider);
@@ -588,6 +723,7 @@ export default function MatchScreen() {
           resolutionReason: option.reason ?? null,
           sourceSurface: "match_screen",
           sourceSection: "tickets",
+          strongRoute: isStrongOption(option),
         },
       });
     } catch {
@@ -662,6 +798,10 @@ export default function MatchScreen() {
       ? ticketResult.score
       : null;
 
+  const bannerHeadline = summaryHeadline(ticketResult, allOptions);
+  const bannerBody = summaryBody(ticketResult, allOptions);
+  const bannerTone = resolverTone(ticketResult, allOptions);
+
   return (
     <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.14}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -726,42 +866,58 @@ export default function MatchScreen() {
                 <Text style={styles.sectionTitle}>Tickets</Text>
                 <Text style={styles.sectionSub}>
                   {ticketsLocked
-                    ? "You can compare ticket routes here, but partner clicks should start from a trip so the booking can be tracked properly."
-                    : "These are the current resolver results ranked by match quality, route quality and provider confidence."}
+                    ? "You can compare routes here, but open partners from a trip if you want booking tracking in Wallet."
+                    : "These routes are ranked by match strength and route quality. Strong routes are better than fallback search pages."}
                 </Text>
               </View>
             </View>
 
             {ticketResult ? (
-              <View style={styles.resolverSummaryWrap}>
-                <View style={styles.resolverSummaryRow}>
-                  <Text style={styles.resolverSummaryLabel}>Resolver result</Text>
-                  <Text style={styles.resolverSummaryValue}>
-                    {ticketResult.ok ? reasonLabel(ticketResult.reason) : "No strong result"}
-                  </Text>
-                </View>
+              <>
+                <ResolverBanner tone={bannerTone} headline={bannerHeadline} body={bannerBody} />
 
-                <View style={styles.resolverSummaryRow}>
-                  <Text style={styles.resolverSummaryLabel}>Providers checked</Text>
-                  <Text style={styles.resolverSummaryValue}>
-                    {Array.isArray(ticketResult.checkedProviders) && ticketResult.checkedProviders.length > 0
-                      ? ticketResult.checkedProviders.map(providerLabel).join(" • ")
-                      : "—"}
-                  </Text>
-                </View>
-
-                {topLevelAdjustedScore != null ? (
+                <View style={styles.resolverSummaryWrap}>
                   <View style={styles.resolverSummaryRow}>
-                    <Text style={styles.resolverSummaryLabel}>Top score</Text>
+                    <Text style={styles.resolverSummaryLabel}>Resolver result</Text>
                     <Text style={styles.resolverSummaryValue}>
-                      {topLevelAdjustedScore}
-                      {topLevelRawScore != null && topLevelRawScore !== topLevelAdjustedScore
-                        ? ` (raw ${topLevelRawScore})`
+                      {ticketResult.ok ? reasonLabel(ticketResult.reason) : "No strong resolver success"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.resolverSummaryRow}>
+                    <Text style={styles.resolverSummaryLabel}>Providers checked</Text>
+                    <Text style={styles.resolverSummaryValue}>
+                      {Array.isArray(ticketResult.checkedProviders) && ticketResult.checkedProviders.length > 0
+                        ? ticketResult.checkedProviders.map(providerLabel).join(" • ")
+                        : "—"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.resolverSummaryRow}>
+                    <Text style={styles.resolverSummaryLabel}>Route strength</Text>
+                    <Text style={styles.resolverSummaryValue}>
+                      {strongOptionCount > 0
+                        ? `${strongOptionCount} stronger route${strongOptionCount === 1 ? "" : "s"}`
+                        : "No stronger routes"}
+                      {weakOptionCount > 0
+                        ? ` • ${weakOptionCount} weak fallback${weakOptionCount === 1 ? "" : "s"}`
                         : ""}
                     </Text>
                   </View>
-                ) : null}
-              </View>
+
+                  {topLevelAdjustedScore != null ? (
+                    <View style={styles.resolverSummaryRow}>
+                      <Text style={styles.resolverSummaryLabel}>Top score</Text>
+                      <Text style={styles.resolverSummaryValue}>
+                        {topLevelAdjustedScore}
+                        {topLevelRawScore != null && topLevelRawScore !== topLevelAdjustedScore
+                          ? ` (raw ${topLevelRawScore})`
+                          : ""}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </>
             ) : null}
 
             {options.length > 0 ? (
@@ -779,10 +935,10 @@ export default function MatchScreen() {
               </View>
             ) : (
               <View style={styles.emptyBox}>
-                <Text style={styles.emptyTitle}>No ticket options loaded yet</Text>
+                <Text style={styles.emptyTitle}>No ticket routes loaded yet</Text>
                 <Text style={styles.emptyText}>
-                  Tap “Compare tickets” first. Then you will see whether the resolver found an exact
-                  match, a partial match, or just a fallback route.
+                  Tap “Compare tickets” first. The screen will then show whether the resolver found
+                  a strong direct route, a related listing, or only weak fallback searches.
                 </Text>
               </View>
             )}
@@ -792,9 +948,7 @@ export default function MatchScreen() {
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleWrap}>
                 <Text style={styles.sectionTitle}>About this trip</Text>
-                <Text style={styles.sectionSub}>
-                  Useful planning context before you commit.
-                </Text>
+                <Text style={styles.sectionSub}>Useful planning context before you commit.</Text>
               </View>
             </View>
 
@@ -1039,6 +1193,41 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
   },
 
+  banner: {
+    gap: 4,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+
+  bannerStrong: {
+    backgroundColor: "rgba(87,162,56,0.08)",
+    borderColor: "rgba(87,162,56,0.22)",
+  },
+
+  bannerMedium: {
+    backgroundColor: "rgba(120,170,255,0.08)",
+    borderColor: "rgba(120,170,255,0.20)",
+  },
+
+  bannerWeak: {
+    backgroundColor: "rgba(255,200,80,0.08)",
+    borderColor: "rgba(255,200,80,0.22)",
+  },
+
+  bannerTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  bannerText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
   resolverSummaryWrap: {
     gap: 8,
     padding: 12,
@@ -1083,6 +1272,11 @@ const styles = StyleSheet.create({
   ticketBest: {
     borderColor: "rgba(87,162,56,0.25)",
     backgroundColor: "rgba(87,162,56,0.08)",
+  },
+
+  ticketWeak: {
+    borderColor: "rgba(255,200,80,0.22)",
+    backgroundColor: "rgba(255,200,80,0.06)",
   },
 
   ticketTopRow: {
@@ -1181,6 +1375,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.medium,
+  },
+
+  ticketWarning: {
+    color: "rgba(255,215,140,1)",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.semibold,
   },
 
   ticketCTA: {
