@@ -734,9 +734,7 @@ export default function TripDetailScreen() {
                   ) : null}
 
                   {!vm.hasFlight ? (
-                    <Text style={styles.guidanceText}>
-                      • Travel is not actually booked yet.
-                    </Text>
+                    <Text style={styles.guidanceText}>• Travel is not actually booked yet.</Text>
                   ) : null}
 
                   {!vm.hasHotel ? (
