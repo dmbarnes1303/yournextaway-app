@@ -1,7 +1,23 @@
 import { theme } from "@/src/constants/theme";
+import {
+  canonicalizePartnerId,
+  getPartnerOrNull,
+} from "@/src/constants/partners";
 import type { Trip } from "@/src/state/trips";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import type { SavedItem } from "@/src/core/savedItemTypes";
+
+export type ProviderBadgeStyle = {
+  borderColor: string;
+  backgroundColor: string;
+  textColor: string;
+};
+
+const DEFAULT_BADGE_STYLE: ProviderBadgeStyle = {
+  borderColor: "rgba(255,255,255,0.15)",
+  backgroundColor: "rgba(255,255,255,0.06)",
+  textColor: theme.colors.text,
+};
 
 export function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -14,7 +30,7 @@ export function safeUri(u: unknown): string | null {
   return s;
 }
 
-export function initials(name: string) {
+export function initials(name: string): string {
   const cleanName = clean(name);
   if (!cleanName) return "—";
 
@@ -24,7 +40,7 @@ export function initials(name: string) {
     return parts[0].slice(0, 2).toUpperCase();
   }
 
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase() || "—";
 }
 
 export function parseIsoToDate(iso?: string | null): Date | null {
@@ -39,9 +55,9 @@ export function safeFixtureTitle(
   row: FixtureListRow | null | undefined,
   fallbackId: string,
   trip?: Trip | null
-) {
-  const home = clean((row as any)?.teams?.home?.name) || clean((trip as any)?.homeName);
-  const away = clean((row as any)?.teams?.away?.name) || clean((trip as any)?.awayName);
+): string {
+  const home = clean(row?.teams?.home?.name) || clean(trip?.homeName);
+  const away = clean(row?.teams?.away?.name) || clean(trip?.awayName);
 
   if (home && away) return `${home} vs ${away}`;
   if (home) return `${home} match`;
@@ -54,13 +70,13 @@ export function formatKickoffMeta(
   row?: FixtureListRow | null,
   trip?: Trip | null
 ): { line: string; tbc: boolean; iso: string | null } {
-  const isoRaw = (row as any)?.fixture?.date ?? (trip as any)?.kickoffIso;
+  const isoRaw = row?.fixture?.date ?? trip?.kickoffIso;
   const iso = clean(isoRaw) || null;
 
   const d = parseIsoToDate(iso);
 
-  const short = clean((row as any)?.fixture?.status?.short).toUpperCase();
-  const long = clean((row as any)?.fixture?.status?.long);
+  const short = clean(row?.fixture?.status?.short).toUpperCase();
+  const long = clean(row?.fixture?.status?.long);
 
   const looksTbc =
     short === "TBD" ||
@@ -68,7 +84,7 @@ export function formatKickoffMeta(
     short === "NS" ||
     short === "PST";
 
-  const snapTbc = Boolean((trip as any)?.kickoffTbc);
+  const snapTbc = Boolean(trip?.kickoffTbc);
 
   if (!d) {
     const tbc = looksTbc || snapTbc;
@@ -93,53 +109,34 @@ export function formatKickoffMeta(
     return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso };
   }
 
-  const statusHint = long ? ` • ${long}` : "";
-
   return {
-    line: `Kickoff: ${datePart} • ${timePart}${statusHint}`,
+    line: `Kickoff: ${datePart} • ${timePart}${long ? ` • ${long}` : ""}`,
     tbc: false,
     iso,
   };
 }
 
 export function providerLabel(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) return clean(provider) || "Provider";
 
-  if (raw === "footballticketsnet") return "FootballTicketNet";
-  if (raw === "sportsevents365") return "SportsEvents365";
-  if (raw === "gigsberg") return "Gigsberg";
-  if (raw === "aviasales") return "Aviasales";
-  if (raw === "expedia" || raw === "expedia_stays") return "Expedia";
-  if (raw === "kiwitaxi") return "KiwiTaxi";
-  if (raw === "omio") return "Omio";
-  if (raw === "getyourguide") return "GetYourGuide";
-  if (raw === "safetywing") return "SafetyWing";
-  if (raw === "airhelp") return "AirHelp";
-
-  return provider || "Provider";
+  const partner = getPartnerOrNull(canonical);
+  return partner?.display.name || clean(provider) || "Provider";
 }
 
 export function providerShort(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) return "P";
 
-  if (raw === "footballticketsnet") return "FTN";
-  if (raw === "sportsevents365") return "365";
-  if (raw === "gigsberg") return "G";
-  if (raw === "aviasales") return "AV";
-  if (raw === "expedia" || raw === "expedia_stays") return "EX";
-  if (raw === "kiwitaxi") return "KT";
-  if (raw === "omio") return "OM";
-  if (raw === "getyourguide") return "GYG";
-  if (raw === "safetywing") return "SW";
-  if (raw === "airhelp") return "AH";
-
-  return "P";
+  const partner = getPartnerOrNull(canonical);
+  return partner?.display.badgeText || "P";
 }
 
-export function providerBadgeStyle(provider?: string | null) {
-  const raw = clean(provider).toLowerCase();
+export function providerBadgeStyle(provider?: string | null): ProviderBadgeStyle {
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) return DEFAULT_BADGE_STYLE;
 
-  if (raw === "footballticketsnet") {
+  if (canonical === "footballticketsnet") {
     return {
       borderColor: "rgba(120,170,255,0.35)",
       backgroundColor: "rgba(120,170,255,0.12)",
@@ -147,7 +144,7 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (raw === "sportsevents365") {
+  if (canonical === "sportsevents365") {
     return {
       borderColor: "rgba(87,162,56,0.35)",
       backgroundColor: "rgba(87,162,56,0.12)",
@@ -155,7 +152,7 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (raw === "gigsberg") {
+  if (canonical === "gigsberg") {
     return {
       borderColor: "rgba(255,200,80,0.35)",
       backgroundColor: "rgba(255,200,80,0.12)",
@@ -163,7 +160,7 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (raw === "aviasales") {
+  if (canonical === "aviasales") {
     return {
       borderColor: "rgba(120,170,255,0.30)",
       backgroundColor: "rgba(120,170,255,0.10)",
@@ -171,7 +168,7 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (raw === "expedia" || raw === "expedia_stays") {
+  if (canonical === "expedia") {
     return {
       borderColor: "rgba(87,162,56,0.30)",
       backgroundColor: "rgba(87,162,56,0.10)",
@@ -179,7 +176,7 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (raw === "kiwitaxi") {
+  if (canonical === "kiwitaxi") {
     return {
       borderColor: "rgba(255,160,120,0.30)",
       backgroundColor: "rgba(255,160,120,0.10)",
@@ -187,7 +184,7 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (raw === "omio") {
+  if (canonical === "omio") {
     return {
       borderColor: "rgba(200,120,255,0.30)",
       backgroundColor: "rgba(200,120,255,0.10)",
@@ -195,7 +192,7 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (raw === "getyourguide") {
+  if (canonical === "getyourguide") {
     return {
       borderColor: "rgba(255,90,120,0.30)",
       backgroundColor: "rgba(255,90,120,0.10)",
@@ -203,15 +200,7 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (raw === "safetywing") {
-    return {
-      borderColor: "rgba(120,220,190,0.28)",
-      backgroundColor: "rgba(120,220,190,0.10)",
-      textColor: "rgba(210,255,245,1)",
-    };
-  }
-
-  if (raw === "airhelp") {
+  if (canonical === "airhelp") {
     return {
       borderColor: "rgba(255,120,170,0.30)",
       backgroundColor: "rgba(255,120,170,0.10)",
@@ -219,14 +208,10 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  return {
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    textColor: theme.colors.text,
-  };
+  return DEFAULT_BADGE_STYLE;
 }
 
-export function statusLabel(status: SavedItem["status"]) {
+export function statusLabel(status: SavedItem["status"]): string {
   if (status === "pending") return "Pending";
   if (status === "saved") return "Saved";
   if (status === "booked") return "Booked";
@@ -234,12 +219,13 @@ export function statusLabel(status: SavedItem["status"]) {
 }
 
 export function ticketConfidenceLabel(score?: number | null): string {
-  const value = typeof score === "number" ? score : 0;
+  const value = typeof score === "number" && Number.isFinite(score) ? score : 0;
 
-  if (value >= 90) return "High confidence";
-  if (value >= 75) return "Strong match";
-  if (value >= 60) return "Good match";
-
+  if (value >= 95) return "Elite match";
+  if (value >= 88) return "Best match";
+  if (value >= 78) return "Strong match";
+  if (value >= 68) return "Good match";
+  if (value >= 60) return "Usable match";
   return "Fallback";
 }
 
@@ -249,7 +235,7 @@ export function shortDomain(url?: string | null): string {
 
   try {
     const parsed = new URL(value);
-    return parsed.hostname.replace(/^www\./, "");
+    return parsed.hostname.replace(/^www\./i, "");
   } catch {
     return "";
   }
@@ -280,16 +266,20 @@ export function savedItemMetaLine(item: SavedItem): string {
   bits.push(typeLabel);
 
   const provider = clean(item.metadata?.ticketProvider) || clean(item.partnerId);
-  if (provider) bits.push(providerLabel(provider));
+  if (provider) {
+    bits.push(providerLabel(provider));
+  }
 
   const domain = shortDomain(item.partnerUrl);
-  if (domain) bits.push(domain);
+  if (domain) {
+    bits.push(domain);
+  }
 
   return bits.join(" • ");
 }
 
 export function attachmentCount(item: SavedItem | null): number {
-  return Array.isArray(item?.attachments) ? item.attachments.length : 0;
+  return Array.isArray(item?.attachments) ? item!.attachments.length : 0;
 }
 
 export function hasAttachments(item: SavedItem | null): boolean {
