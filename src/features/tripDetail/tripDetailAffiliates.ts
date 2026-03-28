@@ -16,7 +16,7 @@ export type PricePoint = {
   amount: number | null;
   currency: string | null;
   text: string | null;
-  source: "saved_item" | "metadata" | "price_text" | null;
+  source: "live_api" | null;
 };
 
 export type FlightSearchState = {
@@ -51,6 +51,10 @@ function safeUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function formatAmount(amount: number): string {
+  return amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2);
 }
 
 export function getBookingWindow(args: {
@@ -104,13 +108,8 @@ export function buildAffiliateUrls(args: {
   const insuranceUrl = safeUrl(built.insuranceUrl);
   const experiencesUrl = safeUrl(built.experiencesUrl);
 
-  const transportUrl =
-    safeUrl(built.transportUrl) ||
-    safeUrl(built.omioUrl);
-
-  const omioUrl =
-    safeUrl(built.omioUrl) ||
-    safeUrl(built.transportUrl);
+  const transportUrl = safeUrl(built.transportUrl) || safeUrl(built.omioUrl);
+  const omioUrl = safeUrl(built.omioUrl) || safeUrl(built.transportUrl);
 
   const mapsUrl =
     safeUrl(built.mapsUrl) ||
@@ -191,9 +190,9 @@ export async function fetchLiveFlightPrice(args: {
       amount,
       currency,
       text: currency
-        ? `${currency} ${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`
-        : `${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`,
-      source: "metadata",
+        ? `${currency} ${formatAmount(amount)}`
+        : formatAmount(amount),
+      source: "live_api",
     };
   } catch {
     return null;
