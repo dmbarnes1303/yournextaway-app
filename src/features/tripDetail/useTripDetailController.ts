@@ -59,6 +59,7 @@ type Props = {
   setNoteText?: SetState<string>;
   setNoteSaving?: SetState<boolean>;
   setProofBusyId?: SetState<string | null>;
+  setTicketLoading?: SetState<boolean>;
   setActiveWorkspaceSection?: (section: WorkspaceSectionKey) => Promise<void> | void;
 };
 
@@ -291,6 +292,7 @@ export default function useTripDetailController({
   setNoteText = () => {},
   setNoteSaving = () => {},
   setProofBusyId = () => {},
+  setTicketLoading = () => {},
   setActiveWorkspaceSection = () => {},
 }: Props) {
   const router = useRouter();
@@ -885,6 +887,8 @@ export default function useTripDetailController({
 
     const dateIso = trip?.startDate || getIsoDateOnly(kickoffIso);
 
+    setTicketLoading(true);
+
     try {
       const resolved = await resolveTicketForFixture({
         fixtureId: mid,
@@ -972,6 +976,8 @@ export default function useTripDetailController({
         "Tickets unavailable",
         "Ticket search failed before the partner click was created."
       );
+    } finally {
+      setTicketLoading(false);
     }
   }
 
@@ -982,7 +988,7 @@ export default function useTripDetailController({
     try {
       await setActiveWorkspaceSection(next);
     } catch {
-      // ignore section open failure
+      // ignore
     }
 
     const tripId = getResolvedTripId();
@@ -1111,4 +1117,4 @@ export default function useTripDetailController({
     openTicketsForMatch,
     addProofForBookedItem,
   };
-        }
+            }
