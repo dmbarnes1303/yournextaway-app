@@ -71,21 +71,93 @@ export function providerShort(provider?: string | null): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ticket strength classification (NEW CORE LOGIC)                             */
+/* Ticket quality / strength helpers                                          */
 /* -------------------------------------------------------------------------- */
 
 export type TicketStrength = "strong" | "medium" | "weak";
 
+export function normalizeTicketUrlQuality(
+  value?: TicketUrlQuality | string | null,
+  fallbackUrl?: string | null
+): TicketUrlQuality {
+  const raw = clean(value).toLowerCase();
+
+  if (raw === "event") return "event";
+  if (raw === "listing") return "listing";
+  if (raw === "search") return "search";
+  if (raw === "unknown") return "unknown";
+
+  const url = clean(fallbackUrl).toLowerCase();
+  if (!url) return "unknown";
+
+  if (
+    url.includes("/search") ||
+    url.includes("search-results") ||
+    url.includes("query=") ||
+    url.includes("q=") ||
+    url.includes("text=") ||
+    url.includes("sjv.io")
+  ) {
+    return "search";
+  }
+
+  if (url.includes("/listing") || url.includes("/listings")) return "listing";
+  if (url.includes("/event") || url.includes("/events") || url.includes("/tickets")) {
+    return "event";
+  }
+
+  return "unknown";
+}
+
+export function isStrongTicketOption(option: TicketResolutionOption): boolean {
+  const reason = clean(option.reason);
+  const urlQuality = normalizeTicketUrlQuality(option.urlQuality, option.url);
+
+  if (option.exact || reason === "exact_event") {
+    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
+  }
+
+  if (reason === "partial_match") {
+    return urlQuality === "event" || urlQuality === "listing";
+  }
+
+  return false;
+}
+
 export function classifyTicketOption(option: TicketResolutionOption): TicketStrength {
   const score = typeof option.score === "number" ? option.score : 0;
+  const reason = clean(option.reason);
+  const urlQuality = normalizeTicketUrlQuality(option.urlQuality, option.url);
 
-  if (option.exact && score >= 85) return "strong";
-  if (score >= 70) return "medium";
+  if (
+    (option.exact || reason === "exact_event") &&
+    (urlQuality === "event" || urlQuality === "listing") &&
+    score >= 78
+  ) {
+    return "strong";
+  }
+
+  if (
+    reason === "partial_match" &&
+    (urlQuality === "event" || urlQuality === "listing") &&
+    score >= 60
+  ) {
+    return "medium";
+  }
+
+  if (
+    (option.exact || reason === "exact_event") &&
+    urlQuality === "unknown" &&
+    score >= 72
+  ) {
+    return "medium";
+  }
+
   return "weak";
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ticket labels (tightened)                                                   */
+/* Ticket labels                                                              */
 /* -------------------------------------------------------------------------- */
 
 export function ticketUrlQualityLabel(
@@ -110,7 +182,7 @@ export function optionReasonLabel(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Price / display logic (FIXED)                                               */
+/* Price / display logic                                                      */
 /* -------------------------------------------------------------------------- */
 
 export function livePriceLine(item: SavedItem): string | null {
@@ -121,42 +193,49 @@ export function livePriceLine(item: SavedItem): string | null {
     clean(item.metadata?.ticketProvider) || clean(item.partnerId)
   );
 
+  const reason = clean(item.metadata?.resolutionReason);
+  const urlQuality = normalizeTicketUrlQuality(
+    clean(item.metadata?.urlQuality),
+    clean(item.partnerUrl)
+  );
+
   const score =
     typeof item.metadata?.score === "number" ? item.metadata.score : null;
 
   const strength: TicketStrength =
-    score == null
-      ? "weak"
-      : score >= 85
-        ? "strong"
-        : score >= 70
-          ? "medium"
-          : "weak";
+    (Boolean(item.metadata?.exactMatch) || reason === "exact_event") &&
+    (urlQuality === "event" || urlQuality === "listing") &&
+    score != null &&
+    score >= 78
+      ? "strong"
+      : reason === "partial_match" &&
+          (urlQuality === "event" || urlQuality === "listing") &&
+          score != null &&
+          score >= 60
+        ? "medium"
+        : "weak";
 
   if (item.status === "booked") {
     const bookedPrice = clean(item.priceText) || resolvedPrice;
     return bookedPrice ? `Booked • ${bookedPrice}` : "Booked";
   }
 
-  // Strong = normal UX
   if (strength === "strong") {
     if (resolvedPrice && provider) return `From ${resolvedPrice} • ${provider}`;
     if (resolvedPrice) return `From ${resolvedPrice}`;
     if (provider) return `View on ${provider}`;
   }
 
-  // Medium = slight downgrade
   if (strength === "medium") {
     if (resolvedPrice && provider) return `${resolvedPrice} • ${provider}`;
     if (provider) return `Check ${provider}`;
   }
 
-  // Weak = be honest
   return "Check availability";
 }
 
 /* -------------------------------------------------------------------------- */
-/* Resolver failure messaging (IMPROVED)                                       */
+/* Resolver failure messaging                                                 */
 /* -------------------------------------------------------------------------- */
 
 export function ticketResolverFailureMessage(
@@ -182,7 +261,8 @@ export function ticketResolverFailureMessage(
     return "Ticket system not configured.";
   }
 
-  if (resolved.ok && Array.isArray(resolved.options) && resolved.options.length > 0) {
+  const options = Array.isArray(resolved.options) ? resolved.options : [];
+  if (!resolved.ok && options.length > 0) {
     return "Only weaker ticket routes available.";
   }
 
@@ -190,7 +270,7 @@ export function ticketResolverFailureMessage(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Ticket normalization (unchanged core, cleaner intent)                       */
+/* Ticket normalization                                                       */
 /* -------------------------------------------------------------------------- */
 
 export function normalizeTicketOptions(
@@ -212,14 +292,43 @@ export function normalizeTicketOptions(
     const key = `${provider.toLowerCase()}|${url}`;
     const existing = deduped.get(key);
 
-    if (!existing || (option.exact && !existing.exact) || score > existing.score) {
+    if (!existing) {
       deduped.set(key, option);
+      continue;
+    }
+
+    const nextStrength = classifyTicketOption(option);
+    const existingStrength = classifyTicketOption(existing);
+
+    const rank = (value: TicketStrength) =>
+      value === "strong" ? 3 : value === "medium" ? 2 : 1;
+
+    if (rank(nextStrength) > rank(existingStrength)) {
+      deduped.set(key, option);
+      continue;
+    }
+
+    if (rank(nextStrength) === rank(existingStrength)) {
+      if ((option.exact && !existing.exact) || score > existing.score) {
+        deduped.set(key, option);
+      }
     }
   }
 
   return Array.from(deduped.values()).sort((a, b) => {
+    const aStrength = classifyTicketOption(a);
+    const bStrength = classifyTicketOption(b);
+
+    const rank = (value: TicketStrength) =>
+      value === "strong" ? 3 : value === "medium" ? 2 : 1;
+
+    if (rank(aStrength) !== rank(bStrength)) {
+      return rank(bStrength) - rank(aStrength);
+    }
+
     if (a.exact && !b.exact) return -1;
     if (!a.exact && b.exact) return 1;
+
     return b.score - a.score;
   });
 }
