@@ -77,28 +77,6 @@ function formatKickoff(iso?: string | null): string {
   });
 }
 
-function formatTicketPrice(price?: string | null, option?: TicketResolutionOption): string {
-  const p = clean(price);
-  const quality = option ? getOptionUrlQuality(option) : "unknown";
-  const reason = clean(option?.reason);
-
-  if (!p) {
-    return quality === "search" || reason === "search_fallback"
-      ? "Check price on partner"
-      : "View live price";
-  }
-
-  if (/^[£€$]/.test(p)) {
-    return quality === "search" || reason === "search_fallback" ? p : `From ${p}`;
-  }
-
-  if (/^(GBP|EUR|USD)\s/i.test(p)) {
-    return quality === "search" || reason === "search_fallback" ? p : `From ${p}`;
-  }
-
-  return p;
-}
-
 function fixtureDateOnly(iso?: string | null): string {
   const value = clean(iso);
   const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -159,6 +137,7 @@ function providerLabel(provider?: string | null): string {
 
   if (raw === "footballticketsnet") return "FootballTicketNet";
   if (raw === "sportsevents365") return "SportsEvents365";
+  if (raw === "stubhub") return "StubHub";
   if (raw === "gigsberg") return "Gigsberg";
 
   return clean(provider) || "Provider";
@@ -169,7 +148,8 @@ function providerShort(provider?: string | null): string {
 
   if (raw === "footballticketsnet") return "FTN";
   if (raw === "sportsevents365") return "365";
-  if (raw === "gigsberg") return "G";
+  if (raw === "stubhub") return "SH";
+  if (raw === "gigsberg") return "GIG";
 
   return "P";
 }
@@ -193,6 +173,14 @@ function providerBadgeStyle(provider?: string | null) {
     };
   }
 
+  if (raw === "stubhub") {
+    return {
+      borderColor: "rgba(174,120,255,0.35)",
+      backgroundColor: "rgba(174,120,255,0.12)",
+      textColor: "rgba(228,210,255,1)",
+    };
+  }
+
   if (raw === "gigsberg") {
     return {
       borderColor: "rgba(255,200,80,0.35)",
@@ -208,32 +196,17 @@ function providerBadgeStyle(provider?: string | null) {
   };
 }
 
-function reasonLabel(reason?: string | null): string {
-  const raw = clean(reason);
-
-  if (raw === "exact_event") return "Exact fixture match";
-  if (raw === "partial_match") return "Related fixture route";
-  if (raw === "search_fallback") return "Fallback search route";
-
-  return "Ticket result";
-}
-
-function reasonTone(reason?: string | null): MatchStrengthTone {
-  const raw = clean(reason);
-
-  if (raw === "exact_event") return "strong";
-  if (raw === "partial_match") return "medium";
-  return "weak";
-}
-
 function detectUrlQualityFromUrl(url?: string | null): TicketUrlQuality {
   const raw = clean(url);
   if (!raw) return "unknown";
 
   try {
     const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
     const path = parsed.pathname.toLowerCase();
     const query = parsed.search.toLowerCase();
+
+    if (host.includes("sjv.io")) return "search";
 
     const looksSearch =
       path === "/search" ||
@@ -243,7 +216,8 @@ function detectUrlQualityFromUrl(url?: string | null): TicketUrlQuality {
       path.includes("/search-results") ||
       query.includes("q=") ||
       query.includes("query=") ||
-      query.includes("text=");
+      query.includes("text=") ||
+      query.includes("search");
 
     if (looksSearch) return "search";
     if (path.includes("/listing") || path.includes("/listings")) return "listing";
@@ -275,8 +249,26 @@ function getOptionUrlQuality(option: TicketResolutionOption): TicketUrlQuality {
 function urlQualityLabel(value: TicketUrlQuality): string {
   if (value === "event") return "Direct event page";
   if (value === "listing") return "Listing page";
-  if (value === "search") return "Search page";
+  if (value === "search") return "Search fallback";
   return "Unknown route";
+}
+
+function reasonLabel(reason?: string | null): string {
+  const raw = clean(reason);
+
+  if (raw === "exact_event") return "Exact fixture match";
+  if (raw === "partial_match") return "Related fixture route";
+  if (raw === "search_fallback") return "Fallback search route";
+
+  return "Ticket result";
+}
+
+function reasonTone(reason?: string | null): MatchStrengthTone {
+  const raw = clean(reason);
+
+  if (raw === "exact_event") return "strong";
+  if (raw === "partial_match") return "medium";
+  return "weak";
 }
 
 function getOptionRawScore(option: TicketResolutionOption): number | null {
@@ -317,37 +309,73 @@ function isStrongOption(option: TicketResolutionOption): boolean {
   return false;
 }
 
-function summaryHeadline(result: TicketResolutionResult | null, options: TicketResolutionOption[]): string {
-  if (!result && options.length === 0) return "No results loaded";
-  if (options.length === 0) return "No ticket routes found";
-  if (result?.ok) return "Strong ticket route found";
-  return "Only weak fallback routes found";
+function splitOptions(options: TicketResolutionOption[]) {
+  const strong: TicketResolutionOption[] = [];
+  const fallback: TicketResolutionOption[] = [];
+
+  for (const option of options) {
+    if (isStrongOption(option)) strong.push(option);
+    else fallback.push(option);
+  }
+
+  return { strong, fallback };
 }
 
-function summaryBody(result: TicketResolutionResult | null, options: TicketResolutionOption[]): string {
-  if (!result && options.length === 0) {
-    return "Tap Compare tickets to check providers for this fixture.";
+function formatTicketPrice(price?: string | null, option?: TicketResolutionOption): string {
+  const p = clean(price);
+  const quality = option ? getOptionUrlQuality(option) : "unknown";
+  const reason = clean(option?.reason);
+
+  if (!p) {
+    return quality === "search" || reason === "search_fallback"
+      ? "Check price on partner"
+      : "View live price";
   }
 
-  if (options.length === 0) {
-    return "No usable ticket routes were returned for this fixture right now.";
+  if (/^[£€$]/.test(p)) {
+    return quality === "search" || reason === "search_fallback" ? p : `From ${p}`;
   }
 
-  if (result?.ok) {
-    return "These results include at least one stronger route such as an event page or a useful listing page.";
+  if (/^(GBP|EUR|USD)\s/i.test(p)) {
+    return quality === "search" || reason === "search_fallback" ? p : `From ${p}`;
   }
 
-  return "These routes are weaker fallbacks. They may still help, but they should not be treated like a clean direct match.";
+  return p;
 }
 
-function resolverTone(result: TicketResolutionResult | null, options: TicketResolutionOption[]): MatchStrengthTone {
-  if (result?.ok) return "strong";
-  if (options.some((option) => clean(option.reason) === "partial_match")) return "medium";
+function summaryHeadline(result: TicketResolutionResult | null, strongCount: number, fallbackCount: number): string {
+  if (!result && strongCount === 0 && fallbackCount === 0) return "No results loaded";
+  if (strongCount > 0) return "Strong ticket routes found";
+  if (fallbackCount > 0) return "Only fallback ticket routes found";
+  return "No ticket routes found";
+}
+
+function summaryBody(result: TicketResolutionResult | null, strongCount: number, fallbackCount: number): string {
+  if (!result && strongCount === 0 && fallbackCount === 0) {
+    return "Tap Compare tickets to check all available providers for this fixture.";
+  }
+
+  if (strongCount > 0) {
+    return "These include stronger routes like direct event pages or useful listing pages. Fallback marketplaces are shown separately below.";
+  }
+
+  if (fallbackCount > 0) {
+    return "Only weaker fallback routes were found. They may still be useful, but they are not clean direct matches.";
+  }
+
+  return "No usable ticket routes were returned for this fixture right now.";
+}
+
+function resolverTone(result: TicketResolutionResult | null, strongCount: number, fallbackCount: number): MatchStrengthTone {
+  if (result?.ok || strongCount > 0) return "strong";
+  if (fallbackCount > 0) return "weak";
   return "weak";
 }
 
 function ticketCardTone(option: TicketResolutionOption): MatchStrengthTone {
-  if (isStrongOption(option)) return clean(option.reason) === "exact_event" ? "strong" : "medium";
+  if (isStrongOption(option)) {
+    return clean(option.reason) === "exact_event" ? "strong" : "medium";
+  }
   return "weak";
 }
 
@@ -449,6 +477,14 @@ function ResolverBanner({
   );
 }
 
+function SectionBadge({ label }: { label: string }) {
+  return (
+    <View style={styles.sectionBadge}>
+      <Text style={styles.sectionBadgeText}>{label}</Text>
+    </View>
+  );
+}
+
 function TicketCard({
   option,
   isBest,
@@ -531,13 +567,13 @@ function TicketCard({
         {reason === "exact_event"
           ? "This looks like a direct route for the exact fixture."
           : reason === "partial_match"
-            ? "This looks related and may be usable, but it is weaker than a direct exact match."
+            ? "This looks related and may still be useful, but it is weaker than a direct exact match."
             : "This is only a fallback search route. Treat it as a weaker lead, not a clean ticket match."}
       </Text>
 
       {blockedWeakOpen ? (
         <Text style={styles.ticketWarning}>
-          Weak search route only. Use this carefully and verify the fixture on the partner page.
+          Weak search route only. Verify the fixture carefully on the partner page before trusting it.
         </Text>
       ) : null}
 
@@ -547,7 +583,7 @@ function TicketCard({
           : locked
             ? "Start trip to open partner"
             : blockedWeakOpen
-              ? "Open weak fallback route"
+              ? "Open fallback route"
               : "Open ticket partner"}
       </Text>
     </Pressable>
@@ -629,16 +665,12 @@ export default function MatchScreen() {
   );
 
   const allOptions = useMemo(() => ticketResult?.options ?? [], [ticketResult]);
-  const options = useMemo(() => allOptions.slice(0, 3), [allOptions]);
-  const strongOptionCount = useMemo(
-    () => allOptions.filter((option) => isStrongOption(option)).length,
-    [allOptions]
-  );
-  const weakOptionCount = useMemo(
-    () => allOptions.filter((option) => !isStrongOption(option)).length,
-    [allOptions]
-  );
+  const groupedOptions = useMemo(() => splitOptions(allOptions), [allOptions]);
+  const strongOptions = groupedOptions.strong;
+  const fallbackOptions = groupedOptions.fallback;
 
+  const strongOptionCount = strongOptions.length;
+  const weakOptionCount = fallbackOptions.length;
   const ticketsLocked = !clean(tripId);
 
   async function loadTickets() {
@@ -798,9 +830,9 @@ export default function MatchScreen() {
       ? ticketResult.score
       : null;
 
-  const bannerHeadline = summaryHeadline(ticketResult, allOptions);
-  const bannerBody = summaryBody(ticketResult, allOptions);
-  const bannerTone = resolverTone(ticketResult, allOptions);
+  const bannerHeadline = summaryHeadline(ticketResult, strongOptionCount, weakOptionCount);
+  const bannerBody = summaryBody(ticketResult, strongOptionCount, weakOptionCount);
+  const bannerTone = resolverTone(ticketResult, strongOptionCount, weakOptionCount);
 
   return (
     <Background imageUrl={imageUrl} imageSource={imageSource} overlayOpacity={0.14}>
@@ -866,8 +898,8 @@ export default function MatchScreen() {
                 <Text style={styles.sectionTitle}>Tickets</Text>
                 <Text style={styles.sectionSub}>
                   {ticketsLocked
-                    ? "You can compare routes here, but open partners from a trip if you want booking tracking in Wallet."
-                    : "These routes are ranked by match strength and route quality. Strong routes are better than fallback search pages."}
+                    ? "You can compare the full marketplace spread here, but open partners from a trip if you want booking tracking in Wallet."
+                    : "Stronger routes are shown first. Fallback marketplaces are still shown, but clearly marked so the user is not misled."}
                 </Text>
               </View>
             </View>
@@ -894,13 +926,13 @@ export default function MatchScreen() {
                   </View>
 
                   <View style={styles.resolverSummaryRow}>
-                    <Text style={styles.resolverSummaryLabel}>Route strength</Text>
+                    <Text style={styles.resolverSummaryLabel}>Route mix</Text>
                     <Text style={styles.resolverSummaryValue}>
                       {strongOptionCount > 0
                         ? `${strongOptionCount} stronger route${strongOptionCount === 1 ? "" : "s"}`
                         : "No stronger routes"}
                       {weakOptionCount > 0
-                        ? ` • ${weakOptionCount} weak fallback${weakOptionCount === 1 ? "" : "s"}`
+                        ? ` • ${weakOptionCount} fallback marketplace${weakOptionCount === 1 ? "" : "s"}`
                         : ""}
                     </Text>
                   </View>
@@ -920,28 +952,62 @@ export default function MatchScreen() {
               </>
             ) : null}
 
-            {options.length > 0 ? (
-              <View style={styles.ticketList}>
-                {options.map((option, index) => (
-                  <TicketCard
-                    key={`${option.provider}-${option.url}-${index}`}
-                    option={option}
-                    isBest={index === 0}
-                    loading={openingUrl === option.url}
-                    locked={ticketsLocked}
-                    onPress={() => openTicket(option)}
-                  />
-                ))}
+            {strongOptions.length > 0 ? (
+              <View style={styles.ticketSection}>
+                <View style={styles.ticketSectionHeader}>
+                  <Text style={styles.ticketSectionTitle}>Best routes</Text>
+                  <SectionBadge label={`${strongOptions.length}`} />
+                </View>
+
+                <View style={styles.ticketList}>
+                  {strongOptions.map((option, index) => (
+                    <TicketCard
+                      key={`strong-${option.provider}-${option.url}-${index}`}
+                      option={option}
+                      isBest={index === 0}
+                      loading={openingUrl === option.url}
+                      locked={ticketsLocked}
+                      onPress={() => openTicket(option)}
+                    />
+                  ))}
+                </View>
               </View>
-            ) : (
+            ) : null}
+
+            {fallbackOptions.length > 0 ? (
+              <View style={styles.ticketSection}>
+                <View style={styles.ticketSectionHeader}>
+                  <Text style={styles.ticketSectionTitle}>More marketplaces</Text>
+                  <SectionBadge label={`${fallbackOptions.length}`} />
+                </View>
+
+                <Text style={styles.fallbackIntro}>
+                  These are weaker routes. They can still be useful for coverage, but they are not as trustworthy as direct event or listing matches.
+                </Text>
+
+                <View style={styles.ticketList}>
+                  {fallbackOptions.map((option, index) => (
+                    <TicketCard
+                      key={`fallback-${option.provider}-${option.url}-${index}`}
+                      option={option}
+                      isBest={false}
+                      loading={openingUrl === option.url}
+                      locked={ticketsLocked}
+                      onPress={() => openTicket(option)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {strongOptions.length === 0 && fallbackOptions.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyTitle}>No ticket routes loaded yet</Text>
                 <Text style={styles.emptyText}>
-                  Tap “Compare tickets” first. The screen will then show whether the resolver found
-                  a strong direct route, a related listing, or only weak fallback searches.
+                  Tap “Compare tickets” first. This screen now shows the full provider spread instead of hiding marketplaces behind a top-3 cut.
                 </Text>
               </View>
-            )}
+            ) : null}
           </GlassCard>
 
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
@@ -1254,6 +1320,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: theme.fontWeight.semibold,
+  },
+
+  ticketSection: {
+    gap: 10,
+  },
+
+  ticketSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 2,
+  },
+
+  ticketSectionTitle: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  sectionBadge: {
+    minWidth: 28,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  sectionBadgeText: {
+    color: theme.colors.textPrimary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  fallbackIntro: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.medium,
   },
 
   ticketList: {
