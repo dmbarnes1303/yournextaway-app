@@ -177,7 +177,10 @@ async function loadLastClickOnce(): Promise<void> {
 
     const itemId = cleanString(record.itemId);
     const tripId = cleanString(record.tripId);
-    const partnerId = getCanonicalPartnerId(cleanString(record.partnerId));
+    const canonicalPartnerRaw = cleanString(record.partnerId);
+    if (!canonicalPartnerRaw) return;
+
+    const partnerId = getCanonicalPartnerId(canonicalPartnerRaw);
     const partnerCategory = getPartner(partnerId).primaryCategory;
 
     const rawSavedItemType = cleanString(record.savedItemType);
@@ -282,12 +285,10 @@ function buildDefaultTitle(args: {
   type: SavedItemType;
   metadata?: Record<string, unknown>;
 }): string {
+  const metadata = args.metadata as Record<string, unknown> | undefined;
+
   const city =
-    cleanString(
-      (args.metadata as Record<string, unknown> | undefined)?.city ??
-        (args.metadata as Record<string, unknown> | undefined)?.destination ??
-        (args.metadata as Record<string, unknown> | undefined)?.place
-    ) || null;
+    cleanString(metadata?.city ?? metadata?.destination ?? metadata?.place) || null;
 
   const label = getSavedItemTypeLabel(args.type);
 
@@ -516,7 +517,8 @@ export async function beginPartnerClick(args: {
   }
 
   const itemForOpen = getItemById(item.id) ?? item;
-  const isTrackedPending = !isUtilityPartner(canonicalPartnerId) && itemForOpen.status === "pending";
+  const isTrackedPending =
+    !isUtilityPartner(canonicalPartnerId) && itemForOpen.status === "pending";
   const clickAt = now();
 
   if (isTrackedPending) {
@@ -634,4 +636,4 @@ export function __unsafeResetPartnerClickStateForDevOnly(): void {
   lastReturnHandledAt = 0;
   lastClickLoaded = false;
   void clearLastClickState();
-}
+      }
