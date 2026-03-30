@@ -1,6 +1,7 @@
 export type TicketProviderId =
   | "footballticketsnet"
   | "sportsevents365"
+  | "stubhub"
   | "gigsberg";
 
 export type TicketResolveReason =
