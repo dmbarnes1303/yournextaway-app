@@ -95,10 +95,24 @@ function appendQuery(
   return `${safeBase}${joiner}${qs}`;
 }
 
+function trackedOrFallbackUrl(
+  trackedValue: unknown,
+  fallback: string | null = null
+): string | null {
+  return safeUrl(trackedValue) || safeUrl(fallback);
+}
+
 function buildMapsSearchUrl(query: string): string | null {
   const q = clean(query);
   if (!q) return null;
-  return `https://www.google.com/maps/search/?api=1&query=${enc(q)}`;
+
+  const base =
+    trackedOrFallbackUrl(AffiliateConfig.googleMapsBase) ||
+    trackedOrFallbackUrl("https://www.google.com/maps/search/?api=1");
+
+  if (!base) return null;
+
+  return appendQuery(base, { query: q });
 }
 
 function normalizeOriginIata(value: unknown): string {
@@ -109,13 +123,6 @@ function normalizeOriginIata(value: unknown): string {
 function resolveDestinationIata(city: string): string | null {
   const resolved = clean(getIataCityCodeForCity(city)).toUpperCase();
   return /^[A-Z]{3}$/.test(resolved) ? resolved : null;
-}
-
-function trackedOrFallbackUrl(
-  trackedValue: unknown,
-  fallback: string | null = null
-): string | null {
-  return safeUrl(trackedValue) || safeUrl(fallback);
 }
 
 function buildFlightsUrl(args: {
@@ -208,10 +215,7 @@ function buildOmioUrl(args: {
   });
 }
 
-function buildTransfersUrl(args: {
-  city: string;
-  date: string | null;
-}): string | null {
+function buildTransfersUrl(args: { city: string; date: string | null }): string | null {
   const city = clean(args.city);
   if (!city) return null;
 
@@ -252,16 +256,26 @@ function buildExperiencesUrl(city: string): string | null {
   return `https://www.getyourguide.com/s/?q=${enc(cityName)}&partner_id=${enc(partnerId)}`;
 }
 
+/**
+ * Insurance is intentionally disabled here.
+ *
+ * Reason:
+ * - insurance partners are not live in the current commercial system
+ * - returning fallback/base URLs here would keep a fake-live path alive
+ */
 function buildInsuranceUrl(): string | null {
-  return trackedOrFallbackUrl(AffiliateConfig.ektaTracked);
+  return null;
 }
 
+/**
+ * Claims are intentionally disabled here.
+ *
+ * Reason:
+ * - claim partners are not live in the current commercial system
+ * - returning fallback/base URLs here would keep placeholder architecture exposed
+ */
 function buildClaimsUrl(): string | null {
-  return (
-    trackedOrFallbackUrl(AffiliateConfig.airhelpTracked) ||
-    trackedOrFallbackUrl(AffiliateConfig.compensairTracked) ||
-    null
-  );
+  return null;
 }
 
 export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffiliateLinks {
