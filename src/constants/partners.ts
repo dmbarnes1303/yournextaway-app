@@ -151,6 +151,10 @@ function unique<T>(items: readonly T[]): T[] {
  * Validation scripts in this repo inspect these exact keys directly.
  * Keep required keys present and non-empty.
  * Optional/deprecated integrations can remain present for migration coverage.
+ *
+ * Important:
+ * - A non-empty config value does NOT automatically mean the partner is live.
+ * - Empty values here are compatibility placeholders only.
  */
 export const AffiliateConfig = {
   // Flights
@@ -212,7 +216,8 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "footballticketnetTracked",
     fallback: {
       mode: "partner_fallback",
-      reason: "Use other ticket marketplaces if direct routing is unavailable.",
+      reason:
+        "Operational ticket marketplace fallback. Reachable in app, but not currently affiliate-wired.",
       partnerIds: ["sportsevents365", "stubhub", "gigsberg"],
       baseUrl: "https://www.footballticketnet.com/",
     },
@@ -252,7 +257,8 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "stubhubTracked",
     fallback: {
       mode: "partner_fallback",
-      reason: "Affiliate fallback ticket marketplace when direct marketplace matches are weak or unavailable.",
+      reason:
+        "Affiliate fallback ticket marketplace when direct marketplace matches are weak or unavailable.",
       partnerIds: ["sportsevents365", "footballticketnet", "gigsberg"],
       baseUrl: "https://stubhubinternational.sjv.io/xJJoL5",
     },
@@ -269,7 +275,8 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "gigsbergTracked",
     fallback: {
       mode: "partner_fallback",
-      reason: "Fallback ticket marketplace.",
+      reason:
+        "Operational ticket marketplace fallback. Reachable in app, but not currently affiliate-wired.",
       partnerIds: ["sportsevents365", "footballticketnet", "stubhub"],
       baseUrl: "https://www.gigsberg.com/",
     },
@@ -350,7 +357,7 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "welcomepickupsTracked",
     fallback: {
       mode: "generic_search",
-      reason: "Compatibility fallback partner for transfers.",
+      reason: "Compatibility-only transfer partner. Not currently live in app.",
       baseUrl: "https://www.welcomepickups.com/",
     },
   },
@@ -359,14 +366,15 @@ export const PARTNER_REGISTRY = [
     display: { name: "EKTA", badgeText: "EK" },
     categories: ["insurance"],
     primaryCategory: "insurance",
-    live: true,
-    capabilities: { affiliate: true, api: false, utility: false, internal: false },
+    live: false,
+    capabilities: { affiliate: false, api: false, utility: false, internal: false },
     aliases: ["ekta"],
     baseUrl: "https://ektatraveling.com/",
     trackedConfigKey: "ektaTracked",
     fallback: {
       mode: "generic_search",
-      reason: "Use generic insurance landing if no tracked route is available.",
+      reason:
+        "Compatibility-only insurance placeholder. Do not treat as live until real outbound tracking is wired.",
       baseUrl: "https://ektatraveling.com/",
     },
   },
@@ -382,7 +390,7 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "safetywingTracked",
     fallback: {
       mode: "partner_fallback",
-      reason: "Kept for compatibility only; route insurance traffic to EKTA.",
+      reason: "Compatibility-only legacy insurance partner.",
       partnerIds: ["ekta"],
       baseUrl: "https://safetywing.com/",
     },
@@ -398,7 +406,7 @@ export const PARTNER_REGISTRY = [
     baseUrl: "https://www.getyourguide.com/",
     fallback: {
       mode: "partner_fallback",
-      reason: "Primary things-to-do partner; other discovery providers remain optional fallback.",
+      reason: "Primary things-to-do partner; other providers are compatibility-only placeholders.",
       partnerIds: ["tiqets", "klook", "wegotrip"],
       baseUrl: "https://www.getyourguide.com/",
     },
@@ -466,7 +474,7 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "airhelpTracked",
     fallback: {
       mode: "partner_fallback",
-      reason: "Compatibility claim provider.",
+      reason: "Compatibility-only claim provider. Not live in app.",
       partnerIds: ["compensair"],
       baseUrl: "https://www.airhelp.com/",
     },
@@ -483,7 +491,7 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "compensairTracked",
     fallback: {
       mode: "partner_fallback",
-      reason: "Compatibility claim provider.",
+      reason: "Compatibility-only claim provider. Not live in app.",
       partnerIds: ["airhelp"],
       baseUrl: "https://compensair.com/",
     },
