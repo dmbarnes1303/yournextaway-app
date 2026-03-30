@@ -1,6 +1,10 @@
-import { AffiliateConfig } from "@/src/constants/partners";
+import {
+  AffiliateConfig,
+  getCanonicalPartnerId,
+  getPartnerOrNull,
+  type PartnerId,
+} from "@/src/constants/partners";
 import { buildAffiliateLinks, type CabinClass } from "@/src/services/affiliateLinks";
-import { getCanonicalPartnerId, getPartnerOrNull } from "@/src/core/partners";
 
 type ResolveAffiliateContext = {
   city: string;
@@ -24,18 +28,22 @@ function safeUrl(value: unknown): string {
   if (!url) return "";
 
   try {
-    return new URL(url).toString();
+    const parsed = new URL(url);
+    if (!/^https?:$/i.test(parsed.protocol)) return "";
+    return parsed.toString();
   } catch {
     return "";
   }
 }
 
-function getResolvedPartnerId(partnerId: string): string {
+function getResolvedPartnerId(partnerId: string): PartnerId | "" {
   const rawId = clean(partnerId).toLowerCase();
   if (!rawId) return "";
 
   const partner = getPartnerOrNull(rawId);
-  return partner ? getCanonicalPartnerId(partner.id) : rawId;
+  if (!partner) return "";
+
+  return getCanonicalPartnerId(partner.id);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -105,7 +113,10 @@ export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
 /* Ticket helpers                                                             */
 /* -------------------------------------------------------------------------- */
 
-export function buildTicketLink(args: { eventUrl: string; partnerId?: string | null }): string | null {
+export function buildTicketLink(args: {
+  eventUrl: string;
+  partnerId?: string | null;
+}): string | null {
   const eventUrl = clean(args.eventUrl);
   const partnerId = clean(args.partnerId) || "sportsevents365";
 
@@ -152,9 +163,6 @@ export function resolveAffiliateUrl(
 
     case "omio":
       return clean(links.transportUrl) || null;
-
-    case "safetywing":
-      return clean(links.insuranceUrl) || null;
 
     case "sportsevents365": {
       const direct = clean(links.ticketsUrl);
