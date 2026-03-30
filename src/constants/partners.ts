@@ -47,6 +47,7 @@ export const CANONICAL_PARTNER_IDS = [
   // Tickets
   "footballticketnet",
   "sportsevents365",
+  "stubhub",
   "gigsberg",
 
   // Flights
@@ -170,6 +171,7 @@ export const AffiliateConfig = {
   // Tickets
   sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=yna",
   footballticketnetTracked: "",
+  stubhubTracked: "https://stubhubinternational.sjv.io/xJJoL5",
   gigsbergTracked: "",
 
   // Things
@@ -211,7 +213,7 @@ export const PARTNER_REGISTRY = [
     fallback: {
       mode: "partner_fallback",
       reason: "Use other ticket marketplaces if direct routing is unavailable.",
-      partnerIds: ["sportsevents365", "gigsberg"],
+      partnerIds: ["sportsevents365", "stubhub", "gigsberg"],
       baseUrl: "https://www.footballticketnet.com/",
     },
   },
@@ -228,8 +230,31 @@ export const PARTNER_REGISTRY = [
     fallback: {
       mode: "partner_fallback",
       reason: "Fallback to other live ticket providers if needed.",
-      partnerIds: ["footballticketnet", "gigsberg"],
+      partnerIds: ["footballticketnet", "stubhub", "gigsberg"],
       baseUrl: "https://www.sportsevents365.com/",
+    },
+  },
+  {
+    id: "stubhub",
+    display: { name: "StubHub International", badgeText: "SH" },
+    categories: ["tickets"],
+    primaryCategory: "tickets",
+    live: true,
+    capabilities: { affiliate: true, api: false, utility: false, internal: false },
+    aliases: [
+      "stubhub",
+      "stubhub_international",
+      "stubhub-international",
+      "stubhubinternational",
+      "sh",
+    ],
+    baseUrl: "https://stubhubinternational.sjv.io/xJJoL5",
+    trackedConfigKey: "stubhubTracked",
+    fallback: {
+      mode: "partner_fallback",
+      reason: "Affiliate fallback ticket marketplace when direct marketplace matches are weak or unavailable.",
+      partnerIds: ["sportsevents365", "footballticketnet", "gigsberg"],
+      baseUrl: "https://stubhubinternational.sjv.io/xJJoL5",
     },
   },
   {
@@ -245,7 +270,7 @@ export const PARTNER_REGISTRY = [
     fallback: {
       mode: "partner_fallback",
       reason: "Fallback ticket marketplace.",
-      partnerIds: ["sportsevents365", "footballticketnet"],
+      partnerIds: ["sportsevents365", "footballticketnet", "stubhub"],
       baseUrl: "https://www.gigsberg.com/",
     },
   },
