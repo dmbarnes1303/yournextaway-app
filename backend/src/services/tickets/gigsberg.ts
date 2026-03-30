@@ -8,50 +8,89 @@ type GigsbergEvent = {
   event_name?: string;
   date?: string;
   event_date?: string;
+  time?: string;
   city?: string;
   venue?: string;
   venue_name?: string;
   country?: string;
   country_name?: string;
+  performer1?: string;
+  performer2?: string;
   type?: string;
   type_name?: string;
   subtype?: string;
   subtype_name?: string;
+  active?: number | boolean;
 };
 
-type GigsbergEventsResponse = {
-  data?: GigsbergEvent[];
-  items?: GigsbergEvent[];
-  total?: number;
-  nextPage?: string | number | null;
-  prevPage?: string | number | null;
-  lastPage?: string | number | null;
-};
+type GigsbergEventsResponse =
+  | {
+      data?: GigsbergEvent[];
+      items?: GigsbergEvent[];
+      total?: number;
+      nextPage?: string | number | null;
+      prevPage?: string | number | null;
+      lastPage?: string | number | null;
+    }
+  | GigsbergEvent[]
+  | null;
 
 type GigsbergListing = {
   id?: number | string;
   listing_id?: number | string;
   event_id?: number | string;
-  block?: string;
+  event?: string;
   category?: string;
-  split_type?: string;
+  category_id?: number | string;
+  block?: string;
+  row?: string;
   quantity?: number | string;
+  price?: number | string;
   total_price?: number | string;
   totalPrice?: number | string;
-  price?: number | string;
   price_per_ticket?: number | string;
   currency?: string;
   currency_code?: string;
+  split_type?: string;
+  active?: number | boolean;
 };
 
-type GigsbergListingsResponse = {
-  data?: GigsbergListing[];
-  items?: GigsbergListing[];
-  total?: number;
-  nextPage?: string | number | null;
-  prevPage?: string | number | null;
-  lastPage?: string | number | null;
-};
+type GigsbergListingsResponse =
+  | {
+      data?: GigsbergListing[];
+      items?: GigsbergListing[];
+      total?: number;
+      nextPage?: string | number | null;
+      prevPage?: string | number | null;
+      lastPage?: string | number | null;
+    }
+  | GigsbergListing[]
+  | null;
+
+type GigsbergMarketDataResponse =
+  | {
+      object?: {
+        min_price?: number | string;
+        lowest_price?: number | string;
+        avg_price?: number | string;
+        median_price?: number | string;
+        currency?: string;
+        currency_code?: string;
+        listings_count?: number | string;
+        tickets_count?: number | string;
+      };
+      data?: {
+        min_price?: number | string;
+        lowest_price?: number | string;
+        avg_price?: number | string;
+        median_price?: number | string;
+        currency?: string;
+        currency_code?: string;
+        listings_count?: number | string;
+        tickets_count?: number | string;
+      };
+    }
+  | null;
 
 type ScoredEvent = {
   ev: GigsbergEvent;
@@ -61,26 +100,25 @@ type ScoredEvent = {
   reasons: string[];
 };
 
-const GIGSBERG_FETCH_TIMEOUT_MS = 6500;
-const EVENTS_PER_PAGE = 25;
-const LISTINGS_PER_PAGE = 20;
+type ScoredListing = {
+  listing: GigsbergListing;
+  score: number;
+};
+
+const GIGSBERG_FETCH_TIMEOUT_MS = 7000;
+const EVENTS_PER_PAGE = 30;
+const LISTINGS_PER_PAGE = 30;
 
 const MIN_PUBLIC_FALLBACK_SCORE = 18;
 const GIGSBERG_MIN_STRONG_EVENT_SCORE = 72;
 const GIGSBERG_MIN_EXACT_EVENT_SCORE = 95;
 const GIGSBERG_SEARCH_FALLBACK_PENALTY = 42;
-const GIGSBERG_LISTING_BONUS_CAP = 10;
+const GIGSBERG_LISTING_BONUS_CAP = 12;
+const GIGSBERG_MARKETDATA_BONUS_CAP = 8;
 
-const EVENT_ENDPOINT_PATHS = [
-  "/search/events",
-  "/events/search",
-  "/event/search",
-] as const;
-
-const LISTING_ENDPOINT_PATHS = [
-  "/search/listings",
-  "/listings/search",
-] as const;
+const EVENT_SEARCH_PATH = "/event/search";
+const LISTING_SEARCH_PATH = "/listing/search";
+const MARKET_DATA_PATH = "/listing/market-data";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -115,13 +153,13 @@ function addDays(date: Date, days: number): Date {
   return copy;
 }
 
-function buildDateWindow(kickoffIso: string): { dateFrom?: string; dateTo?: string } {
+function buildDateWindow(kickoffIso: string): { from?: string; to?: string } {
   const kickoff = safeDate(kickoffIso);
   if (!kickoff) return {};
 
   return {
-    dateFrom: formatYmd(addDays(kickoff, -2)),
-    dateTo: formatYmd(addDays(kickoff, 2)),
+    from: formatYmd(addDays(kickoff, -2)),
+    to: formatYmd(addDays(kickoff, 2)),
   };
 }
 
@@ -141,6 +179,22 @@ function uniqueStrings(values: string[]): string[] {
   }
 
   return out;
+}
+
+function toNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+
+  const raw = clean(v);
+  if (!raw) return null;
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toPositiveInt(v: unknown, fallback: number): number {
+  const parsed = toNumber(v);
+  if (parsed == null || parsed <= 0) return fallback;
+  return Math.floor(parsed);
 }
 
 function eventId(ev: GigsbergEvent): string {
@@ -175,6 +229,14 @@ function eventSubtype(ev: GigsbergEvent): string {
   return clean(ev.subtype_name) || clean(ev.subtype);
 }
 
+function eventPerformer1(ev: GigsbergEvent): string {
+  return clean(ev.performer1);
+}
+
+function eventPerformer2(ev: GigsbergEvent): string {
+  return clean(ev.performer2);
+}
+
 function listingId(listing: GigsbergListing): string {
   return clean(listing.id) || clean(listing.listing_id);
 }
@@ -183,18 +245,8 @@ function listingEventId(listing: GigsbergListing): string {
   return clean(listing.event_id);
 }
 
-function numberFromUnknown(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-
-  const raw = clean(v);
-  if (!raw) return null;
-
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function listingQuantity(listing: GigsbergListing): number | null {
-  return numberFromUnknown(listing.quantity);
+  return toNumber(listing.quantity);
 }
 
 function listingCurrency(listing: GigsbergListing): string {
@@ -203,10 +255,10 @@ function listingCurrency(listing: GigsbergListing): string {
 
 function listingPriceValue(listing: GigsbergListing): number | null {
   return (
-    numberFromUnknown(listing.total_price) ??
-    numberFromUnknown(listing.totalPrice) ??
-    numberFromUnknown(listing.price_per_ticket) ??
-    numberFromUnknown(listing.price) ??
+    toNumber(listing.price) ??
+    toNumber(listing.price_per_ticket) ??
+    toNumber(listing.total_price) ??
+    toNumber(listing.totalPrice) ??
     null
   );
 }
@@ -218,6 +270,30 @@ function listingPriceText(listing: GigsbergListing): string | null {
   if (value == null && !currency) return null;
   if (value != null && currency) return `${value} ${currency}`.trim();
   if (value != null) return String(value);
+  return currency || null;
+}
+
+function marketDataMinPriceText(data: GigsbergMarketDataResponse): string | null {
+  const obj =
+    (data && typeof data === "object" && "object" in data && data.object) ||
+    (data && typeof data === "object" && "data" in data && data.data) ||
+    null;
+
+  if (!obj || typeof obj !== "object") return null;
+
+  const price =
+    toNumber((obj as any).min_price) ??
+    toNumber((obj as any).lowest_price) ??
+    null;
+
+  const currency =
+    clean((obj as any).currency_code) ||
+    clean((obj as any).currency) ||
+    "";
+
+  if (price == null && !currency) return null;
+  if (price != null && currency) return `${price} ${currency}`.trim();
+  if (price != null) return String(price);
   return currency || null;
 }
 
@@ -258,20 +334,62 @@ function buildEventSearchUrl(eventNameValue: string): string {
   return url.toString();
 }
 
-function buildEventSearchNames(input: TicketResolveInput): string[] {
+function buildEventSearchBodies(input: TicketResolveInput): Array<Record<string, unknown>> {
   const preferredHome = getPreferredTeamName(input.homeName);
   const preferredAway = getPreferredTeamName(input.awayName);
   const rawHome = clean(input.homeName);
   const rawAway = clean(input.awayName);
+  const league = clean(input.leagueName);
+  const dateWindow = buildDateWindow(input.kickoffIso);
 
-  return uniqueStrings([
+  const keywordQueries = uniqueStrings([
     `${preferredHome} vs ${preferredAway}`,
     `${preferredHome} ${preferredAway}`,
     `${rawHome} vs ${rawAway}`,
     `${rawHome} ${rawAway}`,
-    preferredHome,
-    preferredAway,
+    league ? `${preferredHome} vs ${preferredAway} ${league}` : "",
+    league ? `${rawHome} vs ${rawAway} ${league}` : "",
   ]);
+
+  const bodies: Array<Record<string, unknown>> = [];
+
+  for (const keyword of keywordQueries) {
+    bodies.push({
+      page: 1,
+      per_page: EVENTS_PER_PAGE,
+      keyword,
+      future_events_only: true,
+      date: {
+        from: dateWindow.from,
+        to: dateWindow.to,
+      },
+    });
+  }
+
+  bodies.push({
+    page: 1,
+    per_page: EVENTS_PER_PAGE,
+    performer1: preferredHome,
+    performer2: preferredAway,
+    future_events_only: true,
+    date: {
+      from: dateWindow.from,
+      to: dateWindow.to,
+    },
+  });
+
+  bodies.push({
+    page: 1,
+    per_page: EVENTS_PER_PAGE,
+    name: `${preferredHome} vs ${preferredAway}`,
+    future_events_only: true,
+    date: {
+      from: dateWindow.from,
+      to: dateWindow.to,
+    },
+  });
+
+  return bodies;
 }
 
 function textContainsVariant(name: string, variant: string): boolean {
@@ -315,24 +433,14 @@ function isBadVariant(name: string): boolean {
 }
 
 function containsTeamsLoose(
-  name: string,
+  text: string,
   homeVariants: string[],
   awayVariants: string[]
 ): boolean {
-  const n = norm(name);
+  const n = norm(text);
   const hasHome = homeVariants.some((home) => n.includes(norm(home)));
   const hasAway = awayVariants.some((away) => n.includes(norm(away)));
   return hasHome && hasAway;
-}
-
-function exactNameMatch(ev: GigsbergEvent, input: TicketResolveInput): boolean {
-  const name = eventName(ev);
-  if (!name || isBadVariant(name)) return false;
-
-  const homeVariants = expandTeamAliases(input.homeName);
-  const awayVariants = expandTeamAliases(input.awayName);
-
-  return containsTeamsLoose(name, homeVariants, awayVariants);
 }
 
 function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): ScoredEvent {
@@ -355,7 +463,17 @@ function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): ScoredEvent {
     };
   }
 
-  const exactTeams = containsTeamsLoose(name, homeVariants, awayVariants);
+  const joinedText = [
+    eventName(ev),
+    eventPerformer1(ev),
+    eventPerformer2(ev),
+    eventVenue(ev),
+    eventCity(ev),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const exactTeams = containsTeamsLoose(joinedText, homeVariants, awayVariants);
 
   if (!exactTeams) {
     return {
@@ -367,8 +485,19 @@ function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): ScoredEvent {
     };
   }
 
-  score += 56;
+  score += 58;
   reasons.push("teams_matched");
+
+  const perf1 = eventPerformer1(ev);
+  const perf2 = eventPerformer2(ev);
+
+  if (perf1 && perf2) {
+    const perfText = `${perf1} ${perf2}`;
+    if (containsTeamsLoose(perfText, homeVariants, awayVariants)) {
+      score += 10;
+      reasons.push("performers_match");
+    }
+  }
 
   let sameDay = false;
   if (kickoff && evDt) {
@@ -393,14 +522,25 @@ function scoreEvent(ev: GigsbergEvent, input: TicketResolveInput): ScoredEvent {
   }
 
   const typeText = `${eventType(ev)} ${eventSubtype(ev)}`.toLowerCase();
-  if (typeText.includes("football")) {
+  if (typeText.includes("football") || typeText.includes("soccer")) {
     score += 6;
     reasons.push("football_type_hint");
   }
 
-  if (eventVenue(ev)) score += 2;
-  if (eventCity(ev)) score += 1;
-  if (eventCountry(ev)) score += 1;
+  if (eventVenue(ev)) {
+    score += 2;
+    reasons.push("has_venue");
+  }
+
+  if (eventCity(ev)) {
+    score += 1;
+    reasons.push("has_city");
+  }
+
+  if (eventCountry(ev)) {
+    score += 1;
+    reasons.push("has_country");
+  }
 
   return {
     ev,
@@ -427,6 +567,7 @@ function scoreListing(listing: GigsbergListing): number {
   const block = clean(listing.block);
   const category = clean(listing.category);
   const splitType = clean(listing.split_type);
+  const active = listing.active;
 
   if (listingId(listing)) score += 3;
   if (listingEventId(listing)) score += 3;
@@ -440,12 +581,43 @@ function scoreListing(listing: GigsbergListing): number {
   if (block) score += 2;
   if (category) score += 2;
 
+  if (active === true || String(active) === "1") {
+    score += 2;
+  }
+
   if (splitType) {
-    if (norm(splitType).includes("avoid")) score -= 3;
-    if (norm(splitType).includes("none")) score += 1;
+    const split = norm(splitType);
+    if (split.includes("avoid")) score -= 3;
+    if (split.includes("none")) score += 1;
+    if (split.includes("pairs")) score += 2;
   }
 
   return Math.min(GIGSBERG_LISTING_BONUS_CAP, score);
+}
+
+function scoreMarketData(data: GigsbergMarketDataResponse): number {
+  const obj =
+    (data && typeof data === "object" && "object" in data && data.object) ||
+    (data && typeof data === "object" && "data" in data && data.data) ||
+    null;
+
+  if (!obj || typeof obj !== "object") return 0;
+
+  let score = 0;
+
+  const minPrice =
+    toNumber((obj as any).min_price) ??
+    toNumber((obj as any).lowest_price) ??
+    null;
+
+  const listingsCount = toNumber((obj as any).listings_count);
+  const ticketsCount = toNumber((obj as any).tickets_count);
+
+  if (minPrice != null && minPrice > 0) score += 4;
+  if (listingsCount != null && listingsCount > 0) score += 2;
+  if (ticketsCount != null && ticketsCount > 0) score += 2;
+
+  return Math.min(GIGSBERG_MARKETDATA_BONUS_CAP, score);
 }
 
 function summarizeEvent(ev: GigsbergEvent) {
@@ -453,6 +625,8 @@ function summarizeEvent(ev: GigsbergEvent) {
     id: eventId(ev) || null,
     name: eventName(ev) || null,
     date: eventDate(ev) || null,
+    performer1: eventPerformer1(ev) || null,
+    performer2: eventPerformer2(ev) || null,
     venue: eventVenue(ev) || null,
     city: eventCity(ev) || null,
     country: eventCountry(ev) || null,
@@ -465,16 +639,27 @@ function summarizeListing(listing: GigsbergListing) {
   return {
     id: listingId(listing) || null,
     eventId: listingEventId(listing) || null,
+    event: clean(listing.event) || null,
     quantity: listingQuantity(listing),
     priceText: listingPriceText(listing),
     block: clean(listing.block) || null,
     category: clean(listing.category) || null,
     splitType: clean(listing.split_type) || null,
+    active: listing.active ?? null,
   };
 }
 
 function eventDedupKey(ev: GigsbergEvent): string {
-  return [eventId(ev), eventName(ev), eventDate(ev), eventVenue(ev)].join("|").toLowerCase();
+  return [
+    eventId(ev),
+    eventName(ev),
+    eventDate(ev),
+    eventVenue(ev),
+    eventPerformer1(ev),
+    eventPerformer2(ev),
+  ]
+    .join("|")
+    .toLowerCase();
 }
 
 function dedupeEvents(events: GigsbergEvent[]): GigsbergEvent[] {
@@ -491,15 +676,43 @@ function dedupeEvents(events: GigsbergEvent[]): GigsbergEvent[] {
   return Array.from(map.values());
 }
 
-function extractEvents(parsed: GigsbergEventsResponse | null): GigsbergEvent[] {
+function dedupeListings(listings: GigsbergListing[]): GigsbergListing[] {
+  const map = new Map<string, GigsbergListing>();
+
+  for (const listing of listings) {
+    const key = [
+      listingId(listing),
+      listingEventId(listing),
+      clean(listing.block),
+      clean(listing.row),
+      clean(listing.category),
+      String(listingQuantity(listing) ?? ""),
+      String(listingPriceValue(listing) ?? ""),
+      clean(listingCurrency(listing)),
+    ]
+      .join("|")
+      .toLowerCase();
+
+    if (!key.replace(/\|/g, "")) continue;
+    if (!map.has(key)) {
+      map.set(key, listing);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+function extractEvents(parsed: GigsbergEventsResponse): GigsbergEvent[] {
   if (!parsed) return [];
+  if (Array.isArray(parsed)) return parsed;
   if (Array.isArray(parsed.data)) return parsed.data;
   if (Array.isArray(parsed.items)) return parsed.items;
   return [];
 }
 
-function extractListings(parsed: GigsbergListingsResponse | null): GigsbergListing[] {
+function extractListings(parsed: GigsbergListingsResponse): GigsbergListing[] {
   if (!parsed) return [];
+  if (Array.isArray(parsed)) return parsed;
   if (Array.isArray(parsed.data)) return parsed.data;
   if (Array.isArray(parsed.items)) return parsed.items;
   return [];
@@ -518,6 +731,7 @@ async function fetchWithTimeout(
       signal: controller.signal,
       headers: {
         Accept: "application/json",
+        "Content-Type": "application/json",
         "x-api-key": env.gigsbergApiKey,
         ...(init?.headers ?? {}),
       },
@@ -548,137 +762,119 @@ function safeJsonParse<T>(raw: string): T | null {
   }
 }
 
-async function tryEventEndpoint(
+async function postJson<TResponse>(
   path: string,
-  input: TicketResolveInput,
-  searchName: string
-): Promise<GigsbergEvent[]> {
-  const dateWindow = buildDateWindow(input.kickoffIso);
-  const url = new URL(buildApiUrl(path));
-
-  if (searchName) url.searchParams.set("name", searchName);
-  if (dateWindow.dateFrom) url.searchParams.set("date_from", dateWindow.dateFrom);
-  if (dateWindow.dateTo) url.searchParams.set("date_to", dateWindow.dateTo);
-  url.searchParams.set("page", "1");
-  url.searchParams.set("per_page", String(EVENTS_PER_PAGE));
-
-  console.log("[Gigsberg] events request start", {
-    endpointPath: path,
-    requestUrl: url.toString(),
-    searchName,
-    homeName: clean(input.homeName),
-    awayName: clean(input.awayName),
-    kickoffIso: clean(input.kickoffIso),
-    leagueName: clean(input.leagueName) || null,
-    leagueId: clean(input.leagueId) || null,
+  body: Record<string, unknown>
+): Promise<{ ok: boolean; status: number; parsed: TResponse | null; raw: string }> {
+  const url = buildApiUrl(path);
+  const response = await fetchWithTimeout(url, {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 
-  let response: { ok: boolean; status: number; body: string };
-  try {
-    response = await fetchWithTimeout(url.toString(), { method: "GET" });
-  } catch (error) {
-    console.log("[Gigsberg] events request failed", {
-      endpointPath: path,
-      searchName,
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  }
-
-  if (!response.ok) {
-    console.log("[Gigsberg] events non-200 response", {
-      endpointPath: path,
-      searchName,
-      status: response.status,
-      body: response.body.slice(0, 500),
-      requestUrl: url.toString(),
-    });
-    return [];
-  }
-
-  const parsed = safeJsonParse<GigsbergEventsResponse>(response.body);
-  const events = extractEvents(parsed);
-
-  console.log("[Gigsberg] events response", {
-    endpointPath: path,
-    searchName,
-    count: events.length,
-    sample: events.slice(0, 5).map(summarizeEvent),
-  });
-
-  return events;
+  return {
+    ok: response.ok,
+    status: response.status,
+    parsed: safeJsonParse<TResponse>(response.body),
+    raw: response.body,
+  };
 }
 
 async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]> {
-  const searchNames = buildEventSearchNames(input);
-  const allEvents: GigsbergEvent[] = [];
+  const bodies = buildEventSearchBodies(input);
+  const collected: GigsbergEvent[] = [];
 
-  for (const searchName of searchNames) {
-    for (const path of EVENT_ENDPOINT_PATHS) {
-      const events = await tryEventEndpoint(path, input, searchName);
+  for (const body of bodies) {
+    console.log("[Gigsberg] event search request", {
+      path: EVENT_SEARCH_PATH,
+      body,
+    });
 
-      if (events.length > 0) {
-        allEvents.push(...events);
-      }
+    let response:
+      | { ok: boolean; status: number; parsed: GigsbergEventsResponse | null; raw: string }
+      | null = null;
+
+    try {
+      response = await postJson<GigsbergEventsResponse>(EVENT_SEARCH_PATH, body);
+    } catch (error) {
+      console.log("[Gigsberg] event search failed", {
+        body,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
     }
 
-    if (allEvents.length > 0) {
+    if (!response.ok) {
+      console.log("[Gigsberg] event search non-200", {
+        status: response.status,
+        body,
+        raw: response.raw.slice(0, 500),
+      });
+      continue;
+    }
+
+    const events = extractEvents(response.parsed);
+
+    console.log("[Gigsberg] event search response", {
+      body,
+      count: events.length,
+      sample: events.slice(0, 5).map(summarizeEvent),
+    });
+
+    if (events.length > 0) {
+      collected.push(...events);
+    }
+
+    if (collected.length >= EVENTS_PER_PAGE) {
       break;
     }
   }
 
-  return dedupeEvents(allEvents);
+  return dedupeEvents(collected);
 }
 
-async function tryListingsEndpoint(path: string, eventId: string): Promise<GigsbergListing[]> {
-  const url = buildApiUrl(path);
+async function searchListingsForEvent(eventIdValue: string): Promise<GigsbergListing[]> {
+  if (!eventIdValue) return [];
+
   const body = {
-    event_id: Number.isFinite(Number(eventId)) ? Number(eventId) : eventId,
-    currency_code: "EUR",
+    page: 1,
+    per_page: LISTINGS_PER_PAGE,
+    event_id: Number.isFinite(Number(eventIdValue)) ? Number(eventIdValue) : eventIdValue,
+    currency: "EUR",
   };
 
-  console.log("[Gigsberg] listings request start", {
-    endpointPath: path,
-    eventId,
-    requestUrl: url,
+  console.log("[Gigsberg] listing search request", {
+    path: LISTING_SEARCH_PATH,
     body,
   });
 
-  let response: { ok: boolean; status: number; body: string };
+  let response:
+    | { ok: boolean; status: number; parsed: GigsbergListingsResponse | null; raw: string }
+    | null = null;
+
   try {
-    response = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    response = await postJson<GigsbergListingsResponse>(LISTING_SEARCH_PATH, body);
   } catch (error) {
-    console.log("[Gigsberg] listings request failed", {
-      endpointPath: path,
-      eventId,
+    console.log("[Gigsberg] listing search failed", {
+      body,
       message: error instanceof Error ? error.message : String(error),
     });
     return [];
   }
 
   if (!response.ok) {
-    console.log("[Gigsberg] listings non-200 response", {
-      endpointPath: path,
-      eventId,
+    console.log("[Gigsberg] listing search non-200", {
       status: response.status,
-      body: response.body.slice(0, 500),
-      requestUrl: url,
+      body,
+      raw: response.raw.slice(0, 500),
     });
     return [];
   }
 
-  const parsed = safeJsonParse<GigsbergListingsResponse>(response.body);
-  const listings = extractListings(parsed).slice(0, LISTINGS_PER_PAGE);
+  const listings = dedupeListings(extractListings(response.parsed));
 
-  console.log("[Gigsberg] listings response", {
-    endpointPath: path,
-    eventId,
+  console.log("[Gigsberg] listing search response", {
+    body,
     count: listings.length,
     sample: listings.slice(0, 5).map(summarizeListing),
   });
@@ -686,15 +882,44 @@ async function tryListingsEndpoint(path: string, eventId: string): Promise<Gigsb
   return listings;
 }
 
-async function searchListingsForEvent(eventId: string): Promise<GigsbergListing[]> {
-  for (const path of LISTING_ENDPOINT_PATHS) {
-    const listings = await tryListingsEndpoint(path, eventId);
-    if (listings.length > 0) {
-      return listings;
-    }
-  }
+async function fetchMarketDataForEvent(eventIdValue: string): Promise<GigsbergMarketDataResponse> {
+  if (!eventIdValue) return null;
 
-  return [];
+  const body = {
+    event_id: Number.isFinite(Number(eventIdValue)) ? Number(eventIdValue) : eventIdValue,
+    currency_id: 1,
+  };
+
+  console.log("[Gigsberg] market-data request", {
+    path: MARKET_DATA_PATH,
+    body,
+  });
+
+  try {
+    const response = await postJson<GigsbergMarketDataResponse>(MARKET_DATA_PATH, body);
+
+    if (!response.ok) {
+      console.log("[Gigsberg] market-data non-200", {
+        status: response.status,
+        body,
+        raw: response.raw.slice(0, 500),
+      });
+      return null;
+    }
+
+    console.log("[Gigsberg] market-data response", {
+      body,
+      parsed: response.parsed,
+    });
+
+    return response.parsed;
+  } catch (error) {
+    console.log("[Gigsberg] market-data failed", {
+      body,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 export async function resolveGigsbergCandidate(
@@ -810,7 +1035,10 @@ export async function resolveGigsbergCandidate(
     };
   }
 
-  const listings = await searchListingsForEvent(bestEventId);
+  const [listings, marketData] = await Promise.all([
+    searchListingsForEvent(bestEventId),
+    fetchMarketDataForEvent(bestEventId),
+  ]);
 
   if (!listings.length) {
     const fallbackUrl = buildEventSearchUrl(bestEventName || `${homeName} vs ${awayName}`);
@@ -822,6 +1050,7 @@ export async function resolveGigsbergCandidate(
         reasons: bestEvent.reasons,
       },
       fallbackUrl,
+      marketData,
     });
 
     const finalScore = Math.max(20, bestEvent.score - GIGSBERG_SEARCH_FALLBACK_PENALTY);
@@ -832,23 +1061,38 @@ export async function resolveGigsbergCandidate(
       score: finalScore,
       url: fallbackUrl,
       title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
-      priceText: null,
+      priceText: marketDataMinPriceText(marketData),
       reason: "search_fallback",
     };
   }
 
-  const scoredListings = listings
+  const scoredListings: ScoredListing[] = listings
     .map((listing) => ({
       listing,
       score: scoreListing(listing),
     }))
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+
+      const aPrice = listingPriceValue(a.listing);
+      const bPrice = listingPriceValue(b.listing);
+
+      if (aPrice != null && bPrice != null && aPrice !== bPrice) {
+        return aPrice - bPrice;
+      }
+
+      return 0;
+    });
 
   const bestListing = scoredListings[0];
   const listingUrl = buildEventSearchUrl(bestEventName || `${homeName} vs ${awayName}`);
+  const marketDataBonus = scoreMarketData(marketData);
+
   const combinedScore = Math.min(
     100,
-    bestEvent.score + Math.min(GIGSBERG_LISTING_BONUS_CAP, bestListing?.score ?? 0)
+    bestEvent.score +
+      Math.min(GIGSBERG_LISTING_BONUS_CAP, bestListing?.score ?? 0) +
+      marketDataBonus
   );
 
   const exact = isExactEvent(bestEvent, combinedScore);
@@ -866,6 +1110,8 @@ export async function resolveGigsbergCandidate(
           listingScore: bestListing.score,
         }
       : null,
+    marketData,
+    marketDataBonus,
     combinedScore,
     resolvedUrl: listingUrl,
   });
@@ -876,7 +1122,9 @@ export async function resolveGigsbergCandidate(
     score: combinedScore,
     url: listingUrl,
     title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
-    priceText: bestListing ? listingPriceText(bestListing.listing) : null,
+    priceText:
+      listingPriceText(bestListing.listing) ||
+      marketDataMinPriceText(marketData),
     reason: exact ? "exact_event" : "partial_match",
   };
       }
