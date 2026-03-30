@@ -114,17 +114,6 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     );
   }
 
-  if (links.insuranceUrl) {
-    output.push(
-      makePartnerLink({
-        provider: "safetywing",
-        title: "Travel insurance",
-        url: links.insuranceUrl,
-        campaign: "trip_insurance",
-      })
-    );
-  }
-
   if (links.mapsUrl) {
     output.push(
       makePartnerLink({
