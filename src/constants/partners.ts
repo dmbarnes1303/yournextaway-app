@@ -179,7 +179,7 @@ export const AffiliateConfig = {
   gigsbergTracked: "",
 
   // Things
-  getyourguidePartnerId: "YNA123",
+  getyourguidePartnerId: "MAQJREP",
   tiqetsTracked: "",
   klookTracked: "",
   wegotripTracked: "",
