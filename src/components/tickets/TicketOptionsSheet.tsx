@@ -9,6 +9,12 @@ import {
 } from "react-native";
 
 import { theme } from "@/src/constants/theme";
+import {
+  providerLabel,
+  providerShort,
+  classifyTicketOption,
+} from "@/src/features/tripDetail/helpers";
+
 import type { TicketResolutionOption } from "@/src/services/ticketResolver";
 
 type Props = {
@@ -26,20 +32,34 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function providerLabel(value: unknown): string {
-  return clean(value) || "Provider";
-}
-
-function priceLabel(value: unknown): string | null {
-  const next = clean(value);
-  return next || null;
-}
-
 function reasonLabel(option: TicketResolutionOption): string | null {
-  if (option.reason === "exact_event" && option.exact) return "Exact match";
-  if (option.reason === "partial_match") return "Closest match found";
+  if (option.reason === "exact_event" && option.exact) return "Exact fixture";
+  if (option.reason === "partial_match") return "Similar listing";
   if (option.reason === "search_fallback") return "Search result";
   return null;
+}
+
+function ctaLabel(strength: "strong" | "medium" | "weak") {
+  if (strength === "strong") return "View tickets →";
+  if (strength === "medium") return "View options →";
+  return "Search tickets →";
+}
+
+function priceLabel(
+  option: TicketResolutionOption,
+  strength: "strong" | "medium" | "weak"
+): string {
+  const price = clean(option.priceText);
+
+  if (strength === "strong") {
+    return price || "View prices";
+  }
+
+  if (strength === "medium") {
+    return price || "Check options";
+  }
+
+  return "Check availability";
 }
 
 export default function TicketOptionsSheet({
@@ -55,12 +75,7 @@ export default function TicketOptionsSheet({
   const topOptions = options.slice(0, 3);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
 
@@ -81,13 +96,17 @@ export default function TicketOptionsSheet({
             showsVerticalScrollIndicator={false}
           >
             {topOptions.map((option, index) => {
-              const price = priceLabel(option.priceText);
+              const strength = classifyTicketOption(option);
               const reason = reasonLabel(option);
 
               return (
                 <Pressable
-                  key={`${providerLabel(option.provider)}-${index}`}
-                  style={styles.optionCard}
+                  key={`${option.provider}-${index}`}
+                  style={[
+                    styles.optionCard,
+                    strength === "strong" && styles.strongCard,
+                    strength === "weak" && styles.weakCard,
+                  ]}
                   onPress={() => onSelect(option)}
                 >
                   <View style={styles.optionTopRow}>
@@ -96,22 +115,28 @@ export default function TicketOptionsSheet({
                         {providerLabel(option.provider)}
                       </Text>
 
-                      {reason ? <Text style={styles.reason}>{reason}</Text> : null}
+                      {reason ? (
+                        <Text style={styles.reason}>{reason}</Text>
+                      ) : null}
                     </View>
 
-                    <View style={styles.priceWrap}>
-                      <Text style={styles.price}>{price || "View options"}</Text>
-                    </View>
+                    <Text style={styles.price}>
+                      {priceLabel(option, strength)}
+                    </Text>
                   </View>
 
                   <View style={styles.optionBottomRow}>
                     <Text style={styles.scoreText}>
-                      {typeof option.score === "number"
-                        ? `Match score ${Math.round(option.score)}`
-                        : "Ticket option"}
+                      {strength === "strong"
+                        ? "Best match"
+                        : strength === "medium"
+                        ? "Good option"
+                        : "May not match exactly"}
                     </Text>
 
-                    <Text style={styles.cta}>View tickets →</Text>
+                    <Text style={styles.cta}>
+                      {ctaLabel(strength)}
+                    </Text>
                   </View>
                 </Pressable>
               );
@@ -145,25 +170,16 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     backgroundColor: "rgba(0,0,0,0.45)",
   },
-
   backdrop: {
     ...StyleSheet.absoluteFillObject,
   },
-
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: "#0B1020",
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 20,
+    padding: 18,
     maxHeight: "78%",
   },
-
   handle: {
     alignSelf: "center",
     width: 46,
@@ -172,144 +188,90 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.18)",
     marginBottom: 14,
   },
-
   title: {
     fontSize: 20,
-    lineHeight: 26,
     fontWeight: "900",
     color: theme.colors.text,
-    letterSpacing: -0.3,
   },
-
   subtitle: {
     marginTop: 6,
     fontSize: 13,
-    lineHeight: 18,
     color: theme.colors.textSecondary,
-    fontWeight: "700",
   },
-
   optionsWrap: {
     marginTop: 16,
-    maxHeight: 340,
   },
-
   optionsContent: {
     gap: 10,
-    paddingBottom: 6,
   },
-
   optionCard: {
     borderRadius: 16,
     padding: 14,
     backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
   },
-
+  strongCard: {
+    borderColor: theme.colors.accent,
+    borderWidth: 1,
+  },
+  weakCard: {
+    opacity: 0.65,
+  },
   optionTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
-    alignItems: "flex-start",
   },
-
-  providerWrap: {
-    flex: 1,
-  },
-
   provider: {
     fontSize: 15,
     fontWeight: "900",
     color: theme.colors.text,
   },
-
   reason: {
-    marginTop: 4,
     fontSize: 12,
-    lineHeight: 16,
     color: theme.colors.textMuted,
-    fontWeight: "700",
   },
-
-  priceWrap: {
-    alignItems: "flex-end",
-  },
-
   price: {
-    fontSize: 15,
     fontWeight: "900",
     color: theme.colors.accent,
   },
-
   optionBottomRow: {
-    marginTop: 10,
+    marginTop: 8,
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
-    alignItems: "center",
   },
-
   scoreText: {
-    flex: 1,
     fontSize: 12,
-    lineHeight: 16,
     color: theme.colors.textSecondary,
-    fontWeight: "700",
   },
-
   cta: {
     fontSize: 12,
     fontWeight: "900",
     color: theme.colors.text,
   },
-
   footerActions: {
     marginTop: 16,
     gap: 10,
   },
-
   secondaryBtn: {
-    minHeight: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
     backgroundColor: theme.colors.accent,
-    paddingHorizontal: 16,
-  },
-
-  secondaryBtnText: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#0B1020",
-  },
-
-  ghostBtn: {
-    minHeight: 46,
-    borderRadius: 14,
+    padding: 14,
+    borderRadius: 12,
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: 16,
   },
-
+  secondaryBtnText: {
+    fontWeight: "900",
+    color: "#000",
+  },
+  ghostBtn: {
+    padding: 12,
+    alignItems: "center",
+  },
   ghostBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
     color: theme.colors.text,
   },
-
   closeBtn: {
-    minHeight: 42,
     alignItems: "center",
-    justifyContent: "center",
   },
-
   closeBtnText: {
-    fontSize: 13,
-    fontWeight: "800",
     color: theme.colors.textMuted,
   },
 });
