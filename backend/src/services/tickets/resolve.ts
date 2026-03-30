@@ -1,5 +1,6 @@
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
+import { resolveStubhubCandidate } from "./stubhub.js";
 import { resolveGigsbergCandidate } from "./gigsberg.js";
 import type {
   CandidateUrlQuality,
@@ -43,13 +44,9 @@ const CACHE = new Map<string, CacheEntry>();
 
 const CACHE_TTL_MS = 1000 * 60 * 10;
 const PROVIDER_TIMEOUT_MS = 4500;
-const MAX_RETURNED_OPTIONS = 3;
-const RESOLVER_VERSION = "v4-provider-aware-output";
+const MAX_RETURNED_OPTIONS = 4;
+const RESOLVER_VERSION = "v5-provider-aware-output-stubhub";
 
-/**
- * Hard floors.
- * Search fallbacks should almost never survive.
- */
 const MIN_EXACT_EVENT_SCORE = 72;
 const MIN_PARTIAL_MATCH_SCORE = 60;
 const MIN_SEARCH_FALLBACK_SCORE = 54;
@@ -58,7 +55,8 @@ const MIN_SELECTED_SCORE = 62;
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
   footballticketsnet: 1,
   sportsevents365: 2,
-  gigsberg: 3,
+  stubhub: 3,
+  gigsberg: 4,
 };
 
 const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
@@ -69,6 +67,15 @@ const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
     "www.footballticketsnet.com",
   ],
   sportsevents365: ["sportsevents365.com", "www.sportsevents365.com"],
+  stubhub: [
+    "stubhubinternational.sjv.io",
+    "stubhub.com",
+    "www.stubhub.com",
+    "stubhub.ie",
+    "www.stubhub.ie",
+    "stubhub.co.uk",
+    "www.stubhub.co.uk",
+  ],
   gigsberg: ["gigsberg.com", "www.gigsberg.com"],
 };
 
@@ -84,6 +91,16 @@ const PROVIDER_STATS: Record<TicketProviderId, ProviderStats> = {
     lastErrorAt: null,
   },
   sportsevents365: {
+    calls: 0,
+    successes: 0,
+    nulls: 0,
+    timeouts: 0,
+    errors: 0,
+    lastDurationMs: null,
+    lastSuccessAt: null,
+    lastErrorAt: null,
+  },
+  stubhub: {
     calls: 0,
     successes: 0,
     nulls: 0,
@@ -218,8 +235,13 @@ function detectUrlQuality(candidate: Pick<TicketCandidate, "url">): CandidateUrl
 
   try {
     const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
     const path = parsed.pathname.toLowerCase();
     const query = parsed.search.toLowerCase();
+
+    if (host.includes("sjv.io")) {
+      return "search";
+    }
 
     const looksSearch =
       path === "/search" ||
@@ -229,7 +251,8 @@ function detectUrlQuality(candidate: Pick<TicketCandidate, "url">): CandidateUrl
       path.includes("/search-results") ||
       query.includes("q=") ||
       query.includes("query=") ||
-      query.includes("text=");
+      query.includes("text=") ||
+      query.includes("search");
 
     if (looksSearch) return "search";
     if (path.includes("/listing") || path.includes("/listings")) return "listing";
@@ -263,6 +286,12 @@ function getProviderBias(
     if (reason === "search_fallback") return -12;
     if (urlQuality === "search") return -14;
     return 2;
+  }
+
+  if (provider === "stubhub") {
+    if (reason === "search_fallback") return -6;
+    if (urlQuality === "search") return -8;
+    return -2;
   }
 
   if (reason === "exact_event" && (urlQuality === "event" || urlQuality === "listing")) {
@@ -313,6 +342,10 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
     reasonBias +
     providerBias +
     priceBonus;
+
+  if (candidate.provider === "stubhub") {
+    adjustedScore = Math.min(adjustedScore, 58);
+  }
 
   if (candidate.reason === "exact_event" && urlQuality === "search") {
     adjustedScore -= 35;
@@ -664,12 +697,14 @@ export async function resolveTicket(
   const checkedProviders: TicketResolution["checkedProviders"] = [
     "footballticketsnet",
     "sportsevents365",
+    "stubhub",
     "gigsberg",
   ];
 
   const providerPromises: Array<Promise<TicketCandidate | null>> = [
     runProvider("footballticketsnet", () => resolveFtnCandidate(input)),
     runProvider("sportsevents365", () => resolveSe365Candidate(input)),
+    runProvider("stubhub", () => resolveStubhubCandidate(input)),
     runProvider("gigsberg", () => resolveGigsbergCandidate(input)),
   ];
 
@@ -679,6 +714,7 @@ export async function resolveTicket(
   const providerOrder: TicketProviderId[] = [
     "footballticketsnet",
     "sportsevents365",
+    "stubhub",
     "gigsberg",
   ];
 
@@ -743,4 +779,4 @@ export async function resolveTicket(
   }
 
   return result;
-             }
+  }
