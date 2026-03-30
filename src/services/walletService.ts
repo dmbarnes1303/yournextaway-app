@@ -13,32 +13,37 @@ export type WalletItem = {
   id: string;
   tripId?: string;
   title: string;
-
   type: WalletItemType;
   status: "pending" | "booked";
-
   partner?: string;
   url?: string;
-
   attachments?: number;
-
   createdAt?: number;
 };
 
 function mapType(type: string): WalletItemType {
   switch (type) {
+    // Canonical current types
+    case "ticket":
+      return "ticket";
+    case "flight":
+      return "flight";
+    case "hotel":
+      return "hotel";
+    case "transfer":
+      return "transfer";
+    case "things":
+      return "experience";
+
+    // Legacy compatibility
     case "tickets":
       return "ticket";
-
     case "flights":
       return "flight";
-
     case "stays":
       return "hotel";
-
     case "transfers":
       return "transfer";
-
     case "experiences":
       return "experience";
 
@@ -52,15 +57,11 @@ function toWalletItem(item: SavedItem): WalletItem {
     id: item.id,
     tripId: item.tripId,
     title: item.title,
-
     type: mapType(item.type),
     status: item.status === "booked" ? "booked" : "pending",
-
     partner: item.partnerId,
     url: item.partnerUrl,
-
     attachments: item.attachments?.length ?? 0,
-
     createdAt: item.createdAt,
   };
 }
