@@ -21,7 +21,8 @@ type Props = {
   visible: boolean;
   matchLabel: string;
   subtitle?: string | null;
-  options: TicketResolutionOption[];
+  strongOptions: TicketResolutionOption[];
+  weakOptions: TicketResolutionOption[];
   onClose: () => void;
   onSelect: (option: TicketResolutionOption) => void;
   onCompareAll: () => void;
@@ -194,36 +195,33 @@ export default function TicketOptionsSheet({
   visible,
   matchLabel,
   subtitle,
-  options,
+  strongOptions,
+  weakOptions,
   onClose,
   onSelect,
   onCompareAll,
   onOpenOfficial,
 }: Props) {
-  const { strongOptions, mediumOptions, weakOptions, visibleOptions } = useMemo(() => {
-    const strong: TicketResolutionOption[] = [];
-    const medium: TicketResolutionOption[] = [];
-    const weak: TicketResolutionOption[] = [];
+  const { mergedOptions, weakOnly } = useMemo(() => {
+    const strong = Array.isArray(strongOptions) ? strongOptions : [];
+    const weak = Array.isArray(weakOptions) ? weakOptions : [];
 
-    for (const option of options) {
+    const medium: TicketResolutionOption[] = [];
+    const strongBucket: TicketResolutionOption[] = [];
+
+    for (const option of strong) {
       const strength = classifyTicketOption(option);
-      if (strength === "strong") strong.push(option);
-      else if (strength === "medium") medium.push(option);
-      else weak.push(option);
+      if (strength === "strong") strongBucket.push(option);
+      else medium.push(option);
     }
 
-    const merged = [...strong, ...medium, ...weak].slice(0, 5);
+    const merged = [...strongBucket, ...medium, ...weak].slice(0, 5);
 
     return {
-      strongOptions: strong,
-      mediumOptions: medium,
-      weakOptions: weak,
-      visibleOptions: merged,
+      mergedOptions: merged,
+      weakOnly: strong.length === 0 && weak.length > 0,
     };
-  }, [options]);
-
-  const hasBetterRoutes = strongOptions.length > 0 || mediumOptions.length > 0;
-  const weakOnly = !hasBetterRoutes && weakOptions.length > 0;
+  }, [strongOptions, weakOptions]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -255,7 +253,7 @@ export default function TicketOptionsSheet({
             contentContainerStyle={styles.optionsContent}
             showsVerticalScrollIndicator={false}
           >
-            {visibleOptions.map((option, index) => {
+            {mergedOptions.map((option, index) => {
               const strength = classifyTicketOption(option);
 
               return (
@@ -271,9 +269,7 @@ export default function TicketOptionsSheet({
 
           <View style={styles.footerActions}>
             <Pressable style={styles.secondaryBtn} onPress={onCompareAll}>
-              <Text style={styles.secondaryBtnText}>
-                Compare all options
-              </Text>
+              <Text style={styles.secondaryBtnText}>Compare all options</Text>
             </Pressable>
 
             {onOpenOfficial ? (
