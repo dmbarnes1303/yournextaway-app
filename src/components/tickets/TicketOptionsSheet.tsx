@@ -31,6 +31,11 @@ type Props = {
 
 type TicketStrength = "strong" | "medium" | "weak";
 
+type DisplayOption = {
+  option: TicketResolutionOption;
+  strength: TicketStrength;
+};
+
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -148,7 +153,9 @@ function OptionCard({
               },
             ]}
           >
-            <Text style={[styles.providerPillText, { color: providerStyle.textColor }]}>
+            <Text
+              style={[styles.providerPillText, { color: providerStyle.textColor }]}
+            >
               {short}
             </Text>
           </View>
@@ -159,23 +166,13 @@ function OptionCard({
           </View>
         </View>
 
-        <Text
-          style={[
-            styles.price,
-            strength === "weak" && styles.priceWeak,
-          ]}
-        >
+        <Text style={[styles.price, strength === "weak" && styles.priceWeak]}>
           {priceLabel(option, strength)}
         </Text>
       </View>
 
       <View style={styles.optionBottomRow}>
-        <Text
-          style={[
-            styles.scoreText,
-            strength === "weak" && styles.scoreTextWeak,
-          ]}
-        >
+        <Text style={[styles.scoreText, strength === "weak" && styles.scoreTextWeak]}>
           {strengthLabel(strength)}
         </Text>
 
@@ -206,19 +203,22 @@ export default function TicketOptionsSheet({
     const strong = Array.isArray(strongOptions) ? strongOptions : [];
     const weak = Array.isArray(weakOptions) ? weakOptions : [];
 
-    const medium: TicketResolutionOption[] = [];
-    const strongBucket: TicketResolutionOption[] = [];
+    const displayStrong: DisplayOption[] = strong.map((option) => {
+      const helperStrength = classifyTicketOption(option);
 
-    for (const option of strong) {
-      const strength = classifyTicketOption(option);
-      if (strength === "strong") strongBucket.push(option);
-      else medium.push(option);
-    }
+      return {
+        option,
+        strength: helperStrength === "weak" ? "medium" : helperStrength,
+      };
+    });
 
-    const merged = [...strongBucket, ...medium, ...weak].slice(0, 5);
+    const displayWeak: DisplayOption[] = weak.map((option) => ({
+      option,
+      strength: "weak",
+    }));
 
     return {
-      mergedOptions: merged,
+      mergedOptions: [...displayStrong, ...displayWeak].slice(0, 5),
       weakOnly: strong.length === 0 && weak.length > 0,
     };
   }, [strongOptions, weakOptions]);
@@ -243,7 +243,8 @@ export default function TicketOptionsSheet({
             <View style={styles.noticeBox}>
               <Text style={styles.noticeTitle}>Only fallback routes found</Text>
               <Text style={styles.noticeText}>
-                These options may still help, but they are weaker than a direct event or strong listing route.
+                These options may still help, but they are weaker than a direct
+                event or strong listing route.
               </Text>
             </View>
           ) : null}
@@ -253,9 +254,7 @@ export default function TicketOptionsSheet({
             contentContainerStyle={styles.optionsContent}
             showsVerticalScrollIndicator={false}
           >
-            {mergedOptions.map((option, index) => {
-              const strength = classifyTicketOption(option);
-
+            {mergedOptions.map(({ option, strength }, index) => {
               return (
                 <OptionCard
                   key={`${option.provider}-${option.url}-${index}`}
