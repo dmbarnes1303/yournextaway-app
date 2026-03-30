@@ -11,6 +11,7 @@ import {
   Platform,
   Modal,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -30,6 +31,7 @@ import type { CityGuide, CityTopThing } from "@/src/data/cityGuides/types";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getCityByKeyLive, type CityRecord } from "@/src/services/citiesRegistry";
 import { normalizeCityKey } from "@/src/utils/city";
+import { openPartnerUrl } from "@/src/services/partnerClicks";
 
 /* -------------------------------------------------------------------------- */
 /* Utils */
@@ -664,6 +666,7 @@ export default function CityScreen() {
   const [cityLive, setCityLive] = useState<CityRecord | null>(null);
   const [cityLiveLoading, setCityLiveLoading] = useState(true);
 
+  const guide = useMemo(() => getCityGuide(citySlug) as CityGuide | null, [citySlug]);
   const guideFull = useMemo(() => getCityGuideFull(citySlug), [citySlug]);
 
   const [loadingFx, setLoadingFx] = useState(true);
@@ -679,6 +682,7 @@ export default function CityScreen() {
 
   const cancelRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [openingThings, setOpeningThings] = useState(false);
 
   useEffect(() => {
     cancelRef.current = false;
@@ -831,6 +835,14 @@ export default function CityScreen() {
     return parts.join(" • ");
   }, [guideFull, guideBlocks]);
 
+  const guideThingsToDoUrl = useMemo(() => {
+    const canonical = safeStr(guide?.bookingLinks?.thingsToDo);
+    if (canonical) return canonical;
+
+    const legacy = safeStr(guide?.thingsToDoUrl);
+    return legacy || "";
+  }, [guide]);
+
   const progressLine = useMemo(() => {
     if (!loadingFx) return "";
     if (!progress.total) return "Searching leagues…";
@@ -870,6 +882,20 @@ export default function CityScreen() {
     },
     [router, from, to, title]
   );
+
+  const openThingsToDo = useCallback(async () => {
+    const url = safeStr(guideThingsToDoUrl);
+    if (!url || openingThings) return;
+
+    setOpeningThings(true);
+    try {
+      await openPartnerUrl(url);
+    } catch (error) {
+      Alert.alert("Unable to open", "The things-to-do link could not be opened right now.");
+    } finally {
+      setOpeningThings(false);
+    }
+  }, [guideThingsToDoUrl, openingThings]);
 
   const bg = getCityBackground(citySlug || cityKeyParam);
   const bgSource = typeof bg === "string" ? { uri: bg } : bg;
@@ -964,6 +990,23 @@ export default function CityScreen() {
                 <Text style={styles.blockNote}>
                   We’ll add this city soon. For now, use fixtures below to anchor your trip.
                 </Text>
+              ) : null}
+
+              {guideThingsToDoUrl ? (
+                <Pressable
+                  onPress={openThingsToDo}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open things to do in ${title}`}
+                  style={({ pressed }) => [
+                    styles.thingsBtn,
+                    (pressed || openingThings) && styles.pressed,
+                  ]}
+                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+                >
+                  <Text style={styles.thingsBtnText}>
+                    {openingThings ? "Opening…" : "Explore things to do"}
+                  </Text>
+                </Pressable>
               ) : null}
             </View>
           </GlassCard>
@@ -1143,6 +1186,25 @@ const styles = StyleSheet.create({
   miniPrimaryPillText: {
     color: theme.colors.text,
     fontSize: 12,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  thingsBtn: {
+    marginTop: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(79,224,138,0.26)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  thingsBtnText: {
+    color: theme.colors.text,
+    fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
 
