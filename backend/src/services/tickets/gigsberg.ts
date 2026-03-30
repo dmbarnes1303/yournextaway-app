@@ -2,6 +2,16 @@ import { env, hasGigsbergConfig } from "../../lib/env.js";
 import type { TicketCandidate, TicketResolveInput } from "./types.js";
 import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
 
+type GigsbergJwtAuthResponse = {
+  jwt?: string;
+  refreshToken?: string;
+};
+
+type GigsbergJwtRefreshResponse = {
+  jwt?: string;
+  refreshToken?: string;
+};
+
 type GigsbergEvent = {
   id?: number | string;
   name?: string;
@@ -67,30 +77,25 @@ type GigsbergListingsResponse =
   | GigsbergListing[]
   | null;
 
+type GigsbergMarketDataObject = {
+  min_price?: number | string;
+  lowest_price?: number | string;
+  avg_price?: number | string;
+  median_price?: number | string;
+  currency?: string;
+  currency_code?: string;
+  listings_count?: number | string;
+  tickets_count?: number | string;
+};
+
 type GigsbergMarketDataResponse =
   | {
-      object?: {
-        min_price?: number | string;
-        lowest_price?: number | string;
-        avg_price?: number | string;
-        median_price?: number | string;
-        currency?: string;
-        currency_code?: string;
-        listings_count?: number | string;
-        tickets_count?: number | string;
-      };
-      data?: {
-        min_price?: number | string;
-        lowest_price?: number | string;
-        avg_price?: number | string;
-        median_price?: number | string;
-        currency?: string;
-        currency_code?: string;
-        listings_count?: number | string;
-        tickets_count?: number | string;
-      };
+      object?: GigsbergMarketDataObject;
+      data?: GigsbergMarketDataObject;
     }
   | null;
+
+type GigsbergListingTicketsResponse = string[] | null;
 
 type ScoredEvent = {
   ev: GigsbergEvent;
@@ -105,9 +110,18 @@ type ScoredListing = {
   score: number;
 };
 
-const GIGSBERG_FETCH_TIMEOUT_MS = 7000;
+type AuthState = {
+  jwt: string | null;
+  refreshToken: string | null;
+  at: number;
+};
+
+const GIGSBERG_FETCH_TIMEOUT_MS = 9000;
+const GIGSBERG_AUTH_TIMEOUT_MS = 9000;
+
 const EVENTS_PER_PAGE = 30;
 const LISTINGS_PER_PAGE = 30;
+const MAX_EVENT_SEARCH_ATTEMPTS = 8;
 
 const MIN_PUBLIC_FALLBACK_SCORE = 18;
 const GIGSBERG_MIN_STRONG_EVENT_SCORE = 72;
@@ -115,10 +129,21 @@ const GIGSBERG_MIN_EXACT_EVENT_SCORE = 95;
 const GIGSBERG_SEARCH_FALLBACK_PENALTY = 42;
 const GIGSBERG_LISTING_BONUS_CAP = 12;
 const GIGSBERG_MARKETDATA_BONUS_CAP = 8;
+const GIGSBERG_TICKETS_FOR_LISTING_BONUS_CAP = 3;
 
+const AUTH_PATH = "/auth";
+const AUTH_REFRESH_PATH = "/auth/refresh";
 const EVENT_SEARCH_PATH = "/event/search";
 const LISTING_SEARCH_PATH = "/listing/search";
 const MARKET_DATA_PATH = "/listing/market-data";
+
+let authState: AuthState = {
+  jwt: null,
+  refreshToken: null,
+  at: 0,
+};
+
+let authInflight: Promise<AuthState | null> | null = null;
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -126,6 +151,22 @@ function clean(v: unknown): string {
 
 function norm(v: unknown): string {
   return clean(v).toLowerCase();
+}
+
+function toNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+
+  const raw = clean(v);
+  if (!raw) return null;
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toPositiveInt(v: unknown, fallback: number): number {
+  const parsed = toNumber(v);
+  if (parsed == null || parsed <= 0) return fallback;
+  return Math.floor(parsed);
 }
 
 function safeDate(v?: string | null): Date | null {
@@ -179,22 +220,6 @@ function uniqueStrings(values: string[]): string[] {
   }
 
   return out;
-}
-
-function toNumber(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-
-  const raw = clean(v);
-  if (!raw) return null;
-
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function toPositiveInt(v: unknown, fallback: number): number {
-  const parsed = toNumber(v);
-  if (parsed == null || parsed <= 0) return fallback;
-  return Math.floor(parsed);
 }
 
 function eventId(ev: GigsbergEvent): string {
@@ -273,28 +298,22 @@ function listingPriceText(listing: GigsbergListing): string | null {
   return currency || null;
 }
 
-function marketDataMinPriceText(data: GigsbergMarketDataResponse): string | null {
-  const obj =
-    (data && typeof data === "object" && "object" in data && data.object) ||
-    (data && typeof data === "object" && "data" in data && data.data) ||
-    null;
+function getGigsbergUserId(): number | null {
+  const raw =
+    clean(process.env.GIGSBERG_USER_ID) ||
+    clean(process.env.GIGSBERG_USERID) ||
+    clean(process.env.GIGSBERG_SELLER_USER_ID);
 
-  if (!obj || typeof obj !== "object") return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+}
 
-  const price =
-    toNumber((obj as any).min_price) ??
-    toNumber((obj as any).lowest_price) ??
-    null;
-
-  const currency =
-    clean((obj as any).currency_code) ||
-    clean((obj as any).currency) ||
-    "";
-
-  if (price == null && !currency) return null;
-  if (price != null && currency) return `${price} ${currency}`.trim();
-  if (price != null) return String(price);
-  return currency || null;
+function hasGigsbergAuthConfig(): boolean {
+  return Boolean(
+    hasGigsbergConfig() &&
+      clean(env.gigsbergApiKey) &&
+      getGigsbergUserId()
+  );
 }
 
 function buildApiUrl(path: string): string {
@@ -620,6 +639,35 @@ function scoreMarketData(data: GigsbergMarketDataResponse): number {
   return Math.min(GIGSBERG_MARKETDATA_BONUS_CAP, score);
 }
 
+function scoreTicketsForListing(tickets: GigsbergListingTicketsResponse): number {
+  if (!Array.isArray(tickets) || tickets.length === 0) return 0;
+  return Math.min(GIGSBERG_TICKETS_FOR_LISTING_BONUS_CAP, Math.min(3, tickets.length));
+}
+
+function marketDataMinPriceText(data: GigsbergMarketDataResponse): string | null {
+  const obj =
+    (data && typeof data === "object" && "object" in data && data.object) ||
+    (data && typeof data === "object" && "data" in data && data.data) ||
+    null;
+
+  if (!obj || typeof obj !== "object") return null;
+
+  const price =
+    toNumber((obj as any).min_price) ??
+    toNumber((obj as any).lowest_price) ??
+    null;
+
+  const currency =
+    clean((obj as any).currency_code) ||
+    clean((obj as any).currency) ||
+    "";
+
+  if (price == null && !currency) return null;
+  if (price != null && currency) return `${price} ${currency}`.trim();
+  if (price != null) return String(price);
+  return currency || null;
+}
+
 function summarizeEvent(ev: GigsbergEvent) {
   return {
     id: eventId(ev) || null,
@@ -643,6 +691,7 @@ function summarizeListing(listing: GigsbergListing) {
     quantity: listingQuantity(listing),
     priceText: listingPriceText(listing),
     block: clean(listing.block) || null,
+    row: clean(listing.row) || null,
     category: clean(listing.category) || null,
     splitType: clean(listing.split_type) || null,
     active: listing.active ?? null,
@@ -718,23 +767,26 @@ function extractListings(parsed: GigsbergListingsResponse): GigsbergListing[] {
   return [];
 }
 
+function safeJsonParse<T>(raw: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchWithTimeout(
   url: string,
-  init?: RequestInit
+  init?: RequestInit,
+  timeoutMs = GIGSBERG_FETCH_TIMEOUT_MS
 ): Promise<{ ok: boolean; status: number; body: string }> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GIGSBERG_FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(url, {
       ...init,
       signal: controller.signal,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "x-api-key": env.gigsbergApiKey,
-        ...(init?.headers ?? {}),
-      },
     });
 
     let body = "";
@@ -754,23 +806,233 @@ async function fetchWithTimeout(
   }
 }
 
-function safeJsonParse<T>(raw: string): T | null {
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+function isFreshJwtState(state: AuthState): boolean {
+  if (!state.jwt) return false;
+  const ageMs = Date.now() - state.at;
+  return ageMs < 1000 * 60 * 45;
 }
 
-async function postJson<TResponse>(
+async function authenticateGigsberg(): Promise<AuthState | null> {
+  if (!hasGigsbergAuthConfig()) {
+    console.log("[Gigsberg] auth skipped: missing user id or api key");
+    return null;
+  }
+
+  const userId = getGigsbergUserId();
+  if (!userId) return null;
+
+  const url = buildApiUrl(AUTH_PATH);
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        apiKey: clean(env.gigsbergApiKey),
+        userId,
+      }),
+    },
+    GIGSBERG_AUTH_TIMEOUT_MS
+  );
+
+  if (!response.ok) {
+    console.log("[Gigsberg] auth non-200", {
+      status: response.status,
+      raw: response.body.slice(0, 500),
+    });
+    return null;
+  }
+
+  const parsed = safeJsonParse<GigsbergJwtAuthResponse>(response.body);
+  const jwt = clean(parsed?.jwt);
+  const refreshToken = clean(parsed?.refreshToken);
+
+  if (!jwt) {
+    console.log("[Gigsberg] auth missing jwt", {
+      raw: response.body.slice(0, 500),
+    });
+    return null;
+  }
+
+  authState = {
+    jwt,
+    refreshToken: refreshToken || null,
+    at: Date.now(),
+  };
+
+  console.log("[Gigsberg] auth success", {
+    hasJwt: Boolean(authState.jwt),
+    hasRefreshToken: Boolean(authState.refreshToken),
+  });
+
+  return authState;
+}
+
+async function refreshGigsbergJwt(currentRefreshToken: string): Promise<AuthState | null> {
+  if (!currentRefreshToken) return null;
+
+  const url = buildApiUrl(AUTH_REFRESH_PATH);
+  const response = await fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        refreshToken: currentRefreshToken,
+      }),
+    },
+    GIGSBERG_AUTH_TIMEOUT_MS
+  );
+
+  if (!response.ok) {
+    console.log("[Gigsberg] refresh non-200", {
+      status: response.status,
+      raw: response.body.slice(0, 500),
+    });
+    return null;
+  }
+
+  const parsed = safeJsonParse<GigsbergJwtRefreshResponse>(response.body);
+  const jwt = clean(parsed?.jwt);
+  const refreshToken = clean(parsed?.refreshToken) || currentRefreshToken;
+
+  if (!jwt) {
+    console.log("[Gigsberg] refresh missing jwt", {
+      raw: response.body.slice(0, 500),
+    });
+    return null;
+  }
+
+  authState = {
+    jwt,
+    refreshToken,
+    at: Date.now(),
+  };
+
+  console.log("[Gigsberg] refresh success", {
+    hasJwt: Boolean(authState.jwt),
+    hasRefreshToken: Boolean(authState.refreshToken),
+  });
+
+  return authState;
+}
+
+async function ensureGigsbergAuthState(forceFresh = false): Promise<AuthState | null> {
+  if (!forceFresh && isFreshJwtState(authState)) {
+    return authState;
+  }
+
+  if (authInflight) {
+    return authInflight;
+  }
+
+  authInflight = (async () => {
+    if (!forceFresh && authState.refreshToken) {
+      const refreshed = await refreshGigsbergJwt(authState.refreshToken);
+      if (refreshed?.jwt) return refreshed;
+    }
+
+    const authed = await authenticateGigsberg();
+    if (authed?.jwt) return authed;
+
+    return null;
+  })().finally(() => {
+    authInflight = null;
+  });
+
+  return authInflight;
+}
+
+async function postSellerJson<TResponse>(
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  retryOn401 = true
 ): Promise<{ ok: boolean; status: number; parsed: TResponse | null; raw: string }> {
+  const auth = await ensureGigsbergAuthState(false);
   const url = buildApiUrl(path);
-  const response = await fetchWithTimeout(url, {
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+
+  if (auth?.jwt) {
+    headers.Authorization = `Bearer ${auth.jwt}`;
+  } else {
+    headers["x-api-key"] = clean(env.gigsbergApiKey);
+  }
+
+  let response = await fetchWithTimeout(url, {
     method: "POST",
+    headers,
     body: JSON.stringify(body),
   });
+
+  if (response.status === 401 && retryOn401) {
+    const refreshed = await ensureGigsbergAuthState(true);
+
+    if (refreshed?.jwt) {
+      response = await fetchWithTimeout(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${refreshed.jwt}`,
+        },
+        body: JSON.stringify(body),
+      });
+    }
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    parsed: safeJsonParse<TResponse>(response.body),
+    raw: response.body,
+  };
+}
+
+async function getSellerJson<TResponse>(
+  path: string,
+  retryOn401 = true
+): Promise<{ ok: boolean; status: number; parsed: TResponse | null; raw: string }> {
+  const auth = await ensureGigsbergAuthState(false);
+  const url = buildApiUrl(path);
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+  };
+
+  if (auth?.jwt) {
+    headers.Authorization = `Bearer ${auth.jwt}`;
+  } else {
+    headers["x-api-key"] = clean(env.gigsbergApiKey);
+  }
+
+  let response = await fetchWithTimeout(url, {
+    method: "GET",
+    headers,
+  });
+
+  if (response.status === 401 && retryOn401) {
+    const refreshed = await ensureGigsbergAuthState(true);
+
+    if (refreshed?.jwt) {
+      response = await fetchWithTimeout(url, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${refreshed.jwt}`,
+        },
+      });
+    }
+  }
 
   return {
     ok: response.ok,
@@ -784,7 +1046,7 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
   const bodies = buildEventSearchBodies(input);
   const collected: GigsbergEvent[] = [];
 
-  for (const body of bodies) {
+  for (const body of bodies.slice(0, MAX_EVENT_SEARCH_ATTEMPTS)) {
     console.log("[Gigsberg] event search request", {
       path: EVENT_SEARCH_PATH,
       body,
@@ -795,7 +1057,7 @@ async function searchEvents(input: TicketResolveInput): Promise<GigsbergEvent[]>
       | null = null;
 
     try {
-      response = await postJson<GigsbergEventsResponse>(EVENT_SEARCH_PATH, body);
+      response = await postSellerJson<GigsbergEventsResponse>(EVENT_SEARCH_PATH, body);
     } catch (error) {
       console.log("[Gigsberg] event search failed", {
         body,
@@ -853,7 +1115,7 @@ async function searchListingsForEvent(eventIdValue: string): Promise<GigsbergLis
     | null = null;
 
   try {
-    response = await postJson<GigsbergListingsResponse>(LISTING_SEARCH_PATH, body);
+    response = await postSellerJson<GigsbergListingsResponse>(LISTING_SEARCH_PATH, body);
   } catch (error) {
     console.log("[Gigsberg] listing search failed", {
       body,
@@ -896,7 +1158,7 @@ async function fetchMarketDataForEvent(eventIdValue: string): Promise<GigsbergMa
   });
 
   try {
-    const response = await postJson<GigsbergMarketDataResponse>(MARKET_DATA_PATH, body);
+    const response = await postSellerJson<GigsbergMarketDataResponse>(MARKET_DATA_PATH, body);
 
     if (!response.ok) {
       console.log("[Gigsberg] market-data non-200", {
@@ -916,6 +1178,43 @@ async function fetchMarketDataForEvent(eventIdValue: string): Promise<GigsbergMa
   } catch (error) {
     console.log("[Gigsberg] market-data failed", {
       body,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function fetchTicketsForListing(listingIdValue: string): Promise<GigsbergListingTicketsResponse> {
+  if (!listingIdValue) return null;
+
+  const page = 1;
+  const perPage = 30;
+  const path = `/listings/${encodeURIComponent(listingIdValue)}/tickets?page=${page}&per_page=${perPage}`;
+
+  console.log("[Gigsberg] listing tickets request", {
+    path,
+  });
+
+  try {
+    const response = await getSellerJson<GigsbergListingTicketsResponse>(path);
+
+    if (!response.ok) {
+      console.log("[Gigsberg] listing tickets non-200", {
+        status: response.status,
+        raw: response.raw.slice(0, 500),
+      });
+      return null;
+    }
+
+    console.log("[Gigsberg] listing tickets response", {
+      listingId: listingIdValue,
+      count: Array.isArray(response.parsed) ? response.parsed.length : 0,
+    });
+
+    return response.parsed;
+  } catch (error) {
+    console.log("[Gigsberg] listing tickets failed", {
+      listingId: listingIdValue,
       message: error instanceof Error ? error.message : String(error),
     });
     return null;
@@ -1035,10 +1334,8 @@ export async function resolveGigsbergCandidate(
     };
   }
 
-  const [listings, marketData] = await Promise.all([
-    searchListingsForEvent(bestEventId),
-    fetchMarketDataForEvent(bestEventId),
-  ]);
+  const listings = await searchListingsForEvent(bestEventId);
+  const marketData = await fetchMarketDataForEvent(bestEventId);
 
   if (!listings.length) {
     const fallbackUrl = buildEventSearchUrl(bestEventName || `${homeName} vs ${awayName}`);
@@ -1085,14 +1382,18 @@ export async function resolveGigsbergCandidate(
     });
 
   const bestListing = scoredListings[0];
-  const listingUrl = buildEventSearchUrl(bestEventName || `${homeName} vs ${awayName}`);
+  const listingTickets = bestListing ? await fetchTicketsForListing(listingId(bestListing.listing)) : null;
+  const listingTicketsBonus = scoreTicketsForListing(listingTickets);
   const marketDataBonus = scoreMarketData(marketData);
+
+  const resolvedUrl = buildEventSearchUrl(bestEventName || `${homeName} vs ${awayName}`);
 
   const combinedScore = Math.min(
     100,
     bestEvent.score +
       Math.min(GIGSBERG_LISTING_BONUS_CAP, bestListing?.score ?? 0) +
-      marketDataBonus
+      marketDataBonus +
+      listingTicketsBonus
   );
 
   const exact = isExactEvent(bestEvent, combinedScore);
@@ -1112,19 +1413,21 @@ export async function resolveGigsbergCandidate(
       : null,
     marketData,
     marketDataBonus,
+    listingTicketsCount: Array.isArray(listingTickets) ? listingTickets.length : 0,
+    listingTicketsBonus,
     combinedScore,
-    resolvedUrl: listingUrl,
+    resolvedUrl,
   });
 
   return {
     provider: "gigsberg",
     exact,
     score: combinedScore,
-    url: listingUrl,
+    url: resolvedUrl,
     title: `Tickets: ${getPreferredTeamName(input.homeName)} vs ${getPreferredTeamName(input.awayName)}`,
     priceText:
-      listingPriceText(bestListing.listing) ||
+      (bestListing ? listingPriceText(bestListing.listing) : null) ||
       marketDataMinPriceText(marketData),
     reason: exact ? "exact_event" : "partial_match",
   };
-      }
+                                }
