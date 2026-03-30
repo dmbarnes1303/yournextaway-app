@@ -16,6 +16,8 @@ type FtnEvent = {
   lowest_price?: string | number | Record<string, unknown>;
   home_team_name?: string;
   away_team_name?: string;
+  league_name?: string;
+  competition?: string;
 };
 
 type FtnListResponse = {
@@ -26,6 +28,56 @@ type FtnListResponse = {
   message?: string;
 };
 
+type FtnTicketLike = {
+  id?: string | number;
+  ticket_id?: string | number;
+  listing_id?: string | number;
+  url?: string;
+  event_url?: string;
+  ticket_url?: string;
+  link?: string;
+
+  price?: string | number | Record<string, unknown>;
+  min_price?: string | number | Record<string, unknown>;
+  lowest_price?: string | number | Record<string, unknown>;
+  total_price?: string | number | Record<string, unknown>;
+  price_total?: string | number | Record<string, unknown>;
+
+  currency?: string;
+  currency_code?: string;
+  curr?: string;
+  symbol?: string;
+
+  quantity?: string | number;
+  qty?: string | number;
+  block?: string;
+  section?: string;
+  category?: string;
+};
+
+type FtnGetEventResponse =
+  | {
+      success?: boolean | string | number;
+      error?: string;
+      message?: string;
+      event?: Record<string, unknown>;
+      data?: unknown;
+      tickets?: unknown;
+      listings?: unknown;
+      items?: unknown;
+      response?: unknown;
+    }
+  | null;
+
+type NormalizedFtnTicket = {
+  id: string | null;
+  url: string | null;
+  priceText: string | null;
+  amount: number | null;
+  quantity: number | null;
+  hasBlockLikeInfo: boolean;
+};
+
 type ScoredEvent = {
   ev: FtnEvent;
   score: number;
@@ -33,15 +85,17 @@ type ScoredEvent = {
   sameDay: boolean;
   hasDirectUrl: boolean;
   penalty: number;
+  leagueScore: number;
 };
 
-const FTN_FETCH_TIMEOUT_MS = 6000;
+const FTN_FETCH_TIMEOUT_MS = 6500;
 const FTN_CANONICAL_HOST = "www.footballticketnet.com";
 
 const FTN_MIN_STRONG_SCORE = 60;
 const FTN_MIN_EXACT_SCORE = 92;
 const FTN_SEARCH_FALLBACK_PENALTY = 45;
 const FTN_WEAK_DIRECT_URL_PENALTY = 10;
+const FTN_TICKET_FETCH_BONUS_CAP = 12;
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -86,6 +140,10 @@ function eventAway(ev: FtnEvent): string {
   return clean(ev.away_team_name);
 }
 
+function eventLeague(ev: FtnEvent): string {
+  return clean(ev.league_name) || clean(ev.competition);
+}
+
 function normalizePriceValue(raw: unknown): string | null {
   if (raw == null) return null;
 
@@ -103,7 +161,9 @@ function normalizePriceValue(raw: unknown): string | null {
     obj.value ??
     obj.price ??
     obj.min_price ??
-    obj.lowest_price;
+    obj.lowest_price ??
+    obj.total_price ??
+    obj.price_total;
 
   const currency =
     obj.currency ??
@@ -119,6 +179,17 @@ function normalizePriceValue(raw: unknown): string | null {
   if (amountText) return amountText;
 
   return null;
+}
+
+function numberFromUnknown(value: unknown): number | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  const match = raw.match(/(\d+(?:[.,]\d{1,2})?)/);
+  if (!match) return null;
+
+  const parsed = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function eventPrice(ev: FtnEvent): string | null {
@@ -227,11 +298,11 @@ function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
   return penalty;
 }
 
-function formatYmd(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+function formatFtnDate(date: Date): string {
   const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const y = date.getUTCFullYear();
+  return `${d}-${m}-${y}`;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -248,8 +319,8 @@ function buildDateWindow(kickoffIso: string): { fromDate?: string; toDate?: stri
   const to = addDays(kickoff, 2);
 
   return {
-    fromDate: formatYmd(from),
-    toDate: formatYmd(to),
+    fromDate: formatFtnDate(from),
+    toDate: formatFtnDate(to),
   };
 }
 
@@ -260,6 +331,7 @@ function summarizeEvent(ev: FtnEvent) {
     home: eventHome(ev) || null,
     away: eventAway(ev) || null,
     date: eventDate(ev) || null,
+    league: eventLeague(ev) || null,
     rawUrl: clean(ev.event_url) || clean(ev.url) || null,
     price: eventPrice(ev) || null,
   };
@@ -325,26 +397,8 @@ function buildStableSearchUrl(input: TicketResolveInput): string {
   return `https://${FTN_CANONICAL_HOST}/search?text=${encoded}`;
 }
 
-function buildOutboundUrl(
-  ev: FtnEvent,
-  input: TicketResolveInput
-): {
-  url: string;
-  isSearchFallback: boolean;
-} {
-  const direct = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
-
-  if (direct && hasUsableEventUrl(ev)) {
-    return {
-      url: direct,
-      isSearchFallback: false,
-    };
-  }
-
-  return {
-    url: buildStableSearchUrl(input),
-    isSearchFallback: true,
-  };
+function buildEventIdUrl(eventIdValue: string): string {
+  return `https://${FTN_CANONICAL_HOST}/search?event_id=${encodeURIComponent(eventIdValue)}`;
 }
 
 function appendAffiliate(url: string): string {
@@ -393,6 +447,19 @@ async function fetchWithTimeout(
   }
 }
 
+function leagueMatchScore(ev: FtnEvent, input: TicketResolveInput): number {
+  const eventLeagueText = norm(eventLeague(ev));
+  const inputLeagueText = norm(input.leagueName);
+
+  if (!eventLeagueText || !inputLeagueText) return 0;
+  if (eventLeagueText === inputLeagueText) return 8;
+  if (eventLeagueText.includes(inputLeagueText) || inputLeagueText.includes(eventLeagueText)) {
+    return 5;
+  }
+
+  return 0;
+}
+
 function scoreEvent(ev: FtnEvent, input: TicketResolveInput): ScoredEvent {
   let score = 0;
 
@@ -437,6 +504,9 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): ScoredEvent {
 
   if (eventPrice(ev)) score += 3;
 
+  const leagueScore = leagueMatchScore(ev, input);
+  score += leagueScore;
+
   const penalty = variantPenalty(ev, input);
   score -= penalty;
 
@@ -452,6 +522,7 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): ScoredEvent {
     sameDay,
     hasDirectUrl,
     penalty,
+    leagueScore,
   };
 }
 
@@ -493,6 +564,265 @@ function pickBestEvent(events: FtnEvent[], input: TicketResolveInput): ScoredEve
   return scored[0];
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function extractArrayCandidates(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+
+  const obj = asRecord(value);
+  if (!obj) return [];
+
+  const keys = ["tickets", "listings", "items", "data", "response"];
+  for (const key of keys) {
+    if (Array.isArray(obj[key])) return obj[key] as unknown[];
+  }
+
+  return [];
+}
+
+function normalizeTicketLike(raw: unknown): NormalizedFtnTicket | null {
+  const obj = asRecord(raw);
+  if (!obj) return null;
+
+  const priceText =
+    normalizePriceValue(obj.price) ||
+    normalizePriceValue(obj.min_price) ||
+    normalizePriceValue(obj.lowest_price) ||
+    normalizePriceValue(obj.total_price) ||
+    normalizePriceValue(obj.price_total);
+
+  const amount =
+    numberFromUnknown(obj.price) ??
+    numberFromUnknown(obj.min_price) ??
+    numberFromUnknown(obj.lowest_price) ??
+    numberFromUnknown(obj.total_price) ??
+    numberFromUnknown(obj.price_total) ??
+    null;
+
+  const quantity =
+    numberFromUnknown(obj.quantity) ??
+    numberFromUnknown(obj.qty) ??
+    null;
+
+  const url =
+    normalizeFtnUrl(obj.ticket_url) ||
+    normalizeFtnUrl(obj.event_url) ||
+    normalizeFtnUrl(obj.url) ||
+    normalizeFtnUrl(obj.link) ||
+    null;
+
+  const hasBlockLikeInfo = Boolean(clean(obj.block) || clean(obj.section) || clean(obj.category));
+
+  return {
+    id: clean(obj.id) || clean(obj.ticket_id) || clean(obj.listing_id) || null,
+    url,
+    priceText,
+    amount,
+    quantity,
+    hasBlockLikeInfo,
+  };
+}
+
+function extractNormalizedTickets(payload: FtnGetEventResponse): NormalizedFtnTicket[] {
+  if (!payload) return [];
+
+  const buckets: unknown[] = [];
+
+  const root = asRecord(payload);
+  if (root) {
+    buckets.push(root.tickets, root.listings, root.items, root.data, root.response, root.event);
+
+    const eventObj = asRecord(root.event);
+    if (eventObj) {
+      buckets.push(
+        eventObj.tickets,
+        eventObj.listings,
+        eventObj.items,
+        eventObj.data,
+        eventObj.response
+      );
+    }
+
+    const dataObj = asRecord(root.data);
+    if (dataObj) {
+      buckets.push(
+        dataObj.tickets,
+        dataObj.listings,
+        dataObj.items,
+        dataObj.data,
+        dataObj.response
+      );
+    }
+  }
+
+  const normalized: NormalizedFtnTicket[] = [];
+
+  for (const bucket of buckets) {
+    const rows = extractArrayCandidates(bucket);
+    for (const row of rows) {
+      const ticket = normalizeTicketLike(row);
+      if (ticket) normalized.push(ticket);
+    }
+  }
+
+  const deduped = new Map<string, NormalizedFtnTicket>();
+
+  for (const ticket of normalized) {
+    const key = [
+      ticket.id ?? "",
+      ticket.url ?? "",
+      ticket.priceText ?? "",
+      String(ticket.quantity ?? ""),
+    ].join("|");
+
+    if (!key.replace(/\|/g, "")) continue;
+
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, ticket);
+      continue;
+    }
+
+    const currentScore =
+      (ticket.amount != null ? 3 : 0) +
+      (ticket.quantity != null ? 2 : 0) +
+      (ticket.hasBlockLikeInfo ? 2 : 0) +
+      (ticket.url ? 2 : 0);
+
+    const existingScore =
+      (existing.amount != null ? 3 : 0) +
+      (existing.quantity != null ? 2 : 0) +
+      (existing.hasBlockLikeInfo ? 2 : 0) +
+      (existing.url ? 2 : 0);
+
+    if (currentScore > existingScore) {
+      deduped.set(key, ticket);
+    }
+  }
+
+  return Array.from(deduped.values()).sort((a, b) => {
+    const aAmount = a.amount ?? Number.POSITIVE_INFINITY;
+    const bAmount = b.amount ?? Number.POSITIVE_INFINITY;
+    if (aAmount !== bAmount) return aAmount - bAmount;
+
+    const aQty = a.quantity ?? 0;
+    const bQty = b.quantity ?? 0;
+    if (aQty !== bQty) return bQty - aQty;
+
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
+}
+
+function summarizeTicket(ticket: NormalizedFtnTicket) {
+  return {
+    id: ticket.id,
+    url: ticket.url,
+    priceText: ticket.priceText,
+    amount: ticket.amount,
+    quantity: ticket.quantity,
+    hasBlockLikeInfo: ticket.hasBlockLikeInfo,
+  };
+}
+
+function ticketDataBonus(tickets: NormalizedFtnTicket[]): number {
+  if (!tickets.length) return 0;
+
+  let bonus = 0;
+
+  if (tickets.some((ticket) => ticket.amount != null)) bonus += 5;
+  if (tickets.some((ticket) => (ticket.quantity ?? 0) >= 2)) bonus += 3;
+  if (tickets.some((ticket) => ticket.hasBlockLikeInfo)) bonus += 2;
+  if (tickets.some((ticket) => ticket.url)) bonus += 2;
+
+  return Math.min(FTN_TICKET_FETCH_BONUS_CAP, bonus);
+}
+
+function bestTicketPriceText(tickets: NormalizedFtnTicket[], eventLevelPrice: string | null): string | null {
+  const withPrice = tickets.find((ticket) => clean(ticket.priceText));
+  return withPrice?.priceText ?? eventLevelPrice;
+}
+
+function bestTicketUrl(
+  tickets: NormalizedFtnTicket[],
+  event: FtnEvent,
+  input: TicketResolveInput
+): { url: string; isSearchFallback: boolean } {
+  const ticketLevelUrl = tickets.find((ticket) => clean(ticket.url))?.url;
+  if (ticketLevelUrl) {
+    return {
+      url: ticketLevelUrl,
+      isSearchFallback: false,
+    };
+  }
+
+  const directEventUrl = normalizeFtnUrl(clean(event.event_url) || clean(event.url));
+  if (directEventUrl && hasUsableEventUrl(event)) {
+    return {
+      url: directEventUrl,
+      isSearchFallback: false,
+    };
+  }
+
+  const id = eventId(event);
+  if (id) {
+    return {
+      url: buildEventIdUrl(id),
+      isSearchFallback: false,
+    };
+  }
+
+  return {
+    url: buildStableSearchUrl(input),
+    isSearchFallback: true,
+  };
+}
+
+async function fetchEventTickets(eventIdValue: string): Promise<FtnGetEventResponse> {
+  const ts = String(Date.now());
+  const sig = sha256(
+    `${env.ftnUsername}-get_event-${eventIdValue}-${ts}-${env.ftnAffiliateSecret}`
+  );
+
+  const qs = new URLSearchParams({
+    action: "get_event",
+    u: env.ftnUsername,
+    s: sig,
+    ts,
+    event_id: eventIdValue,
+  });
+
+  const url = `${env.ftnBaseUrl}?${qs.toString()}`;
+
+  console.log("[FTN] get_event request start", {
+    eventId: eventIdValue,
+    url,
+  });
+
+  const response = await fetchWithTimeout(url);
+
+  if (!response.ok) {
+    console.log("[FTN] get_event non-200 response", {
+      eventId: eventIdValue,
+      status: response.status,
+      body: response.body.slice(0, 500),
+    });
+    return null;
+  }
+
+  try {
+    return response.body ? (JSON.parse(response.body) as FtnGetEventResponse) : null;
+  } catch {
+    console.log("[FTN] get_event invalid JSON", {
+      eventId: eventIdValue,
+      body: response.body.slice(0, 500),
+    });
+    return null;
+  }
+}
+
 export async function resolveFtnCandidate(
   input: TicketResolveInput
 ): Promise<TicketCandidate | null> {
@@ -532,7 +862,7 @@ export async function resolveFtnCandidate(
 
   const url = `${env.ftnBaseUrl}?${qs.toString()}`;
 
-  console.log("[FTN] request start", {
+  console.log("[FTN] list_events request start", {
     homeName,
     awayName,
     kickoffIso,
@@ -607,14 +937,39 @@ export async function resolveFtnCandidate(
           sameDay: scored.sameDay,
           hasDirectUrl: scored.hasDirectUrl,
           penalty: scored.penalty,
+          leagueScore: scored.leagueScore,
         };
       }),
     });
     return null;
   }
 
-  const normalizedPrice = eventPrice(best.ev);
-  const outbound = buildOutboundUrl(best.ev, input);
+  const chosenEventId = eventId(best.ev);
+  let tickets: NormalizedFtnTicket[] = [];
+
+  if (chosenEventId) {
+    const ticketPayload = await fetchEventTickets(chosenEventId);
+    tickets = extractNormalizedTickets(ticketPayload);
+
+    console.log("[FTN] get_event parsed tickets", {
+      eventId: chosenEventId,
+      count: tickets.length,
+      sample: tickets.slice(0, 5).map(summarizeTicket),
+    });
+  } else {
+    console.log("[FTN] best event missing event_id", {
+      best: {
+        ...summarizeEvent(best.ev),
+        score: best.score,
+        exactTeams: best.exactTeams,
+        sameDay: best.sameDay,
+        penalty: best.penalty,
+      },
+    });
+  }
+
+  const priceText = bestTicketPriceText(tickets, eventPrice(best.ev));
+  const outbound = bestTicketUrl(tickets, best.ev, input);
   const affiliateUrl = appendAffiliate(outbound.url);
 
   if (!affiliateUrl) {
@@ -626,14 +981,16 @@ export async function resolveFtnCandidate(
         sameDay: best.sameDay,
         penalty: best.penalty,
       },
+      ticketCount: tickets.length,
     });
     return null;
   }
 
-  let finalScore = best.score;
+  let finalScore = best.score + ticketDataBonus(tickets);
+
   if (outbound.isSearchFallback) {
     finalScore = Math.max(0, finalScore - FTN_SEARCH_FALLBACK_PENALTY);
-  } else if (!best.hasDirectUrl) {
+  } else if (!best.hasDirectUrl && !tickets.some((ticket) => ticket.url)) {
     finalScore = Math.max(0, finalScore - FTN_WEAK_DIRECT_URL_PENALTY);
   }
 
@@ -660,6 +1017,9 @@ export async function resolveFtnCandidate(
       hasDirectUrl: best.hasDirectUrl,
       exact,
       isSearchFallback: outbound.isSearchFallback,
+      chosenEventId: chosenEventId || null,
+      ticketCount: tickets.length,
+      topTicket: tickets[0] ? summarizeTicket(tickets[0]) : null,
       affiliateUrl,
     },
   });
@@ -670,7 +1030,7 @@ export async function resolveFtnCandidate(
     score: finalScore,
     url: affiliateUrl,
     title: `Tickets: ${homeName} vs ${awayName}`,
-    priceText: normalizedPrice,
+    priceText,
     reason,
   };
-      }
+}
