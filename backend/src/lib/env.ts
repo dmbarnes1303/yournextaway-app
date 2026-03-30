@@ -62,12 +62,16 @@ export const env = {
   se365AffiliateId: opt("SE365_AFFILIATE_ID", ""),
 
   // Gigsberg
-  gigsbergBaseUrl: opt(
-    "GIGSBERG_BASE_URL",
-    "https://integration2.gigsberg.com/v2"
-  ),
+  // Seller API docs you sent show:
+  // - POST /auth with apiKey + userId returns jwt + refreshToken
+  // - POST /auth/refresh with refreshToken returns jwt + refreshToken
+  // So the env now supports both simple API-key use and full JWT auth flow.
+  gigsbergBaseUrl: opt("GIGSBERG_BASE_URL", "https://api.gigsberg.com/v1"),
   gigsbergApiKey: opt("GIGSBERG_API_KEY", ""),
   gigsbergAffiliateId: opt("GIGSBERG_AFFILIATE_ID", "yournextaway"),
+  gigsbergUserId: opt("GIGSBERG_USER_ID", ""),
+  gigsbergJwt: opt("GIGSBERG_JWT", ""),
+  gigsbergRefreshToken: opt("GIGSBERG_REFRESH_TOKEN", ""),
 
   // Aviasales / Travelpayouts flights
   aviasalesBaseUrl: opt(
@@ -117,12 +121,50 @@ export function hasSe365Config(): boolean {
   );
 }
 
+/**
+ * Minimal Gigsberg readiness:
+ * enough to hit public/seller search endpoints the way current code does.
+ */
 export function hasGigsbergConfig(): boolean {
   return Boolean(
     env.gigsbergBaseUrl &&
       env.gigsbergApiKey &&
       env.gigsbergAffiliateId
   );
+}
+
+/**
+ * Full documented auth flow readiness:
+ * needed if you move resolver/service logic to proper JWT seller auth.
+ */
+export function hasGigsbergJwtAuthConfig(): boolean {
+  return Boolean(
+    env.gigsbergBaseUrl &&
+      env.gigsbergApiKey &&
+      env.gigsbergUserId
+  );
+}
+
+/**
+ * True when you already have a usable bearer token stored.
+ */
+export function hasGigsbergStoredJwt(): boolean {
+  return Boolean(env.gigsbergJwt);
+}
+
+/**
+ * True when you can refresh without re-authing from scratch.
+ */
+export function hasGigsbergRefreshToken(): boolean {
+  return Boolean(env.gigsbergRefreshToken);
+}
+
+export function requireGigsbergJwtAuthConfig(): void {
+  if (!hasGigsbergJwtAuthConfig()) {
+    throw new Error(
+      "Missing required env vars for Gigsberg JWT auth: GIGSBERG_API_KEY and GIGSBERG_USER_ID"
+    );
+  }
 }
 
 export function hasAviasalesConfig(): boolean {
