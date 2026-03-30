@@ -2,11 +2,12 @@
 //
 // LEGACY COMPATIBILITY SHIM
 //
-// This file is no longer a source of truth.
-// Canonical commercial partner data now lives in:
+// This file is not a source of truth.
+// Canonical commercial partner data lives in:
 //   src/constants/partners.ts
 //
-// Keep this file thin and boring so old imports do not keep a second registry alive.
+// Keep this file thin and derived from the canonical registry so old imports
+// do not keep a second registry or second ID universe alive.
 
 import {
   canonicalizePartnerId as canonicalizePartnerIdFromRegistry,
@@ -15,6 +16,7 @@ import {
   getPartnerOrNull as getPartnerOrNullFromRegistry,
   getPartnersByCategory as getPartnersByCategoryFromRegistry,
   isPartnerId as isPartnerIdFromRegistry,
+  listAllPartners,
   type PartnerId as CanonicalPartnerId,
   type PartnerDefinition,
 } from "@/src/constants/partners";
@@ -69,42 +71,16 @@ function toLegacyPartner(partner: PartnerDefinition): Partner {
     category: toLegacyCategory(partner),
     affiliate: partner.capabilities.affiliate,
     api: partner.capabilities.api,
-    deepLinkBase: partner.baseUrl,
+    deepLinkBase: partner.baseUrl || undefined,
     canonicalId: partner.id,
   };
 }
 
 /**
  * Legacy exported list.
- * This is derived from the canonical registry, not independently maintained.
+ * Fully derived from the canonical registry.
  */
-export const PARTNERS = [
-  ...new Map(
-    [
-      "googlemaps",
-      "footballticketsnet",
-      "sportsevents365",
-      "gigsberg",
-      "seatpick",
-      "aviasales",
-      "omio",
-      "expedia",
-      "kiwitaxi",
-      "welcomepickups",
-      "tiqets",
-      "klook",
-      "getyourguide",
-      "wegotrip",
-      "safetywing",
-      "ekta",
-      "airhelp",
-      "compensair",
-    ].map((id) => {
-      const canonical = getPartnerFromRegistry(id);
-      return [canonical.id, toLegacyPartner(canonical)] as const;
-    })
-  ).values(),
-] as const satisfies readonly Partner[];
+export const PARTNERS = listAllPartners().map(toLegacyPartner) as readonly Partner[];
 
 export type PartnerId = CanonicalPartnerId;
 
@@ -155,6 +131,7 @@ export function getPartnersByCategory(category: PartnerCategory): Partner[] {
   if (category === "compensation") {
     return getPartnersByCategoryFromRegistry("claim").map(toLegacyPartner);
   }
+
   return [
     ...getPartnersByCategoryFromRegistry("maps").map(toLegacyPartner),
     ...getPartnersByCategoryFromRegistry("official_site").map(toLegacyPartner),
@@ -208,3 +185,5 @@ export function isSamePartner(a?: string | null, b?: string | null): boolean {
 export function canonicalizePartnerId(id: string | null | undefined): PartnerId | null {
   return canonicalizePartnerIdFromRegistry(id);
 }
+
+export { PARTNER_MAP, PARTNERS_BY_CATEGORY };
