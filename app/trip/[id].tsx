@@ -399,6 +399,14 @@ export default function TripDetailScreen() {
     return `${ticketSheetPayload.homeName} vs ${ticketSheetPayload.awayName}`;
   }, [ticketSheetPayload]);
 
+  const ticketSheetOptions = useMemo(() => {
+    if (!ticketSheetPayload) return [];
+    return [
+      ...(ticketSheetPayload.strongOptions || []),
+      ...(ticketSheetPayload.weakOptions || []),
+    ];
+  }, [ticketSheetPayload]);
+
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
       <Stack.Screen options={{ headerShown: true, title: "Trip" }} />
@@ -670,8 +678,7 @@ export default function TripDetailScreen() {
           visible={controller.ticketSheet.visible}
           matchLabel={ticketSheetMatchLabel}
           subtitle="Compare ticket providers"
-          strongOptions={ticketSheetPayload?.strongOptions || []}
-          weakOptions={ticketSheetPayload?.weakOptions || []}
+          options={ticketSheetOptions}
           onClose={controller.closeTicketSheet}
           onSelect={(option) => {
             void controller.onSelectTicketSheetOption(option);
