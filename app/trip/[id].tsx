@@ -392,11 +392,12 @@ export default function TripDetailScreen() {
     thingsCount,
   ]);
 
+  const ticketSheetPayload = controller.ticketSheet.payload;
+
   const ticketSheetMatchLabel = useMemo(() => {
-    const payload = controller.ticketSheet.payload;
-    if (!payload) return "Match tickets";
-    return `${payload.homeName} vs ${payload.awayName}`;
-  }, [controller.ticketSheet.payload]);
+    if (!ticketSheetPayload) return "Match tickets";
+    return `${ticketSheetPayload.homeName} vs ${ticketSheetPayload.awayName}`;
+  }, [ticketSheetPayload]);
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -669,14 +670,15 @@ export default function TripDetailScreen() {
           visible={controller.ticketSheet.visible}
           matchLabel={ticketSheetMatchLabel}
           subtitle="Compare ticket providers"
-          options={controller.ticketSheet.payload?.options || []}
+          strongOptions={ticketSheetPayload?.strongOptions || []}
+          weakOptions={ticketSheetPayload?.weakOptions || []}
           onClose={controller.closeTicketSheet}
           onSelect={(option) => {
             void controller.onSelectTicketSheetOption(option);
           }}
           onCompareAll={controller.onCompareAllTickets}
           onOpenOfficial={
-            controller.ticketSheet.payload?.officialTicketUrl
+            ticketSheetPayload?.officialTicketUrl
               ? () => {
                   void controller.onOpenOfficialFromSheet();
                 }
