@@ -409,4 +409,308 @@ export const ekstraklasaCityGuides: Record<string, CityGuide> = {
   },
 
   lubin: {
-    cityId: "lub
+    cityId: "lubin",
+    name: "Lubin",
+    country: "Poland",
+    overview:
+      "Lubin is a functional football stop rather than a major city-break product. That is not a criticism. It just means the value is in efficiency, lower-profile football texture, and the chance to cover a club that sits outside the obvious glamour route.\n\nFor Zagłębie, the city should be sold honestly: practical overnight, straightforward football, and best when paired with a broader Lower Silesia plan if you want more leisure upside.",
+    topThings: [
+      { title: "Zagłębie matchday", tip: "This is the central purpose of the trip." },
+      { title: "Short central walk", tip: "Enough for orientation and a meal, nothing more dramatic." },
+      { title: "One-night football stay", tip: "The cleanest framing for Lubin." },
+      { title: "Simple pre-match meal", tip: "Keep it central and practical." },
+      { title: "Lower Silesia tie-in", tip: "The trip becomes stronger if folded into wider regional travel." },
+      { title: "Morning café reset", tip: "Useful if leaving the next day." },
+      { title: "Compact city rhythm", tip: "Low-friction is the point here." },
+      { title: "Stadium-first planning", tip: "Do not overengineer a small practical stop." },
+      { title: "Straightforward overnight logistics", tip: "This city works best when treated simply." },
+      { title: "Regional onward move", tip: "Lubin is often more valuable as part of a route than as a destination by itself." },
+    ],
+    tips: [
+      "Best framed as a football stop, not a leisure weekend.",
+      "One night is usually enough.",
+      "Stay central if staying at all.",
+      "Wrocław can be the stronger broader regional base.",
+      "Good for proper league coverage rather than glamour travel.",
+    ],
+    food: [
+      "Simple local restaurants",
+      "Practical central dining",
+      "Straightforward cafés",
+      "Low-fuss pre-match meals",
+    ],
+    transport:
+      "Lubin should be handled practically. The city is small enough that the main issue is broader regional access, not movement inside town.",
+    accommodation:
+      "Lubin centre is best for simplicity. Wrocław is stronger if you want a fuller regional weekend.",
+  },
+
+  plock: {
+    cityId: "plock",
+    name: "Płock",
+    country: "Poland",
+    overview:
+      "Płock is a tidy smaller-city football trip rather than a major glamour weekend. That makes it more usable than people assume. Smaller Polish cities often work well when kept efficient: one decent central stay, one football-focused evening, and one simple morning reset.\n\nFor Wisła Płock, the city adds enough riverside and old-town atmosphere that the trip feels coherent even if it is not flashy.",
+    topThings: [
+      { title: "Old Town and river area", tip: "Best part of the city to get a quick sense of place." },
+      { title: "Wisła Płock matchday", tip: "The real anchor of the trip." },
+      { title: "Cathedral and hilltop views", tip: "Good visual add-on if you have daylight spare." },
+      { title: "Simple central dinner", tip: "Best to keep food plans practical and close." },
+      { title: "One-night football stay", tip: "Usually the right format." },
+      { title: "Morning riverside walk", tip: "Strong low-pressure reset before leaving." },
+      { title: "Compact centre loop", tip: "Enough for orientation, no need to force more." },
+      { title: "Low-friction logistics", tip: "This is where the city wins." },
+      { title: "Post-match central return", tip: "Usually smarter than lingering near the ground." },
+      { title: "Football-first short break", tip: "That is the honest product." },
+    ],
+    tips: [
+      "Best as a one-night football-led stop.",
+      "Stay central or near the old-town/riverside area.",
+      "Keep plans simple and the city works well.",
+      "Not a major city-break, but not a dead stop either.",
+      "Useful for proper league-depth coverage.",
+    ],
+    food: [
+      "Central Polish dining",
+      "Riverside restaurants",
+      "Simple cafés",
+      "Practical pre-match meals",
+    ],
+    transport:
+      "Płock is easy enough once you are in the centre. The main job is to keep the trip compact and not overcomplicate the route.",
+    accommodation:
+      "City centre and the old-town/riverside side are the best options for atmosphere and simplicity.",
+  },
+
+  kielce: {
+    cityId: "kielce",
+    name: "Kielce",
+    country: "Poland",
+    overview:
+      "Kielce is a coherent football stop with decent practicality, but it is not a luxury football weekend. That is fine. The city’s strength is that it is straightforward: compact enough to manage easily, lively enough for one evening, and tied to a club with a recognisable domestic identity.\n\nFor Korona, the city gives you a proper football-first product without requiring you to pretend it is one of the elite leisure breaks in the country.",
+    topThings: [
+      { title: "Sienkiewicza Street", tip: "The central social spine and best base for food and drink." },
+      { title: "Korona matchday", tip: "The main event and real reason to be here." },
+      { title: "Palace of the Kraków Bishops area", tip: "A decent central add-on if you want a bit of city texture." },
+      { title: "Short centre walk", tip: "Enough for a calm afternoon block." },
+      { title: "One proper meal", tip: "Kielce is better handled with one solid dinner than lots of drifting." },
+      { title: "Simple pre-match pub plan", tip: "Keep it central and low-fuss." },
+      { title: "Morning coffee reset", tip: "Useful after a football night." },
+      { title: "Low-friction overnight", tip: "This is where Kielce makes sense." },
+      { title: "Post-match centre return", tip: "Usually the cleanest move." },
+      { title: "Football-led short break", tip: "That is the honest route." },
+    ],
+    tips: [
+      "Best as a simple overnight rather than a long luxury weekend.",
+      "Stay central near Sienkiewicza Street.",
+      "Korona is the anchor, not a giant city itinerary.",
+      "Useful if you value practicality over glamour.",
+      "Strong enough as a proper domestic football stop.",
+    ],
+    food: [
+      "Central Polish dining",
+      "Simple bars and grills",
+      "Street cafés",
+      "Straightforward pre-match meals",
+    ],
+    transport:
+      "Kielce works best when you stay central and keep everything simple. You do not need an elaborate transport plan here.",
+    accommodation:
+      "The centre, especially near Sienkiewicza Street, is the smartest stay zone.",
+  },
+
+  katowice: {
+    cityId: "katowice",
+    name: "Katowice",
+    country: "Poland",
+    bookingLinks: {
+      thingsToDo: GYG.katowice,
+    },
+    thingsToDoUrl: GYG.katowice,
+    overview:
+      "Katowice is one of the most underrated football-weekend bases in Poland because it gives you exactly what many football travellers actually need: serious nightlife, good transport, strong regional identity, and access to the wider Silesian football landscape. It is not pretty in the way Kraków or Gdańsk are, but it is more useful than many prettier cities.\n\nFor GKS Katowice, that matters. The city and club fit together in a way that feels grounded and authentic rather than tourist-packaged.",
+    topThings: [
+      { title: "Mariacka Street", tip: "Best nightlife spine and obvious evening anchor." },
+      { title: "Nikiszowiec", tip: "One of the strongest identity-heavy neighbourhood visits in the region." },
+      { title: "Silesian Museum", tip: "High-value stop if you want regional context, not fluff." },
+      { title: "Spodek area", tip: "Good orientation point and central meeting zone." },
+      { title: "GKS Katowice matchday", tip: "A major part of the city’s football-travel appeal now the new stadium is in play." },
+      { title: "Regional football planning", tip: "Katowice is the smartest base for wider Silesian coverage." },
+      { title: "One serious dinner and drinks", tip: "The city does this well without needing overplanning." },
+      { title: "Post-industrial city texture", tip: "Part of the appeal is how different Katowice feels from standard old-town breaks." },
+      { title: "Post-match central return", tip: "Best move if you want the night to keep going." },
+      { title: "Slow Sunday café block", tip: "Useful after a bigger football night." },
+    ],
+    tips: [
+      "Katowice is often the smartest Silesian overnight base even if your match is elsewhere in the region.",
+      "Use it for football-plus-nightlife practicality, not romantic tourism.",
+      "Mariacka is the obvious evening district.",
+      "Nikiszowiec adds local identity and stops the trip feeling generic.",
+      "One of the best utility bases in the whole app.",
+    ],
+    food: [
+      "Modern Polish dining",
+      "Mariacka bars and restaurants",
+      "Regional Silesian comfort food",
+      "Casual central cafés",
+    ],
+    transport:
+      "Katowice works extremely well as a regional base because rail and road links make wider Silesian football movement manageable.",
+    accommodation:
+      "Katowice centre is the correct answer for most travellers. Stay there unless you have a very specific reason not to.",
+  },
+
+  radom: {
+    cityId: "radom",
+    name: "Radom",
+    country: "Poland",
+    overview:
+      "Radom is a functional football stop with a cleaner, more modern setup than older lower-tier associations might lead you to expect. That does not suddenly make it a major city-break product, but it does make it usable. The honest version is simple: football-focused overnight, straightforward logistics, and low wasted time.\n\nFor Radomiak, the point is commitment to proper league coverage rather than chasing only obvious glamour cities.",
+    topThings: [
+      { title: "Radomiak matchday", tip: "The clear anchor of the trip." },
+      { title: "Simple central walk", tip: "Enough to orient yourself before food or drinks." },
+      { title: "One practical dinner", tip: "Do not overcomplicate the city’s role." },
+      { title: "Compact overnight", tip: "Usually the correct framing." },
+      { title: "Morning reset café", tip: "Useful if leaving by rail or road the next day." },
+      { title: "Modern stadium visit focus", tip: "The ground is part of the city’s improved football product." },
+      { title: "Warsaw-linked side trip logic", tip: "Sometimes the smarter broader travel setup." },
+      { title: "Low-friction planning", tip: "This is where Radom works." },
+      { title: "Post-match centre return", tip: "Usually the best move." },
+      { title: "Football-first short stop", tip: "That is the honest product." },
+    ],
+    tips: [
+      "Best as a football-focused overnight or side trip.",
+      "Keep the stay central and practical.",
+      "Warsaw can be the stronger broader travel base.",
+      "Do not oversell the city as a luxury break.",
+      "Useful for proper domestic-league coverage.",
+    ],
+    food: [
+      "Simple Polish restaurants",
+      "Central cafés",
+      "Basic bars and grills",
+      "Straightforward pre-match meals",
+    ],
+    transport:
+      "Radom is manageable if you keep everything central. The bigger question is whether you are basing locally or linking it with Warsaw.",
+    accommodation:
+      "Radom centre is best for simplicity. Warsaw makes more sense if you want broader weekend value.",
+  },
+
+  lublin: {
+    cityId: "lublin",
+    name: "Lublin",
+    country: "Poland",
+    bookingLinks: {
+      thingsToDo: GYG.lublin,
+    },
+    thingsToDoUrl: GYG.lublin,
+    overview:
+      "Lublin is stronger as a football city-break than many people expect. It has a genuinely attractive old core, a decent nightlife rhythm, and enough cultural weight that the match feels naturally embedded in a worthwhile weekend rather than artificially pasted onto one. That makes it a strong product for your app.\n\nFor Motor Lublin, the city is a major asset. It helps turn what could have been a specialist football stop into something much more broadly recommendable.",
+    topThings: [
+      { title: "Old Town", tip: "The obvious anchor and best place to begin." },
+      { title: "Castle and old-city skyline angles", tip: "Good visual payoff without requiring a huge time sink." },
+      { title: "Krakowskie Przedmieście", tip: "Useful for cafés, bars, and city flow." },
+      { title: "Motor Lublin matchday", tip: "A proper modern football anchor in a city that already works well." },
+      { title: "One good dinner in the centre", tip: "Lublin rewards this more than endless snacking." },
+      { title: "Nightlife around the centre", tip: "Not giant-city scale, but enough for a proper football weekend." },
+      { title: "Slow daytime architecture loop", tip: "Good if you have a full second day." },
+      { title: "Post-match old-town return", tip: "Best move if staying central." },
+      { title: "Coffee and pastry morning", tip: "Strong easy reset city." },
+      { title: "Longer eastern-Poland route tie-in", tip: "Useful if building a broader football travel arc." },
+    ],
+    tips: [
+      "Lublin is better than many people assume, so don’t undersell it.",
+      "Old Town is the best base for atmosphere.",
+      "This is a proper city-break-capable football weekend.",
+      "One of the better non-obvious Polish destinations in the app.",
+      "Works well with two nights.",
+    ],
+    food: [
+      "Old-town restaurants",
+      "Modern Polish dining",
+      "Casual centre bars and cafés",
+      "Strong breakfast options",
+    ],
+    transport:
+      "Central Lublin is manageable on foot if you stay in the right zone. Matchday should be a planned move but not a major headache.",
+    accommodation:
+      "Old Town is the strongest atmosphere base. The wider centre is better if you want a bit more practicality and hotel choice.",
+  },
+
+  gdynia: {
+    cityId: "gdynia",
+    name: "Gdynia",
+    country: "Poland",
+    overview:
+      "Gdynia is a cleaner, more modern coastal product than Gdańsk, and that gives it a different kind of value. It is less historically rich, but often easier, lighter, and more openly leisure-oriented. As a football trip, that makes sense for Arka especially if you are folding the weekend into the wider Tri-City route.\n\nGdynia alone is fine. Gdynia as part of Tri-City football travel is much stronger.",
+    topThings: [
+      { title: "Seafront and Skwer Kościuszki", tip: "Best simple city route and immediate identity hit." },
+      { title: "Beach and marina zone", tip: "Best in decent weather; obvious, but it works." },
+      { title: "Arka matchday", tip: "The key football anchor in the city." },
+      { title: "Gdynia centre stroll", tip: "More practical than romantic, but easy to use." },
+      { title: "Tri-City linking", tip: "Part of Gdynia’s value is how easily it sits inside a wider coastal trip." },
+      { title: "One seafood or coast dinner", tip: "Lean into the location rather than forcing generic city dining." },
+      { title: "Post-match coast return", tip: "Good if you want a calmer late evening feel." },
+      { title: "Morning seafront reset", tip: "Very strong after a football night." },
+      { title: "Gdańsk add-on", tip: "Useful if you want a stronger nightlife or heritage layer." },
+      { title: "Simple football-and-coast weekend", tip: "That is the honest product." },
+    ],
+    tips: [
+      "Gdynia works best as part of a Tri-City route.",
+      "Central Gdynia is the best local base.",
+      "Gdańsk is the stronger broader base if you want more nightlife and depth.",
+      "Use the coast as part of the weekend, not just the match.",
+      "A cleaner, calmer football trip than some inland cities.",
+    ],
+    food: [
+      "Seafood",
+      "Seafront dining",
+      "Casual centre cafés",
+      "Simple bars and restaurants",
+    ],
+    transport:
+      "Gdynia is easy enough locally and gains major value from Tri-City rail links, which make wider coastal movement straightforward.",
+    accommodation:
+      "Gdynia centre is best if you want local simplicity. Gdańsk is stronger if you want the broader high-value city-break base.",
+  },
+
+  nieciecza: {
+    cityId: "nieciecza",
+    name: "Nieciecza",
+    country: "Poland",
+    overview:
+      "Nieciecza is not a mainstream weekend destination. It is a committed football stop. That is the entire point. This is one of those fixtures that only makes sense if you actually care about domestic football depth, unusual clubs, and covering the map properly.\n\nTrying to dress it up as a general leisure city would be stupid. The real value is niche football interest, novelty, and the satisfaction of doing something outside the obvious route.",
+    topThings: [
+      { title: "Bruk-Bet Termalica matchday", tip: "The clear reason to come." },
+      { title: "Minimal local stop", tip: "Keep expectations disciplined." },
+      { title: "Tarnów base option", tip: "Usually the smarter practical overnight move." },
+      { title: "Southern Poland route tie-in", tip: "This trip works better as part of a broader plan." },
+      { title: "Simple pre-match meal", tip: "Sort food before relying on ultra-local convenience." },
+      { title: "Small-ground novelty", tip: "Part of the appeal is that this is so different from the bigger-city products." },
+      { title: "Football-depth bragging rights", tip: "That is genuinely part of the product here." },
+      { title: "One-night practical stop", tip: "The correct framing almost every time." },
+      { title: "Do not overplan", tip: "You will just expose the limits of the place." },
+      { title: "Absorb-and-move-on trip", tip: "That is the honest way to enjoy it." },
+    ],
+    tips: [
+      "This is a niche football stop, not a mainstream weekend away.",
+      "Tarnów is usually the best practical base.",
+      "Kraków is the broader city-break alternative if combining travel.",
+      "Keep expectations realistic and the trip becomes far more enjoyable.",
+      "Best for serious league-completeness travellers.",
+    ],
+    food: [
+      "Simple local meals",
+      "Practical pre-match dining",
+      "Tarnów-based evening food options",
+      "Low-fuss cafés",
+    ],
+    transport:
+      "This is a logistics-first trip. The key is not inner-city transport sophistication, but sensible broader planning around Tarnów or Kraków.",
+    accommodation:
+      "Tarnów is the best practical overnight base. Kraków makes more sense only if you are building a larger southern Poland trip around it.",
+  },
+};
+
+export default ekstraklasaCityGuides;
