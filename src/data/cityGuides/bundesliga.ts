@@ -25,6 +25,9 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "munich",
     name: "Munich",
     country: "Germany",
+    bookingLinks: {
+      thingsToDo: GYG.munich,
+    },
     thingsToDoUrl: GYG.munich,
 
     overview:
@@ -70,6 +73,9 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "berlin",
     name: "Berlin",
     country: "Germany",
+    bookingLinks: {
+      thingsToDo: GYG.berlin,
+    },
     thingsToDoUrl: GYG.berlin,
 
     overview:
@@ -115,6 +121,9 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "hamburg",
     name: "Hamburg",
     country: "Germany",
+    bookingLinks: {
+      thingsToDo: GYG.hamburg,
+    },
     thingsToDoUrl: GYG.hamburg,
 
     overview:
@@ -160,6 +169,9 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "cologne",
     name: "Cologne",
     country: "Germany",
+    bookingLinks: {
+      thingsToDo: GYG.cologne,
+    },
     thingsToDoUrl: GYG.cologne,
 
     overview:
@@ -205,6 +217,9 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "frankfurt",
     name: "Frankfurt",
     country: "Germany",
+    bookingLinks: {
+      thingsToDo: GYG.frankfurt,
+    },
     thingsToDoUrl: GYG.frankfurt,
 
     overview:
@@ -250,6 +265,9 @@ export const bundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "leipzig",
     name: "Leipzig",
     country: "Germany",
+    bookingLinks: {
+      thingsToDo: GYG.leipzig,
+    },
     thingsToDoUrl: GYG.leipzig,
 
     overview:
