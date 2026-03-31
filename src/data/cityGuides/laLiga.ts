@@ -9,15 +9,21 @@ import type { CityGuide } from "./types";
  * let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
  */
 const GYG = {
-  barcelona: "https://www.getyourguide.com/en-gb/barcelona-l45/?partner_id=MAQJREP&utm_medium=online_publisher",
-  madrid: "https://www.getyourguide.com/en-gb/madrid-l46/?partner_id=MAQJREP&utm_medium=online_publisher",
-  bilbao: "https://www.getyourguide.com/en-gb/bilbao-l93/?partner_id=MAQJREP&utm_medium=online_publisher",
-  valencia: "https://www.getyourguide.com/en-gb/valencia-l49/?partner_id=MAQJREP&utm_medium=online_publisher",
-  seville: "https://www.getyourguide.com/en-gb/seville-l48/?partner_id=MAQJREP&utm_medium=online_publisher",
+  barcelona:
+    "https://www.getyourguide.com/en-gb/barcelona-l45/?partner_id=MAQJREP&utm_medium=online_publisher",
+  madrid:
+    "https://www.getyourguide.com/en-gb/madrid-l46/?partner_id=MAQJREP&utm_medium=online_publisher",
+  bilbao:
+    "https://www.getyourguide.com/en-gb/bilbao-l93/?partner_id=MAQJREP&utm_medium=online_publisher",
+  valencia:
+    "https://www.getyourguide.com/en-gb/valencia-l49/?partner_id=MAQJREP&utm_medium=online_publisher",
+  seville:
+    "https://www.getyourguide.com/en-gb/seville-l48/?partner_id=MAQJREP&utm_medium=online_publisher",
   "san-sebastian":
     "https://www.getyourguide.com/en-gb/san-sebastian-l94/?partner_id=MAQJREP&utm_medium=online_publisher",
   // Palma city landing exists but the slug can vary; this ID-based page is stable.
-  "palma-de-mallorca": "https://www.getyourguide.com/en-gb/-l1260/?partner_id=MAQJREP&utm_medium=online_publisher",
+  "palma-de-mallorca":
+    "https://www.getyourguide.com/en-gb/-l1260/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const laLigaCityGuides: Record<string, CityGuide> = {
@@ -25,22 +31,55 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
     cityId: "barcelona",
     name: "Barcelona",
     country: "Spain",
+    bookingLinks: {
+      thingsToDo: GYG.barcelona,
+    },
     thingsToDoUrl: GYG.barcelona,
 
     overview:
       "Barcelona is football + Mediterranean city life done properly: walkable neighbourhoods, great metro coverage, and enough standout sights to fill a weekend without over-planning. The win is pacing—cluster your days by area, book the one or two big attractions you care about, and keep matchday logistics boring and predictable.",
 
     topThings: [
-      { title: "Sagrada Família", tip: "Book timed entry ahead. Early morning or late afternoon is the cleanest crowd profile." },
-      { title: "Gothic Quarter wander", tip: "Use Las Ramblas only as a corridor—your time belongs in the side streets." },
-      { title: "Park Güell", tip: "Get tickets online. If sold out, the upper/free areas still deliver strong viewpoints." },
-      { title: "El Born evenings", tip: "Pick one dinner booking, then let the rest be pintxo/tapas-style roaming." },
-      { title: "Montjuïc half-day loop", tip: "Cable car + castle + Olympic area works as one coherent block." },
-      { title: "La Boqueria market", tip: "Go early and walk past the first few stalls; the front row is tourist pricing." },
-      { title: "Beach reset (Barceloneta)", tip: "Morning is calmer. Afternoon can be noisy—choose it intentionally." },
-      { title: "Modernisme house (Casa Batlló OR Casa Milà)", tip: "Choose one unless you’re genuinely architecture-obsessed." },
-      { title: "Rooftop sunset", tip: "Hotel rooftops often beat crowded viewpoints for comfort + views." },
-      { title: "Matchday neighbourhood walk", tip: "Arrive early and walk the stadium area. The build-up is part of the experience." },
+      {
+        title: "Sagrada Família",
+        tip: "Book timed entry ahead. Early morning or late afternoon is the cleanest crowd profile.",
+      },
+      {
+        title: "Gothic Quarter wander",
+        tip: "Use Las Ramblas only as a corridor—your time belongs in the side streets.",
+      },
+      {
+        title: "Park Güell",
+        tip: "Get tickets online. If sold out, the upper/free areas still deliver strong viewpoints.",
+      },
+      {
+        title: "El Born evenings",
+        tip: "Pick one dinner booking, then let the rest be pintxo/tapas-style roaming.",
+      },
+      {
+        title: "Montjuïc half-day loop",
+        tip: "Cable car + castle + Olympic area works as one coherent block.",
+      },
+      {
+        title: "La Boqueria market",
+        tip: "Go early and walk past the first few stalls; the front row is tourist pricing.",
+      },
+      {
+        title: "Beach reset (Barceloneta)",
+        tip: "Morning is calmer. Afternoon can be noisy—choose it intentionally.",
+      },
+      {
+        title: "Modernisme house (Casa Batlló OR Casa Milà)",
+        tip: "Choose one unless you’re genuinely architecture-obsessed.",
+      },
+      {
+        title: "Rooftop sunset",
+        tip: "Hotel rooftops often beat crowded viewpoints for comfort + views.",
+      },
+      {
+        title: "Matchday neighbourhood walk",
+        tip: "Arrive early and walk the stadium area. The build-up is part of the experience.",
+      },
     ],
 
     tips: [
@@ -71,22 +110,55 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
     cityId: "madrid",
     name: "Madrid",
     country: "Spain",
+    bookingLinks: {
+      thingsToDo: GYG.madrid,
+    },
     thingsToDoUrl: GYG.madrid,
 
     overview:
       "Madrid is one of Europe’s best football-weekend cities: lively late, walkable central districts, and neighbourhoods that feel distinct without needing long travel. Build days around food and one strong cultural block, then let the evening carry itself.",
 
     topThings: [
-      { title: "Prado Museum", tip: "Go early. Pick 2–3 sections rather than trying to ‘complete’ it." },
-      { title: "Retiro Park", tip: "Perfect mid-day reset between sightseeing blocks." },
-      { title: "Gran Vía after dark", tip: "The street reads better at night—lights, energy, people." },
-      { title: "Sol → Plaza Mayor loop", tip: "Quick photos, then move on. Don’t burn prime time here." },
-      { title: "Temple of Debod sunset", tip: "Arrive early for space; it’s small but scenic." },
-      { title: "La Latina tapas", tip: "Late afternoon into evening is the sweet spot." },
-      { title: "Malasaña night", tip: "Bars wake up after 10pm—don’t show up at 8 and call it dead." },
-      { title: "One rooftop terrace", tip: "Skyline views without a museum-style queue." },
-      { title: "Neighbourhood coffee loop", tip: "Madrid is a ‘walk and stop’ city. Keep it loose and it’s better." },
-      { title: "Matchday approach", tip: "Plan your transport in/out. Post-match crowds make improvisation expensive." },
+      {
+        title: "Prado Museum",
+        tip: "Go early. Pick 2–3 sections rather than trying to ‘complete’ it.",
+      },
+      {
+        title: "Retiro Park",
+        tip: "Perfect mid-day reset between sightseeing blocks.",
+      },
+      {
+        title: "Gran Vía after dark",
+        tip: "The street reads better at night—lights, energy, people.",
+      },
+      {
+        title: "Sol → Plaza Mayor loop",
+        tip: "Quick photos, then move on. Don’t burn prime time here.",
+      },
+      {
+        title: "Temple of Debod sunset",
+        tip: "Arrive early for space; it’s small but scenic.",
+      },
+      {
+        title: "La Latina tapas",
+        tip: "Late afternoon into evening is the sweet spot.",
+      },
+      {
+        title: "Malasaña night",
+        tip: "Bars wake up after 10pm—don’t show up at 8 and call it dead.",
+      },
+      {
+        title: "One rooftop terrace",
+        tip: "Skyline views without a museum-style queue.",
+      },
+      {
+        title: "Neighbourhood coffee loop",
+        tip: "Madrid is a ‘walk and stop’ city. Keep it loose and it’s better.",
+      },
+      {
+        title: "Matchday approach",
+        tip: "Plan your transport in/out. Post-match crowds make improvisation expensive.",
+      },
     ],
 
     tips: [
@@ -116,22 +188,55 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
     cityId: "bilbao",
     name: "Bilbao",
     country: "Spain",
+    bookingLinks: {
+      thingsToDo: GYG.bilbao,
+    },
     thingsToDoUrl: GYG.bilbao,
 
     overview:
       "Bilbao is elite for football trips: compact, characterful, and built around food. It’s a city where a simple plan wins—one cultural anchor, one long pintxos evening, and a matchday that’s calm because logistics are easy.",
 
     topThings: [
-      { title: "Guggenheim (inside or just exterior loop)", tip: "Even if you skip entry, do the riverside exterior walk—high impact, low time." },
-      { title: "Casco Viejo (Old Town)", tip: "Base for bars and atmosphere. Wander, don’t route-plan." },
-      { title: "Pintxos crawl", tip: "One drink + one bite, then move. Don’t camp in one place." },
-      { title: "Ribera Market", tip: "Strong daytime food stop. Go hungry." },
-      { title: "Mount Artxanda viewpoint", tip: "Best city overview. Ideal before dinner." },
-      { title: "Riverside walk", tip: "A simple connector that makes the city feel coherent." },
-      { title: "Azkuna Zentroa", tip: "Good indoor reset and coffee stop." },
-      { title: "Abando district", tip: "Shopping + nicer hotels; good ‘base’ area." },
-      { title: "Coastal add-on (Getxo)", tip: "If you have a spare half-day, it’s a strong contrast to the city core." },
-      { title: "Matchday approach", tip: "Arrive early and walk the stadium area—Bilbao build-up is quality." },
+      {
+        title: "Guggenheim (inside or just exterior loop)",
+        tip: "Even if you skip entry, do the riverside exterior walk—high impact, low time.",
+      },
+      {
+        title: "Casco Viejo (Old Town)",
+        tip: "Base for bars and atmosphere. Wander, don’t route-plan.",
+      },
+      {
+        title: "Pintxos crawl",
+        tip: "One drink + one bite, then move. Don’t camp in one place.",
+      },
+      {
+        title: "Ribera Market",
+        tip: "Strong daytime food stop. Go hungry.",
+      },
+      {
+        title: "Mount Artxanda viewpoint",
+        tip: "Best city overview. Ideal before dinner.",
+      },
+      {
+        title: "Riverside walk",
+        tip: "A simple connector that makes the city feel coherent.",
+      },
+      {
+        title: "Azkuna Zentroa",
+        tip: "Good indoor reset and coffee stop.",
+      },
+      {
+        title: "Abando district",
+        tip: "Shopping + nicer hotels; good ‘base’ area.",
+      },
+      {
+        title: "Coastal add-on (Getxo)",
+        tip: "If you have a spare half-day, it’s a strong contrast to the city core.",
+      },
+      {
+        title: "Matchday approach",
+        tip: "Arrive early and walk the stadium area—Bilbao build-up is quality.",
+      },
     ],
 
     tips: [
@@ -155,22 +260,55 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
     cityId: "valencia",
     name: "Valencia",
     country: "Spain",
+    bookingLinks: {
+      thingsToDo: GYG.valencia,
+    },
     thingsToDoUrl: GYG.valencia,
 
     overview:
       "Valencia is one of Spain’s most rounded weekend cities: historic old town, futuristic architecture, and beach lifestyle in a single place. It’s easy to structure days cleanly—one culture block, one food block, one sea-air reset—and still have plenty left for matchday.",
 
     topThings: [
-      { title: "City of Arts & Sciences", tip: "Go early or near sunset for the best photos and fewer crowds." },
-      { title: "Central Market (Mercado Central)", tip: "Best for breakfast/lunch supplies. Don’t go when you’re already full." },
-      { title: "Turia Gardens", tip: "Walk or cycle; it’s the city’s best ‘reset’ corridor." },
-      { title: "Cathedral + Miguelete Tower", tip: "Climb for orientation—then the city makes more sense." },
-      { title: "La Lonja de la Seda", tip: "Quick historic highlight with high payoff." },
-      { title: "Ruzafa", tip: "Strong food/cocktail neighbourhood; ideal evening base." },
-      { title: "El Carmen", tip: "Old streets + bars; best at night." },
-      { title: "Malvarrosa Beach", tip: "Weekday mornings are calm. Pair with seafood lunch." },
-      { title: "Paella proper", tip: "Do it once, do it well—avoid tourist strip traps." },
-      { title: "Matchday timing", tip: "Eat before heading to the stadium area—post-match kitchens can be chaos." },
+      {
+        title: "City of Arts & Sciences",
+        tip: "Go early or near sunset for the best photos and fewer crowds.",
+      },
+      {
+        title: "Central Market (Mercado Central)",
+        tip: "Best for breakfast/lunch supplies. Don’t go when you’re already full.",
+      },
+      {
+        title: "Turia Gardens",
+        tip: "Walk or cycle; it’s the city’s best ‘reset’ corridor.",
+      },
+      {
+        title: "Cathedral + Miguelete Tower",
+        tip: "Climb for orientation—then the city makes more sense.",
+      },
+      {
+        title: "La Lonja de la Seda",
+        tip: "Quick historic highlight with high payoff.",
+      },
+      {
+        title: "Ruzafa",
+        tip: "Strong food/cocktail neighbourhood; ideal evening base.",
+      },
+      {
+        title: "El Carmen",
+        tip: "Old streets + bars; best at night.",
+      },
+      {
+        title: "Malvarrosa Beach",
+        tip: "Weekday mornings are calm. Pair with seafood lunch.",
+      },
+      {
+        title: "Paella proper",
+        tip: "Do it once, do it well—avoid tourist strip traps.",
+      },
+      {
+        title: "Matchday timing",
+        tip: "Eat before heading to the stadium area—post-match kitchens can be chaos.",
+      },
     ],
 
     tips: [
@@ -181,7 +319,13 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Heat can be serious in summer—do sightseeing early/late.",
     ],
 
-    food: ["Paella Valenciana", "Seafood rice", "Horchata + fartons", "Fresh orange juice", "Tapas in Ruzafa"],
+    food: [
+      "Paella Valenciana",
+      "Seafood rice",
+      "Horchata + fartons",
+      "Fresh orange juice",
+      "Tapas in Ruzafa",
+    ],
 
     transport:
       "Metro links airport; trams run to the beach. Walking covers the central core. Bikes are popular for the Turia corridor.",
@@ -194,22 +338,55 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
     cityId: "seville",
     name: "Seville",
     country: "Spain",
+    bookingLinks: {
+      thingsToDo: GYG.seville,
+    },
     thingsToDoUrl: GYG.seville,
 
     overview:
       "Seville is high-impact: historic architecture, intense street life, and a food culture built for roaming and small plates. It’s perfect for football trips because the centre is walkable and the atmosphere is consistent day to night.",
 
     topThings: [
-      { title: "Cathedral & Giralda", tip: "Go early. The tower views are worth the effort." },
-      { title: "Real Alcázar", tip: "Timed tickets in advance—walk-ins get destroyed in peak periods." },
-      { title: "Plaza de España", tip: "Best at sunrise or sunset. Midday heat can be brutal." },
-      { title: "Barrio Santa Cruz", tip: "Wander without a route; it’s built for getting slightly lost." },
-      { title: "Triana", tip: "Cross the river for a more local-feeling evening." },
-      { title: "Metropol Parasol (Las Setas)", tip: "Strong sunset viewpoint if you time it right." },
-      { title: "Tapas crawl", tip: "Small orders, many stops. Don’t turn it into one long sit-down." },
-      { title: "Flamenco (small venue)", tip: "Book a smaller spot; big tourist shows are often sterile." },
-      { title: "Guadalquivir river walk", tip: "Easy evening reset and a clean connector between areas." },
-      { title: "Matchday build-up", tip: "Arrive early; the stadium-area atmosphere builds properly here." },
+      {
+        title: "Cathedral & Giralda",
+        tip: "Go early. The tower views are worth the effort.",
+      },
+      {
+        title: "Real Alcázar",
+        tip: "Timed tickets in advance—walk-ins get destroyed in peak periods.",
+      },
+      {
+        title: "Plaza de España",
+        tip: "Best at sunrise or sunset. Midday heat can be brutal.",
+      },
+      {
+        title: "Barrio Santa Cruz",
+        tip: "Wander without a route; it’s built for getting slightly lost.",
+      },
+      {
+        title: "Triana",
+        tip: "Cross the river for a more local-feeling evening.",
+      },
+      {
+        title: "Metropol Parasol (Las Setas)",
+        tip: "Strong sunset viewpoint if you time it right.",
+      },
+      {
+        title: "Tapas crawl",
+        tip: "Small orders, many stops. Don’t turn it into one long sit-down.",
+      },
+      {
+        title: "Flamenco (small venue)",
+        tip: "Book a smaller spot; big tourist shows are often sterile.",
+      },
+      {
+        title: "Guadalquivir river walk",
+        tip: "Easy evening reset and a clean connector between areas.",
+      },
+      {
+        title: "Matchday build-up",
+        tip: "Arrive early; the stadium-area atmosphere builds properly here.",
+      },
     ],
 
     tips: [
@@ -220,7 +397,13 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Aim for one ‘anchor’ booking each day, then roam.",
     ],
 
-    food: ["Jamón ibérico", "Salmorejo", "Croquetas", "Espinacas con garbanzos", "Vermouth + olives"],
+    food: [
+      "Jamón ibérico",
+      "Salmorejo",
+      "Croquetas",
+      "Espinacas con garbanzos",
+      "Vermouth + olives",
+    ],
 
     transport:
       "Walking covers the core. Buses handle longer jumps; metro is limited but useful in specific corridors.",
@@ -233,22 +416,55 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
     cityId: "san-sebastian",
     name: "San Sebastián",
     country: "Spain",
+    bookingLinks: {
+      thingsToDo: GYG["san-sebastian"],
+    },
     thingsToDoUrl: GYG["san-sebastian"],
 
     overview:
       "San Sebastián (Donostia) is compact, polished, and built around food. It’s one of the best ‘football + eating’ weekends in Europe because the city is walkable, the bay is stunning, and you don’t need logistics to have a great time.",
 
     topThings: [
-      { title: "La Concha bay walk", tip: "Do it early morning for calm and clean photos." },
-      { title: "Parte Vieja (Old Town)", tip: "The correct plan is pintxos roaming, not one big sit-down meal." },
-      { title: "Monte Urgull viewpoints", tip: "Free, easy, and gives instant orientation." },
-      { title: "Monte Igueldo funicular", tip: "Classic viewpoint; best in clear weather." },
-      { title: "Zurriola Beach", tip: "Surf vibe and a calmer alternative to the main bay." },
-      { title: "San Telmo Museum", tip: "Good Basque context without being a time sink." },
-      { title: "Harbour evening loop", tip: "Low effort, high vibe after dinner." },
-      { title: "One booked restaurant", tip: "If you want a specific place, reserve. Walk-ins get punished." },
-      { title: "Coffee + pastry morning", tip: "This city rewards slow mornings." },
-      { title: "Matchday timing", tip: "Bars fill steadily—arrive early if you want your pick of spots." },
+      {
+        title: "La Concha bay walk",
+        tip: "Do it early morning for calm and clean photos.",
+      },
+      {
+        title: "Parte Vieja (Old Town)",
+        tip: "The correct plan is pintxos roaming, not one big sit-down meal.",
+      },
+      {
+        title: "Monte Urgull viewpoints",
+        tip: "Free, easy, and gives instant orientation.",
+      },
+      {
+        title: "Monte Igueldo funicular",
+        tip: "Classic viewpoint; best in clear weather.",
+      },
+      {
+        title: "Zurriola Beach",
+        tip: "Surf vibe and a calmer alternative to the main bay.",
+      },
+      {
+        title: "San Telmo Museum",
+        tip: "Good Basque context without being a time sink.",
+      },
+      {
+        title: "Harbour evening loop",
+        tip: "Low effort, high vibe after dinner.",
+      },
+      {
+        title: "One booked restaurant",
+        tip: "If you want a specific place, reserve. Walk-ins get punished.",
+      },
+      {
+        title: "Coffee + pastry morning",
+        tip: "This city rewards slow mornings.",
+      },
+      {
+        title: "Matchday timing",
+        tip: "Bars fill steadily—arrive early if you want your pick of spots.",
+      },
     ],
 
     tips: [
@@ -259,7 +475,12 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "If weather is poor, pivot to food and museums, not forced viewpoints.",
     ],
 
-    food: ["Pintxos", "Txuleta steak", "Basque cheesecake", "Seafood rice dishes"],
+    food: [
+      "Pintxos",
+      "Txuleta steak",
+      "Basque cheesecake",
+      "Seafood rice dishes",
+    ],
 
     transport:
       "Walkable centre; buses cover beaches and outer areas. Keep your base central and you won’t think about transport.",
@@ -280,16 +501,46 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Villarreal is a compact football town that’s best treated as a relaxed base: simple matchday logistics, easy walking, and quick access to the wider Castellón coast. The trip works when you keep expectations realistic—this is football + calm Spanish rhythm, not a headline attraction city.",
 
     topThings: [
-      { title: "Town centre loop", tip: "You can cover the core quickly—use it as a vibe check, not an all-day plan." },
-      { title: "Plaza Mayor coffee stop", tip: "Best simple people-watching base." },
-      { title: "Local tapas near centre", tip: "Choose busy local bars; quiet tourist-facing spots are weaker." },
-      { title: "Short walk before matchday", tip: "A calm pre-match reset makes the day feel like a ‘trip’ not just a game." },
-      { title: "Castellón de la Plana add-on", tip: "Easy for broader dining and nightlife choice." },
-      { title: "Coast half-day (if staying longer)", tip: "Pair beach time with seafood lunch to make the weekend feel bigger." },
-      { title: "Evening stroll", tip: "Spanish small-city evenings are built for slow walking + stopping." },
-      { title: "Matchday bar timing", tip: "Arrive earlier than you think if you want seating." },
-      { title: "Post-match exit plan", tip: "Have a plan for trains/taxis if returning to Castellón—surges happen." },
-      { title: "One strong meal booking", tip: "A single reservation makes the whole trip feel organised." },
+      {
+        title: "Town centre loop",
+        tip: "You can cover the core quickly—use it as a vibe check, not an all-day plan.",
+      },
+      {
+        title: "Plaza Mayor coffee stop",
+        tip: "Best simple people-watching base.",
+      },
+      {
+        title: "Local tapas near centre",
+        tip: "Choose busy local bars; quiet tourist-facing spots are weaker.",
+      },
+      {
+        title: "Short walk before matchday",
+        tip: "A calm pre-match reset makes the day feel like a ‘trip’ not just a game.",
+      },
+      {
+        title: "Castellón de la Plana add-on",
+        tip: "Easy for broader dining and nightlife choice.",
+      },
+      {
+        title: "Coast half-day (if staying longer)",
+        tip: "Pair beach time with seafood lunch to make the weekend feel bigger.",
+      },
+      {
+        title: "Evening stroll",
+        tip: "Spanish small-city evenings are built for slow walking + stopping.",
+      },
+      {
+        title: "Matchday bar timing",
+        tip: "Arrive earlier than you think if you want seating.",
+      },
+      {
+        title: "Post-match exit plan",
+        tip: "Have a plan for trains/taxis if returning to Castellón—surges happen.",
+      },
+      {
+        title: "One strong meal booking",
+        tip: "A single reservation makes the whole trip feel organised.",
+      },
     ],
 
     tips: [
@@ -300,7 +551,12 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Treat it as football-led and it delivers.",
     ],
 
-    food: ["Tapas", "Seafood rice dishes", "Simple grills", "Local bakeries for breakfast"],
+    food: [
+      "Tapas",
+      "Seafood rice dishes",
+      "Simple grills",
+      "Local bakeries for breakfast",
+    ],
 
     transport:
       "Walking covers most of Villarreal. Regional rail/bus connections make Castellón and the coast easy if you plan timings.",
@@ -318,16 +574,46 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Vigo is a working Atlantic port city in Galicia: less tourist gloss, more authenticity, excellent seafood, and a calm everyday rhythm. It’s ideal if you want a real local-feeling football weekend instead of a highlight-reel city break.",
 
     topThings: [
-      { title: "Casco Vello (Old Town)", tip: "Walk uphill from the port for bars and viewpoints." },
-      { title: "Monte O Castro viewpoint", tip: "Best panoramic view over the bay." },
-      { title: "Port & marina evening walk", tip: "Strong low-effort sunset loop." },
-      { title: "Seafood in O Berbés", tip: "Pick busy local spots—Galicia does seafood properly." },
-      { title: "Samil Beach", tip: "Best city beach option; calmer earlier in the day." },
-      { title: "Day trip (Cíes Islands, seasonal)", tip: "Book ahead in summer if you want it—capacity can be limited." },
-      { title: "Praza da Constitución", tip: "Good café base in the centre." },
-      { title: "Market visit", tip: "Morning is best for energy and atmosphere." },
-      { title: "Neighbourhood bar crawl", tip: "Small bars beat ‘designed’ tourist venues here." },
-      { title: "Matchday pre-walk", tip: "Arrive early and let the build-up happen around the ground." },
+      {
+        title: "Casco Vello (Old Town)",
+        tip: "Walk uphill from the port for bars and viewpoints.",
+      },
+      {
+        title: "Monte O Castro viewpoint",
+        tip: "Best panoramic view over the bay.",
+      },
+      {
+        title: "Port & marina evening walk",
+        tip: "Strong low-effort sunset loop.",
+      },
+      {
+        title: "Seafood in O Berbés",
+        tip: "Pick busy local spots—Galicia does seafood properly.",
+      },
+      {
+        title: "Samil Beach",
+        tip: "Best city beach option; calmer earlier in the day.",
+      },
+      {
+        title: "Day trip (Cíes Islands, seasonal)",
+        tip: "Book ahead in summer if you want it—capacity can be limited.",
+      },
+      {
+        title: "Praza da Constitución",
+        tip: "Good café base in the centre.",
+      },
+      {
+        title: "Market visit",
+        tip: "Morning is best for energy and atmosphere.",
+      },
+      {
+        title: "Neighbourhood bar crawl",
+        tip: "Small bars beat ‘designed’ tourist venues here.",
+      },
+      {
+        title: "Matchday pre-walk",
+        tip: "Arrive early and let the build-up happen around the ground.",
+      },
     ],
 
     tips: [
@@ -356,22 +642,52 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Pamplona is compact and historic with a strong food culture. Outside festival periods it’s calm, walkable, and perfect for a short football-led break where you want good eating, easy logistics, and zero stress.",
 
     topThings: [
-      { title: "Plaza del Castillo", tip: "The natural base for coffee and a slow start." },
-      { title: "Old Town walk", tip: "Wander without a route—the streets are the point." },
-      { title: "Cathedral area", tip: "Quick cultural stop that anchors the historic core." },
-      { title: "Ciudadela Park", tip: "Good green reset between food blocks." },
-      { title: "Pintxos crawl", tip: "Small plates, many stops—don’t do one giant meal." },
-      { title: "Bull Run route (seasonal context)", tip: "Worth a quick look for the story even if you’re not here in July." },
-      { title: "Local markets", tip: "Good for casual lunch supplies." },
-      { title: "Evening squares", tip: "The city comes alive in concentrated pockets—easy night." },
-      { title: "Pre-match plan", tip: "Eat earlier; queues and packed kitchens are common on matchdays." },
-      { title: "Post-match move", tip: "Either leave cleanly or commit to one bar—don’t hover in the surge zone." },
+      {
+        title: "Plaza del Castillo",
+        tip: "The natural base for coffee and a slow start.",
+      },
+      {
+        title: "Old Town walk",
+        tip: "Wander without a route—the streets are the point.",
+      },
+      {
+        title: "Cathedral area",
+        tip: "Quick cultural stop that anchors the historic core.",
+      },
+      {
+        title: "Ciudadela Park",
+        tip: "Good green reset between food blocks.",
+      },
+      {
+        title: "Pintxos crawl",
+        tip: "Small plates, many stops—don’t do one giant meal.",
+      },
+      {
+        title: "Bull Run route (seasonal context)",
+        tip: "Worth a quick look for the story even if you’re not here in July.",
+      },
+      {
+        title: "Local markets",
+        tip: "Good for casual lunch supplies.",
+      },
+      {
+        title: "Evening squares",
+        tip: "The city comes alive in concentrated pockets—easy night.",
+      },
+      {
+        title: "Pre-match plan",
+        tip: "Eat earlier; queues and packed kitchens are common on matchdays.",
+      },
+      {
+        title: "Post-match move",
+        tip: "Either leave cleanly or commit to one bar—don’t hover in the surge zone.",
+      },
     ],
 
     tips: [
       "Very walkable—taxis are rarely needed.",
       "Book early if you overlap with festival periods.",
-      "Food quality is high; avoid tourist traps near the most obvious squares.",
+      "Food quality is high; avoid lazy tourist traps near the most obvious squares.",
       "Evenings are lively but not chaotic.",
       "1–2 days is the ideal pace.",
     ],
@@ -394,16 +710,46 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Girona is a compact Catalan gem: medieval streets, great food, and a calm pace that suits football-led weekends perfectly. It’s the right choice when you want ‘Barcelona energy’ nearby without Barcelona intensity and prices.",
 
     topThings: [
-      { title: "Girona Cathedral", tip: "Go early or near sunset for lighter crowds and better photos." },
-      { title: "Jewish Quarter (El Call)", tip: "Get lost on purpose—this area rewards wandering." },
-      { title: "City Walls walk", tip: "Do the full stretch if weather allows—best skyline views." },
-      { title: "Onyar River houses", tip: "Best viewpoints from Pont de Pedra and Eiffel Bridge." },
-      { title: "Plaça de la Independència", tip: "Ideal lunch/dinner square—simple choice that works." },
-      { title: "Rambla de la Llibertat", tip: "Coffee strip and walking spine." },
-      { title: "Arab Baths", tip: "Quick cultural hit (30–45 minutes). Don’t overcommit." },
-      { title: "Devesa Park", tip: "Good reset space between sightseeing blocks." },
-      { title: "Slow evening roam", tip: "Girona evenings are built for walking + stopping, not rushing." },
-      { title: "Matchday pacing", tip: "Eat before heading toward the stadium area. Keep it calm." },
+      {
+        title: "Girona Cathedral",
+        tip: "Go early or near sunset for lighter crowds and better photos.",
+      },
+      {
+        title: "Jewish Quarter (El Call)",
+        tip: "Get lost on purpose—this area rewards wandering.",
+      },
+      {
+        title: "City Walls walk",
+        tip: "Do the full stretch if weather allows—best skyline views.",
+      },
+      {
+        title: "Onyar River houses",
+        tip: "Best viewpoints from Pont de Pedra and Eiffel Bridge.",
+      },
+      {
+        title: "Plaça de la Independència",
+        tip: "Ideal lunch/dinner square—simple choice that works.",
+      },
+      {
+        title: "Rambla de la Llibertat",
+        tip: "Coffee strip and walking spine.",
+      },
+      {
+        title: "Arab Baths",
+        tip: "Quick cultural hit (30–45 minutes). Don’t overcommit.",
+      },
+      {
+        title: "Devesa Park",
+        tip: "Good reset space between sightseeing blocks.",
+      },
+      {
+        title: "Slow evening roam",
+        tip: "Girona evenings are built for walking + stopping, not rushing.",
+      },
+      {
+        title: "Matchday pacing",
+        tip: "Eat before heading toward the stadium area. Keep it calm.",
+      },
     ],
 
     tips: [
@@ -414,7 +760,12 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "The win is calm + quality meals + atmosphere.",
     ],
 
-    food: ["Catalan set-menu lunches", "Tapas & vermouth bars", "Bakery breakfast + coffee", "Ice cream along the Rambla"],
+    food: [
+      "Catalan set-menu lunches",
+      "Tapas & vermouth bars",
+      "Bakery breakfast + coffee",
+      "Ice cream along the Rambla",
+    ],
 
     transport:
       "Historic centre is fully walkable. Trains connect Girona with Barcelona and wider Catalonia.",
@@ -432,16 +783,46 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Elche (Elx) is relaxed and sunny, best known for its UNESCO-listed palm groves and everyday Spanish rhythm. It’s a football weekend for travellers who want low intensity: warm weather, simple sightseeing, and easy access to the Alicante coast.",
 
     topThings: [
-      { title: "Palmeral (Palm Grove) walk", tip: "Do it in the morning or golden hour—this is the city’s signature." },
-      { title: "Huerto del Cura", tip: "45–60 minutes is enough. It’s a clean paid garden visit with a standout ‘Imperial Palm’." },
-      { title: "Basilica of Santa Maria", tip: "Quick stop, then coffee nearby." },
-      { title: "Altamira Palace area", tip: "Small historic block—good context without being a time sink." },
-      { title: "MAHE (archaeology museum)", tip: "A solid indoor option if heat or weather turns." },
-      { title: "Central squares (Glorieta)", tip: "People-watching and cafés—simple but effective." },
-      { title: "Shopping streets", tip: "Compact pedestrian zones; don’t burn prime hours here." },
-      { title: "Santa Pola beach add-on", tip: "Short bus ride for sea air and a seafood lunch." },
-      { title: "Menú del día lunch", tip: "Best value meal format—use it." },
-      { title: "Matchday bar plan", tip: "Choose busy local bars near centre rather than hunting ‘stadium attractions’." },
+      {
+        title: "Palmeral (Palm Grove) walk",
+        tip: "Do it in the morning or golden hour—this is the city’s signature.",
+      },
+      {
+        title: "Huerto del Cura",
+        tip: "45–60 minutes is enough. It’s a clean paid garden visit with a standout ‘Imperial Palm’.",
+      },
+      {
+        title: "Basilica of Santa Maria",
+        tip: "Quick stop, then coffee nearby.",
+      },
+      {
+        title: "Altamira Palace area",
+        tip: "Small historic block—good context without being a time sink.",
+      },
+      {
+        title: "MAHE (archaeology museum)",
+        tip: "A solid indoor option if heat or weather turns.",
+      },
+      {
+        title: "Central squares (Glorieta)",
+        tip: "People-watching and cafés—simple but effective.",
+      },
+      {
+        title: "Shopping streets",
+        tip: "Compact pedestrian zones; don’t burn prime hours here.",
+      },
+      {
+        title: "Santa Pola beach add-on",
+        tip: "Short bus ride for sea air and a seafood lunch.",
+      },
+      {
+        title: "Menú del día lunch",
+        tip: "Best value meal format—use it.",
+      },
+      {
+        title: "Matchday bar plan",
+        tip: "Choose busy local bars near centre rather than hunting ‘stadium attractions’.",
+      },
     ],
 
     tips: [
@@ -452,7 +833,13 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Dinner runs late as standard.",
     ],
 
-    food: ["Arroz con costra (local)", "Rice dishes", "Tapas", "Bakery breakfasts", "Seafood near the coast"],
+    food: [
+      "Arroz con costra (local)",
+      "Rice dishes",
+      "Tapas",
+      "Bakery breakfasts",
+      "Seafood near the coast",
+    ],
 
     transport:
       "Centre is walkable; buses connect to the coast and Alicante. Alicante–Elche airport proximity is a practical bonus.",
@@ -470,16 +857,46 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Vitoria-Gasteiz is compact, tidy, and quietly brilliant: a medieval old town, strong pintxos culture, and a calm local vibe that makes football weekends feel easy. It’s a great Basque option if you want authenticity without the intensity (and prices) of the bigger neighbours.",
 
     topThings: [
-      { title: "Casco Viejo (Medieval Old Town)", tip: "Start at Plaza de la Virgen Blanca and wander uphill." },
-      { title: "Santa Maria Cathedral", tip: "Guided tour is the best version—don’t just do a quick exterior photo." },
-      { title: "Cuchillería Street pintxos", tip: "Keep it to many small stops, not one big sit-down." },
-      { title: "Florida Park", tip: "Short green reset near the centre." },
-      { title: "Los Arquillos", tip: "A quick ‘this is different’ architectural moment." },
-      { title: "Museo Artium", tip: "Modern art option if you want one cultural anchor." },
-      { title: "Green Ring paths", tip: "Good if you want a light walk outside the centre." },
-      { title: "Coffee loop", tip: "This city rewards slow mornings." },
-      { title: "Pre-match pacing", tip: "Eat earlier, then drift towards the stadium area calmly." },
-      { title: "Post-match plan", tip: "Commit to one bar or leave cleanly—don’t get trapped in the surge." },
+      {
+        title: "Casco Viejo (Medieval Old Town)",
+        tip: "Start at Plaza de la Virgen Blanca and wander uphill.",
+      },
+      {
+        title: "Santa Maria Cathedral",
+        tip: "Guided tour is the best version—don’t just do a quick exterior photo.",
+      },
+      {
+        title: "Cuchillería Street pintxos",
+        tip: "Keep it to many small stops, not one big sit-down.",
+      },
+      {
+        title: "Florida Park",
+        tip: "Short green reset near the centre.",
+      },
+      {
+        title: "Los Arquillos",
+        tip: "A quick ‘this is different’ architectural moment.",
+      },
+      {
+        title: "Museo Artium",
+        tip: "Modern art option if you want one cultural anchor.",
+      },
+      {
+        title: "Green Ring paths",
+        tip: "Good if you want a light walk outside the centre.",
+      },
+      {
+        title: "Coffee loop",
+        tip: "This city rewards slow mornings.",
+      },
+      {
+        title: "Pre-match pacing",
+        tip: "Eat earlier, then drift towards the stadium area calmly.",
+      },
+      {
+        title: "Post-match plan",
+        tip: "Commit to one bar or leave cleanly—don’t get trapped in the surge.",
+      },
     ],
 
     tips: [
@@ -490,7 +907,12 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Keep the plan simple and it’s a perfect 1–2 night stop.",
     ],
 
-    food: ["Pintxos", "Txuleta steak", "Basque cheesecake", "Rioja Alavesa wine"],
+    food: [
+      "Pintxos",
+      "Txuleta steak",
+      "Basque cheesecake",
+      "Rioja Alavesa wine",
+    ],
 
     transport:
       "Walking covers most of what you want. Trams and buses are reliable for longer jumps.",
@@ -508,16 +930,46 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Getafe is essentially a matchday satellite of Madrid. Treat it that way: stay and sightsee in Madrid, then travel into Getafe for the football. If you try to make Getafe a standalone tourist base, you’ll be forcing it.",
 
     topThings: [
-      { title: "Madrid as your main city block", tip: "Do the culture/food/neighbourhood time in Madrid, not here." },
-      { title: "Simple pre-match plan", tip: "Eat in Madrid or near Getafe centre before heading to the ground." },
-      { title: "Local café stop", tip: "Getafe centre is fine for coffee and a calm start." },
-      { title: "Matchday early arrival", tip: "Arrive 60–90 minutes early—options around the ground are limited." },
-      { title: "Post-match exit strategy", tip: "Walk away from the immediate surge before committing to transport." },
-      { title: "One calm drink", tip: "Either have one planned drink or leave—hovering is the worst option." },
-      { title: "Neighbourhood realism", tip: "Expect everyday Spain, not polished tourist infrastructure." },
-      { title: "Madrid night after", tip: "If you want nightlife, go back into Madrid—don’t try to force it locally." },
-      { title: "Quick essentials run", tip: "Use local shops for basics; keep it functional." },
-      { title: "Comfort-first pacing", tip: "This is about efficient football logistics, not sightseeing volume." },
+      {
+        title: "Madrid as your main city block",
+        tip: "Do the culture/food/neighbourhood time in Madrid, not here.",
+      },
+      {
+        title: "Simple pre-match plan",
+        tip: "Eat in Madrid or near Getafe centre before heading to the ground.",
+      },
+      {
+        title: "Local café stop",
+        tip: "Getafe centre is fine for coffee and a calm start.",
+      },
+      {
+        title: "Matchday early arrival",
+        tip: "Arrive 60–90 minutes early—options around the ground are limited.",
+      },
+      {
+        title: "Post-match exit strategy",
+        tip: "Walk away from the immediate surge before committing to transport.",
+      },
+      {
+        title: "One calm drink",
+        tip: "Either have one planned drink or leave—hovering is the worst option.",
+      },
+      {
+        title: "Neighbourhood realism",
+        tip: "Expect everyday Spain, not polished tourist infrastructure.",
+      },
+      {
+        title: "Madrid night after",
+        tip: "If you want nightlife, go back into Madrid—don’t try to force it locally.",
+      },
+      {
+        title: "Quick essentials run",
+        tip: "Use local shops for basics; keep it functional.",
+      },
+      {
+        title: "Comfort-first pacing",
+        tip: "This is about efficient football logistics, not sightseeing volume.",
+      },
     ],
 
     tips: [
@@ -528,7 +980,12 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Cash can still help in smaller bars.",
     ],
 
-    food: ["Menú del día lunches", "Simple tapas", "Bakery breakfasts", "Grilled meats"],
+    food: [
+      "Menú del día lunches",
+      "Simple tapas",
+      "Bakery breakfasts",
+      "Grilled meats",
+    ],
 
     transport:
       "Best approached from Madrid via metro/train connections. Treat the whole thing as a planned out-and-back rather than a spontaneous hop.",
@@ -541,22 +998,55 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
     cityId: "palma-de-mallorca",
     name: "Palma de Mallorca",
     country: "Spain",
+    bookingLinks: {
+      thingsToDo: GYG["palma-de-mallorca"],
+    },
     thingsToDoUrl: GYG["palma-de-mallorca"],
 
     overview:
       "Palma turns a football trip into a mini-holiday: historic old town, waterfront walks, strong food scene, and beach options without needing a packed itinerary. The trick is split-days—old town in the morning, sea air later, match in the evening.",
 
     topThings: [
-      { title: "Palma Cathedral (La Seu)", tip: "Early morning for better light and fewer crowds; pair with a waterfront walk." },
-      { title: "Old Town wander", tip: "No rigid route—small squares and shaded streets are the value." },
-      { title: "Passeig del Born", tip: "Great for daytime strolling and evening atmosphere." },
-      { title: "Bellver Castle", tip: "Go for views; taxi/bus unless you love uphill walks." },
-      { title: "Port promenade at sunset", tip: "Easy win with drinks/dinner afterwards." },
-      { title: "Santa Catalina", tip: "One of the best food/bar neighbourhoods—ideal evening base." },
-      { title: "Beach reset", tip: "Choose a calmer beach window (morning/late afternoon) rather than peak midday." },
-      { title: "Market stop", tip: "Good for a casual food hit without a full restaurant sit-down." },
-      { title: "Matchday transport plan", tip: "Stadium isn’t central—decide taxi/bus timing early." },
-      { title: "One strong dinner booking", tip: "Peak season punishes walk-ins—book if you care where you eat." },
+      {
+        title: "Palma Cathedral (La Seu)",
+        tip: "Early morning for better light and fewer crowds; pair with a waterfront walk.",
+      },
+      {
+        title: "Old Town wander",
+        tip: "No rigid route—small squares and shaded streets are the value.",
+      },
+      {
+        title: "Passeig del Born",
+        tip: "Great for daytime strolling and evening atmosphere.",
+      },
+      {
+        title: "Bellver Castle",
+        tip: "Go for views; taxi/bus unless you love uphill walks.",
+      },
+      {
+        title: "Port promenade at sunset",
+        tip: "Easy win with drinks/dinner afterwards.",
+      },
+      {
+        title: "Santa Catalina",
+        tip: "One of the best food/bar neighbourhoods—ideal evening base.",
+      },
+      {
+        title: "Beach reset",
+        tip: "Choose a calmer beach window (morning/late afternoon) rather than peak midday.",
+      },
+      {
+        title: "Market stop",
+        tip: "Good for a casual food hit without a full restaurant sit-down.",
+      },
+      {
+        title: "Matchday transport plan",
+        tip: "Stadium isn’t central—decide taxi/bus timing early.",
+      },
+      {
+        title: "One strong dinner booking",
+        tip: "Peak season punishes walk-ins—book if you care where you eat.",
+      },
     ],
 
     tips: [
@@ -567,7 +1057,13 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Palma works best when it’s relaxed.",
     ],
 
-    food: ["Seafood", "Pa amb oli", "Tapas", "Ensaimadas (pastry)", "Mediterranean grills"],
+    food: [
+      "Seafood",
+      "Pa amb oli",
+      "Tapas",
+      "Ensaimadas (pastry)",
+      "Mediterranean grills",
+    ],
 
     transport:
       "Good bus network and cheap taxis. Plan stadium travel as a deliberate out-and-back rather than winging it.",
@@ -585,16 +1081,46 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Oviedo is compact, elegant, and food-forward, with a historic centre that’s easy to explore on foot. It’s ideal for travellers who prefer culture, walkability, and a calmer northern Spain vibe over beach intensity.",
 
     topThings: [
-      { title: "Old Town loop", tip: "Walkable in under two hours, but allow longer for cafés and small squares." },
-      { title: "Cathedral of San Salvador", tip: "Anchor point for the historic core—do it early." },
-      { title: "Campo de San Francisco Park", tip: "Best mid-day reset space." },
-      { title: "Statue trail", tip: "Treat it as a casual scavenger hunt while you wander." },
-      { title: "Plaza del Fontán", tip: "Strong food/drinks square—great evening base." },
-      { title: "Sidrerías (cider houses)", tip: "Try several small pours; it’s part of the ritual." },
-      { title: "Monte Naranco viewpoints", tip: "Taxi/bus recommended; do it in clear weather." },
-      { title: "Local shopping spine", tip: "Useful connector, not a destination." },
-      { title: "Pre-match food plan", tip: "Eat earlier before travelling to the stadium area." },
-      { title: "Post-match calm exit", tip: "Leave cleanly or commit to one planned stop—avoid the surge zone." },
+      {
+        title: "Old Town loop",
+        tip: "Walkable in under two hours, but allow longer for cafés and small squares.",
+      },
+      {
+        title: "Cathedral of San Salvador",
+        tip: "Anchor point for the historic core—do it early.",
+      },
+      {
+        title: "Campo de San Francisco Park",
+        tip: "Best mid-day reset space.",
+      },
+      {
+        title: "Statue trail",
+        tip: "Treat it as a casual scavenger hunt while you wander.",
+      },
+      {
+        title: "Plaza del Fontán",
+        tip: "Strong food/drinks square—great evening base.",
+      },
+      {
+        title: "Sidrerías (cider houses)",
+        tip: "Try several small pours; it’s part of the ritual.",
+      },
+      {
+        title: "Monte Naranco viewpoints",
+        tip: "Taxi/bus recommended; do it in clear weather.",
+      },
+      {
+        title: "Local shopping spine",
+        tip: "Useful connector, not a destination.",
+      },
+      {
+        title: "Pre-match food plan",
+        tip: "Eat earlier before travelling to the stadium area.",
+      },
+      {
+        title: "Post-match calm exit",
+        tip: "Leave cleanly or commit to one planned stop—avoid the surge zone.",
+      },
     ],
 
     tips: [
@@ -605,7 +1131,12 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Centre is walkable—keep transport minimal.",
     ],
 
-    food: ["Fabada asturiana", "Local cheeses", "Seafood stews", "Sidra (cider)"],
+    food: [
+      "Fabada asturiana",
+      "Local cheeses",
+      "Seafood stews",
+      "Sidra (cider)",
+    ],
 
     transport:
       "City centre is walkable; buses and taxis cover the stadium corridor in ~20–30 minutes depending on traffic.",
@@ -623,16 +1154,46 @@ export const laLigaCityGuides: Record<string, CityGuide> = {
       "Vallecas is not a traditional tourist destination — and that’s exactly the point. This working-class Madrid district is one of the most authentic football neighbourhoods in Spain, built around strong local identity, community pride, and a rebellious culture that defines Rayo Vallecano. A trip to Vallecas is less about sightseeing and more about experiencing raw, local football atmosphere inside a dense urban neighbourhood where the club genuinely belongs to its people.",
 
     topThings: [
-      { title: "Estadio de Vallecas exterior walk", tip: "Arrive early and walk around the stadium area — matchday build-up is part of the experience." },
-      { title: "Vallecas neighbourhood bars", tip: "Choose busy local bars rather than searching for tourist-friendly venues." },
-      { title: "Matchday fan build-up", tip: "Supporters gather early in surrounding streets — soak in the atmosphere before kickoff." },
-      { title: "Avenida de la Albufera walk", tip: "Main spine of the district with everyday Madrid life on display." },
-      { title: "Local tapas stops", tip: "Keep it simple: beer + tapas in smaller neighbourhood bars works best." },
-      { title: "Street art and murals", tip: "Vallecas has strong political and cultural street art — keep your eyes open walking around." },
-      { title: "Neighbourhood cafés", tip: "Morning coffee spots feel local and relaxed compared to central Madrid." },
-      { title: "Plaza Roja area", tip: "A gathering point for supporters and local community life." },
-      { title: "Post-match walk", tip: "Leave the stadium slowly and experience the neighbourhood dispersing." },
-      { title: "Madrid evening afterwards", tip: "Most visitors head back into central Madrid after the match for wider nightlife options." },
+      {
+        title: "Estadio de Vallecas exterior walk",
+        tip: "Arrive early and walk around the stadium area — matchday build-up is part of the experience.",
+      },
+      {
+        title: "Vallecas neighbourhood bars",
+        tip: "Choose busy local bars rather than searching for tourist-friendly venues.",
+      },
+      {
+        title: "Matchday fan build-up",
+        tip: "Supporters gather early in surrounding streets — soak in the atmosphere before kickoff.",
+      },
+      {
+        title: "Avenida de la Albufera walk",
+        tip: "Main spine of the district with everyday Madrid life on display.",
+      },
+      {
+        title: "Local tapas stops",
+        tip: "Keep it simple: beer + tapas in smaller neighbourhood bars works best.",
+      },
+      {
+        title: "Street art and murals",
+        tip: "Vallecas has strong political and cultural street art — keep your eyes open walking around.",
+      },
+      {
+        title: "Neighbourhood cafés",
+        tip: "Morning coffee spots feel local and relaxed compared to central Madrid.",
+      },
+      {
+        title: "Plaza Roja area",
+        tip: "A gathering point for supporters and local community life.",
+      },
+      {
+        title: "Post-match walk",
+        tip: "Leave the stadium slowly and experience the neighbourhood dispersing.",
+      },
+      {
+        title: "Madrid evening afterwards",
+        tip: "Most visitors head back into central Madrid after the match for wider nightlife options.",
+      },
     ],
 
     tips: [
