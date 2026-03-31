@@ -18,6 +18,9 @@ export const leagueOfIrelandPremierCityGuides: Record<string, CityGuide> = {
     cityId: "dublin",
     name: "Dublin",
     country: "Ireland",
+    bookingLinks: {
+      thingsToDo: GYG.dublin,
+    },
     thingsToDoUrl: GYG.dublin,
 
     overview:
@@ -240,6 +243,9 @@ export const leagueOfIrelandPremierCityGuides: Record<string, CityGuide> = {
     cityId: "galway",
     name: "Galway",
     country: "Ireland",
+    bookingLinks: {
+      thingsToDo: GYG.galway,
+    },
     thingsToDoUrl: GYG.galway,
 
     overview:
@@ -388,6 +394,9 @@ export const leagueOfIrelandPremierCityGuides: Record<string, CityGuide> = {
     cityId: "waterford",
     name: "Waterford",
     country: "Ireland",
+    bookingLinks: {
+      thingsToDo: GYG.waterford,
+    },
     thingsToDoUrl: GYG.waterford,
 
     overview:
