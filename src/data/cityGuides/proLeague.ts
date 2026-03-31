@@ -3,6 +3,9 @@ import type { CityGuide } from "./types";
 /**
  * GetYourGuide affiliate entry points.
  * Keep this central so monetised city links stay easy to maintain.
+ *
+ * If a city doesn't have a clean verified GYG city landing page, leave it
+ * undefined and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
  */
 const GYG = {
   brussels:
@@ -14,11 +17,9 @@ const GYG = {
   ghent:
     "https://www.getyourguide.com/en-gb/ghent-l1487/?partner_id=MAQJREP&utm_medium=online_publisher",
   liege:
-    "https://www.getyourguide.com/en-gb/liege-l32275/?partner_id=MAQJREP&utm_medium=online_publisher",
-  leuven:
-    "https://www.getyourguide.com/en-gb/leuven-l1532/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/liege-l32254/?partner_id=MAQJREP&utm_medium=online_publisher",
   mechelen:
-    "https://www.getyourguide.com/en-gb/mechelen-l34046/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/mechelen-l102594/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const proLeagueCityGuides: Record<string, CityGuide> = {
@@ -258,7 +259,7 @@ export const proLeagueCityGuides: Record<string, CityGuide> = {
     name: "Charleroi",
     country: "Belgium",
     overview:
-      'Charleroi has a bad reputation because people lazily compare it to the wrong places. It is not Bruges. It is not trying to be. For football travellers, Charleroi is a practical, no-nonsense stop where the trip should be built around logistics, one or two decent local blocks, and the match itself. If you come expecting romance, that is your mistake. If you come expecting a workable football trip, it can do the job.',
+      "Charleroi has a bad reputation because people lazily compare it to the wrong places. It is not Bruges. It is not trying to be. For football travellers, Charleroi is a practical, no-nonsense stop where the trip should be built around logistics, one or two decent local blocks, and the match itself. If you come expecting romance, that is your mistake. If you come expecting a workable football trip, it can do the job.",
     topThings: [
       { title: "Central practical loop", tip: "Enough to orient yourself. Do not force a full sightseeing fantasy." },
       { title: "Industrial character spots", tip: "This city makes more sense if you accept its industrial identity." },
@@ -331,7 +332,6 @@ export const proLeagueCityGuides: Record<string, CityGuide> = {
     cityId: "leuven",
     name: "Leuven",
     country: "Belgium",
-    thingsToDoUrl: GYG.leuven,
     overview:
       "Leuven is a very good football weekend city if you want something lively but not huge. It has a strong student energy, enough beauty to feel like a real trip, and a compact centre that makes the whole thing easy. It is not trying to overwhelm you with attractions. It is trying to be a place where cafés, bars, city walking and football fit together naturally. That is exactly why it works.",
     topThings: [
@@ -412,7 +412,7 @@ export const proLeagueCityGuides: Record<string, CityGuide> = {
       { title: "Station-area planning", tip: "Transport logic is the real attraction here." },
       { title: "One decent meal", tip: "Find it early and stop pretending the town owes you more." },
       { title: "Pre-match timing", tip: "Do not cut it fine. That is how small-place trips become annoying." },
-      { title: "Post-match transport certainty", tip: "Know your way home before you leave the hotel." },
+      { title: "Post-match transport certainty", tip: "Know your way home before you leave your hotel." },
       { title: "Regional base alternative", tip: "A stronger nearby city base may be the smarter option." },
       { title: "Football-first mindset", tip: "This trip only works if you accept what it is." },
       { title: "Simple overnight", tip: "One night max usually makes sense." },
