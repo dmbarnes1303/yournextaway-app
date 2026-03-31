@@ -10,7 +10,7 @@ const GYG = {
   mostar:
     "https://www.getyourguide.com/en-gb/mostar-l1334/?partner_id=MAQJREP&utm_medium=online_publisher",
   banjaLuka:
-    "https://www.getyourguide.com/en-gb/banja-luka-l142749/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/banja-luka-l164204/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const premierLeagueBosniaCityGuides: Record<string, CityGuide> = {
