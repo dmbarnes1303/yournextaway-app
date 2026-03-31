@@ -4,30 +4,35 @@ import type { CityGuide } from "./types";
 /**
  * GetYourGuide affiliate entry points (city-level “things to do” pages).
  * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ *
+ * Important:
+ * - Use verified city landing pages only.
+ * - If a city does not have a reliable clean city landing page, leave it undefined
+ *   and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
  */
 const GYG = {
   london:
     "https://www.getyourguide.com/en-gb/london-l57/?partner_id=MAQJREP&utm_medium=online_publisher",
   manchester:
-    "https://www.getyourguide.com/en-gb/manchester-11128/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/manchester-l1128/?partner_id=MAQJREP&utm_medium=online_publisher",
   liverpool:
-    "https://www.getyourguide.com/en-gb/liverpool-l1210/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/liverpool-l210/?partner_id=MAQJREP&utm_medium=online_publisher",
   birmingham:
-    "https://www.getyourguide.com/en-gb/birmingham-l12525/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/birmingham-l2525/?partner_id=MAQJREP&utm_medium=online_publisher",
   "newcastle-upon-tyne":
-    "https://www.getyourguide.com/en-gb/newcastle-upon-tyne-l1444/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/newcastle-upon-tyne-l444/?partner_id=MAQJREP&utm_medium=online_publisher",
   leeds:
-    "https://www.getyourguide.com/en-gb/leeds-l11023/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/leeds-l1023/?partner_id=MAQJREP&utm_medium=online_publisher",
   nottingham:
-    "https://www.getyourguide.com/en-gb/nottingham-l1145813/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/nottingham-l145813/?partner_id=MAQJREP&utm_medium=online_publisher",
   brighton:
-    "https://www.getyourguide.com/en-gb/brighton-l1440/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/brighton-l440/?partner_id=MAQJREP&utm_medium=online_publisher",
   bournemouth:
-    "https://www.getyourguide.com/en-gb/bournemouth-l11022/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/bournemouth-l1022/?partner_id=MAQJREP&utm_medium=online_publisher",
   burnley:
-    "https://www.getyourguide.com/en-gb/burnley-l1100710/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/burnley-l100710/?partner_id=MAQJREP&utm_medium=online_publisher",
   wolverhampton:
-    "https://www.getyourguide.com/en-gb/wolverhampton-l1103158/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/wolverhampton-l103158/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const premierLeagueCityGuides: Record<string, CityGuide> = {
@@ -786,8 +791,8 @@ export const premierLeagueCityGuides: Record<string, CityGuide> = {
     name: "Sunderland",
     country: "England",
 
-    // No GetYourGuide city page available (your note).
-    // thingsToDoUrl: undefined,
+    // No reliable clean GYG Sunderland city landing page confirmed here.
+    // Leave undefined and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
 
     overview:
       "Sunderland is a football-first coastal stop with simple logistics and a strong local feel. If you want a bigger nightlife layer, pair it with Newcastle (easy by Metro). If you treat Sunderland as an honest match-led trip, it works well.",
