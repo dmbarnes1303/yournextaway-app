@@ -18,6 +18,9 @@ export const austrianBundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "vienna",
     name: "Vienna",
     country: "Austria",
+    bookingLinks: {
+      thingsToDo: GYG.vienna,
+    },
     thingsToDoUrl: GYG.vienna,
     overview:
       "Vienna is one of the best football-city weekends in Central Europe because the city itself is already elite before the football even starts. Grand architecture, café culture, efficient public transport and strong evening districts make it easy to build a proper weekend, while Rapid Vienna and Austria Vienna give you two different football versions of the same city. The key is simple: stay central, plan by district, and treat the match as one strong anchor inside a bigger Vienna trip rather than the only reason to leave the hotel.",
@@ -62,6 +65,9 @@ export const austrianBundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "salzburg",
     name: "Salzburg",
     country: "Austria",
+    bookingLinks: {
+      thingsToDo: GYG.salzburg,
+    },
     thingsToDoUrl: GYG.salzburg,
     overview:
       "Salzburg is one of Europe’s prettiest small football cities and one of the easiest places in this whole project to turn a match into a proper city break. The old town is visually ridiculous, the mountain backdrop does a lot of the work for you, and Red Bull Salzburg add a high-level football layer even if the stadium itself feels more modern than old-school. The smart move is staying near the centre, doing the obvious scenic blocks properly, and treating the football as part of a polished two-night trip rather than a rushed single-day mission.",
@@ -106,6 +112,9 @@ export const austrianBundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "graz",
     name: "Graz",
     country: "Austria",
+    bookingLinks: {
+      thingsToDo: GYG.graz,
+    },
     thingsToDoUrl: GYG.graz,
     overview:
       "Graz is one of the most underrated football cities in the whole app because it combines genuine city-break quality with one of Austria’s strongest football atmospheres. The old town is attractive without feeling overblown, the student presence keeps the city alive, and Sturm Graz give the football layer real edge. Grazer AK add the historic second-club contrast, but this is basically a Sturm city first if your priority is matchday intensity. Stay central, keep the plan walkable, and Graz becomes a very smart football weekend.",
@@ -150,6 +159,9 @@ export const austrianBundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "linz",
     name: "Linz",
     country: "Austria",
+    bookingLinks: {
+      thingsToDo: GYG.linz,
+    },
     thingsToDoUrl: GYG.linz,
     overview:
       "Linz is a better football city than outsiders usually assume because the city is clean, manageable, and now has a stronger football identity through both LASK and Blau-Weiß Linz. It is not Vienna or Salzburg in sightseeing terms, so stop expecting that, but it works very well as a football-first weekend with enough modern culture, riverfront space and easy logistics to keep the trip worthwhile. LASK are the bigger football pull; Blau-Weiß Linz are the smaller-scale contrast inside the same city.",
@@ -194,6 +206,9 @@ export const austrianBundesligaCityGuides: Record<string, CityGuide> = {
     cityId: "innsbruck",
     name: "Innsbruck",
     country: "Austria",
+    bookingLinks: {
+      thingsToDo: GYG.innsbruck,
+    },
     thingsToDoUrl: GYG.innsbruck,
     overview:
       "Innsbruck is one of the most visually impressive football destinations in the whole project because the mountains completely change the feel of the trip. Even if the football layer were weaker, the city would still justify the weekend. WSG Tirol give it the football reason, but the real sell is Alpine scenery, a very workable centre, and the fact that the place feels genuinely different from standard league-city travel. The mistake would be treating Innsbruck like an ordinary match stop instead of using the setting properly.",
