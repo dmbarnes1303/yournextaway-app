@@ -1,5 +1,12 @@
 import type { CityGuide } from "./types";
 
+/**
+ * GetYourGuide affiliate entry points (city-level “things to do” pages).
+ * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ *
+ * If a city doesn't have a clean GYG city landing page, leave it undefined and
+ * let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
+ */
 const GYG = {
   lisbon:
     "https://www.getyourguide.com/en-gb/lisbon-l42/?partner_id=MAQJREP&utm_medium=online_publisher",
@@ -7,6 +14,10 @@ const GYG = {
     "https://www.getyourguide.com/en-gb/porto-l151/?partner_id=MAQJREP&utm_medium=online_publisher",
   guimaraes:
     "https://www.getyourguide.com/en-gb/guimaraes-l4960/?partner_id=MAQJREP&utm_medium=online_publisher",
+  funchal:
+    "https://www.getyourguide.com/en-gb/funchal-l1026/?partner_id=MAQJREP&utm_medium=online_publisher",
+  "ponta-delgada":
+    "https://www.getyourguide.com/en-gb/ponta-delgada-sao-miguel-l1664/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const primeiraLigaCityGuides: Record<string, CityGuide> = {
@@ -386,6 +397,7 @@ export const primeiraLigaCityGuides: Record<string, CityGuide> = {
     cityId: "funchal",
     name: "Funchal",
     country: "Portugal",
+    thingsToDoUrl: GYG.funchal,
     overview:
       "Funchal is one of the most attractive football-trip destinations in the league because the city itself is a proper travel product. If you are doing Nacional, do not think like a routine mainland away day. Think island break with football built in.",
     topThings: [
@@ -482,6 +494,7 @@ export const primeiraLigaCityGuides: Record<string, CityGuide> = {
     cityId: "ponta-delgada",
     name: "Ponta Delgada",
     country: "Portugal",
+    thingsToDoUrl: GYG["ponta-delgada"],
     overview:
       "Ponta Delgada is a brilliant football add-on because the city is only one part of the value. The real product is São Miguel as a whole. If you are doing Santa Clara, think island football break, not normal away-day logic.",
     topThings: [
@@ -542,7 +555,7 @@ export const primeiraLigaCityGuides: Record<string, CityGuide> = {
       "Only stay here if you actively want the local feel. Otherwise use Guimarães, Braga or Porto.",
   },
 
-  "faro": {
+  faro: {
     cityId: "faro",
     name: "Faro",
     country: "Portugal",
