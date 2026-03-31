@@ -16,6 +16,9 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     cityId: "reykjavik",
     name: "Reykjavík",
     country: "Iceland",
+    bookingLinks: {
+      thingsToDo: GYG.reykjavik,
+    },
     thingsToDoUrl: GYG.reykjavik,
 
     overview:
@@ -383,6 +386,9 @@ export const bestaDeildCityGuides: Record<string, CityGuide> = {
     cityId: "akureyri",
     name: "Akureyri",
     country: "Iceland",
+    bookingLinks: {
+      thingsToDo: GYG.akureyri,
+    },
     thingsToDoUrl: GYG.akureyri,
 
     overview:
