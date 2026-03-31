@@ -16,6 +16,9 @@ export const allsvenskanCityGuides: Record<string, CityGuide> = {
     cityId: "stockholm",
     name: "Stockholm",
     country: "Sweden",
+    bookingLinks: {
+      thingsToDo: GYG.stockholm,
+    },
     thingsToDoUrl: GYG.stockholm,
     overview:
       "Stockholm is one of the strongest football-and-city-break combinations in the whole app because it gives you multiple real club experiences inside one proper capital. AIK, Djurgården, Hammarby, and Brommapojkarna all pull the city in slightly different directions, but the winning travel formula stays the same: base centrally or in Södermalm, use the metro and commuter rail properly, and plan by district rather than trying to pinball across the whole city. If you do that, Stockholm feels premium rather than sprawling.",
@@ -60,6 +63,9 @@ export const allsvenskanCityGuides: Record<string, CityGuide> = {
     cityId: "gothenburg",
     name: "Gothenburg",
     country: "Sweden",
+    bookingLinks: {
+      thingsToDo: GYG.gothenburg,
+    },
     thingsToDoUrl: GYG.gothenburg,
     overview:
       "Gothenburg is one of the easiest football weekends in Scandinavia because the city, bars, trams, and stadium geography all work with you rather than against you. It also has real football depth: IFK Göteborg, GAIS, ÖIS, and Häcken give you multiple club identities inside one trip. The practical formula is simple: stay central, use the tram network, and treat Gamla Ullevi as part of the city centre rather than as a separate matchday project.",
@@ -104,6 +110,9 @@ export const allsvenskanCityGuides: Record<string, CityGuide> = {
     cityId: "malmo",
     name: "Malmö",
     country: "Sweden",
+    bookingLinks: {
+      thingsToDo: GYG.malmo,
+    },
     thingsToDoUrl: GYG.malmo,
     overview:
       "Malmö is one of the strongest major-club trips in Sweden because the football matters, the city is easy, and the centre has enough nightlife and local character to carry the whole weekend. It is more compact and manageable than Stockholm, but still substantial enough to feel like a real break. If you want a Swedish football city that works without much effort, Malmö is near the top.",
@@ -148,6 +157,9 @@ export const allsvenskanCityGuides: Record<string, CityGuide> = {
     cityId: "uppsala",
     name: "Uppsala",
     country: "Sweden",
+    bookingLinks: {
+      thingsToDo: GYG.uppsala,
+    },
     thingsToDoUrl: GYG.uppsala,
     overview:
       "Uppsala is ideal for a clean one-night football trip. It is compact, attractive, easy on foot, and simple enough that you do not waste half the weekend on logistics. If you want a Swedish football break with very little friction and a city that still feels distinct, Uppsala is one of the better options.",
