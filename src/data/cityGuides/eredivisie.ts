@@ -18,6 +18,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "amsterdam",
     name: "Amsterdam",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.amsterdam,
+    },
     thingsToDoUrl: GYG.amsterdam,
 
     overview:
@@ -57,6 +60,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "rotterdam",
     name: "Rotterdam",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.rotterdam,
+    },
     thingsToDoUrl: GYG.rotterdam,
 
     overview:
@@ -96,6 +102,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "eindhoven",
     name: "Eindhoven",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.eindhoven,
+    },
     thingsToDoUrl: GYG.eindhoven,
 
     overview:
@@ -173,6 +182,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "nijmegen",
     name: "Nijmegen",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.nijmegen,
+    },
     thingsToDoUrl: GYG.nijmegen,
 
     overview:
@@ -212,6 +224,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "alkmaar",
     name: "Alkmaar",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.alkmaar,
+    },
     thingsToDoUrl: GYG.alkmaar,
 
     overview:
@@ -289,6 +304,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "utrecht",
     name: "Utrecht",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.utrecht,
+    },
     thingsToDoUrl: GYG.utrecht,
 
     overview:
@@ -328,6 +346,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "groningen",
     name: "Groningen",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.groningen,
+    },
     thingsToDoUrl: GYG.groningen,
 
     overview:
@@ -367,6 +388,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "breda",
     name: "Breda",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.breda,
+    },
     thingsToDoUrl: GYG.breda,
 
     overview:
@@ -406,6 +430,9 @@ export const eredivisieCityGuides: Record<string, CityGuide> = {
     cityId: "volendam",
     name: "Volendam",
     country: "Netherlands",
+    bookingLinks: {
+      thingsToDo: GYG.volendam,
+    },
     thingsToDoUrl: GYG.volendam,
 
     overview:
