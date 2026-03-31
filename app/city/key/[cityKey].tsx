@@ -26,12 +26,18 @@ import { getFlagImageUrl } from "@/src/utils/flagImages";
 import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 
 import { getFixtures, type FixtureListRow } from "@/src/services/apiFootball";
-import { LEAGUES, getRollingWindowIso, type LeagueOption } from "@/src/constants/football";
+import {
+  LEAGUES,
+  getRollingWindowIso,
+  type LeagueOption,
+} from "@/src/constants/football";
 import type { CityGuide, CityTopThing } from "@/src/data/cityGuides/types";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getCityByKeyLive, type CityRecord } from "@/src/services/citiesRegistry";
 import { normalizeCityKey } from "@/src/utils/city";
-import { openPartnerUrl } from "@/src/services/partnerClicks";
+import { beginPartnerClick } from "@/src/services/partnerClicks";
+import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
+import tripsStore from "@/src/state/trips";
 
 /* -------------------------------------------------------------------------- */
 /* Utils */
@@ -41,6 +47,7 @@ type GuideBlock = { heading?: string; text: string };
 type GuideFull = { title: string; blocks: GuideBlock[] };
 
 type CanonicalTripStartParams = {
+  tripId?: string;
   fixtureId: string;
   from?: string;
   to?: string;
@@ -109,6 +116,7 @@ function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string
 }
 
 function buildCanonicalTripStartParams(args: {
+  tripId?: string | null;
   fixtureId: string;
   from?: string | null;
   to?: string | null;
@@ -117,6 +125,7 @@ function buildCanonicalTripStartParams(args: {
   city?: string | null;
   kickoffIso?: string | null;
 }): CanonicalTripStartParams {
+  const tripId = safeStr(args.tripId);
   const fixtureId = safeStr(args.fixtureId);
   const from = safeStr(args.from);
   const to = safeStr(args.to);
@@ -127,6 +136,7 @@ function buildCanonicalTripStartParams(args: {
   const fallbackWindow = inferTripWindowFromKickoff(args.kickoffIso);
 
   return {
+    ...(tripId ? { tripId } : {}),
     fixtureId,
     ...(from ? { from } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
     ...(to ? { to } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
@@ -219,6 +229,20 @@ function splitLinesToBullets(text: string) {
     .filter(Boolean);
 
   return { bullets, paragraph: "" };
+}
+
+function isGetYourGuideUrl(value: unknown): boolean {
+  const raw = safeStr(value);
+  if (!raw) return false;
+
+  const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+  try {
+    const url = new URL(withProto);
+    return /(^|\.)getyourguide\./i.test(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -656,6 +680,7 @@ export default function CityScreen() {
   const cityKeyParam = safeStr(params.cityKey);
   const citySlug = useMemo(() => normalizeCityKey(cityKeyParam), [cityKeyParam]);
 
+  const activeTripId = safeStr(params.tripId);
   const fromParam = toIsoOrEmpty(params.from);
   const toParam = toIsoOrEmpty(params.to);
 
@@ -837,11 +862,19 @@ export default function CityScreen() {
 
   const guideThingsToDoUrl = useMemo(() => {
     const canonical = safeStr(guide?.bookingLinks?.thingsToDo);
-    if (canonical) return canonical;
+    if (isGetYourGuideUrl(canonical)) return canonical;
 
     const legacy = safeStr(guide?.thingsToDoUrl);
-    return legacy || "";
-  }, [guide]);
+    if (isGetYourGuideUrl(legacy)) return legacy;
+
+    const built = buildAffiliateLinks({
+      city: title,
+      startDate: from,
+      endDate: to,
+    }).experiencesUrl;
+
+    return safeStr(built);
+  }, [guide, title, from, to]);
 
   const progressLine = useMemo(() => {
     if (!loadingFx) return "";
@@ -866,6 +899,7 @@ export default function CityScreen() {
       const city = safeStr(row?.fixture?.venue?.city) || title;
 
       const tripParams = buildCanonicalTripStartParams({
+        tripId: activeTripId || undefined,
         fixtureId,
         from,
         to,
@@ -880,7 +914,7 @@ export default function CityScreen() {
         params: tripParams,
       } as never);
     },
-    [router, from, to, title]
+    [router, activeTripId, from, to, title]
   );
 
   const openThingsToDo = useCallback(async () => {
@@ -888,14 +922,58 @@ export default function CityScreen() {
     if (!url || openingThings) return;
 
     setOpeningThings(true);
+
     try {
-      await openPartnerUrl(url);
-    } catch (error) {
+      if (!isGetYourGuideUrl(url)) {
+        Alert.alert(
+          "Things to do unavailable",
+          "This city does not have a valid GetYourGuide link yet."
+        );
+        return;
+      }
+
+      if (!activeTripId) {
+        Alert.alert(
+          "Save a trip first",
+          "Things to do only gets tracked and stored in Wallet when opened from a saved trip. Pick a fixture below, save the trip, then open experiences from inside that trip flow."
+        );
+        return;
+      }
+
+      if (!tripsStore.getState().loaded) {
+        await tripsStore.loadTrips();
+      }
+
+      const trip = tripsStore.getById(activeTripId);
+      if (!trip) {
+        Alert.alert(
+          "Trip not found",
+          "The linked trip no longer exists. Open a fixture below and save the trip first."
+        );
+        return;
+      }
+
+      await beginPartnerClick({
+        tripId: activeTripId,
+        partnerId: "getyourguide",
+        url,
+        savedItemType: "things",
+        title: `Things to do in ${title}`,
+        metadata: {
+          city: title,
+          destination: title,
+          cityKey: citySlug || cityKeyParam,
+          from,
+          to,
+          source: "city_guide",
+        },
+      });
+    } catch {
       Alert.alert("Unable to open", "The things-to-do link could not be opened right now.");
     } finally {
       setOpeningThings(false);
     }
-  }, [guideThingsToDoUrl, openingThings]);
+  }, [guideThingsToDoUrl, openingThings, activeTripId, title, citySlug, cityKeyParam, from, to]);
 
   const bg = getCityBackground(citySlug || cityKeyParam);
   const bgSource = typeof bg === "string" ? { uri: bg } : bg;
