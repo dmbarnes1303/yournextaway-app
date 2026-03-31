@@ -5,69 +5,93 @@ export type CityTopThing = {
 
 export type CityGuideBookingLinks = {
   /**
-   * Primary experiences / activities provider.
-   * Usually a GetYourGuide city landing page.
+   * Canonical city-level experiences / activities link.
+   * This should usually be the GetYourGuide city landing page.
+   *
+   * This is the primary commercial field for "things" and should be preferred
+   * everywhere over legacy top-level URL fields.
    */
   thingsToDo?: string;
 
   /**
-   * Optional city-relevant car hire landing page.
-   * Use only when a real partner is live.
+   * Optional city-level car hire landing page.
+   * Only populate when a real live partner exists and is actually surfaced in app.
    */
   carHire?: string;
 
   /**
-   * Optional eSIM / connectivity landing page.
-   * Use only when a real partner is live.
+   * Optional city-level eSIM / connectivity landing page.
+   * Only populate when a real live partner exists and is actually surfaced in app.
    */
   esim?: string;
 
   /**
-   * Optional airport / local transfer landing page.
-   * Only use if this is genuinely useful at city level.
+   * Optional city-level airport / local transfer landing page.
+   * Only populate when there is a genuinely useful partner destination for this city.
    */
   airportTransfer?: string;
 };
 
 export interface CityGuide {
-  /** Stable slug key used for routing + lookup, e.g. "london" */
+  /**
+   * Stable slug key used for routing + lookup.
+   * Example: "london"
+   */
   cityId: string;
 
-  /** Display name */
+  /**
+   * Human-readable city name.
+   */
   name: string;
 
-  /** Country display name */
+  /**
+   * Human-readable country name.
+   */
   country: string;
 
-  /** Intro paragraph */
+  /**
+   * Lead intro paragraph for the city.
+   */
   overview: string;
 
   /**
-   * Canonical grouped monetisation / booking links for city-level planning.
-   * New work should use this block instead of adding more top-level URL fields.
+   * Canonical grouped booking / monetisation links for city-level planning.
+   *
+   * This is the primary source of truth for city commercial links.
+   * New guide data should be added here, not via legacy top-level URL fields.
    */
   bookingLinks?: CityGuideBookingLinks;
 
   /**
-   * Legacy primary monetised experiences link.
-   * Kept temporarily for backward compatibility while guides/screens migrate.
+   * Legacy experiences link.
+   *
+   * Transitional fallback only while old guides / screens are being migrated.
    * Do not add new guide data using this field.
+   * Consumers should prefer bookingLinks.thingsToDo first.
    */
   thingsToDoUrl?: string;
 
   /**
    * Deprecated legacy field kept only for backward compatibility.
-   * Do not create new values for this.
+   *
+   * Do not add new values.
+   * Do not build new UI against this field.
    */
   tripAdvisorTopThingsUrl?: string;
 
-  /** Core visitor recommendations */
+  /**
+   * Core visitor recommendations for the city.
+   */
   topThings: CityTopThing[];
 
-  /** Practical city tips */
+  /**
+   * Practical city-level tips.
+   */
   tips: string[];
 
-  /** Optional supporting sections */
+  /**
+   * Optional supporting sections.
+   */
   food?: string[];
   transport?: string;
   accommodation?: string;
