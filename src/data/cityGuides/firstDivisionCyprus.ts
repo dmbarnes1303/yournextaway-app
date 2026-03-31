@@ -22,6 +22,9 @@ export const firstDivisionCyprusCityGuides: Record<string, CityGuide> = {
     cityId: "nicosia",
     name: "Nicosia",
     country: "Cyprus",
+    bookingLinks: {
+      thingsToDo: GYG.nicosia,
+    },
     thingsToDoUrl: GYG.nicosia,
 
     overview:
@@ -97,6 +100,9 @@ export const firstDivisionCyprusCityGuides: Record<string, CityGuide> = {
     cityId: "limassol",
     name: "Limassol",
     country: "Cyprus",
+    bookingLinks: {
+      thingsToDo: GYG.limassol,
+    },
     thingsToDoUrl: GYG.limassol,
 
     overview:
@@ -172,6 +178,9 @@ export const firstDivisionCyprusCityGuides: Record<string, CityGuide> = {
     cityId: "larnaca",
     name: "Larnaca",
     country: "Cyprus",
+    bookingLinks: {
+      thingsToDo: GYG.larnaca,
+    },
     thingsToDoUrl: GYG.larnaca,
 
     overview:
@@ -247,6 +256,9 @@ export const firstDivisionCyprusCityGuides: Record<string, CityGuide> = {
     cityId: "paphos",
     name: "Paphos",
     country: "Cyprus",
+    bookingLinks: {
+      thingsToDo: GYG.paphos,
+    },
     thingsToDoUrl: GYG.paphos,
 
     overview:
@@ -614,6 +626,9 @@ export const firstDivisionCyprusCityGuides: Record<string, CityGuide> = {
     cityId: "paralimni",
     name: "Paralimni",
     country: "Cyprus",
+    bookingLinks: {
+      thingsToDo: GYG.protaras,
+    },
     thingsToDoUrl: GYG.protaras,
 
     overview:
