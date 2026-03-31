@@ -17,6 +17,9 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "oslo",
     name: "Oslo",
     country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.oslo,
+    },
     thingsToDoUrl: GYG.oslo,
     overview:
       "Oslo is one of the easiest and strongest football weekends in the Norway section because it gives you scale, transport quality, and enough neighbourhood variation to shape a proper trip rather than a basic match stop. The key is not to overcomplicate the dual-club aspect. Vålerenga is the flagship football experience in the city; KFUM is the more niche, small-scale alternative. That means the city itself should be the anchor, not whichever ground you are visiting. Stay central, move by metro or tram, and let the football sit inside a wider capital-city weekend rather than trying to build the entire break around stadium proximity.",
@@ -61,6 +64,9 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "bodo",
     name: "Bodø",
     country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.bodo,
+    },
     thingsToDoUrl: GYG.bodo,
     overview:
       "Bodø is one of the most distinctive football destinations in the entire app because the city and club are inseparable from the wider northern setting. This is not a generic weekend break with a stadium bolted on. The geography, weather, light, and the fact that Bodø/Glimt have become a serious football force all combine to make the trip feel sharper and more memorable than the city’s raw size might suggest. The smart approach is simple: stay central, respect the conditions, and let the destination itself do half the work.",
@@ -105,6 +111,9 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "bergen",
     name: "Bergen",
     country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.bergen,
+    },
     thingsToDoUrl: GYG.bergen,
     overview:
       "Bergen is one of the strongest football cities in the whole Norway section because the city itself is already a proper destination. Brann give you the football reason, but the waterfront, hills, food, and atmosphere do the rest. The smart move is staying central and using light rail properly rather than building the whole trip around the stadium district.",
@@ -149,6 +158,9 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "trondheim",
     name: "Trondheim",
     country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.trondheim,
+    },
     thingsToDoUrl: GYG.trondheim,
     overview:
       "Trondheim is one of the best balanced football cities in Norway. It has enough history and character to feel like a proper city break, but it is also simple enough that you do not waste half the trip in transit. Rosenborg give the football trip real weight, and the city gives it enough texture to become more than a stadium stop.",
@@ -193,6 +205,9 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "stavanger",
     name: "Stavanger",
     country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.stavanger,
+    },
     thingsToDoUrl: GYG.stavanger,
     overview:
       "Stavanger is one of the better all-round Norwegian football cities because it has both a proper club and a very workable city-break layout. Viking give the football trip weight, while the old town, harbour, and food scene make the rest of the weekend easy. The winning formula is central stay, light planning, and treating the ground as a transport move rather than your whole universe.",
@@ -237,6 +252,9 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "tromso",
     name: "Tromsø",
     country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.tromso,
+    },
     thingsToDoUrl: GYG.tromso,
     overview:
       "Tromsø is one of the most distinctive destinations in the whole app, full stop. This is not just a football trip with a city attached; the city itself is a major reason to go. The club, the weather, the latitude, the pace of the place, and the wider travel feel all make it stand out. The main rule is obvious: plan properly, because conditions matter here more than in most football weekends.",
@@ -281,6 +299,9 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "alesund",
     name: "Ålesund",
     country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.alesund,
+    },
     thingsToDoUrl: GYG.alesund,
     overview:
       "Ålesund is one of the strongest scenic football destinations in the Norway section. Even if the club were smaller than they are, the city would still justify attention. The architecture, water, and overall visual quality lift the whole football trip. The obvious mistake would be trying to rush it like a throwaway match stop.",
@@ -325,6 +346,9 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
     cityId: "kristiansand",
     name: "Kristiansand",
     country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.kristiansand,
+    },
     thingsToDoUrl: GYG.kristiansand,
     overview:
       "Kristiansand is better as a football overnight than people assume. It is not trying to overwhelm you with giant-city options, but it does enough well: clean centre, coastal feel, decent food rhythm, and a club that gives the trip a proper purpose. The right approach is simple planning and one good overnight rather than overblown expectations.",
@@ -366,10 +390,13 @@ export const eliteserienCityGuides: Record<string, CityGuide> = {
   },
 
   molde: {
-  cityId: "molde",
-  name: "Molde",
-  country: "Norway",
-  thingsToDoUrl: GYG.molde,
+    cityId: "molde",
+    name: "Molde",
+    country: "Norway",
+    bookingLinks: {
+      thingsToDo: GYG.molde,
+    },
+    thingsToDoUrl: GYG.molde,
     overview:
       "Molde is a compact, very manageable football city that benefits from both scenery and low-friction logistics. It is not a huge nightlife machine, but it works extremely well for a football-first overnight because the city, stadium, and practical travel pieces line up cleanly. The smart move is staying central and keeping the whole trip simple.",
 
