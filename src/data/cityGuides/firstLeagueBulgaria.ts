@@ -18,6 +18,9 @@ export const firstLeagueBulgariaCityGuides: Record<string, CityGuide> = {
     cityId: "sofia",
     name: "Sofia",
     country: "Bulgaria",
+    bookingLinks: {
+      thingsToDo: GYG.sofia,
+    },
     thingsToDoUrl: GYG.sofia,
 
     overview:
@@ -93,6 +96,9 @@ export const firstLeagueBulgariaCityGuides: Record<string, CityGuide> = {
     cityId: "varna",
     name: "Varna",
     country: "Bulgaria",
+    bookingLinks: {
+      thingsToDo: GYG.varna,
+    },
     thingsToDoUrl: GYG.varna,
 
     overview:
@@ -168,6 +174,9 @@ export const firstLeagueBulgariaCityGuides: Record<string, CityGuide> = {
     cityId: "plovdiv",
     name: "Plovdiv",
     country: "Bulgaria",
+    bookingLinks: {
+      thingsToDo: GYG.plovdiv,
+    },
     thingsToDoUrl: GYG.plovdiv,
 
     overview:
