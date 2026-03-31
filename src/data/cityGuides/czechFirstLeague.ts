@@ -18,6 +18,9 @@ export const czechFirstLeagueCityGuides: Record<string, CityGuide> = {
     cityId: "prague",
     name: "Prague",
     country: "Czech Republic",
+    bookingLinks: {
+      thingsToDo: GYG.prague,
+    },
     thingsToDoUrl: GYG.prague,
 
     overview:
@@ -93,6 +96,9 @@ export const czechFirstLeagueCityGuides: Record<string, CityGuide> = {
     cityId: "plzen",
     name: "Plzeň",
     country: "Czech Republic",
+    bookingLinks: {
+      thingsToDo: GYG.plzen,
+    },
     thingsToDoUrl: GYG.plzen,
 
     overview:
@@ -240,6 +246,9 @@ export const czechFirstLeagueCityGuides: Record<string, CityGuide> = {
     cityId: "olomouc",
     name: "Olomouc",
     country: "Czech Republic",
+    bookingLinks: {
+      thingsToDo: GYG.olomouc,
+    },
     thingsToDoUrl: GYG.olomouc,
 
     overview:
