@@ -18,6 +18,9 @@ export const nbICityGuides: Record<string, CityGuide> = {
     cityId: "budapest",
     name: "Budapest",
     country: "Hungary",
+    bookingLinks: {
+      thingsToDo: GYG.budapest,
+    },
     thingsToDoUrl: GYG.budapest,
 
     overview:
@@ -93,6 +96,9 @@ export const nbICityGuides: Record<string, CityGuide> = {
     cityId: "gyor",
     name: "Győr",
     country: "Hungary",
+    bookingLinks: {
+      thingsToDo: GYG.gyor,
+    },
     thingsToDoUrl: GYG.gyor,
 
     overview:
@@ -167,6 +173,9 @@ export const nbICityGuides: Record<string, CityGuide> = {
     cityId: "debrecen",
     name: "Debrecen",
     country: "Hungary",
+    bookingLinks: {
+      thingsToDo: GYG.debrecen,
+    },
     thingsToDoUrl: GYG.debrecen,
 
     overview:
@@ -411,7 +420,7 @@ export const nbICityGuides: Record<string, CityGuide> = {
       },
       {
         title: "Quiet post-match beer or dinner",
-        tip: "Enough to let the evening settle without forcing fake nightlife energy.",
+        tip: "Enough to complete the stop without dragging it.",
       },
       {
         title: "Budapest-linked base option",
@@ -457,7 +466,7 @@ export const nbICityGuides: Record<string, CityGuide> = {
       "Paks centre is fine for a football-only overnight. Budapest is usually the stronger wider option if you want better hotels, nightlife, and extra trip value around the match.",
   },
 
-  "felcsut": {
+  felcsut: {
     cityId: "felcsut",
     name: "Felcsút",
     country: "Hungary",
@@ -530,7 +539,7 @@ export const nbICityGuides: Record<string, CityGuide> = {
       "Budapest is usually the best base. Felcsút itself only makes sense for a very focused football overnight or if route logic absolutely requires it.",
   },
 
-  "nyiregyhaza": {
+  nyiregyhaza: {
     cityId: "nyiregyhaza",
     name: "Nyíregyháza",
     country: "Hungary",
@@ -677,7 +686,7 @@ export const nbICityGuides: Record<string, CityGuide> = {
       "Stay central for the cleanest all-round trip. If you have a specific wellness or out-of-town plan, fine, but for football purposes central Miskolc is the smartest answer.",
   },
 
-  "kazincbarcika": {
+  kazincbarcika: {
     cityId: "kazincbarcika",
     name: "Kazincbarcika",
     country: "Hungary",
@@ -752,4 +761,3 @@ export const nbICityGuides: Record<string, CityGuide> = {
 };
 
 export default nbICityGuides;
-
