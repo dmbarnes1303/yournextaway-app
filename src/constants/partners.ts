@@ -73,7 +73,7 @@ export const CANONICAL_PARTNER_IDS = [
   "klook",
   "wegotrip",
 
-  // Claims
+  // Claims compatibility
   "airhelp",
   "compensair",
 
@@ -192,7 +192,7 @@ export const AffiliateConfig = {
   airhelpTracked: "",
   compensairTracked: "",
 
-  // Utility / internal
+  // Utility
   googleMapsBase: "https://www.google.com/maps/search/?api=1",
 } as const;
 
@@ -234,7 +234,7 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "sportsevents365Tracked",
     fallback: {
       mode: "partner_fallback",
-      reason: "Fallback to other live ticket providers if needed.",
+      reason: "Fallback to other ticket providers if needed.",
       partnerIds: ["footballticketnet", "stubhub", "gigsberg"],
       baseUrl: "https://www.sportsevents365.com/",
     },
@@ -253,14 +253,13 @@ export const PARTNER_REGISTRY = [
       "stubhubinternational",
       "sh",
     ],
-    baseUrl: "https://stubhubinternational.sjv.io/xJJoL5",
+    baseUrl: "https://www.stubhub.ie/",
     trackedConfigKey: "stubhubTracked",
     fallback: {
       mode: "partner_fallback",
-      reason:
-        "Affiliate fallback ticket marketplace when direct marketplace matches are weak or unavailable.",
+      reason: "Affiliate fallback ticket marketplace when direct ticket matches are weak.",
       partnerIds: ["sportsevents365", "footballticketnet", "gigsberg"],
-      baseUrl: "https://stubhubinternational.sjv.io/xJJoL5",
+      baseUrl: "https://www.stubhub.ie/",
     },
   },
   {
@@ -473,9 +472,9 @@ export const PARTNER_REGISTRY = [
     baseUrl: "https://www.airhelp.com/",
     trackedConfigKey: "airhelpTracked",
     fallback: {
-      mode: "partner_fallback",
-      reason: "Compatibility-only claim provider. Not live in app.",
-      partnerIds: ["compensair"],
+      mode: "internal_only",
+      reason:
+        "Compatibility-only legacy claim provider. Claims are not live external partner flows in current app architecture.",
       baseUrl: "https://www.airhelp.com/",
     },
   },
@@ -490,9 +489,9 @@ export const PARTNER_REGISTRY = [
     baseUrl: "https://compensair.com/",
     trackedConfigKey: "compensairTracked",
     fallback: {
-      mode: "partner_fallback",
-      reason: "Compatibility-only claim provider. Not live in app.",
-      partnerIds: ["airhelp"],
+      mode: "internal_only",
+      reason:
+        "Compatibility-only legacy claim provider. Claims are not live external partner flows in current app architecture.",
       baseUrl: "https://compensair.com/",
     },
   },
@@ -719,6 +718,11 @@ export function isPartnerLive(input: PartnerId | string | null | undefined): boo
 export function isUtilityPartner(input: PartnerId | string | null | undefined): boolean {
   const partner = getPartnerOrNull(input);
   return Boolean(partner?.capabilities.utility);
+}
+
+export function isInternalPartner(input: PartnerId | string | null | undefined): boolean {
+  const partner = getPartnerOrNull(input);
+  return Boolean(partner?.capabilities.internal);
 }
 
 export function supportsCategory(
