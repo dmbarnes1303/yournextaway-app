@@ -231,6 +231,20 @@ function splitLinesToBullets(text: string) {
   return { bullets, paragraph: "" };
 }
 
+function isValidHttpUrl(value: unknown): boolean {
+  const raw = safeStr(value);
+  if (!raw) return false;
+
+  const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
+  try {
+    const url = new URL(withProto);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function isGetYourGuideUrl(value: unknown): boolean {
   const raw = safeStr(value);
   if (!raw) return false;
@@ -862,10 +876,10 @@ export default function CityScreen() {
 
   const guideThingsToDoUrl = useMemo(() => {
     const canonical = safeStr(guide?.bookingLinks?.thingsToDo);
-    if (isGetYourGuideUrl(canonical)) return canonical;
+    if (isValidHttpUrl(canonical)) return canonical;
 
     const legacy = safeStr(guide?.thingsToDoUrl);
-    if (isGetYourGuideUrl(legacy)) return legacy;
+    if (isValidHttpUrl(legacy)) return legacy;
 
     const built = buildAffiliateLinks({
       city: title,
@@ -873,8 +887,33 @@ export default function CityScreen() {
       endDate: to,
     }).experiencesUrl;
 
-    return safeStr(built);
+    return isValidHttpUrl(built) ? safeStr(built) : "";
   }, [guide, title, from, to]);
+
+  const hasThingsToDoUrl = useMemo(() => !!safeStr(guideThingsToDoUrl), [guideThingsToDoUrl]);
+  const thingsToDoIsTrackedFlowReady = useMemo(() => {
+    return !!safeStr(activeTripId) && hasThingsToDoUrl;
+  }, [activeTripId, hasThingsToDoUrl]);
+
+  const thingsToDoCtaLabel = useMemo(() => {
+    if (openingThings) return "Opening…";
+    if (!hasThingsToDoUrl) return "Things to do unavailable";
+    if (!activeTripId) return "Pick a fixture to unlock things to do";
+    return "Explore things to do";
+  }, [openingThings, hasThingsToDoUrl, activeTripId]);
+
+  const thingsToDoHelper = useMemo(() => {
+    if (!hasThingsToDoUrl) {
+      return "No valid city experiences link is available for this city yet.";
+    }
+    if (!activeTripId) {
+      return "To keep partner clicks tracked and saved into Wallet, pick a fixture below and create a trip first.";
+    }
+    if (isGetYourGuideUrl(guideThingsToDoUrl)) {
+      return "This opens the city’s tracked experiences link and saves the click to your trip.";
+    }
+    return "This opens the tracked experiences link for this city and saves the click to your trip.";
+  }, [hasThingsToDoUrl, activeTripId, guideThingsToDoUrl]);
 
   const progressLine = useMemo(() => {
     if (!loadingFx) return "";
@@ -921,25 +960,22 @@ export default function CityScreen() {
     const url = safeStr(guideThingsToDoUrl);
     if (!url || openingThings) return;
 
+    if (!isValidHttpUrl(url)) {
+      Alert.alert("Things to do unavailable", "This city does not have a valid experiences link yet.");
+      return;
+    }
+
+    if (!activeTripId) {
+      Alert.alert(
+        "Pick a fixture first",
+        "To keep experiences tracked and saved into Wallet, open a fixture below, build/save the trip, then come back and open things to do."
+      );
+      return;
+    }
+
     setOpeningThings(true);
 
     try {
-      if (!isGetYourGuideUrl(url)) {
-        Alert.alert(
-          "Things to do unavailable",
-          "This city does not have a valid GetYourGuide link yet."
-        );
-        return;
-      }
-
-      if (!activeTripId) {
-        Alert.alert(
-          "Save a trip first",
-          "Things to do only gets tracked and stored in Wallet when opened from a saved trip. Pick a fixture below, save the trip, then open experiences from inside that trip flow."
-        );
-        return;
-      }
-
       if (!tripsStore.getState().loaded) {
         await tripsStore.loadTrips();
       }
@@ -948,7 +984,7 @@ export default function CityScreen() {
       if (!trip) {
         Alert.alert(
           "Trip not found",
-          "The linked trip no longer exists. Open a fixture below and save the trip first."
+          "The linked trip no longer exists. Pick a fixture below and save a trip first."
         );
         return;
       }
@@ -966,6 +1002,7 @@ export default function CityScreen() {
           from,
           to,
           source: "city_guide",
+          sourceType: isGetYourGuideUrl(url) ? "guide_direct" : "affiliate_fallback",
         },
       });
     } catch {
@@ -1070,22 +1107,29 @@ export default function CityScreen() {
                 </Text>
               ) : null}
 
-              {guideThingsToDoUrl ? (
-                <Pressable
-                  onPress={openThingsToDo}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open things to do in ${title}`}
-                  style={({ pressed }) => [
-                    styles.thingsBtn,
-                    (pressed || openingThings) && styles.pressed,
+              <Text style={styles.blockNote}>{thingsToDoHelper}</Text>
+
+              <Pressable
+                onPress={thingsToDoIsTrackedFlowReady ? openThingsToDo : undefined}
+                accessibilityRole="button"
+                accessibilityLabel={`${thingsToDoCtaLabel} in ${title}`}
+                disabled={!thingsToDoIsTrackedFlowReady || openingThings}
+                style={({ pressed }) => [
+                  styles.thingsBtn,
+                  (!thingsToDoIsTrackedFlowReady || openingThings) && styles.thingsBtnDisabled,
+                  (pressed || openingThings) && styles.pressed,
+                ]}
+                android_ripple={{ color: "rgba(79,224,138,0.10)" }}
+              >
+                <Text
+                  style={[
+                    styles.thingsBtnText,
+                    (!thingsToDoIsTrackedFlowReady || openingThings) && styles.thingsBtnTextDisabled,
                   ]}
-                  android_ripple={{ color: "rgba(79,224,138,0.10)" }}
                 >
-                  <Text style={styles.thingsBtnText}>
-                    {openingThings ? "Opening…" : "Explore things to do"}
-                  </Text>
-                </Pressable>
-              ) : null}
+                  {thingsToDoCtaLabel}
+                </Text>
+              </Pressable>
             </View>
           </GlassCard>
 
@@ -1280,10 +1324,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
+  thingsBtnDisabled: {
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
+  },
   thingsBtnText: {
     color: theme.colors.text,
     fontSize: 13,
     fontWeight: theme.fontWeight.black,
+  },
+  thingsBtnTextDisabled: {
+    color: theme.colors.textTertiary,
   },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
