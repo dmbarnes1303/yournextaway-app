@@ -12,12 +12,18 @@ const GYG = {
     "https://www.getyourguide.com/en-gb/lisbon-l42/?partner_id=MAQJREP&utm_medium=online_publisher",
   porto:
     "https://www.getyourguide.com/en-gb/porto-l151/?partner_id=MAQJREP&utm_medium=online_publisher",
+  braga:
+    "https://www.getyourguide.com/en-gb/braga-l32536/?partner_id=MAQJREP&utm_medium=online_publisher",
   guimaraes:
     "https://www.getyourguide.com/en-gb/guimaraes-l4960/?partner_id=MAQJREP&utm_medium=online_publisher",
+  estoril:
+    "https://www.getyourguide.com/en-gb/estoril-l2285/?partner_id=MAQJREP&utm_medium=online_publisher",
   funchal:
     "https://www.getyourguide.com/en-gb/funchal-l1026/?partner_id=MAQJREP&utm_medium=online_publisher",
   "ponta-delgada":
     "https://www.getyourguide.com/en-gb/ponta-delgada-sao-miguel-l1664/?partner_id=MAQJREP&utm_medium=online_publisher",
+  faro:
+    "https://www.getyourguide.com/en-gb/faro-l1238/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const primeiraLigaCityGuides: Record<string, CityGuide> = {
@@ -103,6 +109,7 @@ export const primeiraLigaCityGuides: Record<string, CityGuide> = {
     cityId: "braga",
     name: "Braga",
     country: "Portugal",
+    thingsToDoUrl: GYG.braga,
     overview:
       "Braga is one of Portugal’s best underappreciated football cities: compact, historic, clean and easy to handle over a short stay. It is not trying to be Lisbon or Porto, and that is exactly why it works. If you want a calmer, football-led city break with very little friction, Braga is strong.",
     topThings: [
@@ -236,6 +243,7 @@ export const primeiraLigaCityGuides: Record<string, CityGuide> = {
     cityId: "estoril",
     name: "Estoril",
     country: "Portugal",
+    thingsToDoUrl: GYG.estoril,
     overview:
       "Estoril is one of the easiest football-trip add-ons in Portugal because it gives you coast, sun, and low-friction travel from Lisbon. It is ideal if you want a calmer base without giving up access to the capital.",
     topThings: [
@@ -559,6 +567,7 @@ export const primeiraLigaCityGuides: Record<string, CityGuide> = {
     cityId: "faro",
     name: "Faro",
     country: "Portugal",
+    thingsToDoUrl: GYG.faro,
     overview:
       "Faro is the gateway to the Algarve and one of the easiest football trips in southern Portugal if you want sun, food and relaxed pacing around a match. The city itself is smaller than people expect, but the combination of old town charm, coastline access and airport convenience makes it a strong football-weekend base.",
     topThings: [
