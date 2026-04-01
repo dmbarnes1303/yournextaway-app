@@ -90,16 +90,18 @@ function appendQuery(
   if (!entries.length) return safeBase;
 
   const joiner = safeBase.includes("?") ? "&" : "?";
-  const qs = entries.map(([key, value]) => `${enc(key)}=${enc(value)}`).join("&");
+  const queryString = entries
+    .map(([key, value]) => `${enc(key)}=${enc(value)}`)
+    .join("&");
 
-  return `${safeBase}${joiner}${qs}`;
+  return `${safeBase}${joiner}${queryString}`;
 }
 
-function trackedOrFallbackUrl(
+function resolveTrackedOrFallbackUrl(
   trackedValue: unknown,
-  fallback: string | null = null
+  fallbackValue: unknown = null
 ): string | null {
-  return safeUrl(trackedValue) || safeUrl(fallback);
+  return safeUrl(trackedValue) || safeUrl(fallbackValue);
 }
 
 function buildMapsSearchUrl(query: string): string | null {
@@ -107,8 +109,8 @@ function buildMapsSearchUrl(query: string): string | null {
   if (!q) return null;
 
   const base =
-    trackedOrFallbackUrl(AffiliateConfig.googleMapsBase) ||
-    trackedOrFallbackUrl("https://www.google.com/maps/search/?api=1");
+    resolveTrackedOrFallbackUrl(AffiliateConfig.googleMapsBase) ||
+    resolveTrackedOrFallbackUrl("https://www.google.com/maps/search/?api=1");
 
   if (!base) return null;
 
@@ -141,8 +143,8 @@ function buildFlightsUrl(args: {
   const marker = clean(AffiliateConfig.aviasalesMarker);
 
   const fallback =
-    trackedOrFallbackUrl(AffiliateConfig.aviasalesFallback) ||
-    trackedOrFallbackUrl("https://www.aviasales.com/");
+    resolveTrackedOrFallbackUrl(AffiliateConfig.aviasalesFallback) ||
+    resolveTrackedOrFallbackUrl("https://www.aviasales.com/");
 
   if (!destination || !outbound) {
     return fallback;
@@ -171,8 +173,8 @@ function buildHotelsUrl(args: {
   if (!city) return null;
 
   const base =
-    trackedOrFallbackUrl(AffiliateConfig.expediaTracked) ||
-    trackedOrFallbackUrl("https://www.expedia.co.uk/Hotel-Search");
+    resolveTrackedOrFallbackUrl(AffiliateConfig.expediaTracked) ||
+    resolveTrackedOrFallbackUrl("https://www.expedia.co.uk/Hotel-Search");
 
   if (!base) return null;
 
@@ -202,8 +204,8 @@ function buildOmioUrl(args: {
   const city = clean(args.city);
 
   const base =
-    trackedOrFallbackUrl(AffiliateConfig.omioTracked) ||
-    trackedOrFallbackUrl("https://www.omio.com/");
+    resolveTrackedOrFallbackUrl(AffiliateConfig.omioTracked) ||
+    resolveTrackedOrFallbackUrl("https://www.omio.com/");
 
   if (!base || !city) return base;
 
@@ -219,7 +221,7 @@ function buildTransfersUrl(args: { city: string; date: string | null }): string 
   const city = clean(args.city);
   if (!city) return null;
 
-  const base = trackedOrFallbackUrl(AffiliateConfig.kiwitaxiTracked);
+  const base = resolveTrackedOrFallbackUrl(AffiliateConfig.kiwitaxiTracked);
   if (!base) return null;
 
   return appendQuery(base, {
@@ -234,7 +236,7 @@ function buildTicketsUrl(args: {
   startDate: string | null;
   endDate: string | null;
 }): string | null {
-  const base = trackedOrFallbackUrl(AffiliateConfig.sportsevents365Tracked);
+  const base = resolveTrackedOrFallbackUrl(AffiliateConfig.sportsevents365Tracked);
   if (!base) return null;
 
   const city = clean(args.city);
