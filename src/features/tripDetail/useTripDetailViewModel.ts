@@ -152,7 +152,9 @@ function stepPriorityScore(step: BookingStepKey): number {
   return 5;
 }
 
-function genericActionFallback(kind: "flights" | "hotels" | "transport" | "activities"): string {
+function genericActionFallback(
+  kind: "flights" | "hotels" | "transport" | "activities"
+): string {
   if (kind === "flights") return "Check flight options";
   if (kind === "hotels") return "Check hotel options";
   if (kind === "transport") return "Check transport options";
@@ -208,6 +210,16 @@ function transportSectionFromAffiliateUrls(
   affiliateUrls: AffiliateUrls | null | undefined
 ): SourceSection {
   return affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "travel" : "transfers";
+}
+
+function buildEmptyProgressMap(): ProgressMap {
+  return {
+    tickets: "empty",
+    flight: "empty",
+    hotel: "empty",
+    transfer: "empty",
+    things: "empty",
+  };
 }
 
 export default function useTripDetailViewModel({
@@ -926,27 +938,19 @@ export default function useTripDetailViewModel({
     if (!hasMatch) return "No fixture selected";
 
     if (ticketState !== "booked") {
-      return ticketState === "empty"
-        ? "Step 1 of 4 • Tickets not booked"
-        : "Step 1 of 4 • Tickets not booked";
+      return "Step 1 of 4 • Tickets not booked";
     }
 
     if (flightState !== "booked") {
-      return flightState === "empty"
-        ? "Step 2 of 4 • Flights not booked"
-        : "Step 2 of 4 • Flights not booked";
+      return "Step 2 of 4 • Flights not booked";
     }
 
     if (hotelState !== "booked") {
-      return hotelState === "empty"
-        ? "Step 3 of 4 • Hotel not booked"
-        : "Step 3 of 4 • Hotel not booked";
+      return "Step 3 of 4 • Hotel not booked";
     }
 
     if (transportState !== "booked") {
-      return transportState === "empty"
-        ? "Step 4 of 4 • Transport not booked"
-        : "Step 4 of 4 • Transport not booked";
+      return "Step 4 of 4 • Transport not booked";
     }
 
     return "Core trip flow complete";
@@ -963,6 +967,10 @@ export default function useTripDetailViewModel({
     if (tripCompletionPct >= 35) return "Trip partly covered";
     return "Trip still early";
   }, [hasMatch, tripCompletionPct]);
+
+  const derivedProgress = useMemo(() => {
+    return hasMatch ? progress : buildEmptyProgressMap();
+  }, [hasMatch, progress]);
 
   return {
     hasTickets,
@@ -984,6 +992,7 @@ export default function useTripDetailViewModel({
     capHint,
     heroBannerCounts,
     readiness,
+    progress: derivedProgress,
     bookingSteps,
     completeCoreCount,
     tripCompletionPct,
@@ -993,4 +1002,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-}
+            }
