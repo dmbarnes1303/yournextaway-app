@@ -1,22 +1,27 @@
 import type { CityGuide } from "./types";
 
+/**
+ * GetYourGuide affiliate entry points (city-level “things to do” pages).
+ * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ *
+ * If a city doesn't have a clean verified GYG city landing page, leave it
+ * undefined and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
+ */
 const GYG = {
   copenhagen:
     "https://www.getyourguide.com/en-gb/copenhagen-l12/?partner_id=MAQJREP&utm_medium=online_publisher",
   aarhus:
-    "https://www.getyourguide.com/en-gb/aarhus-l1154/?partner_id=MAQJREP&utm_medium=online_publisher",
-  herning:
-    "https://www.getyourguide.com/en-gb/herning-l1553/?partner_id=MAQJREP&utm_medium=online_publisher",
-  silkeborg:
-    "https://www.getyourguide.com/en-gb/silkeborg-l1547/?partner_id=MAQJREP&utm_medium=online_publisher",
-  randers:
-    "https://www.getyourguide.com/en-gb/randers-l1546/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/aarhus-l32302/?partner_id=MAQJREP&utm_medium=online_publisher",
   odense:
-    "https://www.getyourguide.com/en-gb/odense-l1518/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/odense-l142774/?partner_id=MAQJREP&utm_medium=online_publisher",
+  silkeborg:
+    "https://www.getyourguide.com/en-gb/silkeborg-l151885/?partner_id=MAQJREP&utm_medium=online_publisher",
+  randers:
+    "https://www.getyourguide.com/en-gb/randers-l155795/?partner_id=MAQJREP&utm_medium=online_publisher",
   viborg:
-    "https://www.getyourguide.com/en-gb/viborg-l1548/?partner_id=MAQJREP&utm_medium=online_publisher",
-  vejle:
-    "https://www.getyourguide.com/en-gb/vejle-l1549/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/viborg-l155067/?partner_id=MAQJREP&utm_medium=online_publisher",
+  lyngby:
+    "https://www.getyourguide.com/en-gb/lyngby-l156313/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const superligaDenmarkCityGuides: Record<string, CityGuide> = {
@@ -99,7 +104,6 @@ export const superligaDenmarkCityGuides: Record<string, CityGuide> = {
     cityId: "herning",
     name: "Herning",
     country: "Denmark",
-    thingsToDoUrl: GYG.herning,
     overview:
       "Herning is a football stop, not a glamour weekend. That is fine. The correct way to position it is as a compact, practical overnight trip for a serious league traveller rather than a city-break masterpiece. FC Midtjylland give it real football relevance even if the city itself is more functional than seductive.",
     topThings: [
@@ -359,7 +363,6 @@ export const superligaDenmarkCityGuides: Record<string, CityGuide> = {
     cityId: "vejle",
     name: "Vejle",
     country: "Denmark",
-    thingsToDoUrl: GYG.vejle,
     overview:
       "Vejle is a coherent football stop with some decent town-and-waterfront value, but it is not one of Denmark’s headline football weekends. That is fine. Not every guide needs to be fireworks. This is a cleaner, easy enough smaller stop inside a wider Denmark route.",
     topThings: [
@@ -396,7 +399,7 @@ export const superligaDenmarkCityGuides: Record<string, CityGuide> = {
     cityId: "lyngby",
     name: "Lyngby",
     country: "Denmark",
-    thingsToDoUrl: GYG.copenhagen,
+    thingsToDoUrl: GYG.lyngby,
     overview:
       "Lyngby is another Copenhagen-region football stop rather than a standalone destination weekend. The right way to sell it is simple: use Copenhagen as your real trip base, then travel to Lyngby for the match. That makes it logical and useful instead of underwhelming.",
     topThings: [
