@@ -2,18 +2,27 @@ import type { CityGuide } from "./types";
 
 /**
  * GetYourGuide affiliate city entry points.
- * Keep this simple and city-level. Where a perfect city landing page is weak,
- * use the nearest strong visitor entry point rather than inventing junk.
+ * Keep this simple and city-level. Where a perfect city landing page is verified,
+ * wire it directly. If a city doesn't have a clean verified GYG city landing page,
+ * leave it undefined and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
  */
 const GYG = {
   athens:
     "https://www.getyourguide.com/en-gb/athens-l91/?partner_id=MAQJREP&utm_medium=online_publisher",
+  piraeus:
+    "https://www.getyourguide.com/en-gb/piraeus-l759/?partner_id=MAQJREP&utm_medium=online_publisher",
   thessaloniki:
     "https://www.getyourguide.com/en-gb/thessaloniki-l115/?partner_id=MAQJREP&utm_medium=online_publisher",
   heraklion:
     "https://www.getyourguide.com/en-gb/heraklion-l1806/?partner_id=MAQJREP&utm_medium=online_publisher",
   volos:
-    "https://www.getyourguide.com/en-gb/volos-l1488/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/volos-l2545/?partner_id=MAQJREP&utm_medium=online_publisher",
+  tripoli:
+    "https://www.getyourguide.com/en-gb/tripoli-greece-l164097/?partner_id=MAQJREP&utm_medium=online_publisher",
+  livadeia:
+    "https://www.getyourguide.com/en-gb/livadia-l115747/?partner_id=MAQJREP&utm_medium=online_publisher",
+  larissa:
+    "https://www.getyourguide.com/en-gb/larissa-l182794/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
@@ -96,7 +105,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
     cityId: "piraeus",
     name: "Piraeus",
     country: "Greece",
-    thingsToDoUrl: GYG.athens,
+    thingsToDoUrl: GYG.piraeus,
 
     overview:
       "Piraeus is not a pure sightseeing destination on the level of central Athens, but it is far more useful than people assume. For an Olympiacos trip, a port-led weekend, or a split Athens–islands itinerary, it works well. The right mindset is simple: use Piraeus for matchday convenience, marina walks, seafood, and ferry logic, not for pretending it is central Athens.",
@@ -245,6 +254,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
     cityId: "tripoli",
     name: "Tripoli",
     country: "Greece",
+    thingsToDoUrl: GYG.tripoli,
 
     overview:
       "Tripoli is not a glamour football trip, and pretending otherwise is stupid. It is a useful, lower-profile stop with genuine local value if you are deliberately covering the league or combining football with a wider Peloponnese itinerary. The right way to frame it is simple: compact, practical, football-first, and regionally useful rather than spectacular.",
@@ -467,6 +477,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
     cityId: "livadeia",
     name: "Livadeia",
     country: "Greece",
+    thingsToDoUrl: GYG.livadeia,
 
     overview:
       "Livadeia is not a glamour football weekend and there is no value in pretending it is one. Its strength is that it is compact, practical, and useful for serious league coverage. If you frame it as a tidy one-night football stop with low wasted movement, it works. If you try to sell it like Athens-lite, it falls apart immediately.",
@@ -613,6 +624,7 @@ export const superLeagueGreeceCityGuides: Record<string, CityGuide> = {
     cityId: "larissa",
     name: "Larissa",
     country: "Greece",
+    thingsToDoUrl: GYG.larissa,
 
     overview:
       "Larissa is stronger than the lower-hype Greek cities because it feels like a real, functioning regional city rather than just a football stop with a few cafés stuck to it. It is still not Athens or Thessaloniki, but it can absolutely work as a neat one- or two-night football trip if you build it around the centre, food, and the club rather than around fake sightseeing fluff.",
