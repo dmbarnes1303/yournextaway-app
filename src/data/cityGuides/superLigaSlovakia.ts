@@ -3,12 +3,21 @@ import type { CityGuide } from "./types";
 /**
  * GetYourGuide affiliate entry points (city-level “things to do” pages).
  * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ *
+ * If a city doesn't have a clean verified GYG city landing page, leave it
+ * undefined and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
  */
 const GYG = {
   bratislava:
     "https://www.getyourguide.com/en-gb/bratislava-l765/?partner_id=MAQJREP&utm_medium=online_publisher",
   kosice:
-    "https://www.getyourguide.com/en-gb/kosice-l2018/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/kosice-l148934/?partner_id=MAQJREP&utm_medium=online_publisher",
+  zilina:
+    "https://www.getyourguide.com/en-gb/zilina-l2115/?partner_id=MAQJREP&utm_medium=online_publisher",
+  trencin:
+    "https://www.getyourguide.com/en-gb/trencin-l150506/?partner_id=MAQJREP&utm_medium=online_publisher",
+  presov:
+    "https://www.getyourguide.com/en-gb/presov-l150517/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const superLigaSlovakiaCityGuides: Record<string, CityGuide> = {
@@ -164,6 +173,7 @@ export const superLigaSlovakiaCityGuides: Record<string, CityGuide> = {
     cityId: "zilina",
     name: "Žilina",
     country: "Slovakia",
+    thingsToDoUrl: GYG.zilina,
 
     overview:
       "Žilina is a practical medium-size football city: not a giant tourist magnet, but definitely good enough for a focused overnight built around MŠK. The city is compact, the ground is close enough to keep logistics clean, and the club themselves give the trip more substance than a routine mid-market football stop. The smart way to do Žilina is one overnight, central stay, and a calm schedule that lets football and the town sit together naturally.",
@@ -677,6 +687,7 @@ export const superLigaSlovakiaCityGuides: Record<string, CityGuide> = {
     cityId: "trencin",
     name: "Trenčín",
     country: "Slovakia",
+    thingsToDoUrl: GYG.trencin,
 
     overview:
       "Trenčín is one of the most attractive medium-size city trips in the Slovak league because it has more visual character than most clubs in its bracket can offer. The castle, old-town feel, and relatively easy scale make it a very workable one-night football break. It is not Bratislava, but it does not need to be. The city is strong enough to support the football naturally, and AS Trenčín give the stop proper sporting substance.",
@@ -750,6 +761,7 @@ export const superLigaSlovakiaCityGuides: Record<string, CityGuide> = {
     cityId: "presov",
     name: "Prešov",
     country: "Slovakia",
+    thingsToDoUrl: GYG.presov,
 
     overview:
       "Prešov is a historical regional city whose football value is tied heavily to Tatran and the club’s older-name status. It is not the strongest city break in the league, but it has more substance than a flat one-club stop because the centre carries some real local character and the new stadium improves the football proposition. The best way to do Prešov is one grounded overnight with the football at the centre and the city providing a modest but real supporting layer.",
