@@ -225,12 +225,11 @@ export default function TripDetailScreen() {
   const savedLoaded = workspace.savedLoaded;
   const originIata = workspace.originIata;
   const activeTripId = workspace.activeTripId;
-
+  const savedItems = workspace.savedItems;
   const pendingItems = workspace.pending;
   const savedOnlyItems = workspace.saved;
   const bookedItems = workspace.booked;
   const groupedBySection = workspace.grouped;
-  const savedItems = workspace.savedItems;
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [ticketLoading, setTicketLoading] = useState(false);
@@ -245,8 +244,14 @@ export default function TripDetailScreen() {
         const value = await storage.getString(PLAN_STORAGE_KEY);
         if (cancelled) return;
 
-        if (value === "premium") setPlan("premium");
-        else if (value === "free") setPlan("free");
+        if (value === "premium") {
+          setPlan("premium");
+          return;
+        }
+
+        if (value === "free") {
+          setPlan("free");
+        }
       } catch {
         // ignore
       }
@@ -298,15 +303,16 @@ export default function TripDetailScreen() {
     bookingPriceBoard: data.bookingPriceBoard,
   });
 
+  const isMissingTrip = !trip && tripsLoaded;
+
   const status = useMemo(() => {
     return trip ? tripStatus(trip) : "Upcoming";
   }, [trip]);
 
-  const isMissingTrip = !trip && tripsLoaded;
-
   const dominantAction = vm.nextAction;
-  const dominantTitle = dominantAction?.title || "Continue planning";
-  const dominantCta = dominantAction?.cta || "Continue planning";
+
+  const decisionTitle = dominantAction?.title || "Continue planning";
+  const decisionCta = dominantAction?.cta || "Continue planning";
 
   const decisionBody = useMemo(() => {
     if (!vm.hasTickets) {
@@ -316,8 +322,13 @@ export default function TripDetailScreen() {
     return dominantAction?.body || "Move the trip forward by completing the next core booking step.";
   }, [vm.hasTickets, dominantAction]);
 
-  const pressureText = urgencyLine(vm.hasTickets, data.kickoffMeta.tbc);
-  const tripDatesText = dateWindowLine(trip?.startDate, trip?.endDate);
+  const pressureText = useMemo(() => {
+    return urgencyLine(vm.hasTickets, data.kickoffMeta.tbc);
+  }, [vm.hasTickets, data.kickoffMeta.tbc]);
+
+  const tripDatesText = useMemo(() => {
+    return dateWindowLine(trip?.startDate, trip?.endDate);
+  }, [trip?.startDate, trip?.endDate]);
 
   const ticketCount = groupedBySection.tickets?.length || 0;
   const travelCount = groupedBySection.travel?.length || 0;
@@ -399,13 +410,261 @@ export default function TripDetailScreen() {
     return `${ticketSheetPayload.homeName} vs ${ticketSheetPayload.awayName}`;
   }, [ticketSheetPayload]);
 
-  const ticketSheetOptions = useMemo(() => {
-    if (!ticketSheetPayload) return [];
-    return [
-      ...(ticketSheetPayload.strongOptions || []),
-      ...(ticketSheetPayload.weakOptions || []),
-    ];
-  }, [ticketSheetPayload]);
+  const renderBody = () => {
+    if (vm.loading) {
+      return (
+        <GlassCard>
+          <EmptyState
+            title="Loading trip"
+            message="Pulling together matches, bookings and trip details."
+          />
+        </GlassCard>
+      );
+    }
+
+    if (isMissingTrip) {
+      return (
+        <GlassCard>
+          <EmptyState title="Trip not found" message="No trip available." />
+        </GlassCard>
+      );
+    }
+
+    if (!trip) {
+      return (
+        <GlassCard>
+          <EmptyState title="Loading" message="Trip details are still loading." />
+        </GlassCard>
+      );
+    }
+
+    return (
+      <>
+        <GlassCard>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerTitleWrap}>
+              <Text style={styles.city}>{data.cityName}</Text>
+              <Text style={styles.meta}>{summaryLine(trip)}</Text>
+            </View>
+
+            <Pressable onPress={controller.onViewWallet} hitSlop={8}>
+              <Text style={styles.walletLink}>Wallet</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.badgeRow}>
+            <View style={styles.statusPill}>
+              <Text style={styles.statusPillText}>{statusLabel(status)}</Text>
+            </View>
+
+            {data.kickoffMeta.tbc ? (
+              <View style={styles.warningPill}>
+                <Text style={styles.warningPillText}>Kickoff TBC</Text>
+              </View>
+            ) : null}
+
+            {vm.tripCompletionPct != null ? (
+              <View
+                style={[
+                  styles.completionPill,
+                  completionTone(vm.tripCompletionPct) === "ready"
+                    ? styles.completionPillReady
+                    : completionTone(vm.tripCompletionPct) === "progress"
+                      ? styles.completionPillProgress
+                      : styles.completionPillEarly,
+                ]}
+              >
+                <Text style={styles.completionPillText}>{vm.tripCompletionPct}% covered</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.tripWindowCard}>
+            <View style={styles.tripWindowHeader}>
+              <Text style={styles.tripWindowLabel}>Trip dates</Text>
+              <Pressable onPress={controller.onEditTrip} hitSlop={8}>
+                <Text style={styles.tripWindowEdit}>Edit</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
+
+            <Text style={styles.tripWindowHint}>
+              This is the real trip window. Flights and stays should follow these saved dates.
+            </Text>
+          </View>
+        </GlassCard>
+
+        <GlassCard>
+          <Text style={styles.stageEyebrow}>Trip status</Text>
+          <Text style={styles.stageTitle}>{tripStageTitle}</Text>
+          <Text style={styles.stageBody}>{tripStageBody}</Text>
+
+          <View style={styles.coreStatusGrid}>
+            <View style={styles.coreStatusCard}>
+              <Text style={styles.coreStatusLabel}>Tickets</Text>
+              <Text style={styles.coreStatusValue}>
+                {vm.hasTickets ? "Booked" : ticketCount > 0 ? "In progress" : "Not booked"}
+              </Text>
+            </View>
+
+            <View style={styles.coreStatusCard}>
+              <Text style={styles.coreStatusLabel}>Travel</Text>
+              <Text style={styles.coreStatusValue}>
+                {vm.hasFlight ? "Booked" : travelCount > 0 ? "In progress" : "Not booked"}
+              </Text>
+            </View>
+
+            <View style={styles.coreStatusCard}>
+              <Text style={styles.coreStatusLabel}>Stay</Text>
+              <Text style={styles.coreStatusValue}>
+                {vm.hasHotel ? "Booked" : stayCount > 0 ? "In progress" : "Not booked"}
+              </Text>
+            </View>
+
+            <View style={styles.coreStatusCard}>
+              <Text style={styles.coreStatusLabel}>Extras</Text>
+              <Text style={styles.coreStatusValue}>
+                {vm.hasThings ? "Booked" : thingsCount > 0 ? "Optional / started" : "Optional"}
+              </Text>
+            </View>
+          </View>
+        </GlassCard>
+
+        <GlassCard>
+          <Text style={styles.decisionEyebrow}>Do this next</Text>
+          <Text style={styles.decisionTitle}>{decisionTitle}</Text>
+          <Text style={styles.decisionBody}>{decisionBody}</Text>
+
+          <View style={styles.decisionMetaRow}>
+            <Text style={styles.decisionMetaText}>
+              {vm.bookingFunnelLabel || `Next: ${nextStepLabel(vm.nextIncompleteStep?.key)}`}
+            </Text>
+          </View>
+
+          <Text style={styles.pressureText}>{pressureText}</Text>
+
+          <Pressable
+            style={styles.primaryActionBtn}
+            onPress={dominantAction?.onPress ? () => dominantAction.onPress() : controller.onEditTrip}
+          >
+            <Text style={styles.primaryActionBtnText}>{decisionCta}</Text>
+          </Pressable>
+
+          {ticketLoading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" />
+              <Text style={styles.loadingText}>Checking ticket availability…</Text>
+            </View>
+          ) : null}
+
+          {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
+        </GlassCard>
+
+        <GlassCard>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Plan this trip</Text>
+            <Text style={styles.sectionSubtitle}>
+              {vm.completionSummary || "Work through the trip in the right order."}
+            </Text>
+          </View>
+
+          <View style={styles.plannerGrid}>
+            {plannerCards.map((item) => (
+              <Pressable
+                key={item.key}
+                style={[
+                  styles.plannerCard,
+                  item.tone === "strong"
+                    ? styles.plannerCardStrong
+                    : item.tone === "medium"
+                      ? styles.plannerCardMedium
+                      : item.tone === "optional"
+                        ? styles.plannerCardOptional
+                        : styles.plannerCardWeak,
+                ]}
+                onPress={() => controller.onOpenSection(item.key)}
+              >
+                <View style={styles.plannerCardTop}>
+                  <Text style={styles.plannerCardEyebrow}>{item.eyebrow}</Text>
+                  <View
+                    style={[
+                      styles.plannerStatusPill,
+                      item.tone === "strong"
+                        ? styles.plannerStatusPillStrong
+                        : item.tone === "medium"
+                          ? styles.plannerStatusPillMedium
+                          : item.tone === "optional"
+                            ? styles.plannerStatusPillOptional
+                            : styles.plannerStatusPillWeak,
+                    ]}
+                  >
+                    <Text style={styles.plannerStatusPillText}>{item.status}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.plannerCardTitle}>{item.label}</Text>
+                <Text style={styles.plannerCardSub}>{item.subtitle}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Text style={styles.plannerFootnote}>
+            Tickets and flights are stronger booking steps. Stay, transport and extras may still be
+            link-based or in progress until actually booked.
+          </Text>
+        </GlassCard>
+
+        <TripMatchesCard
+          trip={trip}
+          numericMatchIds={data.numericMatchIds}
+          primaryMatchId={data.primaryMatchId}
+          fixturesById={data.fixturesById}
+          ticketsByMatchId={data.ticketsByMatchId}
+          fxLoading={data.fxLoading}
+          onAddMatch={controller.onAddMatch}
+          onOpenTicketsForMatch={controller.openTicketsForMatch}
+          onOpenMatchActions={controller.openMatchActions}
+          onSetPrimaryMatch={controller.setPrimaryMatch}
+          onRemoveMatch={controller.removeMatch}
+          getTicketProviderFromItem={ticketProviderFromItem}
+          getTicketScoreFromItem={itemResolvedScore}
+          getLivePriceLine={livePriceLine}
+        />
+
+        <GlassCard>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>What this trip still needs</Text>
+            <Text style={styles.sectionSubtitle}>Don’t leave the page with no clear next move.</Text>
+          </View>
+
+          <View style={styles.guidanceList}>
+            {!vm.hasTickets ? (
+              <Text style={styles.guidanceText}>• Tickets still need locking in.</Text>
+            ) : null}
+
+            {!vm.hasFlight ? (
+              <Text style={styles.guidanceText}>• Travel is not actually booked yet.</Text>
+            ) : null}
+
+            {!vm.hasHotel ? (
+              <Text style={styles.guidanceText}>• Stay location still needs deciding and booking.</Text>
+            ) : null}
+
+            {!vm.hasTransport ? (
+              <Text style={styles.guidanceText}>• Local transport is still weak or unfinished.</Text>
+            ) : null}
+
+            {vm.hasTickets && vm.hasFlight && vm.hasHotel && vm.hasTransport ? (
+              <Text style={styles.guidanceText}>
+                • Core trip is covered. Final step is proof, confirmations and cleanup in Wallet.
+              </Text>
+            ) : null}
+          </View>
+        </GlassCard>
+      </>
+    );
+  };
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
@@ -421,264 +680,15 @@ export default function TripDetailScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          {vm.loading ? (
-            <GlassCard>
-              <EmptyState
-                title="Loading trip"
-                message="Pulling together matches, bookings and trip details."
-              />
-            </GlassCard>
-          ) : isMissingTrip ? (
-            <GlassCard>
-              <EmptyState title="Trip not found" message="No trip available." />
-            </GlassCard>
-          ) : !trip ? (
-            <GlassCard>
-              <EmptyState title="Loading" message="Trip details are still loading." />
-            </GlassCard>
-          ) : (
-            <>
-              <GlassCard>
-                <View style={styles.headerTopRow}>
-                  <View style={styles.headerTitleWrap}>
-                    <Text style={styles.city}>{data.cityName}</Text>
-                    <Text style={styles.meta}>{summaryLine(trip)}</Text>
-                  </View>
-
-                  <Pressable onPress={controller.onViewWallet} hitSlop={8}>
-                    <Text style={styles.walletLink}>Wallet</Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.badgeRow}>
-                  <View style={styles.statusPill}>
-                    <Text style={styles.statusPillText}>{statusLabel(status)}</Text>
-                  </View>
-
-                  {data.kickoffMeta.tbc ? (
-                    <View style={styles.warningPill}>
-                      <Text style={styles.warningPillText}>Kickoff TBC</Text>
-                    </View>
-                  ) : null}
-
-                  {vm.tripCompletionPct != null ? (
-                    <View
-                      style={[
-                        styles.completionPill,
-                        completionTone(vm.tripCompletionPct) === "ready"
-                          ? styles.completionPillReady
-                          : completionTone(vm.tripCompletionPct) === "progress"
-                            ? styles.completionPillProgress
-                            : styles.completionPillEarly,
-                      ]}
-                    >
-                      <Text style={styles.completionPillText}>{vm.tripCompletionPct}% covered</Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                <View style={styles.tripWindowCard}>
-                  <View style={styles.tripWindowHeader}>
-                    <Text style={styles.tripWindowLabel}>Trip dates</Text>
-                    <Pressable onPress={controller.onEditTrip} hitSlop={8}>
-                      <Text style={styles.tripWindowEdit}>Edit</Text>
-                    </Pressable>
-                  </View>
-
-                  <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
-
-                  <Text style={styles.tripWindowHint}>
-                    This is the real trip window. Flights and stays should follow these saved dates.
-                  </Text>
-                </View>
-              </GlassCard>
-
-              <GlassCard>
-                <Text style={styles.stageEyebrow}>Trip status</Text>
-                <Text style={styles.stageTitle}>{tripStageTitle}</Text>
-                <Text style={styles.stageBody}>{tripStageBody}</Text>
-
-                <View style={styles.coreStatusGrid}>
-                  <View style={styles.coreStatusCard}>
-                    <Text style={styles.coreStatusLabel}>Tickets</Text>
-                    <Text style={styles.coreStatusValue}>
-                      {vm.hasTickets ? "Booked" : ticketCount > 0 ? "In progress" : "Not booked"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.coreStatusCard}>
-                    <Text style={styles.coreStatusLabel}>Travel</Text>
-                    <Text style={styles.coreStatusValue}>
-                      {vm.hasFlight ? "Booked" : travelCount > 0 ? "In progress" : "Not booked"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.coreStatusCard}>
-                    <Text style={styles.coreStatusLabel}>Stay</Text>
-                    <Text style={styles.coreStatusValue}>
-                      {vm.hasHotel ? "Booked" : stayCount > 0 ? "In progress" : "Not booked"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.coreStatusCard}>
-                    <Text style={styles.coreStatusLabel}>Extras</Text>
-                    <Text style={styles.coreStatusValue}>
-                      {vm.hasThings ? "Booked" : thingsCount > 0 ? "Optional / started" : "Optional"}
-                    </Text>
-                  </View>
-                </View>
-              </GlassCard>
-
-              <GlassCard>
-                <Text style={styles.decisionEyebrow}>Do this next</Text>
-                <Text style={styles.decisionTitle}>{dominantTitle}</Text>
-                <Text style={styles.decisionBody}>{decisionBody}</Text>
-
-                <View style={styles.decisionMetaRow}>
-                  <Text style={styles.decisionMetaText}>
-                    {vm.bookingFunnelLabel || `Next: ${nextStepLabel(vm.nextIncompleteStep?.key)}`}
-                  </Text>
-                </View>
-
-                <Text style={styles.pressureText}>{pressureText}</Text>
-
-                <Pressable
-                  style={styles.primaryActionBtn}
-                  onPress={
-                    dominantAction?.onPress
-                      ? () => dominantAction.onPress()
-                      : controller.onEditTrip
-                  }
-                >
-                  <Text style={styles.primaryActionBtnText}>{dominantCta}</Text>
-                </Pressable>
-
-                {ticketLoading ? (
-                  <View style={styles.loadingRow}>
-                    <ActivityIndicator size="small" />
-                    <Text style={styles.loadingText}>Checking ticket availability…</Text>
-                  </View>
-                ) : null}
-
-                {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
-              </GlassCard>
-
-              <GlassCard>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Plan this trip</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    {vm.completionSummary || "Work through the trip in the right order."}
-                  </Text>
-                </View>
-
-                <View style={styles.plannerGrid}>
-                  {plannerCards.map((item) => (
-                    <Pressable
-                      key={item.key}
-                      style={[
-                        styles.plannerCard,
-                        item.tone === "strong"
-                          ? styles.plannerCardStrong
-                          : item.tone === "medium"
-                            ? styles.plannerCardMedium
-                            : item.tone === "optional"
-                              ? styles.plannerCardOptional
-                              : styles.plannerCardWeak,
-                      ]}
-                      onPress={() => controller.onOpenSection(item.key)}
-                    >
-                      <View style={styles.plannerCardTop}>
-                        <Text style={styles.plannerCardEyebrow}>{item.eyebrow}</Text>
-                        <View
-                          style={[
-                            styles.plannerStatusPill,
-                            item.tone === "strong"
-                              ? styles.plannerStatusPillStrong
-                              : item.tone === "medium"
-                                ? styles.plannerStatusPillMedium
-                                : item.tone === "optional"
-                                  ? styles.plannerStatusPillOptional
-                                  : styles.plannerStatusPillWeak,
-                          ]}
-                        >
-                          <Text style={styles.plannerStatusPillText}>{item.status}</Text>
-                        </View>
-                      </View>
-
-                      <Text style={styles.plannerCardTitle}>{item.label}</Text>
-                      <Text style={styles.plannerCardSub}>{item.subtitle}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                <Text style={styles.plannerFootnote}>
-                  Tickets and flights are stronger booking steps. Stay, transport and extras may still
-                  be link-based or in progress until actually booked.
-                </Text>
-              </GlassCard>
-
-              <TripMatchesCard
-                trip={trip}
-                numericMatchIds={data.numericMatchIds}
-                primaryMatchId={data.primaryMatchId}
-                fixturesById={data.fixturesById}
-                ticketsByMatchId={data.ticketsByMatchId}
-                fxLoading={data.fxLoading}
-                onAddMatch={controller.onAddMatch}
-                onOpenTicketsForMatch={controller.openTicketsForMatch}
-                onOpenMatchActions={controller.openMatchActions}
-                onSetPrimaryMatch={controller.setPrimaryMatch}
-                onRemoveMatch={controller.removeMatch}
-                getTicketProviderFromItem={ticketProviderFromItem}
-                getTicketScoreFromItem={itemResolvedScore}
-                getLivePriceLine={livePriceLine}
-              />
-
-              <GlassCard>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>What this trip still needs</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    Don’t leave the page with no clear next move.
-                  </Text>
-                </View>
-
-                <View style={styles.guidanceList}>
-                  {!vm.hasTickets ? (
-                    <Text style={styles.guidanceText}>• Tickets still need locking in.</Text>
-                  ) : null}
-
-                  {!vm.hasFlight ? (
-                    <Text style={styles.guidanceText}>• Travel is not actually booked yet.</Text>
-                  ) : null}
-
-                  {!vm.hasHotel ? (
-                    <Text style={styles.guidanceText}>
-                      • Stay location still needs deciding and booking.
-                    </Text>
-                  ) : null}
-
-                  {!vm.hasTransport ? (
-                    <Text style={styles.guidanceText}>
-                      • Local transport is still weak or unfinished.
-                    </Text>
-                  ) : null}
-
-                  {vm.hasTickets && vm.hasFlight && vm.hasHotel && vm.hasTransport ? (
-                    <Text style={styles.guidanceText}>
-                      • Core trip is covered. Final step is proof, confirmations and cleanup in Wallet.
-                    </Text>
-                  ) : null}
-                </View>
-              </GlassCard>
-            </>
-          )}
+          {renderBody()}
         </ScrollView>
 
         <TicketOptionsSheet
           visible={controller.ticketSheet.visible}
           matchLabel={ticketSheetMatchLabel}
           subtitle="Compare ticket providers"
-          options={ticketSheetOptions}
+          strongOptions={ticketSheetPayload?.strongOptions || []}
+          weakOptions={ticketSheetPayload?.weakOptions || []}
           onClose={controller.closeTicketSheet}
           onSelect={(option) => {
             void controller.onSelectTicketSheetOption(option);
