@@ -1,4 +1,5 @@
 // src/services/tripProgress.ts
+
 import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 
@@ -59,39 +60,45 @@ function isActiveItem(item: SavedItem): boolean {
   return item.status !== "archived";
 }
 
-function isBookedLike(item: SavedItem): boolean {
+function isBooked(item: SavedItem): boolean {
   return item.status === "booked";
 }
 
-function isPendingLike(item: SavedItem): boolean {
+function isPending(item: SavedItem): boolean {
   return item.status === "pending";
 }
 
-function isSavedLike(item: SavedItem): boolean {
+function isSaved(item: SavedItem): boolean {
   return item.status === "saved";
 }
 
-function filterItemsForTrip(items: SavedItem[], tripId: string): SavedItem[] {
+function getAllTripItems(tripId: string): SavedItem[] {
   const id = clean(tripId);
   if (!id) return [];
 
-  return items.filter((item) => clean(item.tripId) === id && isActiveItem(item));
+  return savedItemsStore
+    .getAll()
+    .filter((item) => clean(item.tripId) === id)
+    .filter(isActiveItem);
 }
 
-function filterByTypes(items: SavedItem[], types: SavedItemType[]): SavedItem[] {
+function filterItemsByTypes(
+  items: SavedItem[],
+  types: SavedItemType[]
+): SavedItem[] {
   if (!items.length || !types.length) return [];
   return items.filter((item) => types.includes(item.type));
 }
 
-function reduceState(items: SavedItem[]): ProgressState {
+function reduceBucketState(items: SavedItem[]): ProgressState {
   if (!items.length) return "empty";
-  if (items.some(isBookedLike)) return "booked";
-  if (items.some(isPendingLike)) return "pending";
-  if (items.some(isSavedLike)) return "saved";
+  if (items.some(isBooked)) return "booked";
+  if (items.some(isPending)) return "pending";
+  if (items.some(isSaved)) return "saved";
   return "empty";
 }
 
-function getStateScore(state: ProgressState, weight: number): number {
+function getHealthContribution(state: ProgressState, weight: number): number {
   if (state === "booked") return weight;
   return 0;
 }
@@ -100,15 +107,25 @@ export function getTripProgress(tripId: string): TripProgress {
   const id = clean(tripId);
   if (!id) return { ...EMPTY_PROGRESS };
 
-  const tripItems = filterItemsForTrip(savedItemsStore.getAll(), id);
+  const tripItems = getAllTripItems(id);
   if (!tripItems.length) return { ...EMPTY_PROGRESS };
 
   return {
-    tickets: reduceState(filterByTypes(tripItems, PROGRESS_BUCKET_TYPES.tickets)),
-    flight: reduceState(filterByTypes(tripItems, PROGRESS_BUCKET_TYPES.flight)),
-    hotel: reduceState(filterByTypes(tripItems, PROGRESS_BUCKET_TYPES.hotel)),
-    transfer: reduceState(filterByTypes(tripItems, PROGRESS_BUCKET_TYPES.transfer)),
-    things: reduceState(filterByTypes(tripItems, PROGRESS_BUCKET_TYPES.things)),
+    tickets: reduceBucketState(
+      filterItemsByTypes(tripItems, PROGRESS_BUCKET_TYPES.tickets)
+    ),
+    flight: reduceBucketState(
+      filterItemsByTypes(tripItems, PROGRESS_BUCKET_TYPES.flight)
+    ),
+    hotel: reduceBucketState(
+      filterItemsByTypes(tripItems, PROGRESS_BUCKET_TYPES.hotel)
+    ),
+    transfer: reduceBucketState(
+      filterItemsByTypes(tripItems, PROGRESS_BUCKET_TYPES.transfer)
+    ),
+    things: reduceBucketState(
+      filterItemsByTypes(tripItems, PROGRESS_BUCKET_TYPES.things)
+    ),
   };
 }
 
@@ -122,7 +139,7 @@ export function getTripHealth(tripId: string): TripHealth {
     const state = progress[key];
     const weight = HEALTH_WEIGHTS[key];
 
-    score += getStateScore(state, weight);
+    score += getHealthContribution(state, weight);
 
     if (state !== "booked") {
       missing.push(HEALTH_MISSING_LABELS[key]);
