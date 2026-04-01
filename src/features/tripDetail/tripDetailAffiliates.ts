@@ -7,7 +7,6 @@ import {
 } from "@/src/features/tripDetail/helpers";
 
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
-import { searchFlights } from "@/src/services/flights";
 import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 
 import type { Trip } from "@/src/state/trips";
@@ -28,16 +27,16 @@ function addDays(ymd: string | null, offset: number): string | null {
   const raw = clean(ymd);
   if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
 
-  const d = new Date(`${raw}T12:00:00Z`);
-  if (!Number.isFinite(d.getTime())) return null;
+  const date = new Date(`${raw}T12:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return null;
 
-  d.setUTCDate(d.getUTCDate() + offset);
+  date.setUTCDate(date.getUTCDate() + offset);
 
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
 
-  return `${y}-${m}-${day}`;
+  return `${year}-${month}-${day}`;
 }
 
 function safeUrl(value: unknown): string | null {
@@ -53,8 +52,12 @@ function safeUrl(value: unknown): string | null {
   }
 }
 
-function formatAmount(amount: number): string {
-  return amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2);
+function safeCityName(cityName: unknown): string {
+  return clean(cityName);
+}
+
+function isUsableTrip(trip: Trip | null): trip is Trip {
+  return Boolean(trip && clean(trip.id));
 }
 
 export function getBookingWindow(args: {
@@ -68,12 +71,12 @@ export function getBookingWindow(args: {
   const tripStart = clean(args.trip?.startDate) || null;
   const tripEnd = clean(args.trip?.endDate) || null;
 
-  const defaultStart = addDays(kickoffDate ?? null, -1);
-  const defaultEnd = addDays(kickoffDate ?? null, 1);
+  const fallbackStart = addDays(kickoffDate ?? null, -1);
+  const fallbackEnd = addDays(kickoffDate ?? null, 1);
 
   return {
-    startDate: tripStart || defaultStart,
-    endDate: tripEnd || defaultEnd,
+    startDate: tripStart || fallbackStart,
+    endDate: tripEnd || fallbackEnd,
   };
 }
 
@@ -85,7 +88,10 @@ export function buildAffiliateUrls(args: {
 }): AffiliateUrls | null {
   const { trip, cityName, originIata, primaryKickoffIso } = args;
 
-  if (!trip || !clean(cityName) || cityName === "Trip") return null;
+  const safeCity = safeCityName(cityName);
+  if (!isUsableTrip(trip) || !safeCity || safeCity === "Trip") {
+    return null;
+  }
 
   const bookingWindow = getBookingWindow({
     trip,
@@ -93,7 +99,7 @@ export function buildAffiliateUrls(args: {
   });
 
   const built = buildAffiliateLinks({
-    city: clean(cityName),
+    city: safeCity,
     startDate: bookingWindow.startDate,
     endDate: bookingWindow.endDate,
     originIata: cleanUpper3(originIata, "LON"),
@@ -107,19 +113,22 @@ export function buildAffiliateUrls(args: {
   const transfersUrl = safeUrl(built.transfersUrl);
   const insuranceUrl = safeUrl(built.insuranceUrl);
   const experiencesUrl = safeUrl(built.experiencesUrl);
+  const claimsUrl = safeUrl(built.claimsUrl);
 
-  const transportUrl = safeUrl(built.transportUrl) || safeUrl(built.omioUrl);
-  const omioUrl = safeUrl(built.omioUrl) || safeUrl(built.transportUrl);
+  const directTransportUrl = safeUrl(built.transportUrl);
+  const directOmioUrl = safeUrl(built.omioUrl);
+
+  const transportUrl = directTransportUrl || directOmioUrl;
+  const omioUrl = directOmioUrl || directTransportUrl;
 
   const mapsUrl =
     safeUrl(built.mapsUrl) ||
-    safeUrl(buildMapsSearchUrl(`${clean(cityName)} travel`));
-
-  const claimsUrl = safeUrl(built.claimsUrl);
+    safeUrl(buildMapsSearchUrl(`${safeCity} travel`));
 
   return {
     ticketsUrl,
     flightsUrl,
+
     staysUrl: hotelsUrl,
     trainsUrl: transportUrl,
     busesUrl: transportUrl,
@@ -131,7 +140,7 @@ export function buildAffiliateUrls(args: {
     officialSiteUrl: null,
     claimsUrl,
 
-    // compatibility
+    // compatibility fields kept while surrounding trip-detail code still imports them
     hotelsUrl,
     experiencesUrl,
     transportUrl,
@@ -143,58 +152,18 @@ export function resolveFlightDestinationIata(cityName: string): string {
   return clean(getIataCityCodeForCity(cityName)).toUpperCase();
 }
 
-export async function fetchLiveFlightPrice(args: {
+/**
+ * Locked product decision:
+ * Trip Detail must not surface live non-booked flight pricing right now.
+ *
+ * This function remains as a compatibility stub so existing imports do not break,
+ * but it intentionally returns null.
+ */
+export async function fetchLiveFlightPrice(_args: {
   trip: Trip | null;
   cityName: string;
   originIata: string;
   primaryKickoffIso: string | null;
 }): Promise<PricePoint | null> {
-  const { trip, cityName, originIata, primaryKickoffIso } = args;
-
-  if (!trip || !clean(cityName) || cityName === "Trip") return null;
-
-  const origin = cleanUpper3(originIata, "LON");
-  const destination = resolveFlightDestinationIata(cityName);
-
-  if (!destination || origin === destination) return null;
-
-  const bookingWindow = getBookingWindow({
-    trip,
-    primaryKickoffIso,
-  });
-
-  const departureDate = bookingWindow.startDate;
-  const returnDate = bookingWindow.endDate;
-
-  if (!departureDate) return null;
-
-  try {
-    const result = await searchFlights({
-      originIata: origin,
-      destinationIata: destination,
-      departureDate,
-      returnDate,
-      limit: 1,
-    });
-
-    if (!result.ok || !result.cheapest) return null;
-
-    const cheapest = result.cheapest;
-    const amount = Number(cheapest.price);
-
-    if (!Number.isFinite(amount) || amount <= 0) return null;
-
-    const currency = clean(cheapest.currency).toUpperCase() || null;
-
-    return {
-      amount,
-      currency,
-      text: currency
-        ? `${currency} ${formatAmount(amount)}`
-        : formatAmount(amount),
-      source: "live_api",
-    };
-  } catch {
-    return null;
-  }
+  return null;
 }
