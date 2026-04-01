@@ -119,6 +119,25 @@ type TicketSheetState = {
   payload: TicketSheetPayload | null;
 };
 
+type TicketContext = {
+  mid: string;
+  homeName: string;
+  awayName: string;
+  kickoffIso: string;
+  leagueName?: string;
+  leagueId?: string | number;
+  dateIso?: string;
+};
+
+type TravelLaunchCandidate = {
+  partnerId: PartnerId;
+  url: string;
+  itemType: SavedItemType;
+  title: string;
+  sourceSection: SourceSection;
+  metadata?: Record<string, unknown>;
+};
+
 function inferSourceSectionFromSavedItemType(type?: SavedItemType): SourceSection {
   switch (type) {
     case "tickets":
@@ -249,19 +268,32 @@ function getThingsUrl(affiliateUrls?: AffiliateUrls | null): string {
   return clean(affiliateUrls?.thingsUrl || affiliateUrls?.experiencesUrl);
 }
 
-function getTravelCandidate(affiliateUrls?: AffiliateUrls | null): {
-  url: string;
-  partnerId: PartnerId;
-  itemType: SavedItemType;
-  titleKind: "flight" | "train" | "bus" | "transfer";
-} | null {
+function getTransferUrl(affiliateUrls?: AffiliateUrls | null): string {
+  return clean(affiliateUrls?.transfersUrl);
+}
+
+function getTravelLaunchCandidate(
+  affiliateUrls: AffiliateUrls | null | undefined,
+  cityName: string,
+  trip: Trip | null
+): TravelLaunchCandidate | null {
+  const tripMeta = {
+    tripStartDate: trip?.startDate ?? null,
+    tripEndDate: trip?.endDate ?? null,
+  };
+
   const flightsUrl = clean(affiliateUrls?.flightsUrl);
   if (flightsUrl) {
     return {
-      url: flightsUrl,
       partnerId: "aviasales",
+      url: flightsUrl,
       itemType: "flight",
-      titleKind: "flight",
+      title: `Flights to ${cityName}`,
+      sourceSection: "travel",
+      metadata: {
+        ...tripMeta,
+        travelMode: "flight",
+      },
     };
   }
 
@@ -270,30 +302,45 @@ function getTravelCandidate(affiliateUrls?: AffiliateUrls | null): {
   );
   if (trainsUrl) {
     return {
-      url: trainsUrl,
       partnerId: "omio",
+      url: trainsUrl,
       itemType: "train",
-      titleKind: "train",
+      title: `Rail / bus to ${cityName}`,
+      sourceSection: "travel",
+      metadata: {
+        ...tripMeta,
+        travelMode: "rail_bus",
+      },
     };
   }
 
   const busesUrl = clean(affiliateUrls?.busesUrl);
   if (busesUrl) {
     return {
-      url: busesUrl,
       partnerId: "omio",
+      url: busesUrl,
       itemType: "train",
-      titleKind: "bus",
+      title: `Rail / bus to ${cityName}`,
+      sourceSection: "travel",
+      metadata: {
+        ...tripMeta,
+        travelMode: "rail_bus",
+      },
     };
   }
 
   const transfersUrl = clean(affiliateUrls?.transfersUrl);
   if (transfersUrl) {
     return {
-      url: transfersUrl,
       partnerId: "kiwitaxi",
+      url: transfersUrl,
       itemType: "transfer",
-      titleKind: "transfer",
+      title: `Transfers in ${cityName}`,
+      sourceSection: "transfers",
+      metadata: {
+        ...tripMeta,
+        travelMode: "transfer",
+      },
     };
   }
 
@@ -351,8 +398,11 @@ function splitTicketOptions(options: TicketResolutionOption[]): {
   const weak: TicketResolutionOption[] = [];
 
   for (const option of options) {
-    if (isStrongTicketOption(option)) strong.push(option);
-    else weak.push(option);
+    if (isStrongTicketOption(option)) {
+      strong.push(option);
+    } else {
+      weak.push(option);
+    }
   }
 
   return { strong, weak };
@@ -389,6 +439,14 @@ export default function useTripDetailController({
 
   function getResolvedTripId(): string {
     return clean(trip?.id) || clean(activeTripId);
+  }
+
+  async function activateSection(section: WorkspaceSectionKey) {
+    try {
+      await setActiveWorkspaceSection(section);
+    } catch {
+      // ignore
+    }
   }
 
   function getBaseCommercialMetadata() {
@@ -498,7 +556,7 @@ export default function useTripDetailController({
       });
 
       if (args.savedItemType) {
-        void setActiveWorkspaceSection(sectionForSavedItemType(args.savedItemType));
+        await activateSection(sectionForSavedItemType(args.savedItemType));
       }
     } catch (error) {
       Alert.alert("Partner link failed", getTrackedPartnerErrorMessage(error));
@@ -598,7 +656,7 @@ export default function useTripDetailController({
         },
       });
 
-      void setActiveWorkspaceSection(sectionForSavedItemType(item.type));
+      await activateSection(sectionForSavedItemType(item.type));
     } catch (error) {
       Alert.alert("Couldn’t open booking item", getTrackedPartnerErrorMessage(error));
     }
@@ -647,14 +705,10 @@ export default function useTripDetailController({
   }
 
   function confirmArchive(item: SavedItem) {
-    Alert.alert(
-      "Archive this item?",
-      "Archived items are hidden from the trip workspace.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Archive", style: "destructive", onPress: () => void archiveItem(item) },
-      ]
-    );
+    Alert.alert("Archive this item?", "Archived items are hidden from the trip workspace.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Archive", style: "destructive", onPress: () => void archiveItem(item) },
+    ]);
   }
 
   function confirmMarkBooked(item: SavedItem) {
@@ -703,7 +757,7 @@ export default function useTripDetailController({
       });
 
       setNoteText("");
-      void setActiveWorkspaceSection("notes");
+      await activateSection("notes");
     } catch {
       Alert.alert("Couldn’t save note");
     } finally {
@@ -751,24 +805,20 @@ export default function useTripDetailController({
       return;
     }
 
-    Alert.alert(
-      "Remove this match?",
-      "This only removes it from the trip.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await tripsStore.removeMatchFromTrip(trip.id, mid);
-            } catch {
-              Alert.alert("Couldn’t remove match", "Try again.");
-            }
-          },
+    Alert.alert("Remove this match?", "This only removes it from the trip.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await tripsStore.removeMatchFromTrip(trip.id, mid);
+          } catch {
+            Alert.alert("Couldn’t remove match", "Try again.");
+          }
         },
-      ]
-    );
+      },
+    ]);
   }
 
   function openMatchActions(matchId: string) {
@@ -790,14 +840,80 @@ export default function useTripDetailController({
     );
   }
 
-  async function openTicketOptionForMatch(args: {
-    mid: string;
-    homeName: string;
-    awayName: string;
-    kickoffIso: string;
-    leagueName?: string;
-    leagueId?: string | number;
-    dateIso?: string;
+  function getTicketContext(matchId: string): TicketContext | null {
+    const mid = clean(matchId);
+    if (!mid) return null;
+
+    const row = fixturesById[mid] ?? null;
+
+    const homeName = clean(row?.teams?.home?.name ?? trip?.homeName);
+    const awayName = clean(row?.teams?.away?.name ?? trip?.awayName);
+    const kickoffIso = clean(row?.fixture?.date ?? trip?.kickoffIso) || null;
+    const leagueName = clean(row?.league?.name ?? trip?.leagueName) || undefined;
+    const leagueIdRaw = row?.league?.id ?? trip?.leagueId;
+    const leagueId =
+      typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string"
+        ? leagueIdRaw
+        : undefined;
+
+    if (!homeName || !awayName || !kickoffIso) return null;
+
+    return {
+      mid,
+      homeName,
+      awayName,
+      kickoffIso,
+      leagueName,
+      leagueId,
+      dateIso: trip?.startDate || getIsoDateOnly(kickoffIso),
+    };
+  }
+
+  function buildOfficialTicketUrl(homeName: string): string | null {
+    const homeGuide = getTicketGuide(homeName);
+    return clean(homeGuide?.officialTicketUrl) || null;
+  }
+
+  async function openOfficialTicketFallback(args: TicketContext & { officialTicketUrl: string }) {
+    const title = `Official tickets: ${args.homeName} vs ${args.awayName}`;
+
+    Alert.alert(
+      "Official club tickets",
+      `No strong reseller ticket routes were found right now. Try ${args.homeName}'s official ticket page instead.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Open official site",
+          onPress: () =>
+            void openPartnerLaunch({
+              partnerId: "official_site",
+              url: args.officialTicketUrl,
+              title,
+              savedItemType: "tickets",
+              sourceSurface: "ticket_choice_alert",
+              sourceSection: "tickets",
+              metadata: {
+                fixtureId: args.mid,
+                leagueId: args.leagueId,
+                leagueName: args.leagueName,
+                kickoffIso: args.kickoffIso,
+                homeName: args.homeName,
+                awayName: args.awayName,
+                tripStartDate: trip?.startDate ?? null,
+                tripEndDate: trip?.endDate ?? null,
+                ticketProvider: "official_site",
+                officialFallback: true,
+                strongRoute: false,
+              },
+              missingTitle: "Official site unavailable",
+              missingMessage: "The club ticket page is not available yet.",
+            }),
+        },
+      ]
+    );
+  }
+
+  async function openTicketOptionForMatch(args: TicketContext & {
     option: TicketResolutionOption;
     checkedProviders?: string[];
     optionCount?: number;
@@ -859,57 +975,115 @@ export default function useTripDetailController({
     });
   }
 
-  async function openOfficialTicketFallback(args: {
-    mid: string;
-    homeName: string;
-    awayName: string;
-    kickoffIso: string;
-    leagueName?: string;
-    leagueId?: string | number;
-    officialTicketUrl: string;
-  }) {
-    const title = `Official tickets: ${args.homeName} vs ${args.awayName}`;
-
-    Alert.alert(
-      "Official club tickets",
-      `No strong reseller ticket routes were found right now. Try ${args.homeName}'s official ticket page instead.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Open official site",
-          onPress: () =>
-            void openPartnerLaunch({
-              partnerId: "official_site",
-              url: args.officialTicketUrl,
-              title,
-              savedItemType: "tickets",
-              sourceSurface: "ticket_choice_alert",
-              sourceSection: "tickets",
-              metadata: {
-                fixtureId: args.mid,
-                leagueId: args.leagueId,
-                leagueName: args.leagueName,
-                kickoffIso: args.kickoffIso,
-                homeName: args.homeName,
-                awayName: args.awayName,
-                tripStartDate: trip?.startDate ?? null,
-                tripEndDate: trip?.endDate ?? null,
-                ticketProvider: "official_site",
-                officialFallback: true,
-                strongRoute: false,
-              },
-              missingTitle: "Official site unavailable",
-              missingMessage: "The club ticket page is not available yet.",
-            }),
-        },
-      ]
-    );
-  }
-
-  function showTicketChoiceSheet(args: TicketSheetPayload) {
+  function showTicketChoiceSheet(payload: TicketSheetPayload) {
     setTicketSheet({
       visible: true,
-      payload: args,
+      payload,
+    });
+  }
+
+  async function handleResolvedTickets(
+    context: TicketContext,
+    resolved: TicketResolutionResult | null
+  ) {
+    const normalizedOptions = normalizeTicketOptions(resolved);
+    const { strong, weak } = splitTicketOptions(normalizedOptions);
+
+    const strongOptions = strong;
+    const weakOptions = weak;
+    const hasStrongOptions = strongOptions.length > 0;
+    const totalOptionCount = strongOptions.length + weakOptions.length;
+    const officialTicketUrl = buildOfficialTicketUrl(context.homeName);
+
+    if (!hasStrongOptions && totalOptionCount === 0) {
+      if (officialTicketUrl) {
+        await openOfficialTicketFallback({
+          ...context,
+          officialTicketUrl,
+        });
+        return;
+      }
+
+      Alert.alert(
+        "Tickets not found",
+        ticketResolverFailureMessage(resolved as TicketResolutionResult | null)
+      );
+      return;
+    }
+
+    if (!hasStrongOptions && officialTicketUrl) {
+      Alert.alert(
+        "Only weak fallback routes found",
+        `No strong reseller ticket routes were found for ${context.homeName} vs ${context.awayName}. You can try fallback marketplaces, but the official club ticket page is safer if available.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Official site",
+            onPress: () =>
+              void openOfficialTicketFallback({
+                ...context,
+                officialTicketUrl,
+              }),
+          },
+          ...(weakOptions.length > 0
+            ? [
+                {
+                  text: weakOptions.length === 1 ? "Open fallback route" : "See fallback options",
+                  onPress: () => {
+                    if (weakOptions.length === 1) {
+                      void openTicketOptionForMatch({
+                        ...context,
+                        option: weakOptions[0],
+                        checkedProviders: Array.isArray(resolved?.checkedProviders)
+                          ? resolved.checkedProviders
+                          : undefined,
+                        optionCount: weakOptions.length,
+                        hasStrongOptions,
+                      });
+                      return;
+                    }
+
+                    showTicketChoiceSheet({
+                      ...context,
+                      strongOptions: [],
+                      weakOptions,
+                      checkedProviders: Array.isArray(resolved?.checkedProviders)
+                        ? resolved.checkedProviders
+                        : undefined,
+                      officialTicketUrl,
+                      hasStrongOptions,
+                    });
+                  },
+                },
+              ]
+            : []),
+        ]
+      );
+      return;
+    }
+
+    if (strongOptions.length === 1 && weakOptions.length === 0) {
+      await openTicketOptionForMatch({
+        ...context,
+        option: strongOptions[0],
+        checkedProviders: Array.isArray(resolved?.checkedProviders)
+          ? resolved.checkedProviders
+          : undefined,
+        optionCount: 1,
+        hasStrongOptions,
+      });
+      return;
+    }
+
+    showTicketChoiceSheet({
+      ...context,
+      strongOptions,
+      weakOptions,
+      checkedProviders: Array.isArray(resolved?.checkedProviders)
+        ? resolved.checkedProviders
+        : undefined,
+      officialTicketUrl,
+      hasStrongOptions,
     });
   }
 
@@ -937,183 +1111,31 @@ export default function useTripDetailController({
       return;
     }
 
-    const row = fixturesById[mid] ?? null;
-
-    const homeName = clean(row?.teams?.home?.name ?? trip?.homeName);
-    const awayName = clean(row?.teams?.away?.name ?? trip?.awayName);
-    const kickoffIso = clean(row?.fixture?.date ?? trip?.kickoffIso) || null;
-    const leagueName = clean(row?.league?.name ?? trip?.leagueName) || undefined;
-    const leagueIdRaw = row?.league?.id ?? trip?.leagueId;
-    const leagueId =
-      typeof leagueIdRaw === "number" || typeof leagueIdRaw === "string"
-        ? leagueIdRaw
-        : undefined;
-
-    if (!homeName || !awayName || !kickoffIso) {
+    const context = getTicketContext(mid);
+    if (!context) {
       Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
       return;
     }
-
-    const dateIso = trip?.startDate || getIsoDateOnly(kickoffIso);
 
     setTicketLoading(true);
 
     try {
       const resolved = await resolveTicketForFixture({
-        fixtureId: mid,
-        homeName,
-        awayName,
-        kickoffIso,
-        leagueName,
-        leagueId,
+        fixtureId: context.mid,
+        homeName: context.homeName,
+        awayName: context.awayName,
+        kickoffIso: context.kickoffIso,
+        leagueName: context.leagueName,
+        leagueId: context.leagueId,
       });
 
-      const normalizedOptions = normalizeTicketOptions(resolved);
-      const split = splitTicketOptions(normalizedOptions);
-      const strongOptions = split.strong;
-      const weakOptions = split.weak;
-
-      const homeGuide = getTicketGuide(homeName);
-      const officialTicketUrl = clean(homeGuide?.officialTicketUrl) || null;
-      const hasStrongOptions = strongOptions.length > 0;
-      const totalOptionCount = strongOptions.length + weakOptions.length;
-
-      if (!hasStrongOptions && totalOptionCount === 0) {
-        if (officialTicketUrl) {
-          await openOfficialTicketFallback({
-            mid,
-            homeName,
-            awayName,
-            kickoffIso,
-            leagueName,
-            leagueId,
-            officialTicketUrl,
-          });
-          return;
-        }
-
-        Alert.alert(
-          "Tickets not found",
-          ticketResolverFailureMessage(resolved as TicketResolutionResult | null)
-        );
-        return;
-      }
-
-      if (!hasStrongOptions && officialTicketUrl) {
-        Alert.alert(
-          "Only weak fallback routes found",
-          `No strong reseller ticket routes were found for ${homeName} vs ${awayName}. You can try fallback marketplaces, but the official club ticket page is safer if available.`,
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Official site",
-              onPress: () =>
-                void openOfficialTicketFallback({
-                  mid,
-                  homeName,
-                  awayName,
-                  kickoffIso,
-                  leagueName,
-                  leagueId,
-                  officialTicketUrl,
-                }),
-            },
-            ...(weakOptions.length > 0
-              ? [
-                  {
-                    text: weakOptions.length === 1 ? "Open fallback route" : "See fallback options",
-                    onPress: () => {
-                      if (weakOptions.length === 1) {
-                        void openTicketOptionForMatch({
-                          mid,
-                          homeName,
-                          awayName,
-                          kickoffIso,
-                          leagueName,
-                          leagueId,
-                          dateIso,
-                          option: weakOptions[0],
-                          checkedProviders: Array.isArray(resolved?.checkedProviders)
-                            ? resolved?.checkedProviders
-                            : undefined,
-                          optionCount: weakOptions.length,
-                          hasStrongOptions,
-                        });
-                        return;
-                      }
-
-                      showTicketChoiceSheet({
-                        mid,
-                        homeName,
-                        awayName,
-                        kickoffIso,
-                        leagueName,
-                        leagueId,
-                        dateIso,
-                        strongOptions: [],
-                        weakOptions,
-                        checkedProviders: Array.isArray(resolved?.checkedProviders)
-                          ? resolved?.checkedProviders
-                          : undefined,
-                        officialTicketUrl,
-                        hasStrongOptions,
-                      });
-                    },
-                  },
-                ]
-              : []),
-          ]
-        );
-        return;
-      }
-
-      if (strongOptions.length === 1 && weakOptions.length === 0) {
-        await openTicketOptionForMatch({
-          mid,
-          homeName,
-          awayName,
-          kickoffIso,
-          leagueName,
-          leagueId,
-          dateIso,
-          option: strongOptions[0],
-          checkedProviders: Array.isArray(resolved?.checkedProviders)
-            ? resolved?.checkedProviders
-            : undefined,
-          optionCount: 1,
-          hasStrongOptions,
-        });
-        return;
-      }
-
-      showTicketChoiceSheet({
-        mid,
-        homeName,
-        awayName,
-        kickoffIso,
-        leagueName,
-        leagueId,
-        dateIso,
-        strongOptions,
-        weakOptions,
-        checkedProviders: Array.isArray(resolved?.checkedProviders)
-          ? resolved?.checkedProviders
-          : undefined,
-        officialTicketUrl,
-        hasStrongOptions,
-      });
+      await handleResolvedTickets(context, resolved);
     } catch {
-      const homeGuide = getTicketGuide(homeName);
-      const officialTicketUrl = clean(homeGuide?.officialTicketUrl);
+      const officialTicketUrl = buildOfficialTicketUrl(context.homeName);
 
       if (officialTicketUrl) {
         await openOfficialTicketFallback({
-          mid,
-          homeName,
-          awayName,
-          kickoffIso,
-          leagueName,
-          leagueId,
+          ...context,
           officialTicketUrl,
         });
         return;
@@ -1176,7 +1198,80 @@ export default function useTripDetailController({
       kickoffIso: payload.kickoffIso,
       leagueName: payload.leagueName,
       leagueId: payload.leagueId,
+      dateIso: payload.dateIso,
       officialTicketUrl: payload.officialTicketUrl,
+    });
+  }
+
+  async function launchStay() {
+    await openPartnerLaunch({
+      partnerId: "expedia",
+      url: getStayUrl(affiliateUrls),
+      savedItemType: "hotel",
+      title: `Stays in ${cityName}`,
+      sourceSurface: "workspace_cta",
+      sourceSection: "stay",
+      metadata: {
+        tripStartDate: trip?.startDate ?? null,
+        tripEndDate: trip?.endDate ?? null,
+      },
+      missingTitle: "Hotels not ready",
+      missingMessage: "No hotel search available yet.",
+    });
+  }
+
+  async function launchTravel() {
+    const candidate = getTravelLaunchCandidate(affiliateUrls, cityName, trip);
+
+    if (!candidate) {
+      Alert.alert("Travel not ready", "No travel search available yet.");
+      return;
+    }
+
+    await openPartnerLaunch({
+      partnerId: candidate.partnerId,
+      url: candidate.url,
+      savedItemType: candidate.itemType,
+      title: candidate.title,
+      sourceSurface: "workspace_cta",
+      sourceSection: candidate.sourceSection,
+      metadata: candidate.metadata,
+      missingTitle: "Travel not ready",
+      missingMessage: "No travel search available yet.",
+    });
+  }
+
+  async function launchThings() {
+    await openPartnerLaunch({
+      partnerId: "getyourguide",
+      url: getThingsUrl(affiliateUrls),
+      savedItemType: "things",
+      title: `Things to do in ${cityName}`,
+      sourceSurface: "workspace_cta",
+      sourceSection: "things",
+      metadata: {
+        tripStartDate: trip?.startDate ?? null,
+        tripEndDate: trip?.endDate ?? null,
+      },
+      missingTitle: "Experiences not ready",
+      missingMessage: "No activities available yet.",
+    });
+  }
+
+  async function launchTransfers() {
+    await openPartnerLaunch({
+      partnerId: "kiwitaxi",
+      url: getTransferUrl(affiliateUrls),
+      savedItemType: "transfer",
+      title: `Transfers in ${cityName}`,
+      sourceSurface: "workspace_cta",
+      sourceSection: "transfers",
+      metadata: {
+        tripStartDate: trip?.startDate ?? null,
+        tripEndDate: trip?.endDate ?? null,
+      },
+      missingTitle: "Transfers not ready",
+      missingMessage: "No transfer booking link is available yet.",
     });
   }
 
@@ -1184,11 +1279,7 @@ export default function useTripDetailController({
     const next = clean(section) as WorkspaceSectionKey;
     if (!next) return;
 
-    try {
-      await setActiveWorkspaceSection(next);
-    } catch {
-      // ignore
-    }
+    await activateSection(next);
 
     const tripId = getResolvedTripId();
     if (!tripId) {
@@ -1196,102 +1287,36 @@ export default function useTripDetailController({
       return;
     }
 
-    if (next === "tickets") {
-      const primaryMatchId = clean(trip?.fixtureIdPrimary);
-      if (!primaryMatchId) {
-        Alert.alert("Tickets not ready", "No primary match is attached to this trip yet.");
+    switch (next) {
+      case "tickets": {
+        const primaryMatchId = clean(trip?.fixtureIdPrimary);
+        if (!primaryMatchId) {
+          Alert.alert("Tickets not ready", "No primary match is attached to this trip yet.");
+          return;
+        }
+
+        await openTicketsForMatch(primaryMatchId);
         return;
       }
 
-      await openTicketsForMatch(primaryMatchId);
-      return;
-    }
-
-    if (next === "stay") {
-      await openPartnerLaunch({
-        partnerId: "expedia",
-        url: getStayUrl(affiliateUrls),
-        savedItemType: "hotel",
-        title: `Stays in ${cityName}`,
-        sourceSurface: "workspace_cta",
-        sourceSection: "stay",
-        metadata: {
-          tripStartDate: trip?.startDate ?? null,
-          tripEndDate: trip?.endDate ?? null,
-        },
-        missingTitle: "Hotels not ready",
-        missingMessage: "No hotel search available yet.",
-      });
-      return;
-    }
-
-    if (next === "travel") {
-      const candidate = getTravelCandidate(affiliateUrls);
-      if (!candidate) {
-        Alert.alert("Travel not ready", "No travel search available yet.");
+      case "stay":
+        await launchStay();
         return;
-      }
 
-      const title =
-        candidate.titleKind === "flight"
-          ? `Flights to ${cityName}`
-          : candidate.titleKind === "bus"
-            ? `Buses to ${cityName}`
-            : candidate.titleKind === "train"
-              ? `Trains to ${cityName}`
-              : `Transfers in ${cityName}`;
+      case "travel":
+        await launchTravel();
+        return;
 
-      await openPartnerLaunch({
-        partnerId: candidate.partnerId,
-        url: candidate.url,
-        savedItemType: candidate.itemType,
-        title,
-        sourceSurface: "workspace_cta",
-        sourceSection: candidate.itemType === "transfer" ? "transfers" : "travel",
-        metadata: {
-          travelMode: candidate.titleKind,
-          tripStartDate: trip?.startDate ?? null,
-          tripEndDate: trip?.endDate ?? null,
-        },
-        missingTitle: "Travel not ready",
-        missingMessage: "No travel search available yet.",
-      });
-      return;
-    }
+      case "things":
+        await launchThings();
+        return;
 
-    if (next === "things") {
-      await openPartnerLaunch({
-        partnerId: "getyourguide",
-        url: getThingsUrl(affiliateUrls),
-        savedItemType: "things",
-        title: `Things to do in ${cityName}`,
-        sourceSurface: "workspace_cta",
-        sourceSection: "things",
-        metadata: {
-          tripStartDate: trip?.startDate ?? null,
-          tripEndDate: trip?.endDate ?? null,
-        },
-        missingTitle: "Experiences not ready",
-        missingMessage: "No activities available yet.",
-      });
-      return;
-    }
+      case "transfers":
+        await launchTransfers();
+        return;
 
-    if (next === "transfers") {
-      await openPartnerLaunch({
-        partnerId: "kiwitaxi",
-        url: clean(affiliateUrls?.transfersUrl),
-        savedItemType: "transfer",
-        title: `Transfers in ${cityName}`,
-        sourceSurface: "workspace_cta",
-        sourceSection: "transfers",
-        metadata: {
-          tripStartDate: trip?.startDate ?? null,
-          tripEndDate: trip?.endDate ?? null,
-        },
-        missingTitle: "Transfers not ready",
-        missingMessage: "No transfer booking link is available yet.",
-      });
+      default:
+        return;
     }
   }
 
@@ -1322,4 +1347,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-        }
+      }
