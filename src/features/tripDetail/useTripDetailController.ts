@@ -371,7 +371,10 @@ function getOptionUrlQuality(
   }
 
   if (url.includes("/listing") || url.includes("/listings")) return "listing";
-  if (url.includes("/event") || url.includes("/events") || url.includes("/tickets")) return "event";
+  if (url.includes("/event") || url.includes("/events") || url.includes("/tickets")) {
+    return "event";
+  }
+
   return "unknown";
 }
 
@@ -874,7 +877,9 @@ export default function useTripDetailController({
     return clean(homeGuide?.officialTicketUrl) || null;
   }
 
-  async function openOfficialTicketFallback(args: TicketContext & { officialTicketUrl: string }) {
+  async function openOfficialTicketFallback(
+    args: TicketContext & { officialTicketUrl: string }
+  ) {
     const title = `Official tickets: ${args.homeName} vs ${args.awayName}`;
 
     Alert.alert(
@@ -913,12 +918,14 @@ export default function useTripDetailController({
     );
   }
 
-  async function openTicketOptionForMatch(args: TicketContext & {
-    option: TicketResolutionOption;
-    checkedProviders?: string[];
-    optionCount?: number;
-    hasStrongOptions?: boolean;
-  }) {
+  async function openTicketOptionForMatch(
+    args: TicketContext & {
+      option: TicketResolutionOption;
+      checkedProviders?: string[];
+      optionCount?: number;
+      hasStrongOptions?: boolean;
+    }
+  ) {
     let partnerId: PartnerId;
 
     try {
@@ -1004,10 +1011,7 @@ export default function useTripDetailController({
         return;
       }
 
-      Alert.alert(
-        "Tickets not found",
-        ticketResolverFailureMessage(resolved as TicketResolutionResult | null)
-      );
+      Alert.alert("Tickets not found", ticketResolverFailureMessage(resolved));
       return;
     }
 
@@ -1347,4 +1351,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-      }
+          }
