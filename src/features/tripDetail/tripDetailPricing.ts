@@ -55,10 +55,7 @@ function normalizeCurrency(value: unknown): string | null {
   const raw = upper(value);
   if (!raw) return null;
 
-  if (raw === "GBP" || raw === "EUR" || raw === "USD") {
-    return raw;
-  }
-
+  if (raw === "GBP" || raw === "EUR" || raw === "USD") return raw;
   if (raw === "£") return "GBP";
   if (raw === "€") return "EUR";
   if (raw === "$") return "USD";
@@ -142,13 +139,13 @@ export function parsePriceText(raw: unknown): Omit<PricePoint, "displayMode"> | 
 function buildSavedItemPricePoint(item: SavedItem): PricePoint | null {
   if (item.status !== "booked") return null;
 
-  const directText = parsePriceText(item.priceText);
-  if (!directText) return null;
+  const parsed = parsePriceText(item.priceText);
+  if (!parsed) return null;
 
   return {
-    amount: directText.amount,
-    currency: directText.currency,
-    text: directText.text,
+    amount: parsed.amount,
+    currency: parsed.currency,
+    text: parsed.text,
     source: "saved_item",
     displayMode: "booked",
   };
@@ -219,13 +216,11 @@ export function buildPricePointFromItem(item: SavedItem | null): PricePoint | nu
   if (!item) return null;
   if (item.status !== "booked") return null;
 
-  const savedPoint = buildSavedItemPricePoint(item);
-  const metadataNumericPoint = buildMetadataNumericPricePoint(item);
-  const metadataTextPoint = buildMetadataTextPricePoint(item);
-
-  const candidates = [savedPoint, metadataNumericPoint, metadataTextPoint].filter(
-    (point): point is PricePoint => point !== null
-  );
+  const candidates = [
+    buildSavedItemPricePoint(item),
+    buildMetadataNumericPricePoint(item),
+    buildMetadataTextPricePoint(item),
+  ].filter((point): point is PricePoint => point !== null);
 
   if (candidates.length === 0) return null;
 
@@ -367,7 +362,7 @@ export function withFlightPriceOverride(args: {
   board: BookingPriceBoard;
   flightPricePoint: Omit<PricePoint, "displayMode"> | null;
 }): BookingPriceBoard {
-  void args;
+  void args.flightPricePoint;
 
   // Locked decision:
   // do not surface non-booked pricing in Trip Detail for now,
