@@ -3,24 +3,30 @@ import type { CityGuide } from "./types";
 
 /**
  * GetYourGuide affiliate entry points (city-level “things to do” pages).
- * If a city doesn't have a clean GYG landing page, leave it undefined and
+ * If a city doesn't have a clean verified GYG landing page, leave it undefined and
  * let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
  */
 const GYG = {
-  milan: "https://www.getyourguide.com/en-gb/milan-l139/?partner_id=MAQJREP&utm_medium=online_publisher",
-  rome: "https://www.getyourguide.com/en-gb/rome-l33/?partner_id=MAQJREP&utm_medium=online_publisher",
-  naples: "https://www.getyourguide.com/en-gb/naples-l162/?partner_id=MAQJREP&utm_medium=online_publisher",
-  turin: "https://www.getyourguide.com/en-gb/turin-l52/?partner_id=MAQJREP&utm_medium=online_publisher",
-  como: "https://www.getyourguide.com/en-gb/lake-como-l63/?partner_id=MAQJREP&utm_medium=online_publisher",
-  bergamo: "https://www.getyourguide.com/en-gb/bergamo-l1040/?partner_id=MAQJREP&utm_medium=online_publisher",
-  bologna: "https://www.getyourguide.com/en-gb/bologna-l1431/?partner_id=MAQJREP&utm_medium=online_publisher",
-  cagliari: "https://www.getyourguide.com/en-gb/cagliari-l1137/?partner_id=MAQJREP&utm_medium=online_publisher",
-  genoa: "https://www.getyourguide.com/en-gb/genoa-l1009/?partner_id=MAQJREP&utm_medium=online_publisher",
-  parma: "https://www.getyourguide.com/en-gb/parma-l1736/?partner_id=MAQJREP&utm_medium=online_publisher",
-  lecce: "https://www.getyourguide.com/en-gb/lecce-l1064/?partner_id=MAQJREP&utm_medium=online_publisher",
-  florence: "https://www.getyourguide.com/en-gb/florence-l32/?partner_id=MAQJREP&utm_medium=online_publisher",
-  verona: "https://www.getyourguide.com/en-gb/verona-l389/?partner_id=MAQJREP&utm_medium=online_publisher",
-  pisa: "https://www.getyourguide.com/en-gb/pisa-l157/?partner_id=MAQJREP&utm_medium=online_publisher",
+  milan:
+    "https://www.getyourguide.com/en-gb/milan-l139/?partner_id=MAQJREP&utm_medium=online_publisher",
+  rome:
+    "https://www.getyourguide.com/en-gb/rome-l33/?partner_id=MAQJREP&utm_medium=online_publisher",
+  naples:
+    "https://www.getyourguide.com/en-gb/naples-l162/?partner_id=MAQJREP&utm_medium=online_publisher",
+  turin:
+    "https://www.getyourguide.com/en-gb/turin-l52/?partner_id=MAQJREP&utm_medium=online_publisher",
+  como:
+    "https://www.getyourguide.com/en-gb/lake-como-l63/?partner_id=MAQJREP&utm_medium=online_publisher",
+  bologna:
+    "https://www.getyourguide.com/en-gb/bologna-l1431/?partner_id=MAQJREP&utm_medium=online_publisher",
+  genoa:
+    "https://www.getyourguide.com/en-gb/genoa-l1009/?partner_id=MAQJREP&utm_medium=online_publisher",
+  florence:
+    "https://www.getyourguide.com/en-gb/florence-l32/?partner_id=MAQJREP&utm_medium=online_publisher",
+  verona:
+    "https://www.getyourguide.com/en-gb/verona-l389/?partner_id=MAQJREP&utm_medium=online_publisher",
+  pisa:
+    "https://www.getyourguide.com/en-gb/pisa-l157/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const serieACityGuides: Record<string, CityGuide> = {
@@ -34,16 +40,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Milan is Italy’s most efficient big city: fast transport, a walkable core, and a ‘do the highlights, then eat well’ rhythm that suits short breaks. It’s also a huge events city, so match weekends and major shows can spike hotel prices and crowd the metro. The trip is best when you plan by neighbourhood blocks and keep matchday logistics boring and predictable.",
 
     topThings: [
-      { title: "Duomo di Milano + rooftop terraces", tip: "Book rooftop access ahead and go early or late afternoon. Rooftop is the real payoff—then move away from the square for better-value food." },
-      { title: "Galleria Vittorio Emanuele II loop", tip: "Treat it as a 15–20 minute walk-through. If you want a splurge coffee moment, do it here—otherwise save budget for dinner elsewhere." },
-      { title: "Teatro alla Scala area", tip: "Quick exterior hit if you’re not doing the museum. Evening performances increase crowds—factor that into your centre timings." },
-      { title: "Brera district", tip: "Best late afternoon into evening. Pick one anchor (gallery or dinner), then wander. Set a spend limit—Brera is built to tempt you." },
-      { title: "Sforzesco Castle + Parco Sempione", tip: "Do a targeted visit (not a museum marathon), then use the park as a reset. Great mid-day pacing tool." },
-      { title: "Navigli canals (evening)", tip: "Sunset onwards is the window. Choose one solid dinner/aperitivo spot, then walk—don’t trap yourself in tourist menus." },
-      { title: "The Last Supper (Santa Maria delle Grazie)", tip: "Strict ticket territory: if you want it, book early. If you miss out, don’t waste time chasing it—pivot to Brera or food." },
-      { title: "Porta Nuova + Piazza Gae Aulenti", tip: "Your ‘modern Milan’ contrast block. Best as a short photo walk + café, not a whole day." },
-      { title: "Shopping strategy", tip: "Quadrilatero is mainly window-shopping unless you’re luxury spending. Cap it hard if you’re here for the trip experience." },
-      { title: "Matchday logistics (San Siro)", tip: "Plan your route and return before you leave the hotel. Build buffer for metro crowds and post-match queues." },
+      {
+        title: "Duomo di Milano + rooftop terraces",
+        tip: "Book rooftop access ahead and go early or late afternoon. Rooftop is the real payoff—then move away from the square for better-value food.",
+      },
+      {
+        title: "Galleria Vittorio Emanuele II loop",
+        tip: "Treat it as a 15–20 minute walk-through. If you want a splurge coffee moment, do it here—otherwise save budget for dinner elsewhere.",
+      },
+      {
+        title: "Teatro alla Scala area",
+        tip: "Quick exterior hit if you’re not doing the museum. Evening performances increase crowds—factor that into your centre timings.",
+      },
+      {
+        title: "Brera district",
+        tip: "Best late afternoon into evening. Pick one anchor (gallery or dinner), then wander. Set a spend limit—Brera is built to tempt you.",
+      },
+      {
+        title: "Sforzesco Castle + Parco Sempione",
+        tip: "Do a targeted visit (not a museum marathon), then use the park as a reset. Great mid-day pacing tool.",
+      },
+      {
+        title: "Navigli canals (evening)",
+        tip: "Sunset onwards is the window. Choose one solid dinner/aperitivo spot, then walk—don’t trap yourself in tourist menus.",
+      },
+      {
+        title: "The Last Supper (Santa Maria delle Grazie)",
+        tip: "Strict ticket territory: if you want it, book early. If you miss out, don’t waste time chasing it—pivot to Brera or food.",
+      },
+      {
+        title: "Porta Nuova + Piazza Gae Aulenti",
+        tip: "Your ‘modern Milan’ contrast block. Best as a short photo walk + café, not a whole day.",
+      },
+      {
+        title: "Shopping strategy",
+        tip: "Quadrilatero is mainly window-shopping unless you’re luxury spending. Cap it hard if you’re here for the trip experience.",
+      },
+      {
+        title: "Matchday logistics (San Siro)",
+        tip: "Plan your route and return before you leave the hotel. Build buffer for metro crowds and post-match queues.",
+      },
     ],
 
     tips: [
@@ -81,16 +117,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Rome is dense, high-impact, and deceptively tiring: distances look short on maps but feel long on foot. It rewards travellers who plan geographically, build rest windows, and accept that you won’t ‘complete’ the city in a weekend. For football travellers, matchday works best when you plan transport early and avoid last-minute decisions.",
 
     topThings: [
-      { title: "Colosseum + Forum + Palatine", tip: "Book timed entry ahead. Early morning is the only sane option in peak months. Allow 2–3 hours if doing all properly." },
-      { title: "Vatican Museums + Sistine Chapel", tip: "Earliest slot possible. Later in the day is more crowded and more exhausting." },
-      { title: "St Peter’s Basilica + Dome", tip: "Arrive early, dress code matters, dome climb gives the best panoramic payoff." },
-      { title: "Pantheon", tip: "Go early or late evening for calmer conditions." },
-      { title: "Trevi Fountain", tip: "Before 8am or after 11pm. Midday is a crush and not enjoyable." },
-      { title: "Piazza Navona evening loop", tip: "Good for a stroll—eat two streets away from the square for value." },
-      { title: "Trastevere nights", tip: "Wander first, then pick somewhere busy with locals. It’s an evening district, not a daytime checklist." },
-      { title: "Villa Borghese park reset", tip: "Perfect between heavy sightseeing blocks. Don’t stack big sights without a reset." },
-      { title: "Castel Sant’Angelo + river walk", tip: "Strong viewpoint and a clean connector block." },
-      { title: "Matchday travel plan", tip: "Assume taxis are unreliable after full time. Build buffers and have a clear route both ways." },
+      {
+        title: "Colosseum + Forum + Palatine",
+        tip: "Book timed entry ahead. Early morning is the only sane option in peak months. Allow 2–3 hours if doing all properly.",
+      },
+      {
+        title: "Vatican Museums + Sistine Chapel",
+        tip: "Earliest slot possible. Later in the day is more crowded and more exhausting.",
+      },
+      {
+        title: "St Peter’s Basilica + Dome",
+        tip: "Arrive early, dress code matters, dome climb gives the best panoramic payoff.",
+      },
+      {
+        title: "Pantheon",
+        tip: "Go early or late evening for calmer conditions.",
+      },
+      {
+        title: "Trevi Fountain",
+        tip: "Before 8am or after 11pm. Midday is a crush and not enjoyable.",
+      },
+      {
+        title: "Piazza Navona evening loop",
+        tip: "Good for a stroll—eat two streets away from the square for value.",
+      },
+      {
+        title: "Trastevere nights",
+        tip: "Wander first, then pick somewhere busy with locals. It’s an evening district, not a daytime checklist.",
+      },
+      {
+        title: "Villa Borghese park reset",
+        tip: "Perfect between heavy sightseeing blocks. Don’t stack big sights without a reset.",
+      },
+      {
+        title: "Castel Sant’Angelo + river walk",
+        tip: "Strong viewpoint and a clean connector block.",
+      },
+      {
+        title: "Matchday travel plan",
+        tip: "Assume taxis are unreliable after full time. Build buffers and have a clear route both ways.",
+      },
     ],
 
     tips: [
@@ -128,16 +194,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Naples is intense, loud, and genuinely rewarding—an unfiltered city where everyday life and tourism overlap completely. If you embrace the character and plan logistics properly, you get world-class food, powerful street atmosphere, and one of Europe’s best ‘real’ football-weekend backdrops.",
 
     topThings: [
-      { title: "Centro Storico / Spaccanapoli walk", tip: "Late morning or early evening is the sweet spot. Expect crowds, noise, scooters, and street food—this is the point." },
-      { title: "Napoli Sotterranea", tip: "Book ahead. Adds real historical context and breaks up the street intensity." },
-      { title: "National Archaeological Museum", tip: "Essential if doing Pompeii/Herculaneum. Allow 2–3 hours." },
-      { title: "Castel dell’Ovo + Lungomare", tip: "Easy high-payoff waterfront block—great at golden hour." },
-      { title: "Vomero + Castel Sant’Elmo views", tip: "Use funiculars. Cooler air and strong panoramas." },
-      { title: "Pompeii day trip", tip: "Go early. Half-day minimum. Don’t cram it before a match unless you love stress." },
-      { title: "Herculaneum alternative", tip: "Smaller and often better preserved than Pompeii—strong choice if time-limited." },
-      { title: "Pizza trail", tip: "Expect queues. Pick 1–2 iconic spots and commit rather than wandering hungry." },
-      { title: "Quartieri Spagnoli daylight loop", tip: "Great for murals and texture—best in daylight." },
-      { title: "Matchday planning block", tip: "Arrive early and expect crowding on return. Build buffer and don’t book tight post-match plans." },
+      {
+        title: "Centro Storico / Spaccanapoli walk",
+        tip: "Late morning or early evening is the sweet spot. Expect crowds, noise, scooters, and street food—this is the point.",
+      },
+      {
+        title: "Napoli Sotterranea",
+        tip: "Book ahead. Adds real historical context and breaks up the street intensity.",
+      },
+      {
+        title: "National Archaeological Museum",
+        tip: "Essential if doing Pompeii/Herculaneum. Allow 2–3 hours.",
+      },
+      {
+        title: "Castel dell’Ovo + Lungomare",
+        tip: "Easy high-payoff waterfront block—great at golden hour.",
+      },
+      {
+        title: "Vomero + Castel Sant’Elmo views",
+        tip: "Use funiculars. Cooler air and strong panoramas.",
+      },
+      {
+        title: "Pompeii day trip",
+        tip: "Go early. Half-day minimum. Don’t cram it before a match unless you love stress.",
+      },
+      {
+        title: "Herculaneum alternative",
+        tip: "Smaller and often better preserved than Pompeii—strong choice if time-limited.",
+      },
+      {
+        title: "Pizza trail",
+        tip: "Expect queues. Pick 1–2 iconic spots and commit rather than wandering hungry.",
+      },
+      {
+        title: "Quartieri Spagnoli daylight loop",
+        tip: "Great for murals and texture—best in daylight.",
+      },
+      {
+        title: "Matchday planning block",
+        tip: "Arrive early and expect crowding on return. Build buffer and don’t book tight post-match plans.",
+      },
     ],
 
     tips: [
@@ -176,16 +272,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Turin is orderly, elegant, and quietly wealthy—grand boulevards, arcades, and an Alpine edge. It’s a great football-weekend city because logistics are easier than Rome/Naples and the centre feels liveable. The trip works best when you cluster sights and plan one strong museum block plus food-focused evenings.",
 
     topThings: [
-      { title: "Mole Antonelliana + Cinema Museum", tip: "Take the lift for views. Time it near sunset if weather is clear." },
-      { title: "Piazza Castello + Royal sites", tip: "Do early for calm and clean photos." },
-      { title: "Egyptian Museum", tip: "Book ahead on weekends; allow 2–3 hours." },
-      { title: "Quadrilatero Romano evenings", tip: "Dense bars and restaurants—ideal for nights." },
-      { title: "Parco del Valentino river walk", tip: "Great mid-day reset." },
-      { title: "Superga viewpoint", tip: "Go if skies are clear; it’s about views and atmosphere." },
-      { title: "Porta Palazzo market", tip: "Morning is best. Go hungry." },
-      { title: "Historic cafés (chocolate culture)", tip: "Do one proper ‘Turin café’ stop—this city does it better than most." },
-      { title: "One football block (tour or museum)", tip: "Book ahead on match weekends if you want it to be smooth." },
-      { title: "Matchday route planning", tip: "Pick your pre-match area, then move with intent. Don’t improvise across the city last-minute." },
+      {
+        title: "Mole Antonelliana + Cinema Museum",
+        tip: "Take the lift for views. Time it near sunset if weather is clear.",
+      },
+      {
+        title: "Piazza Castello + Royal sites",
+        tip: "Do early for calm and clean photos.",
+      },
+      {
+        title: "Egyptian Museum",
+        tip: "Book ahead on weekends; allow 2–3 hours.",
+      },
+      {
+        title: "Quadrilatero Romano evenings",
+        tip: "Dense bars and restaurants—ideal for nights.",
+      },
+      {
+        title: "Parco del Valentino river walk",
+        tip: "Great mid-day reset.",
+      },
+      {
+        title: "Superga viewpoint",
+        tip: "Go if skies are clear; it’s about views and atmosphere.",
+      },
+      {
+        title: "Porta Palazzo market",
+        tip: "Morning is best. Go hungry.",
+      },
+      {
+        title: "Historic cafés (chocolate culture)",
+        tip: "Do one proper ‘Turin café’ stop—this city does it better than most.",
+      },
+      {
+        title: "One football block (tour or museum)",
+        tip: "Book ahead on match weekends if you want it to be smooth.",
+      },
+      {
+        title: "Matchday route planning",
+        tip: "Pick your pre-match area, then move with intent. Don’t improvise across the city last-minute.",
+      },
     ],
 
     tips: [
@@ -221,16 +347,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Como is football woven into a postcard lake break: waterfront walks, mountain views, slow lunches, then an evening match. It’s best when you treat it like a mini-holiday rather than trying to stack a ‘big city’ itinerary.",
 
     topThings: [
-      { title: "Lakefront promenade", tip: "Golden hour is the money shot. Walk from the ferry area and keep it slow." },
-      { title: "Funicular to Brunate", tip: "Go late afternoon for panoramic views; bring a layer—temps can drop." },
-      { title: "Boat trip (Bellagio or Varenna)", tip: "Half-day return works well. Check seasonal timetables." },
-      { title: "Como Cathedral (Duomo)", tip: "Quick interior visit, then coffee nearby." },
-      { title: "Old Town wandering", tip: "Compact and flat—ideal for drifting without a plan." },
-      { title: "Villa Olmo gardens", tip: "Easy add-on walk from centre." },
-      { title: "Aperitivo by the water", tip: "Make it a ritual: one good spot, slow pacing." },
-      { title: "Enoteca wine stop", tip: "Step away from ferry crowds for better value." },
-      { title: "Scenic viewpoint block", tip: "Choose one elevated view (Brunate or a short hike)—don’t chase five." },
-      { title: "Matchday lakefront walk-in", tip: "Do the stadium approach on foot from centre—low stress, high vibe." },
+      {
+        title: "Lakefront promenade",
+        tip: "Golden hour is the money shot. Walk from the ferry area and keep it slow.",
+      },
+      {
+        title: "Funicular to Brunate",
+        tip: "Go late afternoon for panoramic views; bring a layer—temps can drop.",
+      },
+      {
+        title: "Boat trip (Bellagio or Varenna)",
+        tip: "Half-day return works well. Check seasonal timetables.",
+      },
+      {
+        title: "Como Cathedral (Duomo)",
+        tip: "Quick interior visit, then coffee nearby.",
+      },
+      {
+        title: "Old Town wandering",
+        tip: "Compact and flat—ideal for drifting without a plan.",
+      },
+      {
+        title: "Villa Olmo gardens",
+        tip: "Easy add-on walk from centre.",
+      },
+      {
+        title: "Aperitivo by the water",
+        tip: "Make it a ritual: one good spot, slow pacing.",
+      },
+      {
+        title: "Enoteca wine stop",
+        tip: "Step away from ferry crowds for better value.",
+      },
+      {
+        title: "Scenic viewpoint block",
+        tip: "Choose one elevated view (Brunate or a short hike)—don’t chase five.",
+      },
+      {
+        title: "Matchday lakefront walk-in",
+        tip: "Do the stadium approach on foot from centre—low stress, high vibe.",
+      },
     ],
 
     tips: [
@@ -259,22 +415,51 @@ export const serieACityGuides: Record<string, CityGuide> = {
     cityId: "bergamo",
     name: "Bergamo",
     country: "Italy",
-    thingsToDoUrl: GYG.bergamo,
 
     overview:
       "Bergamo is two cities in one: medieval Città Alta on the hill and the modern lower city below. It’s compact, atmospheric, and ideal for a football weekend because you can do a high-impact historic day, then keep matchday simple without big-city chaos.",
 
     topThings: [
-      { title: "Città Alta wandering", tip: "Enter via funicular and wander without a map. That’s the correct way." },
-      { title: "Piazza Vecchia", tip: "Coffee and people-watching. Don’t rush it." },
-      { title: "Basilica di Santa Maria Maggiore", tip: "High payoff interior—combine with the Cathedral next door." },
-      { title: "Venetian Walls walk", tip: "UNESCO views over Lombardy. Best near sunset." },
-      { title: "Funicular ride", tip: "Simple but iconic; it stitches the city together." },
-      { title: "Lower city café strip", tip: "Useful for downtime and a calmer pace." },
-      { title: "Enoteca stop", tip: "Try regional wines—don’t default to generic lists." },
-      { title: "Parco dei Colli", tip: "If you want a light hike and fresh air outside the stone streets." },
-      { title: "Gelato loop", tip: "Quality gelaterias cluster in Città Alta—easy win." },
-      { title: "Matchday early approach", tip: "Arrive early and keep the rest of the day light so you’re not exhausted." },
+      {
+        title: "Città Alta wandering",
+        tip: "Enter via funicular and wander without a map. That’s the correct way.",
+      },
+      {
+        title: "Piazza Vecchia",
+        tip: "Coffee and people-watching. Don’t rush it.",
+      },
+      {
+        title: "Basilica di Santa Maria Maggiore",
+        tip: "High payoff interior—combine with the Cathedral next door.",
+      },
+      {
+        title: "Venetian Walls walk",
+        tip: "UNESCO views over Lombardy. Best near sunset.",
+      },
+      {
+        title: "Funicular ride",
+        tip: "Simple but iconic; it stitches the city together.",
+      },
+      {
+        title: "Lower city café strip",
+        tip: "Useful for downtime and a calmer pace.",
+      },
+      {
+        title: "Enoteca stop",
+        tip: "Try regional wines—don’t default to generic lists.",
+      },
+      {
+        title: "Parco dei Colli",
+        tip: "If you want a light hike and fresh air outside the stone streets.",
+      },
+      {
+        title: "Gelato loop",
+        tip: "Quality gelaterias cluster in Città Alta—easy win.",
+      },
+      {
+        title: "Matchday early approach",
+        tip: "Arrive early and keep the rest of the day light so you’re not exhausted.",
+      },
     ],
 
     tips: [
@@ -308,16 +493,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Bologna is one of Italy’s best all-round cities: medieval streets, endless porticos, and a food culture that’s the real headline. It’s less chaotic than Rome and less glossy than Milan, so it’s ideal for a football weekend where the trip still feels relaxed.",
 
     topThings: [
-      { title: "Piazza Maggiore", tip: "Sit with coffee or aperitivo and watch the city flow. Simple, high-value." },
-      { title: "Two Towers area", tip: "Climb early if you’re doing it; it’s a leg workout and queues grow fast." },
-      { title: "Portico walks", tip: "Use them strategically—perfect in heat or rain." },
-      { title: "Quadrilatero food streets", tip: "Snack your way through delis and wine bars. Don’t force a big sit-down here." },
-      { title: "Archiginnasio", tip: "Quick cultural hit with real character." },
-      { title: "Santo Stefano complex", tip: "Atmospheric cluster that feels distinct from the main squares." },
-      { title: "Via Zamboni/student energy", tip: "Louder, cheaper, more nightlife-adjacent." },
-      { title: "Giardini Margherita reset", tip: "Good mid-day breathing space." },
-      { title: "San Luca viewpoint", tip: "Do it if you want a ‘signature’ walk. Don’t attempt it right before matchday." },
-      { title: "Matchday timing", tip: "Arrive early and have your pre-match food plan locked—stadium area is residential." },
+      {
+        title: "Piazza Maggiore",
+        tip: "Sit with coffee or aperitivo and watch the city flow. Simple, high-value.",
+      },
+      {
+        title: "Two Towers area",
+        tip: "Climb early if you’re doing it; it’s a leg workout and queues grow fast.",
+      },
+      {
+        title: "Portico walks",
+        tip: "Use them strategically—perfect in heat or rain.",
+      },
+      {
+        title: "Quadrilatero food streets",
+        tip: "Snack your way through delis and wine bars. Don’t force a big sit-down here.",
+      },
+      {
+        title: "Archiginnasio",
+        tip: "Quick cultural hit with real character.",
+      },
+      {
+        title: "Santo Stefano complex",
+        tip: "Atmospheric cluster that feels distinct from the main squares.",
+      },
+      {
+        title: "Via Zamboni/student energy",
+        tip: "Louder, cheaper, more nightlife-adjacent.",
+      },
+      {
+        title: "Giardini Margherita reset",
+        tip: "Good mid-day breathing space.",
+      },
+      {
+        title: "San Luca viewpoint",
+        tip: "Do it if you want a ‘signature’ walk. Don’t attempt it right before matchday.",
+      },
+      {
+        title: "Matchday timing",
+        tip: "Arrive early and have your pre-match food plan locked—stadium area is residential.",
+      },
     ],
 
     tips: [
@@ -352,16 +567,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Udine is a refined northeastern city with Venetian-style squares, excellent regional food, and a calmer pace than Italy’s big tourist magnets. It’s ideal for travellers who want authenticity and an easy logistics weekend rather than headline attractions.",
 
     topThings: [
-      { title: "Piazza Libertà", tip: "Go early morning or golden hour—best light, calmer atmosphere." },
-      { title: "Udine Castle viewpoint", tip: "Short uphill walk for rooftops and wide plains views." },
-      { title: "Via Mercatovecchio café loop", tip: "The city’s daily-life spine—perfect for slow walking and stops." },
-      { title: "Piazza Matteotti evening base", tip: "A strong drinks/dinner square without big-city chaos." },
-      { title: "Cathedral quick stop", tip: "Peaceful interior—good pacing tool." },
-      { title: "Tiepolo art option", tip: "For art lovers—targeted visit, not a full-day museum marathon." },
-      { title: "Short park reset", tip: "Use green space near the centre to protect your energy." },
-      { title: "Cividale del Friuli day trip", tip: "Easy add-on if you have spare time; don’t force it into a tight weekend." },
-      { title: "Friuli wine bar", tip: "Ask for regional whites—this is what Friuli does best." },
-      { title: "Matchday route planning", tip: "Know your route to/from the ground early; suburban stadium areas are less intuitive." },
+      {
+        title: "Piazza Libertà",
+        tip: "Go early morning or golden hour—best light, calmer atmosphere.",
+      },
+      {
+        title: "Udine Castle viewpoint",
+        tip: "Short uphill walk for rooftops and wide plains views.",
+      },
+      {
+        title: "Via Mercatovecchio café loop",
+        tip: "The city’s daily-life spine—perfect for slow walking and stops.",
+      },
+      {
+        title: "Piazza Matteotti evening base",
+        tip: "A strong drinks/dinner square without big-city chaos.",
+      },
+      {
+        title: "Cathedral quick stop",
+        tip: "Peaceful interior—good pacing tool.",
+      },
+      {
+        title: "Tiepolo art option",
+        tip: "For art lovers—targeted visit, not a full-day museum marathon.",
+      },
+      {
+        title: "Short park reset",
+        tip: "Use green space near the centre to protect your energy.",
+      },
+      {
+        title: "Cividale del Friuli day trip",
+        tip: "Easy add-on if you have spare time; don’t force it into a tight weekend.",
+      },
+      {
+        title: "Friuli wine bar",
+        tip: "Ask for regional whites—this is what Friuli does best.",
+      },
+      {
+        title: "Matchday route planning",
+        tip: "Know your route to/from the ground early; suburban stadium areas are less intuitive.",
+      },
     ],
 
     tips: [
@@ -395,16 +640,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Sassuolo is not a classic standalone city break. The smart play is using it as a football anchor inside a wider Emilia-Romagna weekend (often based in Bologna or Modena). Your trip value comes from food, nearby cities, and clean matchday logistics—trying to force a big sightseeing itinerary here will feel thin.",
 
     topThings: [
-      { title: "Palazzo Ducale di Sassuolo", tip: "The main ‘wow’ locally. Check opening days/hours before building plans." },
-      { title: "Centro Storico slow loop", tip: "This is about pacing and cafés, not attractions-per-hour." },
-      { title: "Local parks reset", tip: "Use downtime to keep matchday energy intact." },
-      { title: "Modena day trip", tip: "Best add-on city for food and a compact centre." },
-      { title: "Maranello (Ferrari territory)", tip: "If you want a headline experience nearby, book ahead on weekends." },
-      { title: "Bologna as main base", tip: "Best nightlife and easiest trains; treat Sassuolo as a planned matchday hop." },
-      { title: "Reggio Emilia stop", tip: "If your match routing goes via Reggio, make it a food block rather than a boring transit point." },
-      { title: "Emilia-Romagna food crawl", tip: "This region’s real attraction is eating well. Plan meals like events." },
-      { title: "Aperitivo → matchday routine", tip: "Calm daytime + structured pre-match beats chaotic improvisation." },
-      { title: "Post-match return plan", tip: "Go back to your base for dinner. Stadium-adjacent areas are rarely the best finish." },
+      {
+        title: "Palazzo Ducale di Sassuolo",
+        tip: "The main ‘wow’ locally. Check opening days/hours before building plans.",
+      },
+      {
+        title: "Centro Storico slow loop",
+        tip: "This is about pacing and cafés, not attractions-per-hour.",
+      },
+      {
+        title: "Local parks reset",
+        tip: "Use downtime to keep matchday energy intact.",
+      },
+      {
+        title: "Modena day trip",
+        tip: "Best add-on city for food and a compact centre.",
+      },
+      {
+        title: "Maranello (Ferrari territory)",
+        tip: "If you want a headline experience nearby, book ahead on weekends.",
+      },
+      {
+        title: "Bologna as main base",
+        tip: "Best nightlife and easiest trains; treat Sassuolo as a planned matchday hop.",
+      },
+      {
+        title: "Reggio Emilia stop",
+        tip: "If your match routing goes via Reggio, make it a food block rather than a boring transit point.",
+      },
+      {
+        title: "Emilia-Romagna food crawl",
+        tip: "This region’s real attraction is eating well. Plan meals like events.",
+      },
+      {
+        title: "Aperitivo → matchday routine",
+        tip: "Calm daytime + structured pre-match beats chaotic improvisation.",
+      },
+      {
+        title: "Post-match return plan",
+        tip: "Go back to your base for dinner. Stadium-adjacent areas are rarely the best finish.",
+      },
     ],
 
     tips: [
@@ -433,22 +708,51 @@ export const serieACityGuides: Record<string, CityGuide> = {
     cityId: "cagliari",
     name: "Cagliari",
     country: "Italy",
-    thingsToDoUrl: GYG.cagliari,
 
     overview:
       "Cagliari is a proper ‘go away’ break disguised as a football trip: sea views, a walkable historic core, beaches close by, and a slower rhythm that makes weekends feel longer. The key is logistics—flights and base choice—then splitting time between old-town wandering, sea air, and one clean matchday block.",
 
     topThings: [
-      { title: "Castello district (historic core)", tip: "Do it twice: daylight for views and golden hour for atmosphere. It’s not a one-pass zone." },
-      { title: "Bastione di Saint Remy", tip: "Sunset is the moment—arrive early if you want space." },
-      { title: "Marina evenings", tip: "This is where nights should end. Pick one strong place then drift." },
-      { title: "Poetto Beach", tip: "Half-day minimum. If windy, pivot to café hopping along the beachfront." },
-      { title: "Sella del Diavolo hike", tip: "Early morning, water, proper shoes. Big payoff for moderate effort." },
-      { title: "Mercato di San Benedetto", tip: "Go hungry. Walk first, then choose—this is Sardinia in one hour." },
-      { title: "Nora day trip", tip: "Great non-football cultural anchor; pair with a long coastal lunch." },
-      { title: "Waterfront stroll", tip: "Low effort, high vibe—perfect late afternoon block before dinner." },
-      { title: "One standout seafood meal", tip: "Make it a deliberate ‘event’ meal. It sells the whole trip." },
-      { title: "Matchday as structured half-day", tip: "Calm morning + food block + buffer-time travel beats cramming beach + hike + match." },
+      {
+        title: "Castello district (historic core)",
+        tip: "Do it twice: daylight for views and golden hour for atmosphere. It’s not a one-pass zone.",
+      },
+      {
+        title: "Bastione di Saint Remy",
+        tip: "Sunset is the moment—arrive early if you want space.",
+      },
+      {
+        title: "Marina evenings",
+        tip: "This is where nights should end. Pick one strong place then drift.",
+      },
+      {
+        title: "Poetto Beach",
+        tip: "Half-day minimum. If windy, pivot to café hopping along the beachfront.",
+      },
+      {
+        title: "Sella del Diavolo hike",
+        tip: "Early morning, water, proper shoes. Big payoff for moderate effort.",
+      },
+      {
+        title: "Mercato di San Benedetto",
+        tip: "Go hungry. Walk first, then choose—this is Sardinia in one hour.",
+      },
+      {
+        title: "Nora day trip",
+        tip: "Great non-football cultural anchor; pair with a long coastal lunch.",
+      },
+      {
+        title: "Waterfront stroll",
+        tip: "Low effort, high vibe—perfect late afternoon block before dinner.",
+      },
+      {
+        title: "One standout seafood meal",
+        tip: "Make it a deliberate ‘event’ meal. It sells the whole trip.",
+      },
+      {
+        title: "Matchday as structured half-day",
+        tip: "Calm morning + food block + buffer-time travel beats cramming beach + hike + match.",
+      },
     ],
 
     tips: [
@@ -484,16 +788,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Genoa is textured and layered: a dense medieval core, grand seafront architecture, gritty port zones, and a food culture that quietly over-delivers. It’s excellent for football weekends because it feels real and it doubles as a gateway to the Riviera—matchday plus coastal add-ons is the winning formula.",
 
     topThings: [
-      { title: "Old Town (caruggi) wander", tip: "Don’t over-route it. Wander, get slightly lost, and follow instinct—atmosphere is the point." },
-      { title: "Porto Antico late afternoon", tip: "Perfect transition block: harbour walk → aperitivo → dinner." },
-      { title: "Via Garibaldi (Palazzi dei Rolli)", tip: "Short, high-impact hit. Walking the street delivers most of the payoff." },
-      { title: "Boccadasse", tip: "Go late afternoon; grab focaccia/gelato and sit by the water." },
-      { title: "Aquarium (low-effort big block)", tip: "Great if you want something contained and weather-proof." },
-      { title: "Nervi promenade", tip: "Cliffside coastal walk—strong half-day escape." },
-      { title: "Camogli day trip", tip: "Easy train ride and a high-ROI add-on if you have spare time." },
-      { title: "Portofino (scenery play)", tip: "Beautiful but pricey—treat as photos + short wander, not a spending marathon." },
-      { title: "Focaccia mission", tip: "Try a few versions. Genoa does this better than almost anywhere." },
-      { title: "Matchday as anchor", tip: "Keep the rest of the day lighter so you arrive with energy." },
+      {
+        title: "Old Town (caruggi) wander",
+        tip: "Don’t over-route it. Wander, get slightly lost, and follow instinct—atmosphere is the point.",
+      },
+      {
+        title: "Porto Antico late afternoon",
+        tip: "Perfect transition block: harbour walk → aperitivo → dinner.",
+      },
+      {
+        title: "Via Garibaldi (Palazzi dei Rolli)",
+        tip: "Short, high-impact hit. Walking the street delivers most of the payoff.",
+      },
+      {
+        title: "Boccadasse",
+        tip: "Go late afternoon; grab focaccia/gelato and sit by the water.",
+      },
+      {
+        title: "Aquarium (low-effort big block)",
+        tip: "Great if you want something contained and weather-proof.",
+      },
+      {
+        title: "Nervi promenade",
+        tip: "Cliffside coastal walk—strong half-day escape.",
+      },
+      {
+        title: "Camogli day trip",
+        tip: "Easy train ride and a high-ROI add-on if you have spare time.",
+      },
+      {
+        title: "Portofino (scenery play)",
+        tip: "Beautiful but pricey—treat as photos + short wander, not a spending marathon.",
+      },
+      {
+        title: "Focaccia mission",
+        tip: "Try a few versions. Genoa does this better than almost anywhere.",
+      },
+      {
+        title: "Matchday as anchor",
+        tip: "Keep the rest of the day lighter so you arrive with energy.",
+      },
     ],
 
     tips: [
@@ -528,16 +862,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Cremona is small, elegant, and quietly special—famous for Stradivari and violin-making culture. It’s perfect for a calm football-led weekend: walkable, food-focused, and relaxed. The win is quality over quantity—long lunches, gentle sightseeing, and an easy evening rhythm.",
 
     topThings: [
-      { title: "Piazza del Comune", tip: "Visit twice: morning for quiet photos, evening for atmosphere and aperitivo." },
-      { title: "Torrazzo climb", tip: "If you’re able, do it—views over Lombardy are worth the effort." },
-      { title: "Cathedral interior", tip: "Step inside even if you’re not a church person—high payoff." },
-      { title: "Violin Museum", tip: "Non-negotiable here. It’s the city’s identity in one place." },
-      { title: "Luthier workshops", tip: "Look for independent makers near the centre; browsing is part of the charm." },
-      { title: "Po River embankment walk", tip: "Late afternoon calm block—good contrast to stone streets." },
-      { title: "Corso Garibaldi cafés", tip: "Simple downtime and people-watching spine." },
-      { title: "Torrone/pastry crawl", tip: "Cremona sweets are a signature—don’t skip." },
-      { title: "Small wine bar", tip: "Focus on local Lombardy labels, not generic lists." },
-      { title: "Matchday pacing", tip: "Keep daytime light so matchday doesn’t feel like a slog." },
+      {
+        title: "Piazza del Comune",
+        tip: "Visit twice: morning for quiet photos, evening for atmosphere and aperitivo.",
+      },
+      {
+        title: "Torrazzo climb",
+        tip: "If you’re able, do it—views over Lombardy are worth the effort.",
+      },
+      {
+        title: "Cathedral interior",
+        tip: "Step inside even if you’re not a church person—high payoff.",
+      },
+      {
+        title: "Violin Museum",
+        tip: "Non-negotiable here. It’s the city’s identity in one place.",
+      },
+      {
+        title: "Luthier workshops",
+        tip: "Look for independent makers near the centre; browsing is part of the charm.",
+      },
+      {
+        title: "Po River embankment walk",
+        tip: "Late afternoon calm block—good contrast to stone streets.",
+      },
+      {
+        title: "Corso Garibaldi cafés",
+        tip: "Simple downtime and people-watching spine.",
+      },
+      {
+        title: "Torrone/pastry crawl",
+        tip: "Cremona sweets are a signature—don’t skip.",
+      },
+      {
+        title: "Small wine bar",
+        tip: "Focus on local Lombardy labels, not generic lists.",
+      },
+      {
+        title: "Matchday pacing",
+        tip: "Keep daytime light so matchday doesn’t feel like a slog.",
+      },
     ],
 
     tips: [
@@ -566,22 +930,51 @@ export const serieACityGuides: Record<string, CityGuide> = {
     cityId: "parma",
     name: "Parma",
     country: "Italy",
-    thingsToDoUrl: GYG.parma,
 
     overview:
       "Parma is calm, confident, and obsessed with quality—right in the heart of Emilia-Romagna’s food culture. It’s a brilliant football weekend city because you can walk everywhere, eat extremely well, and keep logistics simple. Parma shines when you plan meals deliberately and let the city’s rhythm do the work.",
 
     topThings: [
-      { title: "Cathedral + Baptistery block", tip: "Do them as one focused block in the morning for the best experience." },
-      { title: "Teatro Regio area", tip: "Even an exterior visit adds cultural weight—Parma takes opera seriously." },
-      { title: "Parco Ducale reset", tip: "Perfect mid-afternoon decompression after sightseeing." },
-      { title: "Oltretorrente wander", tip: "More local-feeling streets, bakeries, and trattorias. Great for drifting." },
-      { title: "Food producer tour (if time)", tip: "Book a morning dairy/producer visit—high ROI if you love food culture." },
-      { title: "Central shopping spine", tip: "More atmosphere than bargains—use it as a connector block." },
-      { title: "Wine bar evening", tip: "Pick one good spot and stay. Parma evenings are calmer, not clubby." },
-      { title: "Long lunch strategy", tip: "Lunch menus are often better value than dinner—use them." },
-      { title: "Matchday walk-in", tip: "Walking to the stadium keeps the day smooth and removes transport stress." },
-      { title: "One ‘event meal’", tip: "Make one standout meal the anchor—this is Parma’s superpower." },
+      {
+        title: "Cathedral + Baptistery block",
+        tip: "Do them as one focused block in the morning for the best experience.",
+      },
+      {
+        title: "Teatro Regio area",
+        tip: "Even an exterior visit adds cultural weight—Parma takes opera seriously.",
+      },
+      {
+        title: "Parco Ducale reset",
+        tip: "Perfect mid-afternoon decompression after sightseeing.",
+      },
+      {
+        title: "Oltretorrente wander",
+        tip: "More local-feeling streets, bakeries, and trattorias. Great for drifting.",
+      },
+      {
+        title: "Food producer tour (if time)",
+        tip: "Book a morning dairy/producer visit—high ROI if you love food culture.",
+      },
+      {
+        title: "Central shopping spine",
+        tip: "More atmosphere than bargains—use it as a connector block.",
+      },
+      {
+        title: "Wine bar evening",
+        tip: "Pick one good spot and stay. Parma evenings are calmer, not clubby.",
+      },
+      {
+        title: "Long lunch strategy",
+        tip: "Lunch menus are often better value than dinner—use them.",
+      },
+      {
+        title: "Matchday walk-in",
+        tip: "Walking to the stadium keeps the day smooth and removes transport stress.",
+      },
+      {
+        title: "One ‘event meal’",
+        tip: "Make one standout meal the anchor—this is Parma’s superpower.",
+      },
     ],
 
     tips: [
@@ -611,22 +1004,51 @@ export const serieACityGuides: Record<string, CityGuide> = {
     cityId: "lecce",
     name: "Lecce",
     country: "Italy",
-    thingsToDoUrl: GYG.lecce,
 
     overview:
       "Lecce is the cultural jewel of Salento: honey-coloured stone, ornate Baroque architecture, and a slow evening rhythm built around aperitivo and late dinners. It’s perfect for a football-led weekend because the centre is compact, atmospheric, and still gives you easy access to coastline add-ons if you have time.",
 
     topThings: [
-      { title: "Basilica di Santa Croce", tip: "Circle the façade and take time with the detail. Golden hour makes the stone glow." },
-      { title: "Piazza del Duomo at night", tip: "Go after dinner when it’s softly lit and quieter—film-set vibes." },
-      { title: "Roman Amphitheatre (Sant’Oronzo)", tip: "Use it as your anchor point for city loops. It’s woven into everyday life." },
-      { title: "Baroque wandering loop", tip: "The real experience is drifting: side streets, small churches, artisan shops, pauses for coffee." },
-      { title: "Museo Faggiano", tip: "Compact, story-driven, and memorable—great on a tight weekend." },
-      { title: "Porta Napoli", tip: "Quick photo + context stop; return via smaller streets for better atmosphere." },
-      { title: "Otranto day trip", tip: "Calmer and pretty—best ‘first pick’ coastal add-on if you want one." },
-      { title: "Gallipoli day trip", tip: "More lively and social—choose this if you want energy and sunset scenes." },
-      { title: "Proper aperitivo session", tip: "Don’t rush. Do it the southern way, then dinner later." },
-      { title: "Matchday pacing", tip: "Treat matchday as its own block—don’t cram heavy sightseeing right up to kickoff." },
+      {
+        title: "Basilica di Santa Croce",
+        tip: "Circle the façade and take time with the detail. Golden hour makes the stone glow.",
+      },
+      {
+        title: "Piazza del Duomo at night",
+        tip: "Go after dinner when it’s softly lit and quieter—film-set vibes.",
+      },
+      {
+        title: "Roman Amphitheatre (Sant’Oronzo)",
+        tip: "Use it as your anchor point for city loops. It’s woven into everyday life.",
+      },
+      {
+        title: "Baroque wandering loop",
+        tip: "The real experience is drifting: side streets, small churches, artisan shops, pauses for coffee.",
+      },
+      {
+        title: "Museo Faggiano",
+        tip: "Compact, story-driven, and memorable—great on a tight weekend.",
+      },
+      {
+        title: "Porta Napoli",
+        tip: "Quick photo + context stop; return via smaller streets for better atmosphere.",
+      },
+      {
+        title: "Otranto day trip",
+        tip: "Calmer and pretty—best ‘first pick’ coastal add-on if you want one.",
+      },
+      {
+        title: "Gallipoli day trip",
+        tip: "More lively and social—choose this if you want energy and sunset scenes.",
+      },
+      {
+        title: "Proper aperitivo session",
+        tip: "Don’t rush. Do it the southern way, then dinner later.",
+      },
+      {
+        title: "Matchday pacing",
+        tip: "Treat matchday as its own block—don’t cram heavy sightseeing right up to kickoff.",
+      },
     ],
 
     tips: [
@@ -662,16 +1084,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Florence is an iconic cultural heavyweight, but it’s also compact and walkable—perfect for a football-led weekend if you plan properly. The best approach is one major cultural block per half-day, lots of wandering in between, and evenings built around wine, conversation, and slower pacing.",
 
     topThings: [
-      { title: "Duomo complex", tip: "Pick ONE paid element if time-limited (dome or tower). The exterior/square delivers huge impact without hours." },
-      { title: "Piazza della Signoria + Palazzo Vecchio area", tip: "Visit day and night; floodlit evenings are a different experience." },
-      { title: "Uffizi (one big museum choice)", tip: "Pre-book. Early or late slots beat midday crowd crush." },
-      { title: "Ponte Vecchio → Oltrarno drift", tip: "Cross then keep walking for a more local-feeling food and bar scene." },
-      { title: "Piazzale Michelangelo sunset", tip: "Best city panorama. Stay after sunset when crowds thin and lights come on." },
-      { title: "Accademia (David)", tip: "Targeted quick visit if it matters to you; the gallery is small." },
-      { title: "Mercato Centrale block", tip: "Good daytime food stop; not a nightlife destination." },
-      { title: "Santa Croce evening zone", tip: "Strong nights area with bars and casual restaurants." },
-      { title: "Tuscan wine bar session", tip: "Pick one good wine bar and stay put—don’t turn it into frantic hopping." },
-      { title: "Matchday as its own block", tip: "Food first, then travel. Don’t squeeze it between museums." },
+      {
+        title: "Duomo complex",
+        tip: "Pick ONE paid element if time-limited (dome or tower). The exterior/square delivers huge impact without hours.",
+      },
+      {
+        title: "Piazza della Signoria + Palazzo Vecchio area",
+        tip: "Visit day and night; floodlit evenings are a different experience.",
+      },
+      {
+        title: "Uffizi (one big museum choice)",
+        tip: "Pre-book. Early or late slots beat midday crowd crush.",
+      },
+      {
+        title: "Ponte Vecchio → Oltrarno drift",
+        tip: "Cross then keep walking for a more local-feeling food and bar scene.",
+      },
+      {
+        title: "Piazzale Michelangelo sunset",
+        tip: "Best city panorama. Stay after sunset when crowds thin and lights come on.",
+      },
+      {
+        title: "Accademia (David)",
+        tip: "Targeted quick visit if it matters to you; the gallery is small.",
+      },
+      {
+        title: "Mercato Centrale block",
+        tip: "Good daytime food stop; not a nightlife destination.",
+      },
+      {
+        title: "Santa Croce evening zone",
+        tip: "Strong nights area with bars and casual restaurants.",
+      },
+      {
+        title: "Tuscan wine bar session",
+        tip: "Pick one good wine bar and stay put—don’t turn it into frantic hopping.",
+      },
+      {
+        title: "Matchday as its own block",
+        tip: "Food first, then travel. Don’t squeeze it between museums.",
+      },
     ],
 
     tips: [
@@ -707,16 +1159,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Verona is compact, romantic, and easy to navigate, making it ideal for a football-led weekend that still feels like a proper city break. The old town is walkable, the evening atmosphere is strong, and you can cover major sights without rushing.",
 
     topThings: [
-      { title: "Arena di Verona", tip: "See it by day for photos and again at night when the square is lively." },
-      { title: "Piazza Bra anchor time", tip: "Best for a slow drink and people-watching—don’t rush it." },
-      { title: "Piazza delle Erbe", tip: "Great atmosphere; eat off-square for better value." },
-      { title: "Juliet’s House (quick stop)", tip: "Photo moment only unless you’re genuinely obsessed." },
-      { title: "Castelvecchio + Ponte Scaligero", tip: "Strong architecture + river views combo." },
-      { title: "Adige riverside sunset loop", tip: "Low effort, high payoff block." },
-      { title: "Torricelle viewpoint", tip: "Do it if you’ve got a spare half-day—panorama is worth it." },
-      { title: "San Zeno Basilica", tip: "A genuinely beautiful church and a quieter district moment." },
-      { title: "Wine bar session", tip: "Pick 1–2 quality bars. Veneto wines are excellent." },
-      { title: "Matchday route planning", tip: "Have your food plan and travel plan locked so the day stays relaxed." },
+      {
+        title: "Arena di Verona",
+        tip: "See it by day for photos and again at night when the square is lively.",
+      },
+      {
+        title: "Piazza Bra anchor time",
+        tip: "Best for a slow drink and people-watching—don’t rush it.",
+      },
+      {
+        title: "Piazza delle Erbe",
+        tip: "Great atmosphere; eat off-square for better value.",
+      },
+      {
+        title: "Juliet’s House (quick stop)",
+        tip: "Photo moment only unless you’re genuinely obsessed.",
+      },
+      {
+        title: "Castelvecchio + Ponte Scaligero",
+        tip: "Strong architecture + river views combo.",
+      },
+      {
+        title: "Adige riverside sunset loop",
+        tip: "Low effort, high payoff block.",
+      },
+      {
+        title: "Torricelle viewpoint",
+        tip: "Do it if you’ve got a spare half-day—panorama is worth it.",
+      },
+      {
+        title: "San Zeno Basilica",
+        tip: "A genuinely beautiful church and a quieter district moment.",
+      },
+      {
+        title: "Wine bar session",
+        tip: "Pick 1–2 quality bars. Veneto wines are excellent.",
+      },
+      {
+        title: "Matchday route planning",
+        tip: "Have your food plan and travel plan locked so the day stays relaxed.",
+      },
     ],
 
     tips: [
@@ -751,16 +1233,46 @@ export const serieACityGuides: Record<string, CityGuide> = {
       "Pisa is more than a Leaning Tower photo stop: it’s a compact Tuscan city with strong local life, good food, and excellent rail links. It works well for a football-led weekend because you can cover headline sights quickly, then spend the rest of the trip eating well and wandering without big-city fatigue.",
 
     topThings: [
-      { title: "Piazza dei Miracoli + Tower area", tip: "Go early or near sunset to avoid tour-bus crush. Even without climbing, the square is worth time." },
-      { title: "Cathedral interior", tip: "Often overlooked—quick visit with high payoff." },
-      { title: "Camposanto", tip: "Calm, atmospheric, and a good break from crowds." },
-      { title: "Arno river walk", tip: "Best late afternoon for light and calmer streets." },
-      { title: "Borgo Stretto", tip: "Cafés and walking spine—perfect for slow pacing." },
-      { title: "Piazza dei Cavalieri", tip: "Quieter historic square with real character." },
-      { title: "Keith Haring mural (Tuttomondo)", tip: "Quick cultural hit near the station." },
-      { title: "One enoteca evening", tip: "Pick one small wine bar and stay; it’s better than hopping." },
-      { title: "Lucca add-on (if time)", tip: "Short train ride and very high ROI if you have a spare half-day." },
-      { title: "Matchday pacing", tip: "Plan pre-match food nearby and arrive early so the day doesn’t feel rushed." },
+      {
+        title: "Piazza dei Miracoli + Tower area",
+        tip: "Go early or near sunset to avoid tour-bus crush. Even without climbing, the square is worth time.",
+      },
+      {
+        title: "Cathedral interior",
+        tip: "Often overlooked—quick visit with high payoff.",
+      },
+      {
+        title: "Camposanto",
+        tip: "Calm, atmospheric, and a good break from crowds.",
+      },
+      {
+        title: "Arno river walk",
+        tip: "Best late afternoon for light and calmer streets.",
+      },
+      {
+        title: "Borgo Stretto",
+        tip: "Cafés and walking spine—perfect for slow pacing.",
+      },
+      {
+        title: "Piazza dei Cavalieri",
+        tip: "Quieter historic square with real character.",
+      },
+      {
+        title: "Keith Haring mural (Tuttomondo)",
+        tip: "Quick cultural hit near the station.",
+      },
+      {
+        title: "One enoteca evening",
+        tip: "Pick one small wine bar and stay; it’s better than hopping.",
+      },
+      {
+        title: "Lucca add-on (if time)",
+        tip: "Short train ride and very high ROI if you have a spare half-day.",
+      },
+      {
+        title: "Matchday pacing",
+        tip: "Plan pre-match food nearby and arrive early so the day doesn’t feel rushed.",
+      },
     ],
 
     tips: [
