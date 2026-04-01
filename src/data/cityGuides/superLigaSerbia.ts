@@ -3,16 +3,15 @@ import type { CityGuide } from "./types";
 /**
  * GetYourGuide affiliate entry points (city-level “things to do” pages).
  * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ *
+ * If a city doesn't have a clean verified GYG city landing page, leave it
+ * undefined and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
  */
 const GYG = {
   belgrade:
     "https://www.getyourguide.com/en-gb/belgrade-l1688/?partner_id=MAQJREP&utm_medium=online_publisher",
-  "novi-sad":
-    "https://www.getyourguide.com/en-gb/novi-sad-l2392/?partner_id=MAQJREP&utm_medium=online_publisher",
-  nis:
-    "https://www.getyourguide.com/en-gb/nis-l32549/?partner_id=MAQJREP&utm_medium=online_publisher",
   subotica:
-    "https://www.getyourguide.com/en-gb/subotica-l191110/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/subotica-l165480/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const superLigaSerbiaCityGuides: Record<string, CityGuide> = {
@@ -95,7 +94,6 @@ export const superLigaSerbiaCityGuides: Record<string, CityGuide> = {
     cityId: "novi-sad",
     name: "Novi Sad",
     country: "Serbia",
-    thingsToDoUrl: GYG["novi-sad"],
 
     overview:
       "Novi Sad is one of the best balanced football weekends in the whole Serbia set because it gives you a real club in Vojvodina and one of the most pleasant, easiest city-break environments in the region. It is calmer than Belgrade, less intense than the giant derby world, but that is exactly why it works so well. The city is compact, attractive, bar-friendly, and easy to enjoy without overplanning. The smart Novi Sad trip is simple: stay central, use the city on foot, and let the football sit inside a weekend that already feels good even before kickoff.",
@@ -317,7 +315,6 @@ export const superLigaSerbiaCityGuides: Record<string, CityGuide> = {
     cityId: "nis",
     name: "Niš",
     country: "Serbia",
-    thingsToDoUrl: GYG.nis,
 
     overview:
       "Niš is one of the best non-Belgrade football cities in Serbia because it combines a traditional club in Radnički with a genuinely easy travel setup, a real city centre, and enough identity that the weekend feels substantial rather than improvised. It is less glamorous than Belgrade and less polished than Novi Sad, but that is not a weakness. It feels more direct. The smart Niš trip is simple: stay central, let the city centre and fortress area carry the non-football time, and build the weekend around Radnički at Čair.",
