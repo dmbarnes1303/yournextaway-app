@@ -125,12 +125,8 @@ function isComplete(state: ProgressState): boolean {
   return state === "booked";
 }
 
-function isMateriallyCovered(state: ProgressState): boolean {
+function isBookedOnly(state: ProgressState): boolean {
   return state === "booked";
-}
-
-function isPartlyCovered(state: ProgressState): boolean {
-  return state === "saved" || state === "pending";
 }
 
 function ticketButtonSubtitle(args: {
@@ -176,7 +172,7 @@ function stepCoverageLabel(
   return labels.empty;
 }
 
-function conservativeCompletionScore(args: {
+function bookedOnlyCompletionScore(args: {
   ticketState: ProgressState;
   flightState: ProgressState;
   hotelState: ProgressState;
@@ -185,21 +181,14 @@ function conservativeCompletionScore(args: {
 }): number {
   const { ticketState, flightState, hotelState, transportState, thingsState } = args;
 
-  const bookedScore =
+  const score =
     (ticketState === "booked" ? 40 : 0) +
     (flightState === "booked" ? 25 : 0) +
     (hotelState === "booked" ? 25 : 0) +
     (transportState === "booked" ? 7 : 0) +
     (thingsState === "booked" ? 3 : 0);
 
-  const startedScore =
-    (ticketState !== "booked" && isPartlyCovered(ticketState) ? 8 : 0) +
-    (flightState !== "booked" && isPartlyCovered(flightState) ? 5 : 0) +
-    (hotelState !== "booked" && isPartlyCovered(hotelState) ? 5 : 0) +
-    (transportState !== "booked" && isPartlyCovered(transportState) ? 2 : 0) +
-    (thingsState !== "booked" && isPartlyCovered(thingsState) ? 1 : 0);
-
-  return Math.max(0, Math.min(100, bookedScore + startedScore));
+  return Math.max(0, Math.min(100, score));
 }
 
 function categoryActionSubtitle(args: {
@@ -213,6 +202,12 @@ function categoryActionSubtitle(args: {
   if (state === "booked") return bookedLabel;
   if (state === "saved" || state === "pending") return startedLabel;
   return emptyFallback;
+}
+
+function transportSectionFromAffiliateUrls(
+  affiliateUrls: AffiliateUrls | null | undefined
+): SourceSection {
+  return affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "travel" : "transfers";
 }
 
 export default function useTripDetailViewModel({
@@ -245,11 +240,11 @@ export default function useTripDetailViewModel({
   const transportState = progress.transfer;
   const thingsState = progress.things;
 
-  const hasTickets = isMateriallyCovered(ticketState);
-  const hasFlight = isMateriallyCovered(flightState);
-  const hasHotel = isMateriallyCovered(hotelState);
-  const hasTransport = isMateriallyCovered(transportState);
-  const hasThings = isMateriallyCovered(thingsState);
+  const hasTickets = isBookedOnly(ticketState);
+  const hasFlight = isBookedOnly(flightState);
+  const hasHotel = isBookedOnly(hotelState);
+  const hasTransport = isBookedOnly(transportState);
+  const hasThings = isBookedOnly(thingsState);
 
   const [tripCount, setTripCount] = useState<number>(tripsStore.getState().trips?.length ?? 0);
 
@@ -431,8 +426,7 @@ export default function useTripDetailViewModel({
 
   const openTransport = useCallback(
     async (sourceSurface: SourceSurface = "unknown") => {
-      const section: SourceSection =
-        affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "travel" : "transfers";
+      const section = transportSectionFromAffiliateUrls(affiliateUrls);
 
       if (!transportAction.url) {
         Alert.alert("Transport not ready", transportAction.message);
@@ -451,14 +445,7 @@ export default function useTripDetailViewModel({
         }),
       });
     },
-    [
-      controller,
-      transportAction,
-      affiliateUrls?.omioUrl,
-      affiliateUrls?.trainsUrl,
-      buildMeta,
-      setWorkspaceSection,
-    ]
+    [controller, transportAction, affiliateUrls, buildMeta, setWorkspaceSection]
   );
 
   const openThings = useCallback(
@@ -536,7 +523,7 @@ export default function useTripDetailViewModel({
   }, [bookingSteps]);
 
   const tripCompletionPct = useMemo(() => {
-    return conservativeCompletionScore({
+    return bookedOnlyCompletionScore({
       ticketState,
       flightState,
       hotelState,
@@ -715,7 +702,10 @@ export default function useTripDetailViewModel({
 
     if (thingsState !== "booked") {
       return {
-        title: thingsState === "empty" ? "Add extras only if they improve the trip" : "Finish optional extras",
+        title:
+          thingsState === "empty"
+            ? "Add extras only if they improve the trip"
+            : "Finish optional extras",
         body:
           thingsState === "empty"
             ? "Core trip is covered. Extras should improve the trip, not clutter it."
@@ -934,26 +924,31 @@ export default function useTripDetailViewModel({
 
   const bookingFunnelLabel = useMemo(() => {
     if (!hasMatch) return "No fixture selected";
+
     if (ticketState !== "booked") {
       return ticketState === "empty"
-        ? "Step 1 of 4 • Tickets not locked"
-        : "Step 1 of 4 • Tickets in progress";
+        ? "Step 1 of 4 • Tickets not booked"
+        : "Step 1 of 4 • Tickets not booked";
     }
+
     if (flightState !== "booked") {
       return flightState === "empty"
         ? "Step 2 of 4 • Flights not booked"
-        : "Step 2 of 4 • Flights in progress";
+        : "Step 2 of 4 • Flights not booked";
     }
+
     if (hotelState !== "booked") {
       return hotelState === "empty"
         ? "Step 3 of 4 • Hotel not booked"
-        : "Step 3 of 4 • Hotel in progress";
+        : "Step 3 of 4 • Hotel not booked";
     }
+
     if (transportState !== "booked") {
       return transportState === "empty"
         ? "Step 4 of 4 • Transport not booked"
-        : "Step 4 of 4 • Transport in progress";
+        : "Step 4 of 4 • Transport not booked";
     }
+
     return "Core trip flow complete";
   }, [hasMatch, ticketState, flightState, hotelState, transportState]);
 
@@ -998,4 +993,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-        }
+}
