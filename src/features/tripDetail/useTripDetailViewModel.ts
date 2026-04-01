@@ -20,19 +20,6 @@ import {
   type SourceSurface,
 } from "@/src/features/tripDetail/helpers";
 
-type PartnerActionConfig = {
-  partnerId: PartnerId;
-  savedItemType: SavedItemType;
-  title: string;
-  metadata?: Record<string, unknown>;
-};
-
-type PartnerActionBundle = {
-  url?: string | null;
-  message: string;
-  config: PartnerActionConfig;
-};
-
 type Controller = {
   onViewWallet: () => void;
   openTrackedPartner: (args: {
@@ -107,7 +94,43 @@ type BookingStep = {
   state: ProgressState;
 };
 
+type PartnerActionConfig = {
+  partnerId: PartnerId;
+  savedItemType: SavedItemType;
+  title: string;
+  metadata?: Record<string, unknown>;
+};
+
+type PartnerActionBundle = {
+  url?: string | null;
+  message: string;
+  config: PartnerActionConfig;
+};
+
+type BookingFlowConfig = {
+  key: BookingStepKey;
+  label: string;
+  transportAltLabel?: string;
+  required: boolean;
+};
+
 const FREE_TRIP_CAP = 5;
+
+const EMPTY_PROGRESS: ProgressMap = {
+  tickets: "empty",
+  flight: "empty",
+  hotel: "empty",
+  transfer: "empty",
+  things: "empty",
+};
+
+const BOOKING_FLOW: BookingFlowConfig[] = [
+  { key: "tickets", label: "Tickets", required: true },
+  { key: "flight", label: "Flights", required: true },
+  { key: "hotel", label: "Hotel", required: true },
+  { key: "transfer", label: "Transfer", transportAltLabel: "Rail/Bus", required: true },
+  { key: "things", label: "Things", required: false },
+];
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -129,27 +152,9 @@ function isBookedOnly(state: ProgressState): boolean {
   return state === "booked";
 }
 
-function ticketButtonSubtitle(args: {
-  primaryTicketItem: SavedItem | null;
-  ticketState: ProgressState;
-}): string {
-  const { primaryTicketItem, ticketState } = args;
-
-  if (ticketState === "booked") return "Ticket booked";
-
-  if (ticketState === "saved" || ticketState === "pending") {
-    return smartButtonSubtitle(primaryTicketItem, "Ticket option saved");
-  }
-
-  return "Compare ticket options";
-}
-
 function stepPriorityScore(step: BookingStepKey): number {
-  if (step === "tickets") return 1;
-  if (step === "flight") return 2;
-  if (step === "hotel") return 3;
-  if (step === "transfer") return 4;
-  return 5;
+  const index = BOOKING_FLOW.findIndex((entry) => entry.key === step);
+  return index === -1 ? 999 : index + 1;
 }
 
 function genericActionFallback(
@@ -174,25 +179,6 @@ function stepCoverageLabel(
   return labels.empty;
 }
 
-function bookedOnlyCompletionScore(args: {
-  ticketState: ProgressState;
-  flightState: ProgressState;
-  hotelState: ProgressState;
-  transportState: ProgressState;
-  thingsState: ProgressState;
-}): number {
-  const { ticketState, flightState, hotelState, transportState, thingsState } = args;
-
-  const score =
-    (ticketState === "booked" ? 40 : 0) +
-    (flightState === "booked" ? 25 : 0) +
-    (hotelState === "booked" ? 25 : 0) +
-    (transportState === "booked" ? 7 : 0) +
-    (thingsState === "booked" ? 3 : 0);
-
-  return Math.max(0, Math.min(100, score));
-}
-
 function categoryActionSubtitle(args: {
   state: ProgressState;
   emptyFallback: string;
@@ -212,14 +198,68 @@ function transportSectionFromAffiliateUrls(
   return affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "travel" : "transfers";
 }
 
-function buildEmptyProgressMap(): ProgressMap {
-  return {
-    tickets: "empty",
-    flight: "empty",
-    hotel: "empty",
-    transfer: "empty",
-    things: "empty",
-  };
+function bookedOnlyCompletionScore(args: {
+  ticketState: ProgressState;
+  flightState: ProgressState;
+  hotelState: ProgressState;
+  transportState: ProgressState;
+  thingsState: ProgressState;
+}): number {
+  const { ticketState, flightState, hotelState, transportState, thingsState } = args;
+
+  const score =
+    (ticketState === "booked" ? 40 : 0) +
+    (flightState === "booked" ? 25 : 0) +
+    (hotelState === "booked" ? 25 : 0) +
+    (transportState === "booked" ? 7 : 0) +
+    (thingsState === "booked" ? 3 : 0);
+
+  return Math.max(0, Math.min(100, score));
+}
+
+function ticketButtonSubtitle(args: {
+  primaryTicketItem: SavedItem | null;
+  ticketState: ProgressState;
+}): string {
+  const { primaryTicketItem, ticketState } = args;
+
+  if (ticketState === "booked") return "Ticket booked";
+
+  if (ticketState === "saved" || ticketState === "pending") {
+    return smartButtonSubtitle(primaryTicketItem, "Ticket option saved");
+  }
+
+  return "Compare ticket options";
+}
+
+function getBookingFunnelLabel(args: {
+  hasMatch: boolean;
+  ticketState: ProgressState;
+  flightState: ProgressState;
+  hotelState: ProgressState;
+  transportState: ProgressState;
+}): string {
+  const { hasMatch, ticketState, flightState, hotelState, transportState } = args;
+
+  if (!hasMatch) return "No fixture selected";
+  if (ticketState !== "booked") return "Step 1 of 4 • Tickets not booked";
+  if (flightState !== "booked") return "Step 2 of 4 • Flights not booked";
+  if (hotelState !== "booked") return "Step 3 of 4 • Hotel not booked";
+  if (transportState !== "booked") return "Step 4 of 4 • Transport not booked";
+  return "Core trip flow complete";
+}
+
+function getCompletionSummary(args: {
+  hasMatch: boolean;
+  tripCompletionPct: number;
+}): string {
+  const { hasMatch, tripCompletionPct } = args;
+
+  if (!hasMatch) return "Trip not started";
+  if (tripCompletionPct >= 90) return "Trip essentially complete";
+  if (tripCompletionPct >= 65) return "Trip materially covered";
+  if (tripCompletionPct >= 35) return "Trip partly covered";
+  return "Trip still early";
 }
 
 export default function useTripDetailViewModel({
@@ -246,11 +286,13 @@ export default function useTripDetailViewModel({
 }: Params) {
   const hasMatch = Boolean(primaryMatchId);
 
-  const ticketState = progress.tickets;
-  const flightState = progress.flight;
-  const hotelState = progress.hotel;
-  const transportState = progress.transfer;
-  const thingsState = progress.things;
+  const effectiveProgress = hasMatch ? progress : EMPTY_PROGRESS;
+
+  const ticketState = effectiveProgress.tickets;
+  const flightState = effectiveProgress.flight;
+  const hotelState = effectiveProgress.hotel;
+  const transportState = effectiveProgress.transfer;
+  const thingsState = effectiveProgress.things;
 
   const hasTickets = isBookedOnly(ticketState);
   const hasFlight = isBookedOnly(flightState);
@@ -268,13 +310,9 @@ export default function useTripDetailViewModel({
     return unsub;
   }, []);
 
-  const loading = useMemo(() => {
-    return Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded));
-  }, [routeTripId, tripsLoaded, savedLoaded, workspaceLoaded]);
+  const loading = Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded));
 
-  const showHeroBanners = useMemo(() => {
-    return pending.length > 0 || saved.length > 0 || booked.length > 0;
-  }, [pending.length, saved.length, booked.length]);
+  const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
   const baseMeta = useMemo(() => {
     return {
@@ -496,38 +534,25 @@ export default function useTripDetailViewModel({
   );
 
   const bookingSteps = useMemo<BookingStep[]>(() => {
-    return [
-      {
-        key: "tickets",
-        complete: isComplete(ticketState),
-        started: isStarted(ticketState),
-        state: ticketState,
-      },
-      {
-        key: "flight",
-        complete: isComplete(flightState),
-        started: isStarted(flightState),
-        state: flightState,
-      },
-      {
-        key: "hotel",
-        complete: isComplete(hotelState),
-        started: isStarted(hotelState),
-        state: hotelState,
-      },
-      {
-        key: "transfer",
-        complete: isComplete(transportState),
-        started: isStarted(transportState),
-        state: transportState,
-      },
-      {
-        key: "things",
-        complete: isComplete(thingsState),
-        started: isStarted(thingsState),
-        state: thingsState,
-      },
-    ];
+    return BOOKING_FLOW.map((step) => {
+      const state =
+        step.key === "tickets"
+          ? ticketState
+          : step.key === "flight"
+            ? flightState
+            : step.key === "hotel"
+              ? hotelState
+              : step.key === "transfer"
+                ? transportState
+                : thingsState;
+
+      return {
+        key: step.key,
+        complete: isComplete(state),
+        started: isStarted(state),
+        state,
+      };
+    });
   }, [ticketState, flightState, hotelState, transportState, thingsState]);
 
   const completeCoreCount = useMemo(() => {
@@ -554,61 +579,64 @@ export default function useTripDetailViewModel({
   }, [bookingSteps]);
 
   const progressItems = useMemo<TripProgressItem[]>(() => {
-    return [
-      {
-        key: "tickets",
-        label: "Tickets",
-        state: ticketState,
-        onPress: () => {
-          void openTickets("progress_strip");
-        },
-      },
-      {
-        key: "flight",
-        label: "Flights",
-        state: flightState,
-        onPress: () => {
-          void openFlights("progress_strip");
-        },
-      },
-      {
-        key: "hotel",
-        label: "Hotel",
-        state: hotelState,
-        onPress: () => {
-          void openHotels("progress_strip");
-        },
-      },
-      {
-        key: "transfer",
-        label: affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl ? "Rail/Bus" : "Transfer",
-        state: transportState,
-        onPress: () => {
-          void openTransport("progress_strip");
-        },
-      },
-      {
-        key: "things",
-        label: "Things",
-        state: thingsState,
-        onPress: () => {
-          void openThings("progress_strip");
-        },
-      },
-    ];
+    return BOOKING_FLOW.map((step) => {
+      const state =
+        step.key === "tickets"
+          ? ticketState
+          : step.key === "flight"
+            ? flightState
+            : step.key === "hotel"
+              ? hotelState
+              : step.key === "transfer"
+                ? transportState
+                : thingsState;
+
+      const label =
+        step.key === "transfer" && (affiliateUrls?.omioUrl || affiliateUrls?.trainsUrl)
+          ? step.transportAltLabel || step.label
+          : step.label;
+
+      const onPress =
+        step.key === "tickets"
+          ? () => {
+              void openTickets("progress_strip");
+            }
+          : step.key === "flight"
+            ? () => {
+                void openFlights("progress_strip");
+              }
+            : step.key === "hotel"
+              ? () => {
+                  void openHotels("progress_strip");
+                }
+              : step.key === "transfer"
+                ? () => {
+                    void openTransport("progress_strip");
+                  }
+                : () => {
+                    void openThings("progress_strip");
+                  };
+
+      return {
+        key: step.key,
+        label,
+        state,
+        onPress,
+      };
+    });
   }, [
     affiliateUrls?.omioUrl,
     affiliateUrls?.trainsUrl,
-    openTickets,
-    openFlights,
-    openHotels,
-    openTransport,
-    openThings,
     ticketState,
     flightState,
     hotelState,
     transportState,
     thingsState,
+    openTickets,
+    openFlights,
+    openHotels,
+    openTransport,
+    openThings,
   ]);
 
   const nextAction = useMemo<NextAction | null>(() => {
@@ -741,18 +769,18 @@ export default function useTripDetailViewModel({
     affiliateUrls?.omioUrl,
     affiliateUrls?.trainsUrl,
     controller.onViewWallet,
+    hasMatch,
     ticketState,
     flightState,
     hotelState,
     transportState,
     thingsState,
-    hasMatch,
     kickoffTbc,
+    openTickets,
     openFlights,
     openHotels,
-    openThings,
-    openTickets,
     openTransport,
+    openThings,
     setWorkspaceSection,
   ]);
 
@@ -761,7 +789,7 @@ export default function useTripDetailViewModel({
 
     const buttons: SmartButton[] = [];
 
-    const add = (
+    const addButton = (
       title: string,
       sub: string,
       onPress: () => void,
@@ -772,7 +800,7 @@ export default function useTripDetailViewModel({
     };
 
     if (ticketState !== "booked" && primaryMatchId) {
-      add(
+      addButton(
         "Tickets",
         ticketButtonSubtitle({
           primaryTicketItem,
@@ -787,7 +815,7 @@ export default function useTripDetailViewModel({
     }
 
     if (flightState !== "booked") {
-      add(
+      addButton(
         "Flights",
         categoryActionSubtitle({
           state: flightState,
@@ -808,7 +836,7 @@ export default function useTripDetailViewModel({
     }
 
     if (hotelState !== "booked") {
-      add(
+      addButton(
         "Hotels",
         categoryActionSubtitle({
           state: hotelState,
@@ -829,7 +857,7 @@ export default function useTripDetailViewModel({
     }
 
     if (transportState !== "booked" && (affiliateUrls.omioUrl || affiliateUrls.trainsUrl)) {
-      add(
+      addButton(
         "Rail / Bus",
         categoryActionSubtitle({
           state: transportState,
@@ -844,7 +872,7 @@ export default function useTripDetailViewModel({
         "omio"
       );
     } else if (transportState !== "booked") {
-      add(
+      addButton(
         "Transfers",
         categoryActionSubtitle({
           state: transportState,
@@ -861,7 +889,7 @@ export default function useTripDetailViewModel({
     }
 
     if (thingsState !== "booked") {
-      add(
+      addButton(
         "Activities",
         categoryActionSubtitle({
           state: thingsState,
@@ -878,10 +906,10 @@ export default function useTripDetailViewModel({
     }
 
     if (buttons.length === 0) {
-      add("Wallet", "Trip proof and confirmations", controller.onViewWallet, "primary", null);
+      addButton("Wallet", "Trip proof and confirmations", controller.onViewWallet, "primary", null);
 
       if (affiliateUrls.omioUrl || affiliateUrls.trainsUrl) {
-        add(
+        addButton(
           "Rail / Bus",
           genericActionFallback("transport"),
           () => {
@@ -891,7 +919,7 @@ export default function useTripDetailViewModel({
           "omio"
         );
       } else if (hasUsablePartnerUrl(affiliateUrls.experiencesUrl || affiliateUrls.thingsUrl)) {
-        add(
+        addButton(
           "Activities",
           genericActionFallback("activities"),
           () => {
@@ -906,71 +934,42 @@ export default function useTripDetailViewModel({
     return buttons.slice(0, 4);
   }, [
     affiliateUrls,
-    controller.onViewWallet,
+    trip,
+    ticketState,
     flightState,
     hotelState,
-    thingsState,
     transportState,
-    ticketState,
-    openFlights,
-    openHotels,
-    openThings,
-    openTickets,
-    openTransport,
+    thingsState,
     primaryMatchId,
     primaryTicketItem,
-    trip,
+    controller.onViewWallet,
+    openTickets,
+    openFlights,
+    openHotels,
+    openTransport,
+    openThings,
   ]);
 
-  const capHint = useMemo(() => {
-    return !isPro ? proCapHint(FREE_TRIP_CAP, tripCount) : undefined;
-  }, [isPro, tripCount]);
+  const capHint = !isPro ? proCapHint(FREE_TRIP_CAP, tripCount) : undefined;
 
-  const heroBannerCounts = useMemo(() => {
-    return {
-      pending: pending.length,
-      saved: saved.length,
-      booked: booked.length,
-    };
-  }, [pending.length, saved.length, booked.length]);
+  const heroBannerCounts = {
+    pending: pending.length,
+    saved: saved.length,
+    booked: booked.length,
+  };
 
-  const bookingFunnelLabel = useMemo(() => {
-    if (!hasMatch) return "No fixture selected";
+  const bookingFunnelLabel = getBookingFunnelLabel({
+    hasMatch,
+    ticketState,
+    flightState,
+    hotelState,
+    transportState,
+  });
 
-    if (ticketState !== "booked") {
-      return "Step 1 of 4 • Tickets not booked";
-    }
-
-    if (flightState !== "booked") {
-      return "Step 2 of 4 • Flights not booked";
-    }
-
-    if (hotelState !== "booked") {
-      return "Step 3 of 4 • Hotel not booked";
-    }
-
-    if (transportState !== "booked") {
-      return "Step 4 of 4 • Transport not booked";
-    }
-
-    return "Core trip flow complete";
-  }, [hasMatch, ticketState, flightState, hotelState, transportState]);
-
-  const commercialSummaryLine = useMemo(() => {
-    return null;
-  }, []);
-
-  const completionSummary = useMemo(() => {
-    if (!hasMatch) return "Trip not started";
-    if (tripCompletionPct >= 90) return "Trip essentially complete";
-    if (tripCompletionPct >= 65) return "Trip materially covered";
-    if (tripCompletionPct >= 35) return "Trip partly covered";
-    return "Trip still early";
-  }, [hasMatch, tripCompletionPct]);
-
-  const derivedProgress = useMemo(() => {
-    return hasMatch ? progress : buildEmptyProgressMap();
-  }, [hasMatch, progress]);
+  const completionSummary = getCompletionSummary({
+    hasMatch,
+    tripCompletionPct,
+  });
 
   return {
     hasTickets,
@@ -992,14 +991,13 @@ export default function useTripDetailViewModel({
     capHint,
     heroBannerCounts,
     readiness,
-    progress: derivedProgress,
+    progress: effectiveProgress,
     bookingSteps,
     completeCoreCount,
     tripCompletionPct,
     bookingFunnelLabel,
     nextIncompleteStep,
-    commercialSummaryLine,
     completionSummary,
     bookingPriceBoard,
   };
-            }
+                            }
