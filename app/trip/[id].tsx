@@ -61,7 +61,7 @@ const PLANNER_ITEMS: PlannerCardItem[] = [
   { key: "things", label: "Extras", eyebrow: "Optional add-ons" },
 ];
 
-function statusLabel(status: string) {
+function screenStatusLabel(status: string) {
   const value = String(status ?? "").toLowerCase();
 
   if (value === "completed") return "Completed";
@@ -310,7 +310,6 @@ export default function TripDetailScreen() {
   }, [trip]);
 
   const dominantAction = vm.nextAction;
-
   const decisionTitle = dominantAction?.title || "Continue planning";
   const decisionCta = dominantAction?.cta || "Continue planning";
 
@@ -410,6 +409,22 @@ export default function TripDetailScreen() {
     return `${ticketSheetPayload.homeName} vs ${ticketSheetPayload.awayName}`;
   }, [ticketSheetPayload]);
 
+  const ticketSheetSubtitle = useMemo(() => {
+    if (!ticketSheetPayload) return "Compare ticket providers";
+
+    const total =
+      (ticketSheetPayload.strongOptions?.length || 0) +
+      (ticketSheetPayload.weakOptions?.length || 0);
+
+    if (ticketSheetPayload.strongOptions?.length) {
+      return total > 1
+        ? "Best matches first, then weaker fallback routes"
+        : "Strong ticket route found";
+    }
+
+    return "Only fallback routes found";
+  }, [ticketSheetPayload]);
+
   const renderBody = () => {
     if (vm.loading) {
       return (
@@ -454,7 +469,7 @@ export default function TripDetailScreen() {
 
           <View style={styles.badgeRow}>
             <View style={styles.statusPill}>
-              <Text style={styles.statusPillText}>{statusLabel(status)}</Text>
+              <Text style={styles.statusPillText}>{screenStatusLabel(status)}</Text>
             </View>
 
             {data.kickoffMeta.tbc ? (
@@ -587,6 +602,7 @@ export default function TripDetailScreen() {
               >
                 <View style={styles.plannerCardTop}>
                   <Text style={styles.plannerCardEyebrow}>{item.eyebrow}</Text>
+
                   <View
                     style={[
                       styles.plannerStatusPill,
@@ -635,7 +651,9 @@ export default function TripDetailScreen() {
         <GlassCard>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>What this trip still needs</Text>
-            <Text style={styles.sectionSubtitle}>Don’t leave the page with no clear next move.</Text>
+            <Text style={styles.sectionSubtitle}>
+              Don’t leave the page with no clear next move.
+            </Text>
           </View>
 
           <View style={styles.guidanceList}>
@@ -648,11 +666,15 @@ export default function TripDetailScreen() {
             ) : null}
 
             {!vm.hasHotel ? (
-              <Text style={styles.guidanceText}>• Stay location still needs deciding and booking.</Text>
+              <Text style={styles.guidanceText}>
+                • Stay location still needs deciding and booking.
+              </Text>
             ) : null}
 
             {!vm.hasTransport ? (
-              <Text style={styles.guidanceText}>• Local transport is still weak or unfinished.</Text>
+              <Text style={styles.guidanceText}>
+                • Local transport is still weak or unfinished.
+              </Text>
             ) : null}
 
             {vm.hasTickets && vm.hasFlight && vm.hasHotel && vm.hasTransport ? (
@@ -686,7 +708,7 @@ export default function TripDetailScreen() {
         <TicketOptionsSheet
           visible={controller.ticketSheet.visible}
           matchLabel={ticketSheetMatchLabel}
-          subtitle="Compare ticket providers"
+          subtitle={ticketSheetSubtitle}
           strongOptions={ticketSheetPayload?.strongOptions || []}
           weakOptions={ticketSheetPayload?.weakOptions || []}
           onClose={controller.closeTicketSheet}
