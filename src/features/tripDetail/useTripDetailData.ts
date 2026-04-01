@@ -57,6 +57,22 @@ type Props = {
   originIata: string;
 };
 
+const EMPTY_PROGRESS = {
+  tickets: "empty",
+  flight: "empty",
+  hotel: "empty",
+  transfer: "empty",
+  things: "empty",
+} as const;
+
+function normalizeNumericMatchIds(trip: Trip | null): string[] {
+  const ids = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
+
+  return ids
+    .map((id) => String(id).trim())
+    .filter(isNumericId);
+}
+
 export default function useTripDetailData({
   trip,
   savedItems,
@@ -68,9 +84,8 @@ export default function useTripDetailData({
   const activeTripId = useMemo(() => clean(trip?.id) || null, [trip?.id]);
 
   const numericMatchIds = useMemo(() => {
-    const ids = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
-    return ids.map((id) => String(id).trim()).filter(isNumericId);
-  }, [trip?.matchIds]);
+    return normalizeNumericMatchIds(trip);
+  }, [trip]);
 
   const primaryMatchId = useMemo(() => {
     return pickPrimaryMatchId(trip, numericMatchIds);
@@ -79,7 +94,7 @@ export default function useTripDetailData({
   useEffect(() => {
     let cancelled = false;
 
-    async function run() {
+    async function loadFixtures() {
       if (numericMatchIds.length === 0) {
         setFixturesById({});
         setFxLoading(false);
@@ -94,7 +109,9 @@ export default function useTripDetailData({
         for (const id of numericMatchIds) {
           try {
             const row = await getFixtureById(id);
-            if (row) next[String(id)] = row;
+            if (row) {
+              next[String(id)] = row;
+            }
           } catch {
             // ignore per-fixture failure
           }
@@ -110,7 +127,7 @@ export default function useTripDetailData({
       }
     }
 
-    void run();
+    void loadFixtures();
 
     return () => {
       cancelled = true;
@@ -236,22 +253,16 @@ export default function useTripDetailData({
   }, [savedItems]);
 
   const progress = useMemo(() => {
-    if (!activeTripId) {
-      return {
-        tickets: "empty",
-        flight: "empty",
-        hotel: "empty",
-        transfer: "empty",
-        things: "empty",
-      } as const;
-    }
-
+    if (!activeTripId) return EMPTY_PROGRESS;
     return getTripProgress(activeTripId);
   }, [activeTripId]);
 
   const readiness = useMemo(() => {
     if (!activeTripId) {
-      return { score: 0, missing: [] as string[] };
+      return {
+        score: 0,
+        missing: [] as string[],
+      };
     }
 
     return getTripHealth(activeTripId);
