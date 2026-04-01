@@ -3,14 +3,17 @@ import type { CityGuide } from "./types";
 /**
  * GetYourGuide affiliate entry points (city-level “things to do” pages).
  * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ *
+ * If a city doesn't have a clean verified GYG city landing page, leave it
+ * undefined and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
  */
 const GYG = {
   ljubljana:
     "https://www.getyourguide.com/en-gb/ljubljana-l318/?partner_id=MAQJREP&utm_medium=online_publisher",
   maribor:
-    "https://www.getyourguide.com/en-gb/maribor-l1338/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/maribor-l316/?partner_id=MAQJREP&utm_medium=online_publisher",
   koper:
-    "https://www.getyourguide.com/en-gb/koper-l1320/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/koper-l2650/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const prvaLigaSloveniaCityGuides: Record<string, CityGuide> = {
