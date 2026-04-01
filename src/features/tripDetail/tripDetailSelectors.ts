@@ -5,13 +5,54 @@ import type { FixtureListRow } from "@/src/services/apiFootball";
 import type { RankedTrip } from "@/src/features/tripFinder/types";
 import type { Trip } from "@/src/state/trips";
 
-import {
-  clean,
-  titleCaseCity,
-} from "@/src/features/tripDetail/helpers";
+import { clean, titleCaseCity } from "@/src/features/tripDetail/helpers";
 
 export type FixtureMap = Record<string, FixtureListRow>;
 export type TicketMap = Record<string, SavedItem | null>;
+
+type TripFinderSummaryHelpers = {
+  difficultyLabel: (value?: unknown) => string | null;
+  confidencePctLabel: (value?: number | null) => string | null;
+  rankReasonsText: (trip: RankedTrip | null) => string | null;
+};
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function getTicketPriority(item: SavedItem): number {
+  if (item.status === "booked") return 0;
+  if (item.status === "pending") return 1;
+  if (item.status === "saved") return 2;
+  return 99;
+}
+
+function sortTicketCandidates(items: SavedItem[]): SavedItem[] {
+  return [...items].sort((a, b) => {
+    const statusDiff = getTicketPriority(a) - getTicketPriority(b);
+    if (statusDiff !== 0) return statusDiff;
+
+    const aUpdated = isFiniteNumber((a as { updatedAt?: unknown }).updatedAt)
+      ? Number((a as { updatedAt?: unknown }).updatedAt)
+      : 0;
+    const bUpdated = isFiniteNumber((b as { updatedAt?: unknown }).updatedAt)
+      ? Number((b as { updatedAt?: unknown }).updatedAt)
+      : 0;
+
+    if (aUpdated !== bUpdated) return bUpdated - aUpdated;
+
+    const aCreated = isFiniteNumber((a as { createdAt?: unknown }).createdAt)
+      ? Number((a as { createdAt?: unknown }).createdAt)
+      : 0;
+    const bCreated = isFiniteNumber((b as { createdAt?: unknown }).createdAt)
+      ? Number((b as { createdAt?: unknown }).createdAt)
+      : 0;
+
+    if (aCreated !== bCreated) return bCreated - aCreated;
+
+    return clean(a.id).localeCompare(clean(b.id));
+  });
+}
 
 export function pickPrimaryMatchId(
   trip: Trip | null,
@@ -80,17 +121,17 @@ export function buildTicketsByMatchId(args: {
   );
 
   for (const mid of numericMatchIds) {
+    const matchId = clean(mid);
+
+    if (!matchId) {
+      continue;
+    }
+
     const exact = ticketCandidates.filter(
-      (item) => clean(item.metadata?.fixtureId) === clean(mid)
+      (item) => clean(item.metadata?.fixtureId) === matchId
     );
 
-    const pool = exact.length > 0 ? exact : ticketCandidates;
-
-    next[String(mid)] =
-      pool.find((item) => item.status === "pending") ??
-      pool.find((item) => item.status === "saved") ??
-      pool.find((item) => item.status === "booked") ??
-      null;
+    next[matchId] = sortTicketCandidates(exact)[0] ?? null;
   }
 
   return next;
@@ -120,23 +161,32 @@ export function buildDateIsoForPrimaryMatch(args: {
 
 export function buildTripFinderSummary(
   rankedTrip: RankedTrip | null,
-  helpers: {
-    difficultyLabel: (value?: any) => string | null;
-    confidencePctLabel: (value?: number | null) => string | null;
-    rankReasonsText: (trip: RankedTrip | null) => string | null;
-  }
+  helpers: TripFinderSummaryHelpers
 ) {
   if (!rankedTrip) return null;
 
-  const rawScore = (rankedTrip as any)?.score;
+  const rankedTripRecord = rankedTrip as unknown as Record<string, unknown>;
+  const breakdown =
+    rankedTripRecord.breakdown && typeof rankedTripRecord.breakdown === "object"
+      ? (rankedTripRecord.breakdown as Record<string, unknown>)
+      : null;
+
+  const rawScore = isFiniteNumber(breakdown?.combinedScore)
+    ? breakdown?.combinedScore
+    : isFiniteNumber(rankedTripRecord.score)
+      ? (rankedTripRecord.score as number)
+      : null;
+
+  const rawDifficulty = breakdown?.travelDifficulty ?? rankedTripRecord.travelDifficulty ?? null;
+
+  const rawConfidence = isFiniteNumber(rankedTripRecord.confidence)
+    ? (rankedTripRecord.confidence as number)
+    : null;
 
   return {
-    difficulty: helpers.difficultyLabel((rankedTrip as any)?.travelDifficulty ?? null),
-    confidence: helpers.confidencePctLabel((rankedTrip as any)?.confidence ?? null),
+    difficulty: helpers.difficultyLabel(rawDifficulty),
+    confidence: helpers.confidencePctLabel(rawConfidence),
     reasons: helpers.rankReasonsText(rankedTrip),
-    score:
-      typeof rawScore === "number" && Number.isFinite(rawScore)
-        ? Math.round(rawScore)
-        : null,
+    score: isFiniteNumber(rawScore) ? Math.round(rawScore) : null,
   };
 }
