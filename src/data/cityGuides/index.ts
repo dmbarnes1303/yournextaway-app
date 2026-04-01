@@ -3,7 +3,7 @@ import { normalizeCityKey } from "@/src/utils/city";
 import { teams } from "@/src/data/teams";
 import { stadiums } from "@/src/data/stadiums";
 
-/* IMPORTS UNCHANGED */
+/* IMPORTS */
 import premierLeagueCityGuides from "./premierLeague";
 import laLigaCityGuides from "./laLiga";
 import bundesligaCityGuides from "./bundesliga";
@@ -47,6 +47,8 @@ export type TripTopThingsBundle = {
 
 type CityGuideMap = Record<string, CityGuide>;
 
+type SourceMap = Record<string, CityGuideMap>;
+
 /* ---------- HELPERS ---------- */
 
 function cleanStr(value: unknown): string | undefined {
@@ -57,27 +59,33 @@ function cleanStr(value: unknown): string | undefined {
 
 function cleanStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const out = value.map(cleanStr).filter(Boolean) as string[];
+
+  const out = value
+    .map((item) => cleanStr(item))
+    .filter((item): item is string => Boolean(item));
+
   return out.length ? Array.from(new Set(out)) : undefined;
 }
 
 function normalizeTopThings(value: unknown): CityTopThing[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter(
-      (x) =>
-        x &&
-        typeof x === "object" &&
-        typeof x.title === "string" &&
-        typeof x.tip === "string"
-    )
-    .map((x) => ({
-      title: x.title.trim(),
-      tip: x.tip.trim(),
-    }));
+
+  const out: CityTopThing[] = [];
+
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+
+    const title = cleanStr((item as CityTopThing).title);
+    const tip = cleanStr((item as CityTopThing).tip);
+
+    if (!title || !tip) continue;
+
+    out.push({ title, tip });
+  }
+
+  return out;
 }
 
-/* 🔥 NEW — normalize bookingLinks properly */
 function normalizeBookingLinks(value: unknown): CityGuideBookingLinks | undefined {
   if (!value || typeof value !== "object") return undefined;
 
@@ -91,12 +99,17 @@ function normalizeBookingLinks(value: unknown): CityGuideBookingLinks | undefine
   };
 
   const hasAny =
-    normalized.thingsToDo ||
-    normalized.carHire ||
-    normalized.esim ||
-    normalized.airportTransfer;
+    !!normalized.thingsToDo ||
+    !!normalized.carHire ||
+    !!normalized.esim ||
+    !!normalized.airportTransfer;
 
   return hasAny ? normalized : undefined;
+}
+
+function getCanonicalThingsToDoUrl(guide: CityGuide | null | undefined): string | undefined {
+  if (!guide) return undefined;
+  return cleanStr(guide.bookingLinks?.thingsToDo) || cleanStr(guide.thingsToDoUrl);
 }
 
 function normalizeGuide(inputKey: string, guide: CityGuide): CityGuide {
@@ -109,12 +122,10 @@ function normalizeGuide(inputKey: string, guide: CityGuide): CityGuide {
     country: cleanStr(guide.country) ?? "",
     overview: cleanStr(guide.overview) ?? "",
 
-    /* 🔥 FIXED */
     bookingLinks: normalizeBookingLinks(guide.bookingLinks),
 
-    /* legacy fallback kept */
+    /* legacy fallback kept for older guide files */
     thingsToDoUrl: cleanStr(guide.thingsToDoUrl),
-
     tripAdvisorTopThingsUrl: cleanStr(guide.tripAdvisorTopThingsUrl),
 
     topThings: normalizeTopThings(guide.topThings),
@@ -127,7 +138,7 @@ function normalizeGuide(inputKey: string, guide: CityGuide): CityGuide {
 
 /* ---------- SOURCE MERGE ---------- */
 
-const SOURCE_MAP: Record<string, CityGuideMap> = {
+const SOURCE_MAP: SourceMap = {
   premierLeague: premierLeagueCityGuides,
   laLiga: laLigaCityGuides,
   bundesliga: bundesligaCityGuides,
@@ -160,15 +171,28 @@ const SOURCE_MAP: Record<string, CityGuideMap> = {
   leagueOfIrelandPremier: leagueOfIrelandPremierCityGuides,
 };
 
-function buildCityGuideRegistry() {
+function buildCityGuideRegistry(): CityGuideMap {
   const merged: CityGuideMap = {};
+  const seenSourcesByCity: Record<string, string> = {};
 
-  for (const source of Object.values(SOURCE_MAP)) {
+  for (const [sourceName, source] of Object.entries(SOURCE_MAP)) {
     for (const [key, guide] of Object.entries(source)) {
       const normalized = normalizeGuide(key, guide);
-      if (!merged[normalized.cityId]) {
-        merged[normalized.cityId] = normalized;
+      const cityId = normalized.cityId;
+
+      if (!cityId) continue;
+
+      if (merged[cityId]) {
+        if (__DEV__) {
+          console.warn(
+            `[cityGuides] Duplicate cityId "${cityId}" ignored from source "${sourceName}". First source kept: "${seenSourcesByCity[cityId]}".`
+          );
+        }
+        continue;
       }
+
+      merged[cityId] = normalized;
+      seenSourcesByCity[cityId] = sourceName;
     }
   }
 
@@ -189,24 +213,38 @@ export function hasCityGuide(city: string): boolean {
   return !!(key && cityGuides[key]);
 }
 
-/* 🔥 FIXED — canonical link logic */
+export function getCityGuideThingsToDoUrl(city: string): string | undefined {
+  const guide = getCityGuide(city);
+  return getCanonicalThingsToDoUrl(guide);
+}
+
 export function getTopThingsToDoForTrip(city: string): TripTopThingsBundle {
   const key = normalizeCityKey(city);
-  const guide = key ? cityGuides[key] : null;
 
-  if (!guide) {
-    return { cityKey: key, hasGuide: false, items: [], quickTips: [] };
+  if (!key) {
+    return {
+      cityKey: "",
+      hasGuide: false,
+      items: [],
+      quickTips: [],
+    };
   }
 
-  const canonicalUrl =
-    guide.bookingLinks?.thingsToDo ||
-    guide.thingsToDoUrl ||
-    undefined;
+  const guide = cityGuides[key];
+
+  if (!guide) {
+    return {
+      cityKey: key,
+      hasGuide: false,
+      items: [],
+      quickTips: [],
+    };
+  }
 
   return {
     cityKey: key,
     hasGuide: true,
-    thingsToDoUrl: canonicalUrl,
+    thingsToDoUrl: getCanonicalThingsToDoUrl(guide),
     items: (guide.topThings ?? []).slice(0, 10).map((x) => ({
       title: x.title,
       description: x.tip,
