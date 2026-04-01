@@ -1,19 +1,35 @@
 import type { CityGuide } from "./types";
 
+/**
+ * GetYourGuide affiliate entry points (city-level “things to do” pages).
+ * Keep this as a single, obvious map so monetisation doesn’t get scattered.
+ *
+ * If a city doesn't have a clean verified GYG city landing page, leave it
+ * undefined and let UI fall back to buildAffiliateLinks({ city }).experiencesUrl.
+ */
 const GYG = {
-  bern: "https://www.getyourguide.com/en-gb/bern-l52/?partner_id=MAQJREP&utm_medium=online_publisher",
-  basel: "https://www.getyourguide.com/en-gb/basel-l51/?partner_id=MAQJREP&utm_medium=online_publisher",
-  zurich: "https://www.getyourguide.com/en-gb/zurich-l55/?partner_id=MAQJREP&utm_medium=online_publisher",
-  geneva: "https://www.getyourguide.com/en-gb/geneva-l54/?partner_id=MAQJREP&utm_medium=online_publisher",
-  lausanne: "https://www.getyourguide.com/en-gb/lausanne-l463/?partner_id=MAQJREP&utm_medium=online_publisher",
-  lugano: "https://www.getyourguide.com/en-gb/lugano-l2528/?partner_id=MAQJREP&utm_medium=online_publisher",
+  bern:
+    "https://www.getyourguide.com/en-gb/bern-l52/?partner_id=MAQJREP&utm_medium=online_publisher",
+  basel:
+    "https://www.getyourguide.com/en-gb/basel-l51/?partner_id=MAQJREP&utm_medium=online_publisher",
+  zurich:
+    "https://www.getyourguide.com/en-gb/zurich-l55/?partner_id=MAQJREP&utm_medium=online_publisher",
+  geneva:
+    "https://www.getyourguide.com/en-gb/geneva-l54/?partner_id=MAQJREP&utm_medium=online_publisher",
+  lausanne:
+    "https://www.getyourguide.com/en-gb/lausanne-l463/?partner_id=MAQJREP&utm_medium=online_publisher",
+  lugano:
+    "https://www.getyourguide.com/en-gb/lugano-l2524/?partner_id=MAQJREP&utm_medium=online_publisher",
   "st-gallen":
-    "https://www.getyourguide.com/en-gb/st-gallen-l1536/?partner_id=MAQJREP&utm_medium=online_publisher",
-  lucerne: "https://www.getyourguide.com/en-gb/lucerne-l867/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/st-gallen-l101973/?partner_id=MAQJREP&utm_medium=online_publisher",
+  lucerne:
+    "https://www.getyourguide.com/en-gb/lucerne-l867/?partner_id=MAQJREP&utm_medium=online_publisher",
   winterthur:
-    "https://www.getyourguide.com/en-gb/winterthur-l1763/?partner_id=MAQJREP&utm_medium=online_publisher",
-  sion: "https://www.getyourguide.com/en-gb/sion-l1467/?partner_id=MAQJREP&utm_medium=online_publisher",
-  thun: "https://www.getyourguide.com/en-gb/thun-l1753/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/winterthur-l102177/?partner_id=MAQJREP&utm_medium=online_publisher",
+  sion:
+    "https://www.getyourguide.com/en-gb/sion-l156369/?partner_id=MAQJREP&utm_medium=online_publisher",
+  thun:
+    "https://www.getyourguide.com/en-gb/thun-l103011/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const swissSuperLeagueCityGuides: Record<string, CityGuide> = {
