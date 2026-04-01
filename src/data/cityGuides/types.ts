@@ -1,15 +1,15 @@
-export type CityTopThing = {
+export interface CityTopThing {
   title: string;
   tip: string;
-};
+}
 
-export type CityGuideBookingLinks = {
+export interface CityGuideBookingLinks {
   /**
    * Canonical city-level experiences / activities link.
-   * This should usually be the GetYourGuide city landing page.
+   * Usually the GetYourGuide city landing page.
    *
-   * This is the primary commercial field for "things" and should be preferred
-   * everywhere over legacy top-level URL fields.
+   * This is the primary commercial field for "things to do" and should be
+   * preferred everywhere over legacy top-level URL fields.
    */
   thingsToDo?: string;
 
@@ -30,11 +30,11 @@ export type CityGuideBookingLinks = {
    * Only populate when there is a genuinely useful partner destination for this city.
    */
   airportTransfer?: string;
-};
+}
 
 export interface CityGuide {
   /**
-   * Stable slug key used for routing + lookup.
+   * Stable slug key used for routing and lookup.
    * Example: "london"
    */
   cityId: string;
