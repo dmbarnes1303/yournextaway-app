@@ -1,293 +1,318 @@
-import { theme } from "@/src/constants/theme";
+import React, { memo, useMemo } from "react";
 import {
-  canonicalizePartnerId,
-  getPartnerOrNull,
-} from "@/src/constants/partners";
-import type { Trip } from "@/src/state/trips";
-import type { FixtureListRow } from "@/src/services/apiFootball";
-import type { SavedItem } from "@/src/core/savedItemTypes";
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  TextInput,
+  Platform,
+} from "react-native";
 
-export type ProviderBadgeStyle = {
-  borderColor: string;
-  backgroundColor: string;
-  textColor: string;
+import GlassCard from "@/src/components/GlassCard";
+import EmptyState from "@/src/components/EmptyState";
+
+import { theme } from "@/src/constants/theme";
+
+import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
+import { WORKSPACE_SECTIONS } from "@/src/core/tripWorkspace";
+
+import {
+  providerBadgeStyle,
+  providerLabel,
+  providerShort,
+  statusLabel,
+  savedItemMetaLine,
+  proofStateText,
+  livePriceLine as sharedLivePriceLine,
+} from "@/src/features/tripDetail/helpers";
+
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function hasProof(item: SavedItem | null): boolean {
+  return Array.isArray(item?.attachments) && item.attachments.length > 0;
+}
+
+function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
+  const title = WORKSPACE_SECTIONS[sectionKey].title;
+
+  if (total <= 0) return `No ${title.toLowerCase()} yet`;
+  if (total === 1) return "1 item";
+  return `${total} items`;
+}
+
+function sectionTitle(sectionKey: WorkspaceSectionKey) {
+  return WORKSPACE_SECTIONS[sectionKey].title;
+}
+
+function sectionLead(sectionKey: WorkspaceSectionKey) {
+  if (sectionKey === "tickets") return "Start here. Tickets anchor the whole trip.";
+  if (sectionKey === "travel") return "Flights and rail should be handled early, not guessed later.";
+  if (sectionKey === "stay") return "A bad hotel area ruins matchday logistics.";
+  if (sectionKey === "transfers") return "Sort the airport-city-stadium chain before it becomes friction.";
+  if (sectionKey === "things") return "Only add extras that improve the trip.";
+  if (sectionKey === "insurance") return "Store cover and policy evidence in one place.";
+  if (sectionKey === "claims") return "Keep refund, delay and compensation evidence together.";
+  return "Keep useful planning notes here.";
+}
+
+function itemPriorityTone(item: SavedItem) {
+  if (item.status === "booked" && !hasProof(item)) return styles.itemToneWarn;
+  if (item.status === "pending") return styles.itemTonePending;
+  if (item.status === "booked") return styles.itemToneBooked;
+  if (item.status === "saved") return styles.itemToneSaved;
+  return styles.itemToneNeutral;
+}
+
+function statusTone(status: SavedItem["status"]) {
+  if (status === "pending") return styles.badgePending;
+  if (status === "saved") return styles.badgeSaved;
+  if (status === "booked") return styles.badgeBooked;
+  return styles.badgeArchived;
+}
+
+function cleanUserFacingPriceLine(value: string | null) {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  return raw
+    .replace(/\bLive price on\b/gi, "Live price •")
+    .replace(/\bFrom\b/gi, "From")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function itemActionHint(item: SavedItem, livePrice: string | null) {
+  if (item.type === "note" || item.type === "other") return "Tap to open note";
+
+  if (item.status === "booked" && !hasProof(item)) {
+    return "Booked, but proof still needs adding";
+  }
+
+  if (item.status === "booked") {
+    return "Booked and stored";
+  }
+
+  if (item.status === "pending") {
+    return "Awaiting confirmation";
+  }
+
+  if (item.status === "saved") {
+    return livePrice ? "Ready to review" : "Saved to compare later";
+  }
+
+  return "Archived item";
+}
+
+type PartnerOpenArgs = {
+  partnerId: any;
+  url: string;
+  title: string;
+  savedItemType?: SavedItemType;
+  metadata?: Record<string, any>;
 };
 
-const DEFAULT_BADGE_STYLE: ProviderBadgeStyle = {
-  borderColor: "rgba(255,255,255,0.15)",
-  backgroundColor: "rgba(255,255,255,0.06)",
-  textColor: theme.colors.text,
-};
-
-export function clean(v: unknown): string {
-  return String(v ?? "").trim();
-}
-
-export function safeUri(u: unknown): string | null {
-  const s = clean(u);
-  if (!s) return null;
-  if (!/^https?:\/\//i.test(s)) return null;
-  return s;
-}
-
-export function initials(name: string): string {
-  const cleanName = clean(name);
-  if (!cleanName) return "—";
-
-  const parts = cleanName.split(/\s+/g).filter(Boolean);
-
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase();
-  }
-
-  return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase() || "—";
-}
-
-export function parseIsoToDate(iso?: string | null): Date | null {
-  const s = clean(iso);
-  if (!s) return null;
-
-  const d = new Date(s);
-  return Number.isFinite(d.getTime()) ? d : null;
-}
-
-export function safeFixtureTitle(
-  row: FixtureListRow | null | undefined,
-  fallbackId: string,
-  trip?: Trip | null
-): string {
-  const home = clean(row?.teams?.home?.name) || clean(trip?.homeName);
-  const away = clean(row?.teams?.away?.name) || clean(trip?.awayName);
-
-  if (home && away) return `${home} vs ${away}`;
-  if (home) return `${home} match`;
-  if (away) return `${away} match`;
-
-  return `Match ${fallbackId}`;
-}
-
-export function formatKickoffMeta(
-  row?: FixtureListRow | null,
-  trip?: Trip | null
-): { line: string; tbc: boolean; iso: string | null } {
-  const isoRaw = row?.fixture?.date ?? trip?.kickoffIso;
-  const iso = clean(isoRaw) || null;
-
-  const d = parseIsoToDate(iso);
-
-  const short = clean(row?.fixture?.status?.short).toUpperCase();
-  const long = clean(row?.fixture?.status?.long);
-
-  const looksTbc =
-    short === "TBD" ||
-    short === "TBA" ||
-    short === "NS" ||
-    short === "PST";
-
-  const snapTbc = Boolean(trip?.kickoffTbc);
-
-  if (!d) {
-    const tbc = looksTbc || snapTbc;
-    return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true, iso };
-  }
-
-  const datePart = d.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  });
-
-  const timePart = d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  const midnight = d.getHours() === 0 && d.getMinutes() === 0;
-  const tbc = looksTbc || snapTbc || midnight;
-
-  if (tbc) {
-    return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso };
-  }
-
-  return {
-    line: `Kickoff: ${datePart} • ${timePart}${long ? ` • ${long}` : ""}`,
-    tbc: false,
-    iso,
+export type TripWorkspaceCardProps = {
+  workspaceSnapshot: {
+    activeTotal: number;
+    sectionActiveTotals: Record<WorkspaceSectionKey, number>;
   };
-}
+  workspace: TripWorkspace | null;
+  sectionOrder: WorkspaceSectionKey[];
+  activeSection: WorkspaceSectionKey;
+  groupedBySection: Record<WorkspaceSectionKey, SavedItem[]>;
+  primaryMatchId: string | null;
+  affiliateUrls: {
+    hotelsUrl?: string | null;
+    flightsUrl?: string | null;
+    omioUrl?: string | null;
+    transfersUrl?: string | null;
+    experiencesUrl?: string | null;
+  } | null;
+  cityName: string;
+  originIata: string;
+  tripStartDate?: string | null;
+  tripEndDate?: string | null;
+  noteText: string;
+  noteSaving: boolean;
+  proofBusyId: string | null;
+  stayBestAreas: { area: string; notes?: string }[];
+  stayBudgetAreas: { area: string; notes?: string }[];
+  transportStops: string[];
 
-export function providerLabel(provider?: string | null): string {
-  const canonical = canonicalizePartnerId(provider);
-  if (!canonical) return clean(provider) || "Provider";
+  onSetActiveSection: (section: WorkspaceSectionKey) => void;
+  onToggleSection: (section: WorkspaceSectionKey) => void;
+  onNoteTextChange: (text: string) => void;
+  onAddNote: () => void;
 
-  const partner = getPartnerOrNull(canonical);
-  return partner?.display.name || clean(provider) || "Provider";
-}
+  onOpenTicketsForPrimaryMatch: () => void;
+  onOpenSavedItem: (item: SavedItem) => void;
+  onOpenNoteActions: (item: SavedItem) => void;
+  onConfirmMarkBooked: (item: SavedItem) => void;
+  onAddProofForBookedItem: (item: SavedItem) => void;
+  onViewWallet: () => void;
+  onConfirmMoveToPending: (item: SavedItem) => void;
+  onConfirmArchive: (item: SavedItem) => void;
 
-export function providerShort(provider?: string | null): string {
-  const canonical = canonicalizePartnerId(provider);
-  if (!canonical) return "P";
+  onOpenPartner: (args: PartnerOpenArgs) => void;
 
-  const partner = getPartnerOrNull(canonical);
-  return partner?.display.badgeText || "P";
-}
+  getLivePriceLine: (item: SavedItem) => string | null;
+  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
+};
 
-export function providerBadgeStyle(provider?: string | null): ProviderBadgeStyle {
-  const canonical = canonicalizePartnerId(provider);
-  if (!canonical) return DEFAULT_BADGE_STYLE;
+type ProviderBadgeProps = {
+  provider?: string | null;
+  size?: "sm" | "md";
+  showLabel?: boolean;
+};
 
-  if (canonical === "footballticketsnet") {
-    return {
-      borderColor: "rgba(120,170,255,0.35)",
-      backgroundColor: "rgba(120,170,255,0.12)",
-      textColor: "rgba(205,225,255,1)",
-    };
-  }
+const ProviderBadge = memo(function ProviderBadge({
+  provider,
+  size = "sm",
+  showLabel = false,
+}: ProviderBadgeProps) {
+  const badge = providerBadgeStyle(provider);
+  const short = providerShort(provider);
+  const label = providerLabel(provider);
 
-  if (canonical === "sportsevents365") {
-    return {
-      borderColor: "rgba(87,162,56,0.35)",
-      backgroundColor: "rgba(87,162,56,0.12)",
-      textColor: "rgba(208,240,192,1)",
-    };
-  }
+  const circleSize = size === "md" ? 30 : 24;
+  const fontSize = size === "md" ? 12 : 11;
 
-  if (canonical === "gigsberg") {
-    return {
-      borderColor: "rgba(255,200,80,0.35)",
-      backgroundColor: "rgba(255,200,80,0.12)",
-      textColor: "rgba(255,226,160,1)",
-    };
-  }
+  return (
+    <View style={[styles.providerBadgeWrap, showLabel && styles.providerBadgeWrapLabeled]}>
+      <View
+        style={[
+          styles.providerBadgeCircle,
+          {
+            width: circleSize,
+            height: circleSize,
+            borderRadius: circleSize / 2,
+            borderColor: badge.borderColor,
+            backgroundColor: badge.backgroundColor,
+          },
+        ]}
+      >
+        <Text style={[styles.providerBadgeCircleText, { color: badge.textColor, fontSize }]}>
+          {short}
+        </Text>
+      </View>
+      {showLabel ? <Text style={styles.providerBadgeLabel}>{label}</Text> : null}
+    </View>
+  );
+});
 
-  if (canonical === "aviasales") {
-    return {
-      borderColor: "rgba(120,170,255,0.30)",
-      backgroundColor: "rgba(120,170,255,0.10)",
-      textColor: "rgba(210,225,255,1)",
-    };
-  }
+const StatusBadge = memo(function StatusBadge({ status }: { status: SavedItem["status"] }) {
+  const label = statusLabel(status);
+  return (
+    <View style={[styles.badge, statusTone(status)]}>
+      <Text style={styles.badgeText}>{label}</Text>
+    </View>
+  );
+});
 
-  if (canonical === "expedia") {
-    return {
-      borderColor: "rgba(87,162,56,0.30)",
-      backgroundColor: "rgba(87,162,56,0.10)",
-      textColor: "rgba(210,240,205,1)",
-    };
-  }
+type WorkspaceItemRowProps = {
+  item: SavedItem;
+  proofBusyId: string | null;
+  onOpenSavedItem: (item: SavedItem) => void;
+  onOpenNoteActions: (item: SavedItem) => void;
+  onConfirmMarkBooked: (item: SavedItem) => void;
+  onAddProofForBookedItem: (item: SavedItem) => void;
+  onViewWallet: () => void;
+  onConfirmMoveToPending: (item: SavedItem) => void;
+  onConfirmArchive: (item: SavedItem) => void;
+  getLivePriceLine: (item: SavedItem) => string | null;
+  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
+};
 
-  if (canonical === "kiwitaxi") {
-    return {
-      borderColor: "rgba(255,160,120,0.30)",
-      backgroundColor: "rgba(255,160,120,0.10)",
-      textColor: "rgba(255,220,205,1)",
-    };
-  }
+const WorkspaceItemRow = memo(function WorkspaceItemRow({
+  item,
+  proofBusyId,
+  onOpenSavedItem,
+  onOpenNoteActions,
+  onConfirmMarkBooked,
+  onAddProofForBookedItem,
+  onViewWallet,
+  onConfirmMoveToPending,
+  onConfirmArchive,
+  getLivePriceLine,
+  getTicketProviderFromItem,
+}: WorkspaceItemRowProps) {
+  const fallbackLivePrice = sharedLivePriceLine(item);
+  const livePrice = cleanUserFacingPriceLine(getLivePriceLine(item) || fallbackLivePrice);
+  const provider = getTicketProviderFromItem(item) || clean(item.partnerId) || null;
+  const proofText = proofStateText(item);
+  const missingProof = item.status === "booked" && !hasProof(item);
+  const proofBusy = proofBusyId === item.id;
+  const isNote = item.type === "note" || item.type === "other";
+  const actionHint = itemActionHint(item, livePrice);
 
-  if (canonical === "omio") {
-    return {
-      borderColor: "rgba(200,120,255,0.30)",
-      backgroundColor: "rgba(200,120,255,0.10)",
-      textColor: "rgba(235,210,255,1)",
-    };
-  }
+  return (
+    <View style={[styles.itemRow, itemPriorityTone(item)]}>
+      <Pressable
+        style={styles.itemMain}
+        onPress={() => (isNote ? onOpenNoteActions(item) : onOpenSavedItem(item))}
+      >
+        <View style={styles.itemTitleRow}>
+          <Text style={styles.itemTitle} numberOfLines={1}>
+            {item.title}
+          </Text>
+          <StatusBadge status={item.status} />
+        </View>
 
-  if (canonical === "getyourguide") {
-    return {
-      borderColor: "rgba(255,90,120,0.30)",
-      backgroundColor: "rgba(255,90,120,0.10)",
-      textColor: "rgba(255,215,225,1)",
-    };
-  }
+        <View style={styles.itemMetaRow}>
+          {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
+          <Text style={styles.itemMeta} numberOfLines={1}>
+            {isNote ? "Notes" : savedItemMetaLine(item)}
+          </Text>
+        </View>
 
-  if (canonical === "airhelp") {
-    return {
-      borderColor: "rgba(255,120,170,0.30)",
-      backgroundColor: "rgba(255,120,170,0.10)",
-      textColor: "rgba(255,220,235,1)",
-    };
-  }
+        <Text style={styles.itemHintLine} numberOfLines={1}>
+          {actionHint}
+        </Text>
 
-  return DEFAULT_BADGE_STYLE;
-}
+        {livePrice ? (
+          <Text
+            style={item.status === "booked" ? styles.paidLine : styles.livePriceLine}
+            numberOfLines={1}
+          >
+            {livePrice}
+          </Text>
+        ) : null}
 
-export function statusLabel(status: SavedItem["status"]): string {
-  if (status === "pending") return "Pending";
-  if (status === "saved") return "Saved";
-  if (status === "booked") return "Booked";
-  return "Archived";
-}
+        {item.status === "booked" ? (
+          <Text
+            style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]}
+            numberOfLines={1}
+          >
+            {proofText}
+          </Text>
+        ) : null}
+      </Pressable>
 
-export function ticketConfidenceLabel(score?: number | null): string {
-  const value = typeof score === "number" && Number.isFinite(score) ? score : 0;
+      <View style={styles.itemActions}>
+        {item.status !== "booked" ? (
+          <Pressable onPress={() => onConfirmMarkBooked(item)} style={styles.smallBtn}>
+            <Text style={styles.smallBtnText}>Booked</Text>
+          </Pressable>
+        ) : missingProof ? (
+          <Pressable
+            onPress={() => onAddProofForBookedItem(item)}
+            style={[
+              styles.smallBtn,
+              styles.smallBtnPrimary,
+              proofBusy && styles.smallBtnDisabled,
+            ]}
+            disabled={proofBusy}
+          >
+            <Text style={styles.smallBtnText}>{proofBusy ? "Adding…" : "Add proof"}</Text>
+          </Pressable>
+        ) : (
+          <Pressable onPress={onViewWallet} style={styles.smallBtn}>
+            <Text style={styles.smallBtnText}>Wallet</Text>
+          </Pressable>
+        )}
 
-  if (value >= 95) return "Elite match";
-  if (value >= 88) return "Best match";
-  if (value >= 78) return "Strong match";
-  if (value >= 68) return "Good match";
-  if (value >= 60) return "Usable match";
-  return "Fallback";
-}
-
-export function shortDomain(url?: string | null): string {
-  const value = clean(url);
-  if (!value) return "";
-
-  try {
-    const parsed = new URL(value);
-    return parsed.hostname.replace(/^www\./i, "");
-  } catch {
-    return "";
-  }
-}
-
-export function savedItemMetaLine(item: SavedItem): string {
-  const bits: string[] = [];
-
-  const typeLabel =
-    item.type === "tickets"
-      ? "Match tickets"
-      : item.type === "hotel"
-        ? "Hotel"
-        : item.type === "flight"
-          ? "Flight"
-          : item.type === "train"
-            ? "Train"
-            : item.type === "transfer"
-              ? "Transfer"
-              : item.type === "things"
-                ? "Experience"
-                : item.type === "insurance"
-                  ? "Insurance"
-                  : item.type === "claim"
-                    ? "Claim"
-                    : "Note";
-
-  bits.push(typeLabel);
-
-  const provider = clean(item.metadata?.ticketProvider) || clean(item.partnerId);
-  if (provider) {
-    bits.push(providerLabel(provider));
-  }
-
-  const domain = shortDomain(item.partnerUrl);
-  if (domain) {
-    bits.push(domain);
-  }
-
-  return bits.join(" • ");
-}
-
-export function attachmentCount(item: SavedItem | null): number {
-  return Array.isArray(item?.attachments) ? item!.attachments.length : 0;
-}
-
-export function hasAttachments(item: SavedItem | null): boolean {
-  return attachmentCount(item) > 0;
-}
-
-export function proofStateText(item: SavedItem): string {
-  const count = attachmentCount(item);
-  if (count <= 0) return "No proof attached yet";
-  return `${count} proof file${count === 1 ? "" : "s"} attached`;
-}
+        {item.status === "saved" ?
