@@ -1,3 +1,4 @@
+// src/features/tripDetail/tripDetailPricing.ts
 import type { SavedItem } from "@/src/core/savedItemTypes";
 
 export type PricePointSource =
@@ -39,8 +40,8 @@ function isPositiveAmount(value: unknown): value is number {
 }
 
 function toPositiveAmount(value: unknown): number | null {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 function currencySymbolToCode(symbol: string): string | null {
@@ -53,7 +54,15 @@ function currencySymbolToCode(symbol: string): string | null {
 function normalizeCurrency(value: unknown): string | null {
   const raw = upper(value);
   if (!raw) return null;
-  if (raw === "GBP" || raw === "EUR" || raw === "USD") return raw;
+
+  if (raw === "GBP" || raw === "EUR" || raw === "USD") {
+    return raw;
+  }
+
+  if (raw === "£") return "GBP";
+  if (raw === "€") return "EUR";
+  if (raw === "$") return "USD";
+
   return null;
 }
 
@@ -287,17 +296,24 @@ export function sumTripCorePrice(args: {
   const { tickets, flights, hotels } = args;
 
   if (!tickets || !flights || !hotels) return null;
-  if (!isPositiveAmount(tickets.amount) || !isPositiveAmount(flights.amount) || !isPositiveAmount(hotels.amount)) {
+
+  if (
+    !isPositiveAmount(tickets.amount) ||
+    !isPositiveAmount(flights.amount) ||
+    !isPositiveAmount(hotels.amount)
+  ) {
     return null;
   }
 
   const currency = sameCurrency([tickets, flights, hotels]);
   if (!currency) return null;
 
+  const total = tickets.amount + flights.amount + hotels.amount;
+
   return {
-    amount: tickets.amount + flights.amount + hotels.amount,
+    amount: total,
     currency,
-    text: formatPriceText(currency, tickets.amount + flights.amount + hotels.amount),
+    text: formatPriceText(currency, total),
     source: "saved_item",
     displayMode: "booked",
   };
@@ -351,6 +367,8 @@ export function withFlightPriceOverride(args: {
   board: BookingPriceBoard;
   flightPricePoint: Omit<PricePoint, "displayMode"> | null;
 }): BookingPriceBoard {
+  void args;
+
   // Locked decision:
   // do not surface non-booked pricing in Trip Detail for now,
   // even if flights are API-backed.
