@@ -4,11 +4,11 @@ const GYG = {
   helsinki:
     "https://www.getyourguide.com/en-gb/helsinki-l13/?partner_id=MAQJREP&utm_medium=online_publisher",
   turku:
-    "https://www.getyourguide.com/en-gb/turku-l32369/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/turku-l104793/?partner_id=MAQJREP&utm_medium=online_publisher",
   tampere:
-    "https://www.getyourguide.com/en-gb/tampere-l32373/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/tampere-l45587/?partner_id=MAQJREP&utm_medium=online_publisher",
   mariehamn:
-    "https://www.getyourguide.com/en-gb/mariehamn-l191431/?partner_id=MAQJREP&utm_medium=online_publisher",
+    "https://www.getyourguide.com/en-gb/mariehamn-l151076/?partner_id=MAQJREP&utm_medium=online_publisher",
 } as const;
 
 export const veikkausliigaCityGuides: Record<string, CityGuide> = {
