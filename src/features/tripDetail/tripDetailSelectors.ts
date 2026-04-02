@@ -1,5 +1,3 @@
-// src/features/tripDetail/tripDetailSelectors.ts
-
 import type { SavedItem } from "@/src/core/savedItemTypes";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import type { RankedTrip } from "@/src/features/tripFinder/types";
@@ -20,6 +18,19 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function safeRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
 function getTicketPriority(item: SavedItem): number {
   if (item.status === "booked") return 0;
   if (item.status === "pending") return 1;
@@ -27,40 +38,48 @@ function getTicketPriority(item: SavedItem): number {
   return 99;
 }
 
+function getSavedItemTimestamp(item: SavedItem, key: "updatedAt" | "createdAt"): number {
+  const raw = (item as SavedItem & { updatedAt?: unknown; createdAt?: unknown })[key];
+  return toFiniteNumber(raw) ?? 0;
+}
+
 function sortTicketCandidates(items: SavedItem[]): SavedItem[] {
   return [...items].sort((a, b) => {
     const statusDiff = getTicketPriority(a) - getTicketPriority(b);
     if (statusDiff !== 0) return statusDiff;
 
-    const aUpdated = isFiniteNumber((a as { updatedAt?: unknown }).updatedAt)
-      ? Number((a as { updatedAt?: unknown }).updatedAt)
-      : 0;
-    const bUpdated = isFiniteNumber((b as { updatedAt?: unknown }).updatedAt)
-      ? Number((b as { updatedAt?: unknown }).updatedAt)
-      : 0;
+    const updatedDiff = getSavedItemTimestamp(b, "updatedAt") - getSavedItemTimestamp(a, "updatedAt");
+    if (updatedDiff !== 0) return updatedDiff;
 
-    if (aUpdated !== bUpdated) return bUpdated - aUpdated;
-
-    const aCreated = isFiniteNumber((a as { createdAt?: unknown }).createdAt)
-      ? Number((a as { createdAt?: unknown }).createdAt)
-      : 0;
-    const bCreated = isFiniteNumber((b as { createdAt?: unknown }).createdAt)
-      ? Number((b as { createdAt?: unknown }).createdAt)
-      : 0;
-
-    if (aCreated !== bCreated) return bCreated - aCreated;
+    const createdDiff = getSavedItemTimestamp(b, "createdAt") - getSavedItemTimestamp(a, "createdAt");
+    if (createdDiff !== 0) return createdDiff;
 
     return clean(a.id).localeCompare(clean(b.id));
   });
+}
+
+function itemFixtureId(item: SavedItem): string {
+  return (
+    clean(item.metadata?.fixtureId) ||
+    clean((item.metadata as Record<string, unknown> | undefined)?.matchId) ||
+    clean((item.metadata as Record<string, unknown> | undefined)?.primaryMatchId) ||
+    ""
+  );
 }
 
 export function pickPrimaryMatchId(
   trip: Trip | null,
   numericMatchIds: string[]
 ): string | null {
+  if (!Array.isArray(numericMatchIds) || numericMatchIds.length === 0) return null;
+
   const preferred = clean(trip?.fixtureIdPrimary);
-  if (preferred && numericMatchIds.includes(preferred)) return preferred;
-  return numericMatchIds[0] ?? null;
+  if (preferred && numericMatchIds.includes(preferred)) {
+    return preferred;
+  }
+
+  const first = clean(numericMatchIds[0]);
+  return first || null;
 }
 
 export function getTripCity(
@@ -71,6 +90,7 @@ export function getTripCity(
     clean(trip?.displayCity) ||
     clean(trip?.venueCity) ||
     clean(primaryFixture?.fixture?.venue?.city) ||
+    clean((trip as Trip & { city?: unknown })?.city) ||
     clean(trip?.cityId) ||
     "Trip";
 
@@ -81,11 +101,13 @@ export function getPrimaryLeagueId(
   trip: Trip | null,
   primaryFixture: FixtureListRow | null
 ): number | undefined {
-  const fromFixture = primaryFixture?.league?.id;
-  if (typeof fromFixture === "number") return fromFixture;
+  const fromFixture = toFiniteNumber(primaryFixture?.league?.id);
+  if (fromFixture != null) return fromFixture;
 
-  const fromTrip = trip?.leagueId;
-  return typeof fromTrip === "number" ? fromTrip : undefined;
+  const fromTrip = toFiniteNumber(trip?.leagueId);
+  if (fromTrip != null) return fromTrip;
+
+  return undefined;
 }
 
 export function getPrimaryHomeName(
@@ -120,17 +142,11 @@ export function buildTicketsByMatchId(args: {
     (item) => item.type === "tickets" && item.status !== "archived"
   );
 
-  for (const mid of numericMatchIds) {
-    const matchId = clean(mid);
+  for (const rawMid of numericMatchIds) {
+    const matchId = clean(rawMid);
+    if (!matchId) continue;
 
-    if (!matchId) {
-      continue;
-    }
-
-    const exact = ticketCandidates.filter(
-      (item) => clean(item.metadata?.fixtureId) === matchId
-    );
-
+    const exact = ticketCandidates.filter((item) => itemFixtureId(item) === matchId);
     next[matchId] = sortTicketCandidates(exact)[0] ?? null;
   }
 
@@ -141,14 +157,16 @@ export function buildPrimaryFixture(
   primaryMatchId: string | null,
   fixturesById: FixtureMap
 ): FixtureListRow | null {
-  return primaryMatchId ? fixturesById[String(primaryMatchId)] ?? null : null;
+  if (!primaryMatchId) return null;
+  return fixturesById[clean(primaryMatchId)] ?? null;
 }
 
 export function buildPrimaryTicketItem(
   primaryMatchId: string | null,
   ticketsByMatchId: TicketMap
 ): SavedItem | null {
-  return primaryMatchId ? ticketsByMatchId[String(primaryMatchId)] ?? null : null;
+  if (!primaryMatchId) return null;
+  return ticketsByMatchId[clean(primaryMatchId)] ?? null;
 }
 
 export function buildDateIsoForPrimaryMatch(args: {
@@ -156,7 +174,7 @@ export function buildDateIsoForPrimaryMatch(args: {
   primaryKickoffIso: string | null;
   getIsoDateOnly: (raw?: string | null) => string | undefined;
 }): string | undefined {
-  return args.trip?.startDate || args.getIsoDateOnly(args.primaryKickoffIso);
+  return clean(args.trip?.startDate) || args.getIsoDateOnly(args.primaryKickoffIso);
 }
 
 export function buildTripFinderSummary(
@@ -165,28 +183,25 @@ export function buildTripFinderSummary(
 ) {
   if (!rankedTrip) return null;
 
-  const rankedTripRecord = rankedTrip as unknown as Record<string, unknown>;
-  const breakdown =
-    rankedTripRecord.breakdown && typeof rankedTripRecord.breakdown === "object"
-      ? (rankedTripRecord.breakdown as Record<string, unknown>)
-      : null;
+  const rankedTripRecord = safeRecord(rankedTrip);
+  const breakdown = safeRecord(rankedTripRecord?.breakdown);
 
-  const rawScore = isFiniteNumber(breakdown?.combinedScore)
-    ? breakdown?.combinedScore
-    : isFiniteNumber(rankedTripRecord.score)
-      ? (rankedTripRecord.score as number)
-      : null;
+  const rawScore =
+    toFiniteNumber(breakdown?.combinedScore) ??
+    toFiniteNumber(rankedTripRecord?.score) ??
+    null;
 
-  const rawDifficulty = breakdown?.travelDifficulty ?? rankedTripRecord.travelDifficulty ?? null;
+  const rawDifficulty =
+    breakdown?.travelDifficulty ??
+    rankedTripRecord?.travelDifficulty ??
+    null;
 
-  const rawConfidence = isFiniteNumber(rankedTripRecord.confidence)
-    ? (rankedTripRecord.confidence as number)
-    : null;
+  const rawConfidence = toFiniteNumber(rankedTripRecord?.confidence);
 
   return {
     difficulty: helpers.difficultyLabel(rawDifficulty),
     confidence: helpers.confidencePctLabel(rawConfidence),
     reasons: helpers.rankReasonsText(rankedTrip),
-    score: isFiniteNumber(rawScore) ? Math.round(rawScore) : null,
+    score: rawScore != null ? Math.round(rawScore) : null,
   };
 }
