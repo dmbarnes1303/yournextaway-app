@@ -3,8 +3,11 @@ export type SavedItemId = string;
 
 /**
  * Canonical saved item types.
- * Keep this list stable.
- * If older builds used aliases, add them to SavedItemTypeInput and normalizeSavedItemType.
+ * Do not casually expand this union without updating:
+ * - trip workspace grouping
+ * - trip progress logic
+ * - wallet UI
+ * - saved item normalization
  */
 export type SavedItemType =
   | "tickets"
@@ -19,10 +22,8 @@ export type SavedItemType =
   | "other";
 
 /**
- * Inputs that may appear from:
- * - persisted legacy data
- * - older builds
- * - loose callers
+ * Legacy / loose inputs that may still appear from persistence
+ * or older builds and must be normalized at boundaries.
  */
 export type SavedItemTypeInput = SavedItemType | "stay" | "stays" | "hotels";
 
@@ -30,6 +31,12 @@ export type SavedItemTypeInput = SavedItemType | "stay" | "stays" | "hotels";
  * Canonical status values.
  */
 export type SavedItemStatus = "saved" | "pending" | "booked" | "archived";
+
+/**
+ * Flexible metadata payload.
+ * Keep it broad, but not `any`.
+ */
+export type SavedItemMetadata = Record<string, unknown>;
 
 /* -------------------------------------------------------------------------- */
 /* Canonical constants + guards                                               */
@@ -48,7 +55,7 @@ export const SAVED_ITEM_TYPES: readonly SavedItemType[] = [
   "other",
 ] as const;
 
-export const SAVED_ITEM_STATUS: readonly SavedItemStatus[] = [
+export const SAVED_ITEM_STATUSES: readonly SavedItemStatus[] = [
   "saved",
   "pending",
   "booked",
@@ -56,10 +63,14 @@ export const SAVED_ITEM_STATUS: readonly SavedItemStatus[] = [
 ] as const;
 
 const TYPE_SET = new Set<string>(SAVED_ITEM_TYPES);
-const STATUS_SET = new Set<string>(SAVED_ITEM_STATUS);
+const STATUS_SET = new Set<string>(SAVED_ITEM_STATUSES);
 
 function cleanString(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
+}
+
+function isFinitePositiveNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 export function isSavedItemType(value: unknown): value is SavedItemType {
@@ -71,8 +82,8 @@ export function isSavedItemStatus(value: unknown): value is SavedItemStatus {
 }
 
 /**
- * Normalise type input at boundaries.
- * This is what prevents stay/stays/hotels drift from poisoning Trips/Wallet/UI.
+ * Normalizes loose input into the canonical type contract.
+ * This is the main anti-drift boundary for older aliases.
  */
 export function normalizeSavedItemType(input: unknown): SavedItemType | null {
   const raw = cleanString(input).toLowerCase();
@@ -149,17 +160,17 @@ export function getSavedItemUiGroupLabel(group: SavedItemUiGroup): string {
     case "tickets":
       return "Match tickets";
     case "hotel":
-      return "Hotels";
+      return "Stay";
     case "flight":
       return "Flights";
     case "transport":
       return "Transport";
     case "things":
-      return "Experiences";
+      return "Activities";
     case "insurance":
-      return "Protect yourself";
+      return "Insurance";
     case "claim":
-      return "Claims & compensation";
+      return "Claims";
     case "note":
       return "Notes";
     case "other":
@@ -197,22 +208,10 @@ export function normalizeWalletAttachmentKind(input: unknown): WalletAttachmentK
 export type WalletAttachment = {
   id: string;
   kind: WalletAttachmentKind;
-
-  /** Original filename when known */
   name?: string;
-
-  /** MIME type when known */
   mimeType?: string;
-
-  /** Byte size when known */
   size?: number;
-
-  /**
-   * App-owned local URI.
-   * This is what the app opens/shares offline.
-   */
   uri: string;
-
   createdAt: number;
 };
 
@@ -232,34 +231,61 @@ export function isWalletAttachment(value: unknown): value is WalletAttachment {
   );
 }
 
+export function normalizeWalletAttachment(input: unknown): WalletAttachment | null {
+  if (!input || typeof input !== "object") return null;
+
+  const raw = input as Record<string, unknown>;
+  const id = cleanString(raw.id);
+  const uri = cleanString(raw.uri);
+  const createdAt = Number(raw.createdAt);
+
+  if (!id || !uri || !Number.isFinite(createdAt) || createdAt <= 0) {
+    return null;
+  }
+
+  const name = cleanString(raw.name) || undefined;
+  const mimeType = cleanString(raw.mimeType) || undefined;
+  const size = isFinitePositiveNumber(raw.size) ? raw.size : undefined;
+
+  return {
+    id,
+    kind: normalizeWalletAttachmentKind(raw.kind),
+    name,
+    mimeType,
+    size,
+    uri,
+    createdAt,
+  };
+}
+
+export function normalizeWalletAttachments(input: unknown): WalletAttachment[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((entry) => normalizeWalletAttachment(entry))
+    .filter((entry): entry is WalletAttachment => entry !== null);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Saved item model                                                           */
 /* -------------------------------------------------------------------------- */
 
 /**
- * tripId stays optional at type level because legacy/orphan items can still exist.
- * Trip-scoped screens should still treat tripId as effectively required.
+ * tripId remains optional at type level because legacy/orphan items may exist.
+ * Trip-scoped UI should still behave as if tripId is required.
  */
 export type SavedItem = {
   id: SavedItemId;
   tripId?: TripId;
-
   type: SavedItemType;
   status: SavedItemStatus;
-
   title: string;
-
   partnerId?: string;
   partnerUrl?: string;
-
   priceText?: string;
   currency?: string;
-
-  metadata?: Record<string, any>;
-
-  /** Offline proof / confirmations / screenshots */
+  metadata?: SavedItemMetadata;
   attachments?: WalletAttachment[];
-
   createdAt: number;
   updatedAt: number;
 };
@@ -273,19 +299,19 @@ export function getSavedItemTypeLabel(type: SavedItemType): string {
     case "tickets":
       return "Match tickets";
     case "hotel":
-      return "Hotels";
+      return "Stay";
     case "flight":
       return "Flights";
     case "train":
-      return "Trains & buses";
+      return "Rail / bus";
     case "transfer":
       return "Transfers";
     case "things":
-      return "Experiences";
+      return "Activities";
     case "insurance":
-      return "Protect yourself";
+      return "Insurance";
     case "claim":
-      return "Claims & compensation";
+      return "Claims";
     case "note":
       return "Notes";
     case "other":
@@ -299,12 +325,6 @@ export function getSavedItemTypeLabel(type: SavedItemType): string {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Transition policy:
- * - saved: shortlisted / not opened recently
- * - pending: opened partner, outcome unknown
- * - booked: explicitly confirmed booked
- * - archived: hidden from active workspace
- *
  * Rules:
  * - saved -> pending/booked/archived
  * - pending -> saved/booked/archived
@@ -327,3 +347,88 @@ export function assertTransition(from: SavedItemStatus, to: SavedItemStatus): vo
     throw new Error(`Invalid status transition: ${from} → ${to}`);
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Saved item normalization                                                   */
+/* -------------------------------------------------------------------------- */
+
+export function isSavedItem(value: unknown): value is SavedItem {
+  if (!value || typeof value !== "object") return false;
+
+  const raw = value as Record<string, unknown>;
+
+  return (
+    typeof raw.id === "string" &&
+    Boolean(raw.id.trim()) &&
+    typeof raw.title === "string" &&
+    Boolean(raw.title.trim()) &&
+    isSavedItemType(raw.type) &&
+    isSavedItemStatus(raw.status) &&
+    Number.isFinite(Number(raw.createdAt)) &&
+    Number(raw.createdAt) > 0 &&
+    Number.isFinite(Number(raw.updatedAt)) &&
+    Number(raw.updatedAt) > 0
+  );
+}
+
+export function normalizeSavedItem(input: unknown): SavedItem | null {
+  if (!input || typeof input !== "object") return null;
+
+  const raw = input as Record<string, unknown>;
+
+  const id = cleanString(raw.id);
+  const title = cleanString(raw.title);
+  const type = normalizeSavedItemType(raw.type);
+  const status = normalizeSavedItemStatus(raw.status);
+  const createdAt = Number(raw.createdAt);
+  const updatedAt = Number(raw.updatedAt);
+
+  if (
+    !id ||
+    !title ||
+    !type ||
+    !status ||
+    !Number.isFinite(createdAt) ||
+    createdAt <= 0 ||
+    !Number.isFinite(updatedAt) ||
+    updatedAt <= 0
+  ) {
+    return null;
+  }
+
+  const tripId = cleanString(raw.tripId) || undefined;
+  const partnerId = cleanString(raw.partnerId) || undefined;
+  const partnerUrl = cleanString(raw.partnerUrl) || undefined;
+  const priceText = cleanString(raw.priceText) || undefined;
+  const currency = cleanString(raw.currency) || undefined;
+  const metadata =
+    raw.metadata && typeof raw.metadata === "object"
+      ? (raw.metadata as SavedItemMetadata)
+      : undefined;
+
+  const attachments = normalizeWalletAttachments(raw.attachments);
+
+  return {
+    id,
+    tripId,
+    type,
+    status,
+    title,
+    partnerId,
+    partnerUrl,
+    priceText,
+    currency,
+    metadata,
+    attachments: attachments.length > 0 ? attachments : undefined,
+    createdAt,
+    updatedAt,
+  };
+}
+
+export function normalizeSavedItems(input: unknown): SavedItem[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((entry) => normalizeSavedItem(entry))
+    .filter((entry): entry is SavedItem => entry !== null);
+    }
