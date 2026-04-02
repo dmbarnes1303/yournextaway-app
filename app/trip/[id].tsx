@@ -28,7 +28,6 @@ import useTripWorkspace from "@/src/features/tripDetail/useTripWorkspace";
 
 import {
   type PlanValue,
-  clean,
   coerceId,
   itemResolvedScore,
   livePriceLine,
@@ -95,8 +94,8 @@ function urgencyLine(hasBookedTickets: boolean, kickoffTbc: boolean) {
 }
 
 function dateWindowLine(startDate?: string | null, endDate?: string | null) {
-  const start = clean(startDate);
-  const end = clean(endDate);
+  const start = String(startDate ?? "").trim();
+  const end = String(endDate ?? "").trim();
 
   if (!start || !end) return "Trip dates not set";
   return `${start} → ${end}`;
@@ -216,7 +215,10 @@ export default function TripDetailScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
 
-  const routeTripId = useMemo(() => coerceId((params as any)?.id), [params]);
+  const routeTripId = useMemo(
+    () => coerceId((params as Record<string, unknown>)?.id),
+    [params]
+  );
 
   const workspace = useTripWorkspace({ routeTripId });
 
@@ -561,7 +563,11 @@ export default function TripDetailScreen() {
 
           <Pressable
             style={styles.primaryActionBtn}
-            onPress={dominantAction?.onPress ? () => dominantAction.onPress() : controller.onEditTrip}
+            onPress={
+              dominantAction?.onPress
+                ? () => dominantAction.onPress()
+                : controller.onEditTrip
+            }
           >
             <Text style={styles.primaryActionBtnText}>{decisionCta}</Text>
           </Pressable>
