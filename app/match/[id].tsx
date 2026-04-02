@@ -93,7 +93,10 @@ function fixtureDateOnly(iso?: string | null): string {
   return match?.[1] ?? "";
 }
 
-function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string; to?: string } {
+function inferTripWindowFromKickoff(kickoffIso?: string | null): {
+  from?: string;
+  to?: string;
+} {
   const dateOnly = fixtureDateOnly(kickoffIso);
   if (!dateOnly) return {};
 
