@@ -10,6 +10,7 @@ import type { TripProgressItem } from "@/src/components/TripProgressStrip";
 import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
 
 import {
+  clean,
   cleanUpper3,
   proCapHint,
   smartButtonSubtitle,
@@ -128,13 +129,9 @@ const BOOKING_FLOW: BookingFlowConfig[] = [
   { key: "tickets", label: "Tickets", required: true },
   { key: "flight", label: "Flights", required: true },
   { key: "hotel", label: "Hotel", required: true },
-  { key: "transfer", label: "Transfer", transportAltLabel: "Rail/Bus", required: true },
+  { key: "transfer", label: "Transfer", transportAltLabel: "Rail / Bus", required: true },
   { key: "things", label: "Things", required: false },
 ];
-
-function clean(value: unknown): string {
-  return String(value ?? "").trim();
-}
 
 function hasUsablePartnerUrl(value?: string | null): boolean {
   return Boolean(clean(value));
@@ -145,10 +142,6 @@ function isStarted(state: ProgressState): boolean {
 }
 
 function isComplete(state: ProgressState): boolean {
-  return state === "booked";
-}
-
-function isBookedOnly(state: ProgressState): boolean {
   return state === "booked";
 }
 
@@ -285,7 +278,6 @@ export default function useTripDetailViewModel({
   bookingPriceBoard = null,
 }: Params) {
   const hasMatch = Boolean(primaryMatchId);
-
   const effectiveProgress = hasMatch ? progress : EMPTY_PROGRESS;
 
   const ticketState = effectiveProgress.tickets;
@@ -294,11 +286,11 @@ export default function useTripDetailViewModel({
   const transportState = effectiveProgress.transfer;
   const thingsState = effectiveProgress.things;
 
-  const hasTickets = isBookedOnly(ticketState);
-  const hasFlight = isBookedOnly(flightState);
-  const hasHotel = isBookedOnly(hotelState);
-  const hasTransport = isBookedOnly(transportState);
-  const hasThings = isBookedOnly(thingsState);
+  const hasTickets = ticketState === "booked";
+  const hasFlight = flightState === "booked";
+  const hasHotel = hotelState === "booked";
+  const hasTransport = transportState === "booked";
+  const hasThings = thingsState === "booked";
 
   const [tripCount, setTripCount] = useState<number>(tripsStore.getState().trips?.length ?? 0);
 
@@ -311,7 +303,6 @@ export default function useTripDetailViewModel({
   }, []);
 
   const loading = Boolean(routeTripId && (!tripsLoaded || !savedLoaded || !workspaceLoaded));
-
   const showHeroBanners = pending.length > 0 || saved.length > 0 || booked.length > 0;
 
   const baseMeta = useMemo(() => {
@@ -1000,4 +991,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-                            }
+              }
