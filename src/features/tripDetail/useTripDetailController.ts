@@ -37,6 +37,7 @@ import {
   getIsoDateOnly,
   mapTicketProviderToPartnerId,
   normalizeTicketOptions,
+  normalizeTicketUrlQuality,
   noteTitleFromText,
   cleanNoteText,
   ticketResolverFailureMessage,
@@ -909,7 +910,7 @@ export default function useTripDetailController({
           typeof args.option.rawScore === "number" && Number.isFinite(args.option.rawScore)
             ? args.option.rawScore
             : null,
-        urlQuality: clean(args.option.urlQuality) || null,
+        urlQuality: normalizeTicketUrlQuality(args.option.urlQuality, args.option.url),
         checkedProviders: args.checkedProviders,
         optionCount: args.optionCount,
         strongRoute,
@@ -1289,4 +1290,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-      }
+                               }
