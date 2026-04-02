@@ -1,4 +1,3 @@
-// src/features/tripDetail/tripDetailPricing.ts
 import type { SavedItem } from "@/src/core/savedItemTypes";
 
 export type PricePointSource =
@@ -35,11 +34,24 @@ function upper(value: unknown): string {
   return clean(value).toUpperCase();
 }
 
+function safeRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
 function isPositiveAmount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function toPositiveAmount(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, "").trim());
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
@@ -91,6 +103,10 @@ function rankSource(source: PricePointSource): number {
   return 4;
 }
 
+function isBookedItem(item: SavedItem | null | undefined): item is SavedItem {
+  return Boolean(item && item.status === "booked");
+}
+
 export function parsePriceText(raw: unknown): Omit<PricePoint, "displayMode"> | null {
   const text = clean(raw);
   if (!text) return null;
@@ -137,7 +153,7 @@ export function parsePriceText(raw: unknown): Omit<PricePoint, "displayMode"> | 
 }
 
 function buildSavedItemPricePoint(item: SavedItem): PricePoint | null {
-  if (item.status !== "booked") return null;
+  if (!isBookedItem(item)) return null;
 
   const parsed = parsePriceText(item.priceText);
   if (!parsed) return null;
@@ -152,9 +168,10 @@ function buildSavedItemPricePoint(item: SavedItem): PricePoint | null {
 }
 
 function buildMetadataNumericPricePoint(item: SavedItem): PricePoint | null {
-  if (item.status !== "booked") return null;
+  if (!isBookedItem(item)) return null;
 
-  const meta = (item.metadata ?? {}) as Record<string, unknown>;
+  const meta = safeRecord(item.metadata);
+  if (!meta) return null;
 
   const numericCandidates = [
     meta.priceAmount,
@@ -187,9 +204,10 @@ function buildMetadataNumericPricePoint(item: SavedItem): PricePoint | null {
 }
 
 function buildMetadataTextPricePoint(item: SavedItem): PricePoint | null {
-  if (item.status !== "booked") return null;
+  if (!isBookedItem(item)) return null;
 
-  const meta = (item.metadata ?? {}) as Record<string, unknown>;
+  const meta = safeRecord(item.metadata);
+  if (!meta) return null;
 
   const textCandidates = [
     meta.resolvedPriceText,
@@ -204,7 +222,10 @@ function buildMetadataTextPricePoint(item: SavedItem): PricePoint | null {
     if (!parsed) continue;
 
     return {
-      ...parsed,
+      amount: parsed.amount,
+      currency: parsed.currency,
+      text: parsed.text,
+      source: "price_text",
       displayMode: "booked",
     };
   }
@@ -213,8 +234,7 @@ function buildMetadataTextPricePoint(item: SavedItem): PricePoint | null {
 }
 
 export function buildPricePointFromItem(item: SavedItem | null): PricePoint | null {
-  if (!item) return null;
-  if (item.status !== "booked") return null;
+  if (!isBookedItem(item)) return null;
 
   const candidates = [
     buildSavedItemPricePoint(item),
@@ -228,8 +248,6 @@ export function buildPricePointFromItem(item: SavedItem | null): PricePoint | nu
 }
 
 function choosePreferredPoint(points: PricePoint[]): PricePoint | null {
-  if (points.length === 0) return null;
-
   const withAmounts = points.filter(
     (point) =>
       typeof point.amount === "number" &&
@@ -244,26 +262,26 @@ function choosePreferredPoint(points: PricePoint[]): PricePoint | null {
     withAmounts[0]?.currency ||
     null;
 
-  const samePreferredCurrency = withAmounts.filter(
+  const currencyPool = withAmounts.filter(
     (point) => (point.currency || null) === preferredCurrency
   );
 
-  const pool = samePreferredCurrency.length > 0 ? samePreferredCurrency : withAmounts;
+  const pool = currencyPool.length > 0 ? currencyPool : withAmounts;
 
-  return (
-    pool.sort((a, b) => {
-      const sourceRankDiff = rankSource(a.source) - rankSource(b.source);
-      if (sourceRankDiff !== 0) return sourceRankDiff;
+  const sorted = [...pool].sort((a, b) => {
+    const sourceRankDiff = rankSource(a.source) - rankSource(b.source);
+    if (sourceRankDiff !== 0) return sourceRankDiff;
 
-      const aAmount = a.amount ?? Number.POSITIVE_INFINITY;
-      const bAmount = b.amount ?? Number.POSITIVE_INFINITY;
-      if (aAmount !== bAmount) return aAmount - bAmount;
+    const aAmount = a.amount ?? Number.POSITIVE_INFINITY;
+    const bAmount = b.amount ?? Number.POSITIVE_INFINITY;
+    if (aAmount !== bAmount) return aAmount - bAmount;
 
-      const aText = clean(a.text);
-      const bText = clean(b.text);
-      return aText.localeCompare(bText);
-    })[0] ?? null
-  );
+    const aText = clean(a.text);
+    const bText = clean(b.text);
+    return aText.localeCompare(bText);
+  });
+
+  return sorted[0] ?? null;
 }
 
 export function chooseBestPricePoint(
@@ -366,7 +384,7 @@ export function withFlightPriceOverride(args: {
 
   // Locked decision:
   // do not surface non-booked pricing in Trip Detail for now,
-  // even if flights are API-backed.
+  // even if flights later become API-backed.
   return args.board;
 }
 
@@ -383,4 +401,4 @@ export function priceLine(point: PricePoint | null): string | null {
         : formatPriceText(point.currency || null, point.amount);
 
   return `Booked ${base}`;
-}
+                                 }
