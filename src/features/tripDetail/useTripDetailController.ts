@@ -40,6 +40,8 @@ import {
   noteTitleFromText,
   cleanNoteText,
   ticketResolverFailureMessage,
+  splitTicketOptions,
+  isStrongTicketOption,
   type AffiliateUrls,
   type SourceSection,
   type SourceSurface,
@@ -345,70 +347,6 @@ function getTravelLaunchCandidate(
   }
 
   return null;
-}
-
-function getOptionUrlQuality(
-  option: TicketResolutionOption
-): "event" | "listing" | "search" | "unknown" {
-  const raw = clean(option.urlQuality).toLowerCase();
-
-  if (raw === "event" || raw === "listing" || raw === "search" || raw === "unknown") {
-    return raw;
-  }
-
-  const url = clean(option.url).toLowerCase();
-  if (!url) return "unknown";
-
-  if (
-    url.includes("/search") ||
-    url.includes("search-results") ||
-    url.includes("query=") ||
-    url.includes("q=") ||
-    url.includes("text=") ||
-    url.includes("sjv.io")
-  ) {
-    return "search";
-  }
-
-  if (url.includes("/listing") || url.includes("/listings")) return "listing";
-  if (url.includes("/event") || url.includes("/events") || url.includes("/tickets")) {
-    return "event";
-  }
-
-  return "unknown";
-}
-
-function isStrongTicketOption(option: TicketResolutionOption): boolean {
-  const reason = clean(option.reason);
-  const urlQuality = getOptionUrlQuality(option);
-
-  if (option.exact || reason === "exact_event") {
-    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
-  }
-
-  if (reason === "partial_match") {
-    return urlQuality === "event" || urlQuality === "listing";
-  }
-
-  return false;
-}
-
-function splitTicketOptions(options: TicketResolutionOption[]): {
-  strong: TicketResolutionOption[];
-  weak: TicketResolutionOption[];
-} {
-  const strong: TicketResolutionOption[] = [];
-  const weak: TicketResolutionOption[] = [];
-
-  for (const option of options) {
-    if (isStrongTicketOption(option)) {
-      strong.push(option);
-    } else {
-      weak.push(option);
-    }
-  }
-
-  return { strong, weak };
 }
 
 export default function useTripDetailController({
@@ -971,7 +909,7 @@ export default function useTripDetailController({
           typeof args.option.rawScore === "number" && Number.isFinite(args.option.rawScore)
             ? args.option.rawScore
             : null,
-        urlQuality: getOptionUrlQuality(args.option),
+        urlQuality: clean(args.option.urlQuality) || null,
         checkedProviders: args.checkedProviders,
         optionCount: args.optionCount,
         strongRoute,
@@ -1351,4 +1289,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-          }
+        }
