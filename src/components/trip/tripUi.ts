@@ -1,1425 +1,293 @@
-import React, { memo, useMemo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  TextInput,
-  Platform,
-} from "react-native";
-
-import GlassCard from "@/src/components/GlassCard";
-import EmptyState from "@/src/components/EmptyState";
-
 import { theme } from "@/src/constants/theme";
-
-import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
-import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
-import { WORKSPACE_SECTIONS } from "@/src/core/tripWorkspace";
-
 import {
-  providerBadgeStyle,
-  providerLabel,
-  providerShort,
-  statusLabel,
-  savedItemMetaLine,
-  proofStateText,
-  livePriceLine as sharedLivePriceLine,
-} from "@/src/features/tripDetail/helpers";
+  canonicalizePartnerId,
+  getPartnerOrNull,
+} from "@/src/constants/partners";
+import type { Trip } from "@/src/state/trips";
+import type { FixtureListRow } from "@/src/services/apiFootball";
+import type { SavedItem } from "@/src/core/savedItemTypes";
 
-function clean(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function hasProof(item: SavedItem | null): boolean {
-  return Array.isArray(item?.attachments) && item.attachments.length > 0;
-}
-
-function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
-  const title = WORKSPACE_SECTIONS[sectionKey].title;
-
-  if (total <= 0) return `No ${title.toLowerCase()} yet`;
-  if (total === 1) return "1 item";
-  return `${total} items`;
-}
-
-function sectionTitle(sectionKey: WorkspaceSectionKey) {
-  return WORKSPACE_SECTIONS[sectionKey].title;
-}
-
-function sectionLead(sectionKey: WorkspaceSectionKey) {
-  if (sectionKey === "tickets") return "Start here. Tickets anchor the whole trip.";
-  if (sectionKey === "travel") return "Flights and rail should be handled early, not guessed later.";
-  if (sectionKey === "stay") return "A bad hotel area ruins matchday logistics.";
-  if (sectionKey === "transfers") return "Sort the airport-city-stadium chain before it becomes friction.";
-  if (sectionKey === "things") return "Only add extras that improve the trip.";
-  if (sectionKey === "insurance") return "Store cover and policy evidence in one place.";
-  if (sectionKey === "claims") return "Keep refund, delay and compensation evidence together.";
-  return "Keep useful planning notes here.";
-}
-
-function itemPriorityTone(item: SavedItem) {
-  if (item.status === "booked" && !hasProof(item)) return styles.itemToneWarn;
-  if (item.status === "pending") return styles.itemTonePending;
-  if (item.status === "booked") return styles.itemToneBooked;
-  if (item.status === "saved") return styles.itemToneSaved;
-  return styles.itemToneNeutral;
-}
-
-function statusTone(status: SavedItem["status"]) {
-  if (status === "pending") return styles.badgePending;
-  if (status === "saved") return styles.badgeSaved;
-  if (status === "booked") return styles.badgeBooked;
-  return styles.badgeArchived;
-}
-
-function cleanUserFacingPriceLine(value: string | null) {
-  const raw = clean(value);
-  if (!raw) return null;
-
-  return raw
-    .replace(/\bLive price on\b/gi, "Live price •")
-    .replace(/\bFrom\b/gi, "From")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function itemActionHint(item: SavedItem, livePrice: string | null) {
-  if (item.type === "note" || item.type === "other") return "Tap to open note";
-
-  if (item.status === "booked" && !hasProof(item)) {
-    return "Booked, but proof still needs adding";
-  }
-
-  if (item.status === "booked") {
-    return "Booked and stored";
-  }
-
-  if (item.status === "pending") {
-    return "Awaiting confirmation";
-  }
-
-  if (item.status === "saved") {
-    return livePrice ? "Ready to review" : "Saved to compare later";
-  }
-
-  return "Archived item";
-}
-
-type PartnerOpenArgs = {
-  partnerId: any;
-  url: string;
-  title: string;
-  savedItemType?: SavedItemType;
-  metadata?: Record<string, any>;
+export type ProviderBadgeStyle = {
+  borderColor: string;
+  backgroundColor: string;
+  textColor: string;
 };
 
-export type TripWorkspaceCardProps = {
-  workspaceSnapshot: {
-    activeTotal: number;
-    sectionActiveTotals: Record<WorkspaceSectionKey, number>;
+const DEFAULT_BADGE_STYLE: ProviderBadgeStyle = {
+  borderColor: "rgba(255,255,255,0.15)",
+  backgroundColor: "rgba(255,255,255,0.06)",
+  textColor: theme.colors.text,
+};
+
+export function clean(v: unknown): string {
+  return String(v ?? "").trim();
+}
+
+export function safeUri(u: unknown): string | null {
+  const s = clean(u);
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) return null;
+  return s;
+}
+
+export function initials(name: string): string {
+  const cleanName = clean(name);
+  if (!cleanName) return "—";
+
+  const parts = cleanName.split(/\s+/g).filter(Boolean);
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase() || "—";
+}
+
+export function parseIsoToDate(iso?: string | null): Date | null {
+  const s = clean(iso);
+  if (!s) return null;
+
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+export function safeFixtureTitle(
+  row: FixtureListRow | null | undefined,
+  fallbackId: string,
+  trip?: Trip | null
+): string {
+  const home = clean(row?.teams?.home?.name) || clean(trip?.homeName);
+  const away = clean(row?.teams?.away?.name) || clean(trip?.awayName);
+
+  if (home && away) return `${home} vs ${away}`;
+  if (home) return `${home} match`;
+  if (away) return `${away} match`;
+
+  return `Match ${fallbackId}`;
+}
+
+export function formatKickoffMeta(
+  row?: FixtureListRow | null,
+  trip?: Trip | null
+): { line: string; tbc: boolean; iso: string | null } {
+  const isoRaw = row?.fixture?.date ?? trip?.kickoffIso;
+  const iso = clean(isoRaw) || null;
+
+  const d = parseIsoToDate(iso);
+
+  const short = clean(row?.fixture?.status?.short).toUpperCase();
+  const long = clean(row?.fixture?.status?.long);
+
+  const looksTbc =
+    short === "TBD" ||
+    short === "TBA" ||
+    short === "NS" ||
+    short === "PST";
+
+  const snapTbc = Boolean(trip?.kickoffTbc);
+
+  if (!d) {
+    const tbc = looksTbc || snapTbc;
+    return { line: tbc ? "Kickoff: TBC" : "Kickoff: —", tbc: true, iso };
+  }
+
+  const datePart = d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+
+  const timePart = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const midnight = d.getHours() === 0 && d.getMinutes() === 0;
+  const tbc = looksTbc || snapTbc || midnight;
+
+  if (tbc) {
+    return { line: `Kickoff: ${datePart} • TBC`, tbc: true, iso };
+  }
+
+  return {
+    line: `Kickoff: ${datePart} • ${timePart}${long ? ` • ${long}` : ""}`,
+    tbc: false,
+    iso,
   };
-  workspace: TripWorkspace | null;
-  sectionOrder: WorkspaceSectionKey[];
-  activeSection: WorkspaceSectionKey;
-  groupedBySection: Record<WorkspaceSectionKey, SavedItem[]>;
-  primaryMatchId: string | null;
-  affiliateUrls: {
-    hotelsUrl?: string | null;
-    flightsUrl?: string | null;
-    omioUrl?: string | null;
-    transfersUrl?: string | null;
-    experiencesUrl?: string | null;
-  } | null;
-  cityName: string;
-  originIata: string;
-  tripStartDate?: string | null;
-  tripEndDate?: string | null;
-  noteText: string;
-  noteSaving: boolean;
-  proofBusyId: string | null;
-  stayBestAreas: { area: string; notes?: string }[];
-  stayBudgetAreas: { area: string; notes?: string }[];
-  transportStops: string[];
-
-  onSetActiveSection: (section: WorkspaceSectionKey) => void;
-  onToggleSection: (section: WorkspaceSectionKey) => void;
-  onNoteTextChange: (text: string) => void;
-  onAddNote: () => void;
-
-  onOpenTicketsForPrimaryMatch: () => void;
-  onOpenSavedItem: (item: SavedItem) => void;
-  onOpenNoteActions: (item: SavedItem) => void;
-  onConfirmMarkBooked: (item: SavedItem) => void;
-  onAddProofForBookedItem: (item: SavedItem) => void;
-  onViewWallet: () => void;
-  onConfirmMoveToPending: (item: SavedItem) => void;
-  onConfirmArchive: (item: SavedItem) => void;
-
-  onOpenPartner: (args: PartnerOpenArgs) => void;
-
-  getLivePriceLine: (item: SavedItem) => string | null;
-  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
-};
-
-type ProviderBadgeProps = {
-  provider?: string | null;
-  size?: "sm" | "md";
-  showLabel?: boolean;
-};
-
-const ProviderBadge = memo(function ProviderBadge({
-  provider,
-  size = "sm",
-  showLabel = false,
-}: ProviderBadgeProps) {
-  const badge = providerBadgeStyle(provider);
-  const short = providerShort(provider);
-  const label = providerLabel(provider);
-
-  const circleSize = size === "md" ? 30 : 24;
-  const fontSize = size === "md" ? 12 : 11;
-
-  return (
-    <View style={[styles.providerBadgeWrap, showLabel && styles.providerBadgeWrapLabeled]}>
-      <View
-        style={[
-          styles.providerBadgeCircle,
-          {
-            width: circleSize,
-            height: circleSize,
-            borderRadius: circleSize / 2,
-            borderColor: badge.borderColor,
-            backgroundColor: badge.backgroundColor,
-          },
-        ]}
-      >
-        <Text style={[styles.providerBadgeCircleText, { color: badge.textColor, fontSize }]}>
-          {short}
-        </Text>
-      </View>
-      {showLabel ? <Text style={styles.providerBadgeLabel}>{label}</Text> : null}
-    </View>
-  );
-});
-
-const StatusBadge = memo(function StatusBadge({ status }: { status: SavedItem["status"] }) {
-  const label = statusLabel(status);
-  return (
-    <View style={[styles.badge, statusTone(status)]}>
-      <Text style={styles.badgeText}>{label}</Text>
-    </View>
-  );
-});
-
-type WorkspaceItemRowProps = {
-  item: SavedItem;
-  proofBusyId: string | null;
-  onOpenSavedItem: (item: SavedItem) => void;
-  onOpenNoteActions: (item: SavedItem) => void;
-  onConfirmMarkBooked: (item: SavedItem) => void;
-  onAddProofForBookedItem: (item: SavedItem) => void;
-  onViewWallet: () => void;
-  onConfirmMoveToPending: (item: SavedItem) => void;
-  onConfirmArchive: (item: SavedItem) => void;
-  getLivePriceLine: (item: SavedItem) => string | null;
-  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
-};
-
-const WorkspaceItemRow = memo(function WorkspaceItemRow({
-  item,
-  proofBusyId,
-  onOpenSavedItem,
-  onOpenNoteActions,
-  onConfirmMarkBooked,
-  onAddProofForBookedItem,
-  onViewWallet,
-  onConfirmMoveToPending,
-  onConfirmArchive,
-  getLivePriceLine,
-  getTicketProviderFromItem,
-}: WorkspaceItemRowProps) {
-  const fallbackLivePrice = sharedLivePriceLine(item);
-  const livePrice = cleanUserFacingPriceLine(getLivePriceLine(item) || fallbackLivePrice);
-  const provider = getTicketProviderFromItem(item) || clean(item.partnerId) || null;
-  const proofText = proofStateText(item);
-  const missingProof = item.status === "booked" && !hasProof(item);
-  const proofBusy = proofBusyId === item.id;
-  const isNote = item.type === "note" || item.type === "other";
-  const actionHint = itemActionHint(item, livePrice);
-
-  return (
-    <View style={[styles.itemRow, itemPriorityTone(item)]}>
-      <Pressable
-        style={styles.itemMain}
-        onPress={() => (isNote ? onOpenNoteActions(item) : onOpenSavedItem(item))}
-      >
-        <View style={styles.itemTitleRow}>
-          <Text style={styles.itemTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <StatusBadge status={item.status} />
-        </View>
-
-        <View style={styles.itemMetaRow}>
-          {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
-          <Text style={styles.itemMeta} numberOfLines={1}>
-            {isNote ? "Notes" : savedItemMetaLine(item)}
-          </Text>
-        </View>
-
-        <Text style={styles.itemHintLine} numberOfLines={1}>
-          {actionHint}
-        </Text>
-
-        {livePrice ? (
-          <Text
-            style={item.status === "booked" ? styles.paidLine : styles.livePriceLine}
-            numberOfLines={1}
-          >
-            {livePrice}
-          </Text>
-        ) : null}
-
-        {item.status === "booked" ? (
-          <Text
-            style={[styles.proofLine, missingProof ? styles.proofLineMissing : undefined]}
-            numberOfLines={1}
-          >
-            {proofText}
-          </Text>
-        ) : null}
-      </Pressable>
-
-      <View style={styles.itemActions}>
-        {item.status !== "booked" ? (
-          <Pressable onPress={() => onConfirmMarkBooked(item)} style={styles.smallBtn}>
-            <Text style={styles.smallBtnText}>Booked</Text>
-          </Pressable>
-        ) : missingProof ? (
-          <Pressable
-            onPress={() => onAddProofForBookedItem(item)}
-            style={[
-              styles.smallBtn,
-              styles.smallBtnPrimary,
-              proofBusy && styles.smallBtnDisabled,
-            ]}
-            disabled={proofBusy}
-          >
-            <Text style={styles.smallBtnText}>{proofBusy ? "Adding…" : "Add proof"}</Text>
-          </Pressable>
-        ) : (
-          <Pressable onPress={onViewWallet} style={styles.smallBtn}>
-            <Text style={styles.smallBtnText}>Wallet</Text>
-          </Pressable>
-        )}
-
-        {item.status === "saved" ? (
-          <Pressable onPress={() => onConfirmMoveToPending(item)} style={styles.smallBtn}>
-            <Text style={styles.smallBtnText}>Pending</Text>
-          </Pressable>
-        ) : null}
-
-        <Pressable
-          onPress={() => onConfirmArchive(item)}
-          style={[styles.smallBtn, styles.smallBtnDanger]}
-        >
-          <Text style={styles.smallBtnText}>Archive</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-});
-
-type SectionContentProps = {
-  sectionKey: WorkspaceSectionKey;
-  items: SavedItem[];
-  primaryMatchId: string | null;
-  affiliateUrls: TripWorkspaceCardProps["affiliateUrls"];
-  cityName: string;
-  originIata: string;
-  tripStartDate?: string | null;
-  tripEndDate?: string | null;
-  noteText: string;
-  noteSaving: boolean;
-  proofBusyId: string | null;
-  stayBestAreas: { area: string; notes?: string }[];
-  stayBudgetAreas: { area: string; notes?: string }[];
-  transportStops: string[];
-  onNoteTextChange: (text: string) => void;
-  onAddNote: () => void;
-  onOpenTicketsForPrimaryMatch: () => void;
-  onOpenSavedItem: (item: SavedItem) => void;
-  onOpenNoteActions: (item: SavedItem) => void;
-  onConfirmMarkBooked: (item: SavedItem) => void;
-  onAddProofForBookedItem: (item: SavedItem) => void;
-  onViewWallet: () => void;
-  onConfirmMoveToPending: (item: SavedItem) => void;
-  onConfirmArchive: (item: SavedItem) => void;
-  onOpenPartner: (args: PartnerOpenArgs) => void;
-  getLivePriceLine: (item: SavedItem) => string | null;
-  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
-};
-
-function renderItemList(
-  items: SavedItem[],
-  props: Omit<SectionContentProps, "sectionKey" | "items">
-) {
-  if (items.length === 0) return null;
-
-  return (
-    <View style={styles.listGap}>
-      {items.map((item) => (
-        <WorkspaceItemRow
-          key={item.id}
-          item={item}
-          proofBusyId={props.proofBusyId}
-          onOpenSavedItem={props.onOpenSavedItem}
-          onOpenNoteActions={props.onOpenNoteActions}
-          onConfirmMarkBooked={props.onConfirmMarkBooked}
-          onAddProofForBookedItem={props.onAddProofForBookedItem}
-          onViewWallet={props.onViewWallet}
-          onConfirmMoveToPending={props.onConfirmMoveToPending}
-          onConfirmArchive={props.onConfirmArchive}
-          getLivePriceLine={props.getLivePriceLine}
-          getTicketProviderFromItem={props.getTicketProviderFromItem}
-        />
-      ))}
-    </View>
-  );
 }
 
-const SectionContent = memo(function SectionContent(props: SectionContentProps) {
-  const {
-    sectionKey,
-    items,
-    primaryMatchId,
-    affiliateUrls,
-    cityName,
-    originIata,
-    tripStartDate,
-    tripEndDate,
-    noteText,
-    noteSaving,
-    stayBestAreas,
-    stayBudgetAreas,
-    transportStops,
-    onNoteTextChange,
-    onAddNote,
-    onOpenTicketsForPrimaryMatch,
-    onOpenPartner,
-  } = props;
+export function providerLabel(provider?: string | null): string {
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) return clean(provider) || "Provider";
 
-  const hotelsUrl = affiliateUrls?.hotelsUrl ?? null;
-  const flightsUrl = affiliateUrls?.flightsUrl ?? null;
-  const omioUrl = affiliateUrls?.omioUrl ?? null;
-  const transfersUrl = affiliateUrls?.transfersUrl ?? null;
-  const experiencesUrl = affiliateUrls?.experiencesUrl ?? null;
-
-  if (sectionKey === "tickets") {
-    return (
-      <>
-        {primaryMatchId ? (
-          <Pressable onPress={onOpenTicketsForPrimaryMatch} style={styles.sectionCta}>
-            <Text style={styles.sectionCtaTitle}>Compare live ticket options</Text>
-            <Text style={styles.sectionCtaBody}>
-              This is the anchor step. If tickets are not sorted, the rest of the trip is built on
-              guesswork.
-            </Text>
-          </Pressable>
-        ) : (
-          <EmptyState
-            title="No match selected"
-            message="Add a match first. No fixture means no proper ticket route."
-          />
-        )}
-
-        {items.length > 0 ? (
-          renderItemList(items, props)
-        ) : (
-          <EmptyState
-            title="No ticket items yet"
-            message="Open ticket options and save the strongest route here."
-          />
-        )}
-      </>
-    );
-  }
-
-  if (sectionKey === "stay") {
-    return (
-      <>
-        {hotelsUrl ? (
-          <Pressable
-            onPress={() =>
-              onOpenPartner({
-                partnerId: "expedia",
-                url: hotelsUrl,
-                savedItemType: "hotel",
-                title: `Hotels in ${cityName}`,
-                metadata: {
-                  city: cityName,
-                  startDate: tripStartDate,
-                  endDate: tripEndDate,
-                  priceMode: "live",
-                  sourceSurface: "workspace_cta",
-                  sourceSection: "stay",
-                },
-              })
-            }
-            style={styles.sectionCta}
-          >
-            <Text style={styles.sectionCtaTitle}>Open live stays</Text>
-            <Text style={styles.sectionCtaBody}>
-              Use stay guidance before booking. Cheap in the wrong area is not smart value.
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {stayBestAreas.length > 0 || stayBudgetAreas.length > 0 ? (
-          <View style={styles.guidanceMiniBox}>
-            <Text style={styles.guidanceMiniTitle}>Area shortlist</Text>
-
-            {stayBestAreas.slice(0, 2).map((item, index) => (
-              <Text key={`stay-best-${index}`} style={styles.guidanceMiniLine}>
-                • {item.area}
-                {item.notes ? ` — ${item.notes}` : ""}
-              </Text>
-            ))}
-
-            {stayBudgetAreas.slice(0, 2).map((item, index) => (
-              <Text key={`stay-budget-${index}`} style={styles.guidanceMiniLine}>
-                • {item.area}
-                {item.notes ? ` — ${item.notes}` : ""}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-
-        {items.length > 0 ? (
-          renderItemList(items, props)
-        ) : (
-          <EmptyState
-            title="No stay items yet"
-            message="Save hotel options here so the trip becomes a real booking plan, not a vague intention."
-          />
-        )}
-      </>
-    );
-  }
-
-  if (sectionKey === "travel") {
-    return (
-      <>
-        <View style={styles.sectionActionRow}>
-          {flightsUrl ? (
-            <Pressable
-              onPress={() =>
-                onOpenPartner({
-                  partnerId: "aviasales",
-                  url: flightsUrl,
-                  savedItemType: "flight",
-                  title: `Flights to ${cityName}`,
-                  metadata: {
-                    city: cityName,
-                    originIata,
-                    startDate: tripStartDate,
-                    endDate: tripEndDate,
-                    priceMode: "live",
-                    sourceSurface: "workspace_cta",
-                    sourceSection: "travel",
-                  },
-                })
-              }
-              style={[styles.smallActionBtn, styles.smallActionBtnPrimary]}
-            >
-              <Text style={styles.smallActionBtnText}>Flights</Text>
-            </Pressable>
-          ) : null}
-
-          {omioUrl ? (
-            <Pressable
-              onPress={() =>
-                onOpenPartner({
-                  partnerId: "omio",
-                  url: omioUrl,
-                  savedItemType: "train",
-                  title: `Trains & buses in ${cityName}`,
-                  metadata: {
-                    city: cityName,
-                    startDate: tripStartDate,
-                    endDate: tripEndDate,
-                    priceMode: "live",
-                    transportMode: "rail_bus",
-                    sourceSurface: "workspace_cta",
-                    sourceSection: "travel",
-                  },
-                })
-              }
-              style={styles.smallActionBtn}
-            >
-              <Text style={styles.smallActionBtnText}>Rail / Bus</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {items.length > 0 ? (
-          renderItemList(items, props)
-        ) : (
-          <EmptyState
-            title="No travel items yet"
-            message="Flights or rail should be decided early. Leaving them vague is how trips get messy."
-          />
-        )}
-      </>
-    );
-  }
-
-  if (sectionKey === "transfers") {
-    return (
-      <>
-        {transfersUrl ? (
-          <Pressable
-            onPress={() =>
-              onOpenPartner({
-                partnerId: "kiwitaxi",
-                url: transfersUrl,
-                savedItemType: "transfer",
-                title: `Transfers in ${cityName}`,
-                metadata: {
-                  city: cityName,
-                  startDate: tripStartDate,
-                  endDate: tripEndDate,
-                  priceMode: "live",
-                  sourceSurface: "workspace_cta",
-                  sourceSection: "transfers",
-                },
-              })
-            }
-            style={styles.sectionCta}
-          >
-            <Text style={styles.sectionCtaTitle}>Open transfer options</Text>
-            <Text style={styles.sectionCtaBody}>
-              Handle airport-city-stadium movement before matchday friction hits.
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {transportStops.length > 0 ? (
-          <View style={styles.guidanceMiniBox}>
-            <Text style={styles.guidanceMiniTitle}>Useful transport stops</Text>
-            {transportStops.map((line, index) => (
-              <Text key={`transport-stop-${index}`} style={styles.guidanceMiniLine}>
-                • {line}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-
-        {items.length > 0 ? (
-          renderItemList(items, props)
-        ) : (
-          <EmptyState
-            title="No transfer items yet"
-            message="This section should remove local transport guesswork."
-          />
-        )}
-      </>
-    );
-  }
-
-  if (sectionKey === "things") {
-    return (
-      <>
-        {experiencesUrl ? (
-          <Pressable
-            onPress={() =>
-              onOpenPartner({
-                partnerId: "getyourguide",
-                url: experiencesUrl,
-                savedItemType: "things",
-                title: `Experiences in ${cityName}`,
-                metadata: {
-                  city: cityName,
-                  startDate: tripStartDate,
-                  endDate: tripEndDate,
-                  priceMode: "live",
-                  sourceSurface: "workspace_cta",
-                  sourceSection: "things",
-                },
-              })
-            }
-            style={styles.sectionCta}
-          >
-            <Text style={styles.sectionCtaTitle}>Open activities</Text>
-            <Text style={styles.sectionCtaBody}>
-              Add extras only if they improve the trip. Filler is pointless.
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {items.length > 0 ? (
-          renderItemList(items, props)
-        ) : (
-          <EmptyState
-            title="No things saved yet"
-            message="This section is optional. Good when useful, bad when bloated."
-          />
-        )}
-      </>
-    );
-  }
-
-  if (sectionKey === "insurance") {
-    return items.length > 0 ? (
-      renderItemList(items, props)
-    ) : (
-      <EmptyState
-        title="No insurance saved yet"
-        message="Store policy routes and cover records here."
-      />
-    );
-  }
-
-  if (sectionKey === "claims") {
-    return items.length > 0 ? (
-      renderItemList(items, props)
-    ) : (
-      <EmptyState
-        title="No claim items yet"
-        message="Use this for compensation, refund and delay evidence."
-      />
-    );
-  }
-
-  return (
-    <>
-      <View style={styles.noteBox}>
-        <Text style={styles.noteBoxTitle}>Trip notes</Text>
-        <Text style={styles.noteBoxSub}>
-          Save only useful notes: ticket thoughts, hotel shortlist, reminders, booking gaps.
-        </Text>
-
-        <TextInput
-          value={noteText}
-          onChangeText={onNoteTextChange}
-          placeholder="Add a note (tickets, hotel shortlist, reminders, anything)…"
-          placeholderTextColor={theme.colors.textSecondary}
-          style={styles.noteInput}
-          multiline
-        />
-
-        <Pressable
-          onPress={onAddNote}
-          disabled={noteSaving}
-          style={[styles.noteSaveBtn, noteSaving && styles.noteSaveBtnDisabled]}
-        >
-          <Text style={styles.noteSaveText}>{noteSaving ? "Saving…" : "Save note"}</Text>
-        </Pressable>
-      </View>
-
-      {items.length > 0 ? (
-        <View style={styles.noteListWrap}>{renderItemList(items, props)}</View>
-      ) : (
-        <View style={styles.noteEmptyWrap}>
-          <EmptyState
-            title="No notes yet"
-            message="Notes you actually need should live here, not scattered across your phone."
-          />
-        </View>
-      )}
-    </>
-  );
-});
-
-type WorkspaceTabsProps = {
-  sectionOrder: WorkspaceSectionKey[];
-  activeSection: WorkspaceSectionKey;
-  sectionActiveTotals: Record<WorkspaceSectionKey, number>;
-  onSetActiveSection: (section: WorkspaceSectionKey) => void;
-};
-
-const WorkspaceTabs = memo(function WorkspaceTabs({
-  sectionOrder,
-  activeSection,
-  sectionActiveTotals,
-  onSetActiveSection,
-}: WorkspaceTabsProps) {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.workspaceTabsRow}
-    >
-      {sectionOrder.map((sectionKey) => {
-        const total = sectionActiveTotals[sectionKey] ?? 0;
-        const selected = activeSection === sectionKey;
-
-        return (
-          <Pressable
-            key={sectionKey}
-            onPress={() => onSetActiveSection(sectionKey)}
-            style={[styles.workspaceTab, selected && styles.workspaceTabActive]}
-          >
-            <Text style={[styles.workspaceTabTitle, selected && styles.workspaceTabTitleActive]}>
-              {sectionTitle(sectionKey)}
-            </Text>
-            <Text style={[styles.workspaceTabSub, selected && styles.workspaceTabSubActive]}>
-              {sectionStateLabel(sectionKey, total)}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  );
-});
-
-type WorkspaceSectionCardProps = {
-  sectionKey: WorkspaceSectionKey;
-  workspace: TripWorkspace | null;
-  activeSection: WorkspaceSectionKey;
-  total: number;
-  children: React.ReactNode;
-  onToggleSection: (section: WorkspaceSectionKey) => void;
-};
-
-const WorkspaceSectionCard = memo(function WorkspaceSectionCard({
-  sectionKey,
-  workspace,
-  activeSection,
-  total,
-  children,
-  onToggleSection,
-}: WorkspaceSectionCardProps) {
-  const section = WORKSPACE_SECTIONS[sectionKey];
-  const collapsed = Boolean(workspace?.collapsed?.[sectionKey]);
-  const selected = activeSection === sectionKey;
-
-  if (!selected) return null;
-
-  return (
-    <View style={styles.workspaceSection}>
-      <Pressable onPress={() => onToggleSection(sectionKey)} style={styles.workspaceSectionHeader}>
-        <View style={styles.flexOne}>
-          <Text style={styles.workspaceSectionTitle}>{section.title}</Text>
-          <Text style={styles.workspaceSectionSub}>{sectionLead(sectionKey)}</Text>
-        </View>
-
-        <View style={styles.workspaceHeaderRight}>
-          <View style={styles.workspaceCountPill}>
-            <Text style={styles.workspaceCountText}>{total}</Text>
-          </View>
-          <Text style={styles.chev}>{collapsed ? "›" : "⌄"}</Text>
-        </View>
-      </Pressable>
-
-      {!collapsed ? <View style={styles.sectionContentWrap}>{children}</View> : null}
-    </View>
-  );
-});
-
-const WorkspaceSummaryStrip = memo(function WorkspaceSummaryStrip({
-  snapshot,
-}: {
-  snapshot: TripWorkspaceCardProps["workspaceSnapshot"];
-}) {
-  const summary = useMemo(() => {
-    const totals = snapshot.sectionActiveTotals;
-    return [
-      `Tickets ${totals.tickets ?? 0}`,
-      `Travel ${totals.travel ?? 0}`,
-      `Stay ${totals.stay ?? 0}`,
-      `Transfers ${totals.transfers ?? 0}`,
-      `Things ${totals.things ?? 0}`,
-    ];
-  }, [snapshot]);
-
-  return (
-    <View style={styles.summaryStrip}>
-      <Text style={styles.summaryStripTitle}>Workspace snapshot</Text>
-      <Text style={styles.summaryStripText}>{summary.join(" • ")}</Text>
-    </View>
-  );
-});
-
-export default function TripWorkspaceCard({
-  workspaceSnapshot,
-  workspace,
-  sectionOrder,
-  activeSection,
-  groupedBySection,
-  primaryMatchId,
-  affiliateUrls,
-  cityName,
-  originIata,
-  tripStartDate,
-  tripEndDate,
-  noteText,
-  noteSaving,
-  proofBusyId,
-  stayBestAreas,
-  stayBudgetAreas,
-  transportStops,
-  onSetActiveSection,
-  onToggleSection,
-  onNoteTextChange,
-  onAddNote,
-  onOpenTicketsForPrimaryMatch,
-  onOpenSavedItem,
-  onOpenNoteActions,
-  onConfirmMarkBooked,
-  onAddProofForBookedItem,
-  onViewWallet,
-  onConfirmMoveToPending,
-  onConfirmArchive,
-  onOpenPartner,
-  getLivePriceLine,
-  getTicketProviderFromItem,
-}: TripWorkspaceCardProps) {
-  return (
-    <GlassCard style={styles.card}>
-      <View style={styles.sectionTitleRow}>
-        <Text style={styles.sectionTitle}>Workspace</Text>
-        <Text style={styles.sectionSub}>{workspaceSnapshot.activeTotal} active items</Text>
-      </View>
-
-      <WorkspaceSummaryStrip snapshot={workspaceSnapshot} />
-
-      <WorkspaceTabs
-        sectionOrder={sectionOrder}
-        activeSection={activeSection}
-        sectionActiveTotals={workspaceSnapshot.sectionActiveTotals}
-        onSetActiveSection={onSetActiveSection}
-      />
-
-      <View style={styles.sectionStack}>
-        {sectionOrder.map((sectionKey) => {
-          const total = workspaceSnapshot.sectionActiveTotals[sectionKey] ?? 0;
-          const items = groupedBySection[sectionKey] ?? [];
-
-          return (
-            <WorkspaceSectionCard
-              key={sectionKey}
-              sectionKey={sectionKey}
-              workspace={workspace}
-              activeSection={activeSection}
-              total={total}
-              onToggleSection={onToggleSection}
-            >
-              <SectionContent
-                sectionKey={sectionKey}
-                items={items}
-                primaryMatchId={primaryMatchId}
-                affiliateUrls={affiliateUrls}
-                cityName={cityName}
-                originIata={originIata}
-                tripStartDate={tripStartDate}
-                tripEndDate={tripEndDate}
-                noteText={noteText}
-                noteSaving={noteSaving}
-                proofBusyId={proofBusyId}
-                stayBestAreas={stayBestAreas}
-                stayBudgetAreas={stayBudgetAreas}
-                transportStops={transportStops}
-                onNoteTextChange={onNoteTextChange}
-                onAddNote={onAddNote}
-                onOpenTicketsForPrimaryMatch={onOpenTicketsForPrimaryMatch}
-                onOpenSavedItem={onOpenSavedItem}
-                onOpenNoteActions={onOpenNoteActions}
-                onConfirmMarkBooked={onConfirmMarkBooked}
-                onAddProofForBookedItem={onAddProofForBookedItem}
-                onViewWallet={onViewWallet}
-                onConfirmMoveToPending={onConfirmMoveToPending}
-                onConfirmArchive={onConfirmArchive}
-                onOpenPartner={onOpenPartner}
-                getLivePriceLine={getLivePriceLine}
-                getTicketProviderFromItem={getTicketProviderFromItem}
-              />
-            </WorkspaceSectionCard>
-          );
-        })}
-      </View>
-    </GlassCard>
-  );
+  const partner = getPartnerOrNull(canonical);
+  return partner?.display.name || clean(provider) || "Provider";
 }
 
-const styles = StyleSheet.create({
-  flexOne: { flex: 1 },
-
-  card: {
-    padding: theme.spacing.lg,
-  },
-
-  sectionTitleRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  sectionTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    marginBottom: 8,
-  },
-
-  sectionSub: {
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  summaryStrip: {
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.18)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-
-  summaryStripTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  summaryStripText: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  providerBadgeWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  providerBadgeWrapLabeled: {
-    maxWidth: 180,
-  },
-
-  providerBadgeCircle: {
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  providerBadgeCircleText: {
-    fontWeight: "900",
-    letterSpacing: 0.4,
-  },
-
-  providerBadgeLabel: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  workspaceTabsRow: {
-    paddingRight: 8,
-    gap: 10,
-  },
-
-  workspaceTab: {
-    minWidth: 114,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-
-  workspaceTabActive: {
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,0,0,0.24)",
-  },
-
-  workspaceTabTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  workspaceTabTitleActive: {
-    color: theme.colors.text,
-  },
-
-  workspaceTabSub: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 11,
-  },
-
-  workspaceTabSubActive: {
-    color: theme.colors.textTertiary,
-  },
-
-  sectionStack: {
-    gap: 10,
-  },
-
-  workspaceSection: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 16,
-    padding: 12,
-  },
-
-  workspaceSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  workspaceHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  workspaceCountPill: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-
-  workspaceCountText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  workspaceSectionTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 15,
-  },
-
-  workspaceSectionSub: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  sectionContentWrap: {
-    marginTop: 10,
-  },
-
-  sectionCta: {
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.22)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-  },
-
-  sectionCtaTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 13,
-  },
-
-  sectionCtaBody: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  sectionActionRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 10,
-  },
-
-  smallActionBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.16)",
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-
-  smallActionBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.35)",
-  },
-
-  smallActionBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  guidanceMiniBox: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(0,0,0,0.14)",
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-    gap: 6,
-  },
-
-  guidanceMiniTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  guidanceMiniLine: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  listGap: {
-    gap: 10,
-  },
-
-  itemRow: {
-    flexDirection: "row",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-
-  itemToneNeutral: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  itemTonePending: {
-    borderColor: "rgba(255,200,80,0.24)",
-    backgroundColor: "rgba(255,200,80,0.07)",
-  },
-
-  itemToneSaved: {
-    borderColor: "rgba(0,255,136,0.18)",
-    backgroundColor: "rgba(0,255,136,0.05)",
-  },
-
-  itemToneBooked: {
-    borderColor: "rgba(120,170,255,0.20)",
-    backgroundColor: "rgba(120,170,255,0.06)",
-  },
-
-  itemToneWarn: {
-    borderColor: "rgba(255,200,80,0.28)",
-    backgroundColor: "rgba(255,200,80,0.08)",
-  },
-
-  itemMain: {
-    flex: 1,
-  },
-
-  itemTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  itemTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    flexShrink: 1,
-    paddingRight: 6,
-  },
-
-  itemMetaRow: {
-    marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  itemMeta: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    flex: 1,
-  },
-
-  itemHintLine: {
-    marginTop: 5,
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  livePriceLine: {
-    marginTop: 6,
-    color: theme.colors.textTertiary,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  paidLine: {
-    marginTop: 6,
-    color: "rgba(242,244,246,0.92)",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  proofLine: {
-    marginTop: 6,
-    color: "rgba(160,195,255,1)",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  proofLineMissing: {
-    color: "rgba(255,200,80,1)",
-  },
-
-  itemActions: {
-    gap: 8,
-    alignItems: "flex-end",
-  },
-
-  smallBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
-
-  smallBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.35)",
-  },
-
-  smallBtnDisabled: {
-    opacity: 0.65,
-  },
-
-  smallBtnDanger: {
-    borderColor: "rgba(255,80,80,0.35)",
-  },
-
-  smallBtnText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  badge: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-
-  badgeText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 11,
-  },
-
-  badgePending: {
-    borderColor: "rgba(255,200,80,0.40)",
-    backgroundColor: "rgba(255,200,80,0.10)",
-  },
-
-  badgeSaved: {
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
-
-  badgeBooked: {
-    borderColor: "rgba(120,170,255,0.45)",
-    backgroundColor: "rgba(120,170,255,0.10)",
-  },
-
-  badgeArchived: {
-    borderColor: "rgba(255,255,255,0.18)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-
-  noteBox: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    padding: 12,
-  },
-
-  noteBoxTitle: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 13,
-  },
-
-  noteBoxSub: {
-    marginTop: 6,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  noteInput: {
-    minHeight: 80,
-    color: theme.colors.text,
-    textAlignVertical: "top",
-    fontWeight: "800",
-    marginTop: 10,
-    ...(Platform.OS === "ios" ? { paddingTop: 10 } : null),
-  },
-
-  noteSaveBtn: {
-    marginTop: 10,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(0,255,136,0.55)",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.18)",
-  },
-
-  noteSaveBtnDisabled: {
-    opacity: 0.7,
-  },
-
-  noteSaveText: {
-    color: theme.colors.text,
-    fontWeight: "900",
-  },
-
-  noteListWrap: {
-    marginTop: 10,
-  },
-
-  noteEmptyWrap: {
-    marginTop: 10,
-  },
-
-  chev: {
-    color: theme.colors.textSecondary,
-    fontSize: 22,
-    marginTop: -2,
-  },
-});
+export function providerShort(provider?: string | null): string {
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) return "P";
+
+  const partner = getPartnerOrNull(canonical);
+  return partner?.display.badgeText || "P";
+}
+
+export function providerBadgeStyle(provider?: string | null): ProviderBadgeStyle {
+  const canonical = canonicalizePartnerId(provider);
+  if (!canonical) return DEFAULT_BADGE_STYLE;
+
+  if (canonical === "footballticketsnet") {
+    return {
+      borderColor: "rgba(120,170,255,0.35)",
+      backgroundColor: "rgba(120,170,255,0.12)",
+      textColor: "rgba(205,225,255,1)",
+    };
+  }
+
+  if (canonical === "sportsevents365") {
+    return {
+      borderColor: "rgba(87,162,56,0.35)",
+      backgroundColor: "rgba(87,162,56,0.12)",
+      textColor: "rgba(208,240,192,1)",
+    };
+  }
+
+  if (canonical === "gigsberg") {
+    return {
+      borderColor: "rgba(255,200,80,0.35)",
+      backgroundColor: "rgba(255,200,80,0.12)",
+      textColor: "rgba(255,226,160,1)",
+    };
+  }
+
+  if (canonical === "aviasales") {
+    return {
+      borderColor: "rgba(120,170,255,0.30)",
+      backgroundColor: "rgba(120,170,255,0.10)",
+      textColor: "rgba(210,225,255,1)",
+    };
+  }
+
+  if (canonical === "expedia") {
+    return {
+      borderColor: "rgba(87,162,56,0.30)",
+      backgroundColor: "rgba(87,162,56,0.10)",
+      textColor: "rgba(210,240,205,1)",
+    };
+  }
+
+  if (canonical === "kiwitaxi") {
+    return {
+      borderColor: "rgba(255,160,120,0.30)",
+      backgroundColor: "rgba(255,160,120,0.10)",
+      textColor: "rgba(255,220,205,1)",
+    };
+  }
+
+  if (canonical === "omio") {
+    return {
+      borderColor: "rgba(200,120,255,0.30)",
+      backgroundColor: "rgba(200,120,255,0.10)",
+      textColor: "rgba(235,210,255,1)",
+    };
+  }
+
+  if (canonical === "getyourguide") {
+    return {
+      borderColor: "rgba(255,90,120,0.30)",
+      backgroundColor: "rgba(255,90,120,0.10)",
+      textColor: "rgba(255,215,225,1)",
+    };
+  }
+
+  if (canonical === "airhelp") {
+    return {
+      borderColor: "rgba(255,120,170,0.30)",
+      backgroundColor: "rgba(255,120,170,0.10)",
+      textColor: "rgba(255,220,235,1)",
+    };
+  }
+
+  return DEFAULT_BADGE_STYLE;
+}
+
+export function statusLabel(status: SavedItem["status"]): string {
+  if (status === "pending") return "Pending";
+  if (status === "saved") return "Saved";
+  if (status === "booked") return "Booked";
+  return "Archived";
+}
+
+export function ticketConfidenceLabel(score?: number | null): string {
+  const value = typeof score === "number" && Number.isFinite(score) ? score : 0;
+
+  if (value >= 95) return "Elite match";
+  if (value >= 88) return "Best match";
+  if (value >= 78) return "Strong match";
+  if (value >= 68) return "Good match";
+  if (value >= 60) return "Usable match";
+  return "Fallback";
+}
+
+export function shortDomain(url?: string | null): string {
+  const value = clean(url);
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    return parsed.hostname.replace(/^www\./i, "");
+  } catch {
+    return "";
+  }
+}
+
+export function savedItemMetaLine(item: SavedItem): string {
+  const bits: string[] = [];
+
+  const typeLabel =
+    item.type === "tickets"
+      ? "Match tickets"
+      : item.type === "hotel"
+        ? "Hotel"
+        : item.type === "flight"
+          ? "Flight"
+          : item.type === "train"
+            ? "Train"
+            : item.type === "transfer"
+              ? "Transfer"
+              : item.type === "things"
+                ? "Experience"
+                : item.type === "insurance"
+                  ? "Insurance"
+                  : item.type === "claim"
+                    ? "Claim"
+                    : "Note";
+
+  bits.push(typeLabel);
+
+  const provider = clean(item.metadata?.ticketProvider) || clean(item.partnerId);
+  if (provider) {
+    bits.push(providerLabel(provider));
+  }
+
+  const domain = shortDomain(item.partnerUrl);
+  if (domain) {
+    bits.push(domain);
+  }
+
+  return bits.join(" • ");
+}
+
+export function attachmentCount(item: SavedItem | null): number {
+  return Array.isArray(item?.attachments) ? item!.attachments.length : 0;
+}
+
+export function hasAttachments(item: SavedItem | null): boolean {
+  return attachmentCount(item) > 0;
+}
+
+export function proofStateText(item: SavedItem): string {
+  const count = attachmentCount(item);
+  if (count <= 0) return "No proof attached yet";
+  return `${count} proof file${count === 1 ? "" : "s"} attached`;
+}
