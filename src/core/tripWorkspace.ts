@@ -1,4 +1,8 @@
-import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
+import type {
+  SavedItem,
+  SavedItemStatus,
+  SavedItemType,
+} from "@/src/core/savedItemTypes";
 
 export type WorkspaceSectionKey =
   | "tickets"
@@ -27,27 +31,42 @@ export type TripWorkspace = {
   updatedAt: number;
 };
 
+export type WorkspaceSnapshot = {
+  total: number;
+  activeTotal: number;
+  saved: number;
+  pending: number;
+  booked: number;
+  archived: number;
+  sectionTotals: Record<WorkspaceSectionKey, number>;
+  sectionActiveTotals: Record<WorkspaceSectionKey, number>;
+  missing: Array<{
+    section: WorkspaceSectionKey;
+    reason: string;
+  }>;
+};
+
 export const WORKSPACE_SECTIONS: Record<WorkspaceSectionKey, WorkspaceSection> = {
   tickets: {
     key: "tickets",
     title: "Tickets",
     subtitle: "Seats, official sellers, confirmations",
     types: ["tickets"],
-    requiredForCompletion: false,
-  },
-  stay: {
-    key: "stay",
-    title: "Stay",
-    subtitle: "Hotels, apartments",
-    types: ["hotel"],
-    requiredForCompletion: false,
+    requiredForCompletion: true,
   },
   travel: {
     key: "travel",
     title: "Travel",
     subtitle: "Flights, trains",
     types: ["flight", "train"],
-    requiredForCompletion: false,
+    requiredForCompletion: true,
+  },
+  stay: {
+    key: "stay",
+    title: "Stay",
+    subtitle: "Hotels, apartments",
+    types: ["hotel"],
+    requiredForCompletion: true,
   },
   transfers: {
     key: "transfers",
@@ -88,14 +107,22 @@ export const WORKSPACE_SECTIONS: Record<WorkspaceSectionKey, WorkspaceSection> =
 
 export const DEFAULT_SECTION_ORDER: WorkspaceSectionKey[] = [
   "tickets",
-  "stay",
   "travel",
+  "stay",
   "transfers",
   "things",
   "insurance",
   "claims",
   "notes",
 ];
+
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function isFinitePositiveNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
 
 export function isWorkspaceSectionKey(value: unknown): value is WorkspaceSectionKey {
   return typeof value === "string" && value in WORKSPACE_SECTIONS;
@@ -137,39 +164,38 @@ export function normalizeCollapsed(
 }
 
 export function normalizeActiveSection(value: unknown): WorkspaceSectionKey {
-  if (isWorkspaceSectionKey(value)) return value;
-  return DEFAULT_SECTION_ORDER[0];
+  return isWorkspaceSectionKey(value) ? value : DEFAULT_SECTION_ORDER[0];
 }
 
 export function makeDefaultTripWorkspace(tripId: string): TripWorkspace {
   const now = Date.now();
 
   return {
-    tripId: String(tripId),
+    tripId: clean(tripId),
     sectionOrder: [...DEFAULT_SECTION_ORDER],
     collapsed: {},
-    activeSection: "tickets",
+    activeSection: DEFAULT_SECTION_ORDER[0],
     createdAt: now,
     updatedAt: now,
   };
 }
 
 export function cloneWorkspace(workspace: TripWorkspace): TripWorkspace {
+  const createdAt = isFinitePositiveNumber(workspace.createdAt)
+    ? workspace.createdAt
+    : Date.now();
+
+  const updatedAt = isFinitePositiveNumber(workspace.updatedAt)
+    ? workspace.updatedAt
+    : createdAt;
+
   return {
-    tripId: String(workspace.tripId),
+    tripId: clean(workspace.tripId),
     sectionOrder: normalizeOrder(workspace.sectionOrder),
     collapsed: normalizeCollapsed(workspace.collapsed),
     activeSection: normalizeActiveSection(workspace.activeSection),
-    createdAt:
-      Number.isFinite(workspace.createdAt) && workspace.createdAt > 0
-        ? workspace.createdAt
-        : Date.now(),
-    updatedAt:
-      Number.isFinite(workspace.updatedAt) && workspace.updatedAt > 0
-        ? workspace.updatedAt
-        : Number.isFinite(workspace.createdAt) && workspace.createdAt > 0
-          ? workspace.createdAt
-          : Date.now(),
+    createdAt,
+    updatedAt,
   };
 }
 
@@ -197,7 +223,9 @@ export function sectionForSavedItemType(type: SavedItemType): WorkspaceSectionKe
   }
 }
 
-export function groupSavedItemsBySection(items: SavedItem[]) {
+export function groupSavedItemsBySection(
+  items: SavedItem[]
+): Record<WorkspaceSectionKey, SavedItem[]> {
   const grouped: Record<WorkspaceSectionKey, SavedItem[]> = {
     tickets: [],
     stay: [],
@@ -209,90 +237,87 @@ export function groupSavedItemsBySection(items: SavedItem[]) {
     notes: [],
   };
 
-  for (const it of items) {
-    if (it.status === "archived") continue;
-    const key = sectionForSavedItemType(it.type);
-    grouped[key].push(it);
+  for (const item of Array.isArray(items) ? items : []) {
+    if (item.status === "archived") continue;
+    grouped[sectionForSavedItemType(item.type)].push(item);
   }
 
   return grouped;
 }
 
-export function countByStatus(items: SavedItem[]) {
-  const c: Record<SavedItemStatus, number> = {
+export function countByStatus(items: SavedItem[]): Record<SavedItemStatus, number> {
+  const counts: Record<SavedItemStatus, number> = {
     saved: 0,
     pending: 0,
     booked: 0,
     archived: 0,
   };
 
-  for (const it of items) {
-    c[it.status] = (c[it.status] ?? 0) + 1;
+  for (const item of Array.isArray(items) ? items : []) {
+    counts[item.status] = (counts[item.status] ?? 0) + 1;
   }
 
-  return c;
+  return counts;
 }
 
-export type WorkspaceSnapshot = {
-  total: number;
-  activeTotal: number;
-  saved: number;
-  pending: number;
-  booked: number;
-  archived: number;
-  sectionTotals: Record<WorkspaceSectionKey, number>;
-  sectionActiveTotals: Record<WorkspaceSectionKey, number>;
-  missing: {
-    section: WorkspaceSectionKey;
-    reason: string;
-  }[];
-};
+function makeEmptySectionCounts(): Record<WorkspaceSectionKey, number> {
+  return {
+    tickets: 0,
+    stay: 0,
+    travel: 0,
+    transfers: 0,
+    things: 0,
+    insurance: 0,
+    claims: 0,
+    notes: 0,
+  };
+}
 
 export function computeWorkspaceSnapshot(items: SavedItem[]): WorkspaceSnapshot {
   const allItems = Array.isArray(items) ? items : [];
-  const activeItems = allItems.filter((it) => it.status !== "archived");
+  const activeItems = allItems.filter((item) => item.status !== "archived");
 
-  const bySection = groupSavedItemsBySection(activeItems);
   const statusCounts = countByStatus(allItems);
+  const sectionTotals = makeEmptySectionCounts();
+  const sectionActiveTotals = makeEmptySectionCounts();
 
-  const sectionActiveTotals: Record<WorkspaceSectionKey, number> = {
-    tickets: bySection.tickets.length,
-    stay: bySection.stay.length,
-    travel: bySection.travel.length,
-    transfers: bySection.transfers.length,
-    things: bySection.things.length,
-    insurance: bySection.insurance.length,
-    claims: bySection.claims.length,
-    notes: bySection.notes.length,
-  };
+  for (const item of allItems) {
+    const section = sectionForSavedItemType(item.type);
+    sectionTotals[section] += 1;
 
-  const sectionTotals: Record<WorkspaceSectionKey, number> = {
-    tickets: allItems.filter((it) => sectionForSavedItemType(it.type) === "tickets").length,
-    stay: allItems.filter((it) => sectionForSavedItemType(it.type) === "stay").length,
-    travel: allItems.filter((it) => sectionForSavedItemType(it.type) === "travel").length,
-    transfers: allItems.filter((it) => sectionForSavedItemType(it.type) === "transfers").length,
-    things: allItems.filter((it) => sectionForSavedItemType(it.type) === "things").length,
-    insurance: allItems.filter((it) => sectionForSavedItemType(it.type) === "insurance").length,
-    claims: allItems.filter((it) => sectionForSavedItemType(it.type) === "claims").length,
-    notes: allItems.filter((it) => sectionForSavedItemType(it.type) === "notes").length,
-  };
+    if (item.status !== "archived") {
+      sectionActiveTotals[section] += 1;
+    }
+  }
 
   const missing: WorkspaceSnapshot["missing"] = [];
 
   if (sectionActiveTotals.tickets === 0) {
-    missing.push({ section: "tickets", reason: "No ticket option saved yet." });
-  }
-
-  if (sectionActiveTotals.stay === 0) {
-    missing.push({ section: "stay", reason: "No accommodation saved yet." });
+    missing.push({
+      section: "tickets",
+      reason: "No ticket option saved yet.",
+    });
   }
 
   if (sectionActiveTotals.travel === 0) {
-    missing.push({ section: "travel", reason: "No travel saved yet." });
+    missing.push({
+      section: "travel",
+      reason: "No travel option saved yet.",
+    });
+  }
+
+  if (sectionActiveTotals.stay === 0) {
+    missing.push({
+      section: "stay",
+      reason: "No accommodation saved yet.",
+    });
   }
 
   if (sectionActiveTotals.transfers === 0) {
-    missing.push({ section: "transfers", reason: "No transfer option saved yet." });
+    missing.push({
+      section: "transfers",
+      reason: "No transfer option saved yet.",
+    });
   }
 
   return {
