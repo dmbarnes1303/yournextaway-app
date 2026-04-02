@@ -14,179 +14,25 @@ import EmptyState from "@/src/components/EmptyState";
 
 import { theme } from "@/src/constants/theme";
 
-import type { SavedItem, SavedItemType, WalletAttachment } from "@/src/core/savedItemTypes";
-import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
-import { getPartner } from "@/src/core/partners";
+import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { WorkspaceSectionKey, TripWorkspace } from "@/src/core/tripWorkspace";
 import { WORKSPACE_SECTIONS } from "@/src/core/tripWorkspace";
 import {
+  clean,
   providerBadgeStyle,
   providerLabel,
   providerShort,
+  statusLabel,
+  savedItemMetaLine,
+  proofStateText,
 } from "@/src/features/tripDetail/helpers";
 
-function clean(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function statusLabel(status: SavedItem["status"]) {
-  if (status === "pending") return "Pending";
-  if (status === "saved") return "Saved";
-  if (status === "booked") return "Booked";
-  return "Archived";
-}
-
-function safePartnerName(item: SavedItem) {
-  if (!item.partnerId) return null;
-
-  try {
-    return getPartner(item.partnerId as any).name;
-  } catch {
-    const provider = clean(item.metadata?.ticketProvider).toLowerCase();
-
-    if (provider === "footballticketsnet") return "FootballTicketNet";
-    if (provider === "sportsevents365") return "SportsEvents365";
-    if (provider === "gigsberg") return "Gigsberg";
-    if (provider === "omio") return "Omio";
-    if (provider === "aviasales") return "Aviasales";
-    if (provider === "expedia") return "Expedia";
-    if (provider === "kiwitaxi") return "KiwiTaxi";
-    if (provider === "getyourguide") return "GetYourGuide";
-
-    return null;
-  }
-}
-
-function safeTypeLabel(type: SavedItemType) {
-  try {
-    return getSavedItemTypeLabel(type);
-  } catch {
-    return "Notes";
-  }
-}
-
-function friendlyTypeLabel(type: SavedItemType) {
-  const raw = safeTypeLabel(type).toLowerCase();
-
-  if (raw.includes("ticket")) return "Tickets";
-  if (raw.includes("flight")) return "Flights";
-  if (raw.includes("hotel")) return "Stay";
-  if (raw.includes("train")) return "Rail";
-  if (raw.includes("transfer")) return "Transfers";
-  if (raw.includes("insurance")) return "Insurance";
-  if (raw.includes("claim")) return "Claims";
-  if (raw.includes("thing")) return "Activities";
-  if (raw.includes("note")) return "Notes";
-  if (raw.includes("other")) return "Notes";
-
-  return safeTypeLabel(type);
-}
-
-function buildMetaLine(item: SavedItem) {
-  const bits: string[] = [friendlyTypeLabel(item.type)];
-
-  const partnerName = safePartnerName(item);
-  if (partnerName) bits.push(partnerName);
-
-  return bits.join(" • ");
-}
-
-function getAttachmentCount(item: SavedItem | null): number {
-  const attachments = Array.isArray(item?.attachments)
-    ? (item.attachments as WalletAttachment[])
-    : [];
-  return attachments.length;
-}
-
-function hasProof(item: SavedItem | null): boolean {
-  return getAttachmentCount(item) > 0;
-}
-
-function proofStateText(item: SavedItem): string {
-  const count = getAttachmentCount(item);
-
-  if (count <= 0) return "No booking proof added yet";
-  if (count === 1) return "1 proof file added";
-  return `${count} proof files added`;
-}
-
-function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
-  const title = WORKSPACE_SECTIONS[sectionKey].title;
-
-  if (total <= 0) return `No ${title.toLowerCase()} yet`;
-  if (total === 1) return "1 item";
-  return `${total} items`;
-}
-
-function sectionTitle(sectionKey: WorkspaceSectionKey) {
-  return WORKSPACE_SECTIONS[sectionKey].title;
-}
-
-function sectionLead(sectionKey: WorkspaceSectionKey) {
-  if (sectionKey === "tickets") return "Start here. Tickets anchor the whole trip.";
-  if (sectionKey === "travel") return "Flights and rail should be handled early, not guessed later.";
-  if (sectionKey === "stay") return "A bad hotel area ruins matchday logistics.";
-  if (sectionKey === "transfers") return "Sort the airport-city-stadium chain before it becomes friction.";
-  if (sectionKey === "things") return "Only add extras that improve the trip.";
-  if (sectionKey === "insurance") return "Store cover and policy evidence in one place.";
-  if (sectionKey === "claims") return "Keep refund, delay and compensation evidence together.";
-  return "Keep useful planning notes here.";
-}
-
-function itemPriorityTone(item: SavedItem) {
-  if (item.status === "booked" && !hasProof(item)) return styles.itemToneWarn;
-  if (item.status === "pending") return styles.itemTonePending;
-  if (item.status === "booked") return styles.itemToneBooked;
-  if (item.status === "saved") return styles.itemToneSaved;
-  return styles.itemToneNeutral;
-}
-
-function statusTone(status: SavedItem["status"]) {
-  if (status === "pending") return styles.badgePending;
-  if (status === "saved") return styles.badgeSaved;
-  if (status === "booked") return styles.badgeBooked;
-  return styles.badgeArchived;
-}
-
-function cleanUserFacingPriceLine(value: string | null) {
-  const raw = clean(value);
-  if (!raw) return null;
-
-  return raw
-    .replace(/\bLive price on\b/gi, "Live price •")
-    .replace(/\bFrom\b/gi, "From")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function itemActionHint(item: SavedItem, livePrice: string | null) {
-  if (item.type === "note" || item.type === "other") return "Tap to open note";
-
-  if (item.status === "booked" && !hasProof(item)) {
-    return "Booked, but proof still needs adding";
-  }
-
-  if (item.status === "booked") {
-    return "Booked and stored";
-  }
-
-  if (item.status === "pending") {
-    return "Awaiting confirmation";
-  }
-
-  if (item.status === "saved") {
-    return livePrice ? "Ready to review" : "Saved to compare later";
-  }
-
-  return "Archived item";
-}
-
 type PartnerOpenArgs = {
-  partnerId: any;
+  partnerId: unknown;
   url: string;
   title: string;
   savedItemType?: SavedItemType;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 export type TripWorkspaceCardProps = {
@@ -243,6 +89,138 @@ type ProviderBadgeProps = {
   showLabel?: boolean;
 };
 
+type WorkspaceItemRowProps = {
+  item: SavedItem;
+  proofBusyId: string | null;
+  onOpenSavedItem: (item: SavedItem) => void;
+  onOpenNoteActions: (item: SavedItem) => void;
+  onConfirmMarkBooked: (item: SavedItem) => void;
+  onAddProofForBookedItem: (item: SavedItem) => void;
+  onViewWallet: () => void;
+  onConfirmMoveToPending: (item: SavedItem) => void;
+  onConfirmArchive: (item: SavedItem) => void;
+  getLivePriceLine: (item: SavedItem) => string | null;
+  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
+};
+
+type SectionContentProps = {
+  sectionKey: WorkspaceSectionKey;
+  items: SavedItem[];
+  primaryMatchId: string | null;
+  affiliateUrls: TripWorkspaceCardProps["affiliateUrls"];
+  cityName: string;
+  originIata: string;
+  tripStartDate?: string | null;
+  tripEndDate?: string | null;
+  noteText: string;
+  noteSaving: boolean;
+  proofBusyId: string | null;
+  stayBestAreas: { area: string; notes?: string }[];
+  stayBudgetAreas: { area: string; notes?: string }[];
+  transportStops: string[];
+  onNoteTextChange: (text: string) => void;
+  onAddNote: () => void;
+  onOpenTicketsForPrimaryMatch: () => void;
+  onOpenSavedItem: (item: SavedItem) => void;
+  onOpenNoteActions: (item: SavedItem) => void;
+  onConfirmMarkBooked: (item: SavedItem) => void;
+  onAddProofForBookedItem: (item: SavedItem) => void;
+  onViewWallet: () => void;
+  onConfirmMoveToPending: (item: SavedItem) => void;
+  onConfirmArchive: (item: SavedItem) => void;
+  onOpenPartner: (args: PartnerOpenArgs) => void;
+  getLivePriceLine: (item: SavedItem) => string | null;
+  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
+};
+
+function friendlyTypeLabel(item: SavedItem): string {
+  if (item.type === "tickets") return "Tickets";
+  if (item.type === "flight") return "Flights";
+  if (item.type === "hotel") return "Stay";
+  if (item.type === "train") return "Rail";
+  if (item.type === "transfer") return "Transfers";
+  if (item.type === "insurance") return "Insurance";
+  if (item.type === "claim") return "Claims";
+  if (item.type === "things") return "Activities";
+  if (item.type === "note" || item.type === "other") return "Notes";
+  return "Item";
+}
+
+function hasProof(item: SavedItem | null): boolean {
+  return Array.isArray(item?.attachments) && item.attachments.length > 0;
+}
+
+function sectionStateLabel(sectionKey: WorkspaceSectionKey, total: number) {
+  const title = WORKSPACE_SECTIONS[sectionKey].title;
+  if (total <= 0) return `No ${title.toLowerCase()} yet`;
+  if (total === 1) return "1 item";
+  return `${total} items`;
+}
+
+function sectionTitle(sectionKey: WorkspaceSectionKey) {
+  return WORKSPACE_SECTIONS[sectionKey].title;
+}
+
+function sectionLead(sectionKey: WorkspaceSectionKey) {
+  if (sectionKey === "tickets") return "Start here. Tickets anchor the whole trip.";
+  if (sectionKey === "travel") return "Flights and rail should be handled early, not guessed later.";
+  if (sectionKey === "stay") return "A bad hotel area ruins matchday logistics.";
+  if (sectionKey === "transfers") {
+    return "Sort the airport-city-stadium chain before it becomes friction.";
+  }
+  if (sectionKey === "things") return "Only add extras that improve the trip.";
+  if (sectionKey === "insurance") return "Store cover and policy evidence in one place.";
+  if (sectionKey === "claims") return "Keep refund, delay and compensation evidence together.";
+  return "Keep useful planning notes here.";
+}
+
+function itemPriorityTone(item: SavedItem) {
+  if (item.status === "booked" && !hasProof(item)) return styles.itemToneWarn;
+  if (item.status === "pending") return styles.itemTonePending;
+  if (item.status === "booked") return styles.itemToneBooked;
+  if (item.status === "saved") return styles.itemToneSaved;
+  return styles.itemToneNeutral;
+}
+
+function statusTone(status: SavedItem["status"]) {
+  if (status === "pending") return styles.badgePending;
+  if (status === "saved") return styles.badgeSaved;
+  if (status === "booked") return styles.badgeBooked;
+  return styles.badgeArchived;
+}
+
+function cleanUserFacingPriceLine(value: string | null) {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  return raw
+    .replace(/\bLive price on\b/gi, "Live price •")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function itemActionHint(item: SavedItem, livePrice: string | null) {
+  if (item.type === "note" || item.type === "other") return "Tap to open note";
+
+  if (item.status === "booked" && !hasProof(item)) {
+    return "Booked, but proof still needs adding";
+  }
+
+  if (item.status === "booked") {
+    return "Booked and stored";
+  }
+
+  if (item.status === "pending") {
+    return "Awaiting confirmation";
+  }
+
+  if (item.status === "saved") {
+    return livePrice ? "Ready to review" : "Saved to compare later";
+  }
+
+  return "Archived item";
+}
+
 const ProviderBadge = memo(function ProviderBadge({
   provider,
   size = "sm",
@@ -273,33 +251,19 @@ const ProviderBadge = memo(function ProviderBadge({
           {short}
         </Text>
       </View>
+
       {showLabel ? <Text style={styles.providerBadgeLabel}>{label}</Text> : null}
     </View>
   );
 });
 
 const StatusBadge = memo(function StatusBadge({ status }: { status: SavedItem["status"] }) {
-  const label = statusLabel(status);
   return (
     <View style={[styles.badge, statusTone(status)]}>
-      <Text style={styles.badgeText}>{label}</Text>
+      <Text style={styles.badgeText}>{statusLabel(status)}</Text>
     </View>
   );
 });
-
-type WorkspaceItemRowProps = {
-  item: SavedItem;
-  proofBusyId: string | null;
-  onOpenSavedItem: (item: SavedItem) => void;
-  onOpenNoteActions: (item: SavedItem) => void;
-  onConfirmMarkBooked: (item: SavedItem) => void;
-  onAddProofForBookedItem: (item: SavedItem) => void;
-  onViewWallet: () => void;
-  onConfirmMoveToPending: (item: SavedItem) => void;
-  onConfirmArchive: (item: SavedItem) => void;
-  getLivePriceLine: (item: SavedItem) => string | null;
-  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
-};
 
 const WorkspaceItemRow = memo(function WorkspaceItemRow({
   item,
@@ -338,7 +302,7 @@ const WorkspaceItemRow = memo(function WorkspaceItemRow({
         <View style={styles.itemMetaRow}>
           {provider ? <ProviderBadge provider={provider} size="sm" /> : null}
           <Text style={styles.itemMeta} numberOfLines={1}>
-            {isNote ? "Notes" : buildMetaLine(item)}
+            {isNote ? "Notes" : savedItemMetaLine(item) || friendlyTypeLabel(item)}
           </Text>
         </View>
 
@@ -404,36 +368,6 @@ const WorkspaceItemRow = memo(function WorkspaceItemRow({
     </View>
   );
 });
-
-type SectionContentProps = {
-  sectionKey: WorkspaceSectionKey;
-  items: SavedItem[];
-  primaryMatchId: string | null;
-  affiliateUrls: TripWorkspaceCardProps["affiliateUrls"];
-  cityName: string;
-  originIata: string;
-  tripStartDate?: string | null;
-  tripEndDate?: string | null;
-  noteText: string;
-  noteSaving: boolean;
-  proofBusyId: string | null;
-  stayBestAreas: { area: string; notes?: string }[];
-  stayBudgetAreas: { area: string; notes?: string }[];
-  transportStops: string[];
-  onNoteTextChange: (text: string) => void;
-  onAddNote: () => void;
-  onOpenTicketsForPrimaryMatch: () => void;
-  onOpenSavedItem: (item: SavedItem) => void;
-  onOpenNoteActions: (item: SavedItem) => void;
-  onConfirmMarkBooked: (item: SavedItem) => void;
-  onAddProofForBookedItem: (item: SavedItem) => void;
-  onViewWallet: () => void;
-  onConfirmMoveToPending: (item: SavedItem) => void;
-  onConfirmArchive: (item: SavedItem) => void;
-  onOpenPartner: (args: PartnerOpenArgs) => void;
-  getLivePriceLine: (item: SavedItem) => string | null;
-  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
-};
 
 function renderItemList(
   items: SavedItem[],
