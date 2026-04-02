@@ -991,4 +991,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-              }
+        }
