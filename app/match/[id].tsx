@@ -34,16 +34,26 @@ import { getStadiumByTeamFromRegistry } from "@/src/data/stadiumRegistry";
 import { normalizeTeamKey } from "@/src/data/teams";
 import { normalizeCityKey } from "@/src/utils/city";
 
-import { mapTicketProviderToPartnerId } from "@/src/features/tripDetail/helpers";
+import {
+  clean,
+  mapTicketProviderToPartnerId,
+  normalizeTicketUrlQuality,
+  providerBadgeStyle,
+  providerLabel,
+  providerShort,
+  splitTicketOptions,
+  isStrongTicketOption,
+  ticketUrlQualityLabel,
+  optionReasonLabel,
+  ticketConfidenceLabel,
+  type SourceSection,
+  type SourceSurface,
+} from "@/src/features/tripDetail/helpers";
+
 import type { PartnerId } from "@/src/constants/partners";
 
 type RouteParams = Record<string, string | string[] | undefined>;
-type TicketUrlQuality = "event" | "listing" | "search" | "unknown";
 type MatchStrengthTone = "strong" | "medium" | "weak";
-
-function clean(value: unknown): string {
-  return String(value ?? "").trim();
-}
 
 function getParam(params: RouteParams, key: string): string {
   const value = params[key];
@@ -132,145 +142,6 @@ function buildCanonicalTripBuildParams(args: {
   };
 }
 
-function providerLabel(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet") return "FootballTicketNet";
-  if (raw === "sportsevents365") return "SportsEvents365";
-  if (raw === "stubhub") return "StubHub";
-  if (raw === "gigsberg") return "Gigsberg";
-
-  return clean(provider) || "Provider";
-}
-
-function providerShort(provider?: string | null): string {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet") return "FTN";
-  if (raw === "sportsevents365") return "365";
-  if (raw === "stubhub") return "SH";
-  if (raw === "gigsberg") return "GIG";
-
-  return "P";
-}
-
-function providerBadgeStyle(provider?: string | null) {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet") {
-    return {
-      borderColor: "rgba(120,170,255,0.35)",
-      backgroundColor: "rgba(120,170,255,0.12)",
-      textColor: "rgba(205,225,255,1)",
-    };
-  }
-
-  if (raw === "sportsevents365") {
-    return {
-      borderColor: "rgba(87,162,56,0.35)",
-      backgroundColor: "rgba(87,162,56,0.12)",
-      textColor: "rgba(208,240,192,1)",
-    };
-  }
-
-  if (raw === "stubhub") {
-    return {
-      borderColor: "rgba(174,120,255,0.35)",
-      backgroundColor: "rgba(174,120,255,0.12)",
-      textColor: "rgba(228,210,255,1)",
-    };
-  }
-
-  if (raw === "gigsberg") {
-    return {
-      borderColor: "rgba(255,200,80,0.35)",
-      backgroundColor: "rgba(255,200,80,0.12)",
-      textColor: "rgba(255,226,160,1)",
-    };
-  }
-
-  return {
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    textColor: theme.colors.text,
-  };
-}
-
-function detectUrlQualityFromUrl(url?: string | null): TicketUrlQuality {
-  const raw = clean(url);
-  if (!raw) return "unknown";
-
-  try {
-    const parsed = new URL(raw);
-    const host = parsed.hostname.toLowerCase();
-    const path = parsed.pathname.toLowerCase();
-    const query = parsed.search.toLowerCase();
-
-    if (host.includes("sjv.io")) return "search";
-
-    const looksSearch =
-      path === "/search" ||
-      path.startsWith("/search/") ||
-      path.includes("/events/search") ||
-      path.includes("/event/search") ||
-      path.includes("/search-results") ||
-      query.includes("q=") ||
-      query.includes("query=") ||
-      query.includes("text=") ||
-      query.includes("search");
-
-    if (looksSearch) return "search";
-    if (path.includes("/listing") || path.includes("/listings")) return "listing";
-    if (path.includes("/event") || path.includes("/events")) return "event";
-    if (path.includes("/ticket") || path.includes("/tickets")) return "event";
-
-    return "unknown";
-  } catch {
-    return "unknown";
-  }
-}
-
-function getOptionUrlQuality(option: TicketResolutionOption): TicketUrlQuality {
-  const direct = (option as TicketResolutionOption & { urlQuality?: unknown }).urlQuality;
-  const normalized = clean(direct).toLowerCase();
-
-  if (
-    normalized === "event" ||
-    normalized === "listing" ||
-    normalized === "search" ||
-    normalized === "unknown"
-  ) {
-    return normalized;
-  }
-
-  return detectUrlQualityFromUrl(option.url);
-}
-
-function urlQualityLabel(value: TicketUrlQuality): string {
-  if (value === "event") return "Direct event page";
-  if (value === "listing") return "Listing page";
-  if (value === "search") return "Search fallback";
-  return "Unknown route";
-}
-
-function reasonLabel(reason?: string | null): string {
-  const raw = clean(reason);
-
-  if (raw === "exact_event") return "Exact fixture match";
-  if (raw === "partial_match") return "Related fixture route";
-  if (raw === "search_fallback") return "Fallback search route";
-
-  return "Ticket result";
-}
-
-function reasonTone(reason?: string | null): MatchStrengthTone {
-  const raw = clean(reason);
-
-  if (raw === "exact_event") return "strong";
-  if (raw === "partial_match") return "medium";
-  return "weak";
-}
-
 function getOptionRawScore(option: TicketResolutionOption): number | null {
   const raw = (option as TicketResolutionOption & { rawScore?: unknown }).rawScore;
   const n = Number(raw);
@@ -278,47 +149,13 @@ function getOptionRawScore(option: TicketResolutionOption): number | null {
 }
 
 function getTopLevelRawScore(result: TicketResolutionResult | null): number | null {
-  const raw = (result as TicketResolutionResult & { rawScore?: unknown } | null)?.rawScore;
+  const raw = (result as (TicketResolutionResult & { rawScore?: unknown }) | null)?.rawScore;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
 }
 
-function scoreBandLabel(score?: number | null): string {
-  const value = typeof score === "number" && Number.isFinite(score) ? score : 0;
-
-  if (value >= 95) return "Elite";
-  if (value >= 88) return "Best";
-  if (value >= 78) return "Strong";
-  if (value >= 68) return "Good";
-  if (value >= 60) return "Usable";
-  return "Weak";
-}
-
-function isStrongOption(option: TicketResolutionOption): boolean {
-  const urlQuality = getOptionUrlQuality(option);
-  const reason = clean(option.reason);
-
-  if (option.exact || reason === "exact_event") {
-    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
-  }
-
-  if (reason === "partial_match") {
-    return urlQuality === "event" || urlQuality === "listing";
-  }
-
-  return false;
-}
-
-function splitOptions(options: TicketResolutionOption[]) {
-  const strong: TicketResolutionOption[] = [];
-  const fallback: TicketResolutionOption[] = [];
-
-  for (const option of options) {
-    if (isStrongOption(option)) strong.push(option);
-    else fallback.push(option);
-  }
-
-  return { strong, fallback };
+function getOptionUrlQuality(option: TicketResolutionOption) {
+  return normalizeTicketUrlQuality(option.urlQuality, option.url);
 }
 
 function formatTicketPrice(price?: string | null, option?: TicketResolutionOption): string {
@@ -343,14 +180,29 @@ function formatTicketPrice(price?: string | null, option?: TicketResolutionOptio
   return p;
 }
 
-function summaryHeadline(result: TicketResolutionResult | null, strongCount: number, fallbackCount: number): string {
+function reasonTone(reason?: string | null): MatchStrengthTone {
+  const raw = clean(reason);
+  if (raw === "exact_event") return "strong";
+  if (raw === "partial_match") return "medium";
+  return "weak";
+}
+
+function summaryHeadline(
+  result: TicketResolutionResult | null,
+  strongCount: number,
+  fallbackCount: number
+): string {
   if (!result && strongCount === 0 && fallbackCount === 0) return "No results loaded";
   if (strongCount > 0) return "Strong ticket routes found";
   if (fallbackCount > 0) return "Only fallback ticket routes found";
   return "No ticket routes found";
 }
 
-function summaryBody(result: TicketResolutionResult | null, strongCount: number, fallbackCount: number): string {
+function summaryBody(
+  result: TicketResolutionResult | null,
+  strongCount: number,
+  fallbackCount: number
+): string {
   if (!result && strongCount === 0 && fallbackCount === 0) {
     return "Tap Compare tickets to check all available providers for this fixture.";
   }
@@ -366,21 +218,39 @@ function summaryBody(result: TicketResolutionResult | null, strongCount: number,
   return "No usable ticket routes were returned for this fixture right now.";
 }
 
-function resolverTone(result: TicketResolutionResult | null, strongCount: number, fallbackCount: number): MatchStrengthTone {
+function resolverTone(
+  result: TicketResolutionResult | null,
+  strongCount: number,
+  fallbackCount: number
+): MatchStrengthTone {
   if (result?.ok || strongCount > 0) return "strong";
   if (fallbackCount > 0) return "weak";
   return "weak";
 }
 
 function ticketCardTone(option: TicketResolutionOption): MatchStrengthTone {
-  if (isStrongOption(option)) {
+  if (isStrongTicketOption(option)) {
     return clean(option.reason) === "exact_event" ? "strong" : "medium";
   }
   return "weak";
 }
 
 function isOpenBlockedByWeakResult(option: TicketResolutionOption): boolean {
-  return !isStrongOption(option) && getOptionUrlQuality(option) === "search";
+  return !isStrongTicketOption(option) && getOptionUrlQuality(option) === "search";
+}
+
+function buildReasonBody(reason?: string | null): string {
+  const raw = clean(reason);
+
+  if (raw === "exact_event") {
+    return "This looks like a direct route for the exact fixture.";
+  }
+
+  if (raw === "partial_match") {
+    return "This looks related and may still be useful, but it is weaker than a direct exact match.";
+  }
+
+  return "This is only a fallback search route. Treat it as a weaker lead, not a clean ticket match.";
 }
 
 function Crest({ name, uri }: { name: string; uri?: string | null }) {
@@ -539,20 +409,23 @@ function TicketCard({
       <Text style={styles.ticketProviderFull}>{provider}</Text>
 
       <View style={styles.ticketPillRow}>
-        <QualityPill label={reasonLabel(reason)} tone={tone} />
+        <QualityPill label={optionReasonLabel(reason)} tone={tone} />
         <QualityPill
-          label={urlQualityLabel(urlQuality)}
+          label={ticketUrlQualityLabel(urlQuality) || "Unknown route"}
           tone={urlQuality === "event" ? "strong" : urlQuality === "listing" ? "medium" : "weak"}
         />
         {isBest ? (
-          <QualityPill label={cardTone === "weak" ? "Best fallback" : "Top option"} tone={cardTone} />
+          <QualityPill
+            label={cardTone === "weak" ? "Best fallback" : "Top option"}
+            tone={cardTone}
+          />
         ) : null}
       </View>
 
       <View style={styles.scoreRow}>
         {adjustedScore != null ? (
           <Text style={styles.scoreText}>
-            Resolver score: {adjustedScore} • {scoreBandLabel(adjustedScore)}
+            Resolver score: {adjustedScore} • {ticketConfidenceLabel(adjustedScore)}
           </Text>
         ) : (
           <Text style={styles.scoreText}>Resolver score unavailable</Text>
@@ -563,13 +436,7 @@ function TicketCard({
         ) : null}
       </View>
 
-      <Text style={styles.ticketMeta}>
-        {reason === "exact_event"
-          ? "This looks like a direct route for the exact fixture."
-          : reason === "partial_match"
-            ? "This looks related and may still be useful, but it is weaker than a direct exact match."
-            : "This is only a fallback search route. Treat it as a weaker lead, not a clean ticket match."}
-      </Text>
+      <Text style={styles.ticketMeta}>{buildReasonBody(reason)}</Text>
 
       {blockedWeakOpen ? (
         <Text style={styles.ticketWarning}>
@@ -665,9 +532,9 @@ export default function MatchScreen() {
   );
 
   const allOptions = useMemo(() => ticketResult?.options ?? [], [ticketResult]);
-  const groupedOptions = useMemo(() => splitOptions(allOptions), [allOptions]);
+  const groupedOptions = useMemo(() => splitTicketOptions(allOptions), [allOptions]);
   const strongOptions = groupedOptions.strong;
-  const fallbackOptions = groupedOptions.fallback;
+  const fallbackOptions = groupedOptions.weak;
 
   const strongOptionCount = strongOptions.length;
   const weakOptionCount = fallbackOptions.length;
@@ -753,9 +620,9 @@ export default function MatchScreen() {
           rawScore: getOptionRawScore(option),
           urlQuality: getOptionUrlQuality(option),
           resolutionReason: option.reason ?? null,
-          sourceSurface: "match_screen",
-          sourceSection: "tickets",
-          strongRoute: isStrongOption(option),
+          sourceSurface: "match_screen" as SourceSurface,
+          sourceSection: "tickets" as SourceSection,
+          strongRoute: isStrongTicketOption(option),
         },
       });
     } catch {
@@ -912,14 +779,17 @@ export default function MatchScreen() {
                   <View style={styles.resolverSummaryRow}>
                     <Text style={styles.resolverSummaryLabel}>Resolver result</Text>
                     <Text style={styles.resolverSummaryValue}>
-                      {ticketResult.ok ? reasonLabel(ticketResult.reason) : "No strong resolver success"}
+                      {ticketResult.ok
+                        ? optionReasonLabel(ticketResult.reason)
+                        : "No strong resolver success"}
                     </Text>
                   </View>
 
                   <View style={styles.resolverSummaryRow}>
                     <Text style={styles.resolverSummaryLabel}>Providers checked</Text>
                     <Text style={styles.resolverSummaryValue}>
-                      {Array.isArray(ticketResult.checkedProviders) && ticketResult.checkedProviders.length > 0
+                      {Array.isArray(ticketResult.checkedProviders) &&
+                      ticketResult.checkedProviders.length > 0
                         ? ticketResult.checkedProviders.map(providerLabel).join(" • ")
                         : "—"}
                     </Text>
