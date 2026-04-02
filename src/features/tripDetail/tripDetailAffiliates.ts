@@ -56,7 +56,7 @@ function safeCityName(cityName: unknown): string {
   return clean(cityName);
 }
 
-function isUsableTrip(trip: Trip | null): trip is Trip {
+function hasUsableTrip(trip: Trip | null): trip is Trip {
   return Boolean(trip && clean(trip.id));
 }
 
@@ -68,15 +68,15 @@ export function getBookingWindow(args: {
   endDate: string | null;
 } {
   const kickoffDate = getIsoDateOnly(args.primaryKickoffIso);
-  const tripStart = clean(args.trip?.startDate) || null;
-  const tripEnd = clean(args.trip?.endDate) || null;
+  const explicitStart = clean(args.trip?.startDate) || null;
+  const explicitEnd = clean(args.trip?.endDate) || null;
 
   const fallbackStart = addDays(kickoffDate ?? null, -1);
   const fallbackEnd = addDays(kickoffDate ?? null, 1);
 
   return {
-    startDate: tripStart || fallbackStart,
-    endDate: tripEnd || fallbackEnd,
+    startDate: explicitStart || fallbackStart,
+    endDate: explicitEnd || fallbackEnd,
   };
 }
 
@@ -89,19 +89,19 @@ export function buildAffiliateUrls(args: {
   const { trip, cityName, originIata, primaryKickoffIso } = args;
 
   const safeCity = safeCityName(cityName);
-  if (!isUsableTrip(trip) || !safeCity || safeCity === "Trip") {
+  if (!hasUsableTrip(trip) || !safeCity || safeCity === "Trip") {
     return null;
   }
 
-  const bookingWindow = getBookingWindow({
+  const { startDate, endDate } = getBookingWindow({
     trip,
     primaryKickoffIso,
   });
 
   const built = buildAffiliateLinks({
     city: safeCity,
-    startDate: bookingWindow.startDate,
-    endDate: bookingWindow.endDate,
+    startDate,
+    endDate,
     originIata: cleanUpper3(originIata, "LON"),
     passengers: 1,
     cabinClass: "economy",
@@ -115,11 +115,13 @@ export function buildAffiliateUrls(args: {
   const experiencesUrl = safeUrl(built.experiencesUrl);
   const claimsUrl = safeUrl(built.claimsUrl);
 
-  const directTransportUrl = safeUrl(built.transportUrl);
-  const directOmioUrl = safeUrl(built.omioUrl);
+  const transportUrl =
+    safeUrl(built.transportUrl) ||
+    safeUrl(built.omioUrl);
 
-  const transportUrl = directTransportUrl || directOmioUrl;
-  const omioUrl = directOmioUrl || directTransportUrl;
+  const omioUrl =
+    safeUrl(built.omioUrl) ||
+    safeUrl(built.transportUrl);
 
   const mapsUrl =
     safeUrl(built.mapsUrl) ||
@@ -140,7 +142,8 @@ export function buildAffiliateUrls(args: {
     officialSiteUrl: null,
     claimsUrl,
 
-    // compatibility fields kept while surrounding trip-detail code still imports them
+    // compatibility fields retained while surrounding trip-detail code
+    // still references the older names
     hotelsUrl,
     experiencesUrl,
     transportUrl,
@@ -156,8 +159,7 @@ export function resolveFlightDestinationIata(cityName: string): string {
  * Locked product decision:
  * Trip Detail must not surface live non-booked flight pricing right now.
  *
- * This function remains as a compatibility stub so existing imports do not break,
- * but it intentionally returns null.
+ * This stays as a compatibility stub so existing imports do not break.
  */
 export async function fetchLiveFlightPrice(_args: {
   trip: Trip | null;
