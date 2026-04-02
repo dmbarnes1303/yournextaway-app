@@ -69,15 +69,11 @@ function normalizeNumericMatchIds(trip: Trip | null): string[] {
   const ids = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
 
   return ids
-    .map((id) => String(id).trim())
-    .filter(isNumericId);
+    .map((id) => clean(id))
+    .filter((id) => Boolean(id) && isNumericId(id));
 }
 
-export default function useTripDetailData({
-  trip,
-  savedItems,
-  originIata,
-}: Props) {
+export default function useTripDetailData({ trip, savedItems, originIata }: Props) {
   const [fixturesById, setFixturesById] = useState<FixtureMap>({});
   const [fxLoading, setFxLoading] = useState(false);
 
@@ -102,24 +98,29 @@ export default function useTripDetailData({
       }
 
       setFxLoading(true);
+      setFixturesById({});
 
       try {
-        const next: FixtureMap = {};
-
-        for (const id of numericMatchIds) {
-          try {
-            const row = await getFixtureById(id);
-            if (row) {
-              next[String(id)] = row;
+        const results = await Promise.all(
+          numericMatchIds.map(async (id) => {
+            try {
+              const row = await getFixtureById(id);
+              return row ? ([id, row] as const) : null;
+            } catch {
+              return null;
             }
-          } catch {
-            // ignore per-fixture failure
-          }
+          })
+        );
+
+        if (cancelled) return;
+
+        const next: FixtureMap = {};
+        for (const entry of results) {
+          if (!entry) continue;
+          next[String(entry[0])] = entry[1];
         }
 
-        if (!cancelled) {
-          setFixturesById(next);
-        }
+        setFixturesById(next);
       } finally {
         if (!cancelled) {
           setFxLoading(false);
@@ -162,7 +163,7 @@ export default function useTripDetailData({
     return buildAffiliateUrls({
       trip,
       cityName,
-      originIata,
+      originIata: cleanUpper3(originIata, "LON"),
       primaryKickoffIso,
     });
   }, [trip, cityName, originIata, primaryKickoffIso]);
@@ -254,7 +255,7 @@ export default function useTripDetailData({
 
   const progress = useMemo(() => {
     if (!activeTripId) return EMPTY_PROGRESS;
-    return getTripProgress(activeTripId);
+    return getTripProgress(activeTripId) || EMPTY_PROGRESS;
   }, [activeTripId]);
 
   const readiness = useMemo(() => {
@@ -265,7 +266,12 @@ export default function useTripDetailData({
       };
     }
 
-    return getTripHealth(activeTripId);
+    return (
+      getTripHealth(activeTripId) || {
+        score: 0,
+        missing: [] as string[],
+      }
+    );
   }, [activeTripId]);
 
   const dateIsoForPrimaryMatch = useMemo(() => {
@@ -279,16 +285,21 @@ export default function useTripDetailData({
   return {
     fixturesById,
     fxLoading,
+
     numericMatchIds,
     primaryMatchId,
     primaryFixture,
+
     cityName,
     primaryLeagueId,
-    affiliateUrls,
     primaryHomeName,
     primaryLeagueName,
     primaryKickoffIso,
+    dateIsoForPrimaryMatch,
     kickoffMeta,
+
+    affiliateUrls,
+
     primaryLogisticsSnippet,
     stadiumName,
     stadiumCity,
@@ -298,13 +309,15 @@ export default function useTripDetailData({
     transportStops,
     transportTips,
     lateTransportNote,
+
     rankedTrip,
     tripFinderSummary,
+
     ticketsByMatchId,
     primaryTicketItem,
+
     bookingPriceBoard,
     progress,
     readiness,
-    dateIsoForPrimaryMatch,
   };
 }
