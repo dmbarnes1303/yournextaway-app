@@ -58,7 +58,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
         provider: asProvider("expedia"),
         title: "Hotels",
         url: links.hotelsUrl,
-        campaign: "trip_hotels",
+        campaign: "tier1_trip_hotels_expedia",
       })
     );
   }
@@ -69,7 +69,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
         provider: asProvider("aviasales"),
         title: "Flights",
         url: links.flightsUrl,
-        campaign: "trip_flights",
+        campaign: "tier1_trip_flights_aviasales",
       })
     );
   }
@@ -78,9 +78,9 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     output.push(
       makePartnerLink({
         provider: asProvider("sportsevents365"),
-        title: "Tickets",
+        title: "Best ticket option",
         url: links.ticketsPrimaryUrl,
-        campaign: "trip_tickets_primary",
+        campaign: "tier1_trip_tickets_se365",
       })
     );
   }
@@ -88,10 +88,10 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
   if (links.ticketsSecondaryUrl) {
     output.push(
       makePartnerLink({
-        provider: asProvider("footballticketsnet"),
-        title: "More ticket options",
+        provider: asProvider("footballticketnet"),
+        title: "Compare more ticket options",
         url: links.ticketsSecondaryUrl,
-        campaign: "trip_tickets_secondary",
+        campaign: "tier2_trip_tickets_ftn",
       })
     );
   }
@@ -102,7 +102,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
         provider: asProvider("safetywing"),
         title: "Insurance",
         url: links.insuranceUrl,
-        campaign: "trip_insurance",
+        campaign: "tier1_trip_insurance_safetywing",
       })
     );
   }
