@@ -15,6 +15,10 @@ export type PartnerContext = {
   cabinClass?: "economy" | "premium" | "business" | "first" | null;
 };
 
+function asProvider(value: string): Provider {
+  return value as Provider;
+}
+
 export function makePartnerLink(input: {
   provider: Provider;
   title: string;
@@ -51,7 +55,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
   if (links.hotelsUrl) {
     output.push(
       makePartnerLink({
-        provider: "expedia",
+        provider: asProvider("expedia"),
         title: "Hotels",
         url: links.hotelsUrl,
         campaign: "trip_hotels",
@@ -62,7 +66,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
   if (links.flightsUrl) {
     output.push(
       makePartnerLink({
-        provider: "aviasales",
+        provider: asProvider("aviasales"),
         title: "Flights",
         url: links.flightsUrl,
         campaign: "trip_flights",
@@ -70,57 +74,35 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     );
   }
 
-  if (links.transfersUrl) {
+  if (links.ticketsPrimaryUrl) {
     output.push(
       makePartnerLink({
-        provider: "kiwitaxi",
-        title: "Transfers",
-        url: links.transfersUrl,
-        campaign: "trip_transfers",
-      })
-    );
-  }
-
-  if (links.ticketsUrl) {
-    output.push(
-      makePartnerLink({
-        provider: "sportsevents365",
+        provider: asProvider("sportsevents365"),
         title: "Tickets",
-        url: links.ticketsUrl,
-        campaign: "trip_tickets",
+        url: links.ticketsPrimaryUrl,
+        campaign: "trip_tickets_primary",
       })
     );
   }
 
-  if (links.experiencesUrl) {
+  if (links.ticketsSecondaryUrl) {
     output.push(
       makePartnerLink({
-        provider: "getyourguide",
-        title: "Things to do",
-        url: links.experiencesUrl,
-        campaign: "trip_experiences",
+        provider: asProvider("footballticketsnet"),
+        title: "More ticket options",
+        url: links.ticketsSecondaryUrl,
+        campaign: "trip_tickets_secondary",
       })
     );
   }
 
-  if (links.transportUrl) {
+  if (links.insuranceUrl) {
     output.push(
       makePartnerLink({
-        provider: "omio",
-        title: "Train & coach",
-        url: links.transportUrl,
-        campaign: "trip_transport",
-      })
-    );
-  }
-
-  if (links.mapsUrl) {
-    output.push(
-      makePartnerLink({
-        provider: "google",
-        title: "Maps",
-        url: links.mapsUrl,
-        campaign: "trip_maps",
+        provider: asProvider("safetywing"),
+        title: "Insurance",
+        url: links.insuranceUrl,
+        campaign: "trip_insurance",
       })
     );
   }
