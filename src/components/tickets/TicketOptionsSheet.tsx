@@ -79,7 +79,7 @@ function priceLabel(
 function providerTone(provider?: string | null) {
   const raw = clean(provider).toLowerCase();
 
-  if (raw === "footballticketsnet") {
+  if (raw === "footballticketsnet" || raw === "footballticketnet") {
     return {
       borderColor: "rgba(120,170,255,0.30)",
       backgroundColor: "rgba(120,170,255,0.12)",
@@ -92,22 +92,6 @@ function providerTone(provider?: string | null) {
       borderColor: "rgba(87,162,56,0.30)",
       backgroundColor: "rgba(87,162,56,0.12)",
       textColor: "rgba(214,241,200,1)",
-    };
-  }
-
-  if (raw === "stubhub") {
-    return {
-      borderColor: "rgba(181,126,255,0.30)",
-      backgroundColor: "rgba(181,126,255,0.12)",
-      textColor: "rgba(231,214,255,1)",
-    };
-  }
-
-  if (raw === "gigsberg") {
-    return {
-      borderColor: "rgba(255,200,80,0.30)",
-      backgroundColor: "rgba(255,200,80,0.12)",
-      textColor: "rgba(255,228,165,1)",
     };
   }
 
