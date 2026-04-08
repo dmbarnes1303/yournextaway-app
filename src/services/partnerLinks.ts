@@ -1,3 +1,4 @@
+// src/services/partnerLinks.ts
 import {
   AffiliateConfig,
   getCanonicalPartnerId,
@@ -46,10 +47,6 @@ function getResolvedPartnerId(partnerId: string): PartnerId | "" {
   return getCanonicalPartnerId(partner.id);
 }
 
-/* -------------------------------------------------------------------------- */
-/* SportsEvents365 tracking                                                   */
-/* -------------------------------------------------------------------------- */
-
 function extractSe365Aid(): string {
   const tracked = clean(AffiliateConfig.sportsevents365Tracked);
   if (!tracked) return "";
@@ -90,10 +87,6 @@ function appendSe365Aid(url: string): string {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Generic tracked URL wrapper                                                */
-/* -------------------------------------------------------------------------- */
-
 export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
   const url = safeUrl(baseUrl);
   const resolvedId = getResolvedPartnerId(partnerId);
@@ -104,14 +97,16 @@ export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
     case "sportsevents365":
       return appendSe365Aid(url);
 
-    default:
+    case "aviasales":
+    case "expedia":
+    case "footballticketsnet":
+    case "safetywing":
       return url;
+
+    default:
+      return "";
   }
 }
-
-/* -------------------------------------------------------------------------- */
-/* Ticket helpers                                                             */
-/* -------------------------------------------------------------------------- */
 
 export function buildTicketLink(args: {
   eventUrl: string;
@@ -125,10 +120,6 @@ export function buildTicketLink(args: {
   const tracked = buildAffiliateUrl(eventUrl, partnerId);
   return tracked || null;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Main partner resolver                                                      */
-/* -------------------------------------------------------------------------- */
 
 export function resolveAffiliateUrl(
   partnerId: string,
@@ -155,22 +146,18 @@ export function resolveAffiliateUrl(
     case "expedia":
       return clean(links.hotelsUrl) || null;
 
-    case "kiwitaxi":
-      return clean(links.transfersUrl) || null;
-
-    case "getyourguide":
-      return clean(links.experiencesUrl) || null;
-
-    case "omio":
-      return clean(links.transportUrl) || null;
-
     case "sportsevents365": {
-      const direct = clean(links.ticketsUrl);
+      const direct = clean(links.ticketsPrimaryUrl);
       return direct ? buildAffiliateUrl(direct, "sportsevents365") : null;
     }
 
-    case "google":
-      return clean(links.mapsUrl) || null;
+    case "footballticketsnet": {
+      const direct = clean(links.ticketsSecondaryUrl);
+      return direct ? buildAffiliateUrl(direct, "footballticketsnet") : null;
+    }
+
+    case "safetywing":
+      return clean(links.insuranceUrl) || null;
 
     default:
       return null;
