@@ -1,3 +1,4 @@
+// src/services/affiliateLinks.ts
 import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 import { AffiliateConfig } from "@/src/constants/partners";
 import { formatIsoToYmd } from "@/src/utils/dates";
@@ -16,14 +17,12 @@ export type BuildAffiliateLinksArgs = {
 export type BuiltAffiliateLinks = {
   flightsUrl: string | null;
   hotelsUrl: string | null;
-  transfersUrl: string | null;
-  ticketsUrl: string | null;
-  experiencesUrl: string | null;
-  transportUrl: string | null;
-  omioUrl: string | null;
+  ticketsPrimaryUrl: string | null;
+  ticketsSecondaryUrl: string | null;
   insuranceUrl: string | null;
-  claimsUrl: string | null;
-  mapsUrl: string | null;
+
+  // compatibility aliases for surrounding code while other files are being cleaned
+  ticketsUrl: string | null;
 };
 
 function clean(value: unknown): string {
@@ -104,19 +103,6 @@ function resolveTrackedOrFallbackUrl(
   return safeUrl(trackedValue) || safeUrl(fallbackValue);
 }
 
-function buildMapsSearchUrl(query: string): string | null {
-  const q = clean(query);
-  if (!q) return null;
-
-  const base =
-    resolveTrackedOrFallbackUrl(AffiliateConfig.googleMapsBase) ||
-    resolveTrackedOrFallbackUrl("https://www.google.com/maps/search/?api=1");
-
-  if (!base) return null;
-
-  return appendQuery(base, { query: q });
-}
-
 function normalizeOriginIata(value: unknown): string {
   const raw = clean(value).toUpperCase();
   return /^[A-Z]{3}$/.test(raw) ? raw : "LON";
@@ -187,51 +173,7 @@ function buildHotelsUrl(args: {
   });
 }
 
-function omioOriginLabel(originIata: string): string {
-  if (originIata === "LON") return "London";
-  if (originIata === "PAR") return "Paris";
-  if (originIata === "MIL") return "Milan";
-  if (originIata === "ROM") return "Rome";
-  return originIata;
-}
-
-function buildOmioUrl(args: {
-  city: string;
-  originIata: string;
-  startDate: string | null;
-  endDate: string | null;
-}): string | null {
-  const city = clean(args.city);
-
-  const base =
-    resolveTrackedOrFallbackUrl(AffiliateConfig.omioTracked) ||
-    resolveTrackedOrFallbackUrl("https://www.omio.com/");
-
-  if (!base || !city) return base;
-
-  return appendQuery(base, {
-    departureLocation: omioOriginLabel(normalizeOriginIata(args.originIata)),
-    arrivalLocation: city,
-    departureDate: args.startDate,
-    arrivalDate: args.endDate,
-  });
-}
-
-function buildTransfersUrl(args: { city: string; date: string | null }): string | null {
-  const city = clean(args.city);
-  if (!city) return null;
-
-  const base = resolveTrackedOrFallbackUrl(AffiliateConfig.kiwitaxiTracked);
-  if (!base) return null;
-
-  return appendQuery(base, {
-    to: city,
-    destination: city,
-    date: args.date,
-  });
-}
-
-function buildTicketsUrl(args: {
+function buildSportsEvents365Url(args: {
   city: string;
   startDate: string | null;
   endDate: string | null;
@@ -249,35 +191,32 @@ function buildTicketsUrl(args: {
   });
 }
 
-function buildExperiencesUrl(city: string): string | null {
-  const cityName = clean(city);
-  const partnerId = clean(AffiliateConfig.getyourguidePartnerId);
+function buildFootballTicketsNetUrl(args: {
+  city: string;
+  startDate: string | null;
+  endDate: string | null;
+}): string | null {
+  const base =
+    resolveTrackedOrFallbackUrl(AffiliateConfig.footballticketsnetTracked) ||
+    resolveTrackedOrFallbackUrl("https://www.footballticketnet.com/");
 
-  if (!cityName || !partnerId) return null;
+  if (!base) return null;
 
-  return `https://www.getyourguide.com/s/?q=${enc(cityName)}&partner_id=${enc(partnerId)}`;
+  const city = clean(args.city);
+
+  return appendQuery(base, {
+    q: city || null,
+    city: city || null,
+    from: args.startDate,
+    to: args.endDate,
+  });
 }
 
-/**
- * Insurance is intentionally disabled here.
- *
- * Reason:
- * - insurance partners are not live in the current commercial system
- * - returning fallback/base URLs here would keep a fake-live path alive
- */
 function buildInsuranceUrl(): string | null {
-  return null;
-}
-
-/**
- * Claims are intentionally disabled here.
- *
- * Reason:
- * - claim partners are not live in the current commercial system
- * - returning fallback/base URLs here would keep placeholder architecture exposed
- */
-function buildClaimsUrl(): string | null {
-  return null;
+  return (
+    resolveTrackedOrFallbackUrl(AffiliateConfig.safetywingAffiliateUrl) ||
+    resolveTrackedOrFallbackUrl("https://safetywing.com/")
+  );
 }
 
 export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffiliateLinks {
@@ -288,9 +227,14 @@ export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffilia
   const passengers = clampInt(args.passengers, 1, 9, 1);
   const cabinClass = normalizeCabinClass(args.cabinClass);
 
-  const omioUrl = buildOmioUrl({
+  const ticketsPrimaryUrl = buildSportsEvents365Url({
     city,
-    originIata,
+    startDate,
+    endDate,
+  });
+
+  const ticketsSecondaryUrl = buildFootballTicketsNetUrl({
+    city,
     startDate,
     endDate,
   });
@@ -310,20 +254,9 @@ export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffilia
       endDate,
       passengers,
     }),
-    transfersUrl: buildTransfersUrl({
-      city,
-      date: startDate,
-    }),
-    ticketsUrl: buildTicketsUrl({
-      city,
-      startDate,
-      endDate,
-    }),
-    experiencesUrl: buildExperiencesUrl(city),
-    transportUrl: omioUrl,
-    omioUrl,
+    ticketsPrimaryUrl,
+    ticketsSecondaryUrl,
     insuranceUrl: buildInsuranceUrl(),
-    claimsUrl: buildClaimsUrl(),
-    mapsUrl: buildMapsSearchUrl(city),
+    ticketsUrl: ticketsPrimaryUrl,
   };
 }
