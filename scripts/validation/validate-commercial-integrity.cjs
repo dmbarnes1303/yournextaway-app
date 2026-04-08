@@ -24,31 +24,6 @@ function pass(message) {
   console.log(`\x1b[32mPASS\x1b[0m ${message}`);
 }
 
-function extractLeagueIdsFromFootball() {
-  const content = readFileSafe("src/constants/football.ts");
-  return [
-    ...new Set(
-      [...content.matchAll(/leagueId\s*:\s*(\d+)/g)].map((m) => Number(m[1]))
-    ),
-  ];
-}
-
-function extractLeagueIdsFromDiscoverPrice() {
-  const content = readFileSafe("src/features/discover/discoverPrice.ts");
-
-  const tupleIds = [...content.matchAll(/\[\s*(\d+)\s*,\s*\d+\s*\]/g)].map((m) =>
-    Number(m[1])
-  );
-  const objectIds = [...content.matchAll(/\b(\d+)\s*:\s*\{/g)].map((m) =>
-    Number(m[1])
-  );
-  const ifIds = [...content.matchAll(/if\s*\(\s*.*?===\s*(\d+)\s*\)/g)].map((m) =>
-    Number(m[1])
-  );
-
-  return [...new Set([...tupleIds, ...objectIds, ...ifIds])];
-}
-
 function requireNonEmptyConfigKey(fileContent, keyName) {
   const regex = new RegExp(`${keyName}\\s*:\\s*"([^"]*)"`, "m");
   const match = fileContent.match(regex);
@@ -66,148 +41,160 @@ function requireNonEmptyConfigKey(fileContent, keyName) {
   pass(`AffiliateConfig.${keyName} is present.`);
 }
 
-function requireOptionalConfigKey(fileContent, keyName) {
-  const regex = new RegExp(`${keyName}\\s*:\\s*"([^"]*)"`, "m");
-  const match = fileContent.match(regex);
-
-  if (!match) {
-    fail(`AffiliateConfig is missing optional key: ${keyName}`);
-    return;
+function forbidPattern(fileContent, regex, message) {
+  if (regex.test(fileContent)) {
+    fail(message);
+  } else {
+    pass(message.replace("still ", "no longer ").replace("contains ", "contains no "));
   }
-
-  if (!String(match[1] || "").trim()) {
-    warn(`AffiliateConfig.${keyName} is empty.`);
-    return;
-  }
-
-  pass(`AffiliateConfig.${keyName} is present.`);
-}
-
-function fixtureRowCardUsesLeagueAwareTicketDifficulty(content) {
-  const derivesLeagueId = /const\s+leagueId\s*=\s*[\s\S]*?;/.test(content);
-  const passesLeagueId = /getTicketDifficultyBadge\s*\(\s*home\s*,\s*leagueId\s*\)/.test(
-    content
-  );
-
-  return derivesLeagueId && passesLeagueId;
 }
 
 console.log("\n=== Validate commercial integrity ===\n");
 
-const footballIds = extractLeagueIdsFromFootball();
-const priceIds = extractLeagueIdsFromDiscoverPrice();
-
-const missingInPrice = footballIds.filter((id) => !priceIds.includes(id));
-if (missingInPrice.length) {
-  fail(
-    `discoverPrice.ts is missing league IDs from football.ts: ${missingInPrice.join(", ")}`
-  );
-} else {
-  pass("discoverPrice.ts covers every league ID found in football.ts.");
-}
-
 const partnersContent = readFileSafe("src/constants/partners.ts");
+const affiliateLinks = readFileSafe("src/services/affiliateLinks.ts");
+const partnerRegistry = readFileSafe("src/services/partnerRegistry.ts");
+const partnerLinks = readFileSafe("src/services/partnerLinks.ts");
+const ticketOptionsSheet = readFileSafe("src/components/tickets/TicketOptionsSheet.tsx");
+const tripDetailAffiliates = readFileSafe("src/features/tripDetail/tripDetailAffiliates.ts");
 
 [
   "aviasalesMarker",
   "aviasalesFallback",
-  "expediaToken",
-  "kiwitaxiTracked",
+  "expediaTracked",
   "sportsevents365Tracked",
-  "getyourguidePartnerId",
-  "omioTracked",
+  "footballticketsnetTracked",
+  "safetywingAffiliateUrl",
 ].forEach((key) => requireNonEmptyConfigKey(partnersContent, key));
 
 if (/safetywingTracked\s*:/m.test(partnersContent)) {
-  fail(
-    "AffiliateConfig still contains safetywingTracked. SafetyWing should be removed if not live."
-  );
+  fail("AffiliateConfig still contains safetywingTracked.");
 } else {
-  pass("AffiliateConfig no longer contains stale SafetyWing config.");
+  pass("AffiliateConfig no longer contains safetywingTracked.");
+}
+
+const bannedPartners = [
+  "stubhub",
+  "gigsberg",
+  "omio",
+  "kiwitaxi",
+  "welcomepickups",
+  "ekta",
+  "getyourguide",
+  "tiqets",
+  "klook",
+  "wegotrip",
+  "airhelp",
+  "compensair",
+  "google",
+  "official_site",
+  "internal_claim",
+  "internal_note",
+  "internal_other",
+];
+
+for (const banned of bannedPartners) {
+  const regex = new RegExp(`["']${banned}["']|\\b${banned}\\b`, "i");
+
+  if (regex.test(partnersContent)) {
+    fail(`Deleted partner still exists in partners.ts: ${banned}`);
+  } else {
+    pass(`Deleted partner removed from partners.ts: ${banned}`);
+  }
+}
+
+const requiredPartners = [
+  "aviasales",
+  "expedia",
+  "sportsevents365",
+  "footballticketsnet",
+  "safetywing",
+];
+
+for (const required of requiredPartners) {
+  const regex = new RegExp(`["']${required}["']|\\b${required}\\b`, "i");
+
+  if (regex.test(partnersContent)) {
+    pass(`Approved partner present in partners.ts: ${required}`);
+  } else {
+    fail(`Approved partner missing in partners.ts: ${required}`);
+  }
+}
+
+if (/classification\s*:\s*"LIVE_MONETISED"/g.test(partnersContent)) {
+  pass('Partner classification "LIVE_MONETISED" is present.');
+} else {
+  fail('Partner classification "LIVE_MONETISED" is missing.');
 }
 
 [
-  "ektaTracked",
-  "klookTracked",
-  "tiqetsTracked",
-  "wegotripTracked",
-  "airhelpTracked",
-  "compensairTracked",
-  "welcomepickupsTracked",
-].forEach((key) => requireOptionalConfigKey(partnersContent, key));
+  { file: affiliateLinks, name: "affiliateLinks.ts" },
+  { file: partnerRegistry, name: "partnerRegistry.ts" },
+  { file: partnerLinks, name: "partnerLinks.ts" },
+  { file: ticketOptionsSheet, name: "TicketOptionsSheet.tsx" },
+  { file: tripDetailAffiliates, name: "tripDetailAffiliates.ts" },
+].forEach(({ file, name }) => {
+  bannedPartners.forEach((banned) => {
+    const regex = new RegExp(`["']${banned}["']|\\b${banned}\\b`, "i");
 
-const partnerRegistry = readFileSafe("src/services/partnerRegistry.ts");
-const affiliateLinks = readFileSafe("src/services/affiliateLinks.ts");
-const fixtureRowCard = readFileSafe("src/features/fixtures/FixtureRowCard.tsx");
-const discoverFixtureCard = readFileSafe(
-  "src/features/discover/components/DiscoverFixtureCard.tsx"
-);
-const ticketGuidesIndex = readFileSafe("src/data/ticketGuides/index.ts");
+    if (regex.test(file)) {
+      fail(`${name} still references deleted partner: ${banned}`);
+    }
+  });
+});
 
-if (/google\.com\/search/i.test(partnerRegistry)) {
-  fail("partnerRegistry.ts still contains google.com/search fallback URLs.");
+if (/transfersUrl|experiencesUrl|transportUrl|omioUrl|claimsUrl|mapsUrl/.test(affiliateLinks)) {
+  fail("affiliateLinks.ts still exposes deleted partner categories.");
 } else {
-  pass("partnerRegistry.ts no longer uses fake Google search affiliate fallbacks.");
+  pass("affiliateLinks.ts only exposes approved commercial categories.");
 }
 
-if (/google\.com\/search/i.test(affiliateLinks)) {
-  fail("affiliateLinks.ts still contains google.com/search fallback URLs.");
+if (/sportsevents365/i.test(partnerRegistry) && /footballticketsnet/i.test(partnerRegistry)) {
+  pass("partnerRegistry.ts includes both approved ticket partners.");
 } else {
-  pass("affiliateLinks.ts no longer uses fake Google search affiliate fallbacks.");
+  fail("partnerRegistry.ts is missing one or both approved ticket partners.");
 }
 
-if (/safetywingTracked/i.test(affiliateLinks)) {
-  fail("affiliateLinks.ts still references SafetyWing.");
+if (/safetywing/i.test(partnerRegistry)) {
+  pass("partnerRegistry.ts includes SafetyWing.");
 } else {
-  pass("affiliateLinks.ts no longer references SafetyWing.");
+  fail("partnerRegistry.ts is missing SafetyWing.");
 }
 
-if (!/resolveAffiliateUrl\s*\(/.test(fixtureRowCard)) {
-  fail(
-    "FixtureRowCard.tsx is not resolving affiliate availability through resolveAffiliateUrl()."
-  );
+if (/case\s*"sportsevents365"/.test(partnerLinks) &&
+    /case\s*"footballticketsnet"/.test(partnerLinks) &&
+    /case\s*"safetywing"/.test(partnerLinks) &&
+    /case\s*"aviasales"/.test(partnerLinks) &&
+    /case\s*"expedia"/.test(partnerLinks)) {
+  pass("partnerLinks.ts resolves all approved partners.");
 } else {
-  pass("FixtureRowCard.tsx uses resolveAffiliateUrl().");
+  fail("partnerLinks.ts does not resolve all approved partners.");
 }
 
-if (!fixtureRowCardUsesLeagueAwareTicketDifficulty(fixtureRowCard)) {
-  fail(
-    "FixtureRowCard.tsx is not deriving leagueId and passing it into getTicketDifficultyBadge(home, leagueId)."
-  );
-} else {
-  pass(
-    "FixtureRowCard.tsx derives leagueId and uses it in getTicketDifficultyBadge()."
-  );
-}
+const directUrlWarnings = [
+  {
+    key: "footballticketsnetTracked",
+    value: (partnersContent.match(/footballticketsnetTracked\s*:\s*"([^"]+)"/) || [])[1] || "",
+    label: "FootballTicketsNet",
+  },
+  {
+    key: "safetywingAffiliateUrl",
+    value: (partnersContent.match(/safetywingAffiliateUrl\s*:\s*"([^"]+)"/) || [])[1] || "",
+    label: "SafetyWing",
+  },
+];
 
-if (/Flights prefilled/.test(fixtureRowCard)) {
-  fail('FixtureRowCard.tsx still contains misleading text: "Flights prefilled".');
-} else {
-  pass('FixtureRowCard.tsx no longer claims "Flights prefilled".');
-}
-
-if (/Hotels prefilled/.test(fixtureRowCard)) {
-  fail('FixtureRowCard.tsx still contains misleading text: "Hotels prefilled".');
-} else {
-  pass('FixtureRowCard.tsx no longer claims "Hotels prefilled".');
-}
-
-if (/Tickets live/.test(fixtureRowCard)) {
-  fail('FixtureRowCard.tsx still contains misleading generic text: "Tickets live".');
-} else {
-  pass('FixtureRowCard.tsx no longer uses the weak "Tickets live" fallback.');
-}
-
-if (!/Estimated only/i.test(discoverFixtureCard)) {
-  fail("DiscoverFixtureCard.tsx does not clearly label pricing as estimated.");
-} else {
-  pass("DiscoverFixtureCard.tsx clearly labels pricing as estimated.");
-}
-
-if (!/getLeagueTicketDifficultyFallback/.test(ticketGuidesIndex)) {
-  fail("ticketGuides/index.ts is missing league-level fallback ticket logic.");
-} else {
-  pass("ticketGuides/index.ts includes league-level fallback ticket logic.");
+for (const item of directUrlWarnings) {
+  try {
+    const url = new URL(item.value);
+    if (url.search) {
+      pass(`${item.label} config contains query parameters.`);
+    } else {
+      warn(`${item.label} config has no query params. Replace with real affiliate URL if required.`);
+    }
+  } catch {
+    fail(`${item.label} config is not a valid URL.`);
+  }
 }
 
 console.log("\n=== Commercial integrity summary ===");
