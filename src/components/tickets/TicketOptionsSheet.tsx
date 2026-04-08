@@ -40,6 +40,20 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function normalizeProvider(provider?: string | null): string {
+  return clean(provider).toLowerCase();
+}
+
+function isSe365(provider?: string | null): boolean {
+  const raw = normalizeProvider(provider);
+  return raw === "sportsevents365" || raw === "se365";
+}
+
+function isFtn(provider?: string | null): boolean {
+  const raw = normalizeProvider(provider);
+  return raw === "footballticketnet" || raw === "ftn";
+}
+
 function reasonLabel(option: TicketResolutionOption): string | null {
   if (option.reason === "exact_event" && option.exact) return "Exact fixture";
   if (option.reason === "partial_match") return "Related listing";
@@ -47,13 +61,19 @@ function reasonLabel(option: TicketResolutionOption): string | null {
   return null;
 }
 
-function strengthLabel(strength: TicketStrength): string {
+function strengthLabel(strength: TicketStrength, provider?: string | null): string {
+  if (isSe365(provider)) return "Best revenue option";
+  if (isFtn(provider)) return "Strategic fallback";
+
   if (strength === "strong") return "Best match";
   if (strength === "medium") return "Good option";
   return "Weak fallback";
 }
 
-function ctaLabel(strength: TicketStrength): string {
+function ctaLabel(strength: TicketStrength, provider?: string | null): string {
+  if (isSe365(provider)) return "View best ticket option →";
+  if (isFtn(provider)) return "Compare more options →";
+
   if (strength === "strong") return "View tickets →";
   if (strength === "medium") return "View options →";
   return "Search carefully →";
@@ -61,9 +81,18 @@ function ctaLabel(strength: TicketStrength): string {
 
 function priceLabel(
   option: TicketResolutionOption,
-  strength: TicketStrength
+  strength: TicketStrength,
+  provider?: string | null
 ): string {
   const price = clean(option.priceText);
+
+  if (isSe365(provider)) {
+    return price || "Best option";
+  }
+
+  if (isFtn(provider)) {
+    return price || "More options";
+  }
 
   if (strength === "strong") {
     return price || "View prices";
@@ -77,9 +106,7 @@ function priceLabel(
 }
 
 function providerTone(provider?: string | null) {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketsnet" || raw === "footballticketnet") {
+  if (isFtn(provider)) {
     return {
       borderColor: "rgba(120,170,255,0.30)",
       backgroundColor: "rgba(120,170,255,0.12)",
@@ -87,7 +114,7 @@ function providerTone(provider?: string | null) {
     };
   }
 
-  if (raw === "sportsevents365") {
+  if (isSe365(provider)) {
     return {
       borderColor: "rgba(87,162,56,0.30)",
       backgroundColor: "rgba(87,162,56,0.12)",
@@ -100,6 +127,16 @@ function providerTone(provider?: string | null) {
     backgroundColor: "rgba(255,255,255,0.06)",
     textColor: theme.colors.text,
   };
+}
+
+function resolveDisplayStrength(option: TicketResolutionOption): TicketStrength {
+  if (isSe365(option.provider)) return "strong";
+  if (isFtn(option.provider)) return "medium";
+
+  const helperStrength = classifyTicketOption(option);
+  if (helperStrength === "strong") return "strong";
+  if (helperStrength === "medium") return "medium";
+  return "weak";
 }
 
 function OptionCard({
@@ -151,19 +188,31 @@ function OptionCard({
         </View>
 
         <Text style={[styles.price, strength === "weak" && styles.priceWeak]}>
-          {priceLabel(option, strength)}
+          {priceLabel(option, strength, option.provider)}
         </Text>
       </View>
 
       <View style={styles.optionBottomRow}>
         <Text style={[styles.scoreText, strength === "weak" && styles.scoreTextWeak]}>
-          {strengthLabel(strength)}
+          {strengthLabel(strength, option.provider)}
         </Text>
 
-        <Text style={styles.cta}>{ctaLabel(strength)}</Text>
+        <Text style={styles.cta}>{ctaLabel(strength, option.provider)}</Text>
       </View>
 
-      {strength === "weak" ? (
+      {isSe365(option.provider) ? (
+        <Text style={styles.goodText}>
+          Primary monetised ticket route for this app.
+        </Text>
+      ) : null}
+
+      {isFtn(option.provider) ? (
+        <Text style={styles.infoText}>
+          Secondary strategic route. Useful for broader inventory checks.
+        </Text>
+      ) : null}
+
+      {strength === "weak" && !isFtn(option.provider) ? (
         <Text style={styles.warningText}>
           Fallback route only. Verify the exact fixture on the partner page.
         </Text>
@@ -186,24 +235,42 @@ export default function TicketOptionsSheet({
   const { mergedOptions, weakOnly } = useMemo(() => {
     const strong = Array.isArray(strongOptions) ? strongOptions : [];
     const weak = Array.isArray(weakOptions) ? weakOptions : [];
+    const combined = [...strong, ...weak];
 
-    const displayStrong: DisplayOption[] = strong.map((option) => {
-      const helperStrength = classifyTicketOption(option);
-
-      return {
-        option,
-        strength: helperStrength === "weak" ? "medium" : helperStrength,
-      };
+    const seen = new Set<string>();
+    const deduped = combined.filter((option, index) => {
+      const key = `${clean(option.provider)}|${clean(option.url)}|${index}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
 
-    const displayWeak: DisplayOption[] = weak.map((option) => ({
+    const prioritized = [...deduped].sort((a, b) => {
+      const aSe365 = isSe365(a.provider) ? 1 : 0;
+      const bSe365 = isSe365(b.provider) ? 1 : 0;
+      if (aSe365 !== bSe365) return bSe365 - aSe365;
+
+      const aFtn = isFtn(a.provider) ? 1 : 0;
+      const bFtn = isFtn(b.provider) ? 1 : 0;
+      if (aFtn !== bFtn) return bFtn - aFtn;
+
+      const aStrength = resolveDisplayStrength(a);
+      const bStrength = resolveDisplayStrength(b);
+
+      const weight = { strong: 3, medium: 2, weak: 1 };
+      return weight[bStrength] - weight[aStrength];
+    });
+
+    const mergedOptions: DisplayOption[] = prioritized.slice(0, 5).map((option) => ({
       option,
-      strength: "weak",
+      strength: resolveDisplayStrength(option),
     }));
 
     return {
-      mergedOptions: [...displayStrong, ...displayWeak].slice(0, 5),
-      weakOnly: strong.length === 0 && weak.length > 0,
+      mergedOptions,
+      weakOnly:
+        mergedOptions.length > 0 &&
+        mergedOptions.every(({ strength, option }) => strength === "weak" && !isFtn(option.provider)),
     };
   }, [strongOptions, weakOptions]);
 
@@ -451,6 +518,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
     color: theme.colors.text,
+  },
+
+  goodText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "rgba(214,241,200,1)",
+    fontWeight: "700",
+  },
+
+  infoText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: "rgba(210,226,255,1)",
+    fontWeight: "700",
   },
 
   warningText: {
