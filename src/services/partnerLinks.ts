@@ -99,8 +99,10 @@ export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
 
     case "aviasales":
     case "expedia":
-    case "footballticketsnet":
     case "safetywing":
+      return url;
+
+    case "footballticketnet":
       return url;
 
     default:
@@ -151,9 +153,9 @@ export function resolveAffiliateUrl(
       return direct ? buildAffiliateUrl(direct, "sportsevents365") : null;
     }
 
-    case "footballticketsnet": {
+    case "footballticketnet": {
       const direct = clean(links.ticketsSecondaryUrl);
-      return direct ? buildAffiliateUrl(direct, "footballticketsnet") : null;
+      return direct ? buildAffiliateUrl(direct, "footballticketnet") : null;
     }
 
     case "safetywing":
