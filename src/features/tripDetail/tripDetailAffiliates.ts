@@ -1,6 +1,5 @@
 import type { AffiliateUrls } from "@/src/features/tripDetail/helpers";
 import {
-  buildMapsSearchUrl,
   clean,
   cleanUpper3,
   getIsoDateOnly,
@@ -107,48 +106,37 @@ export function buildAffiliateUrls(args: {
     cabinClass: "economy",
   });
 
-  const ticketsUrl = safeUrl(built.ticketsUrl);
+  const ticketsUrl = safeUrl(built.ticketsPrimaryUrl);
   const flightsUrl = safeUrl(built.flightsUrl);
   const hotelsUrl = safeUrl(built.hotelsUrl);
-  const transfersUrl = safeUrl(built.transfersUrl);
   const insuranceUrl = safeUrl(built.insuranceUrl);
-  const experiencesUrl = safeUrl(built.experiencesUrl);
-  const claimsUrl = safeUrl(built.claimsUrl);
-
-  const transportUrl =
-    safeUrl(built.transportUrl) ||
-    safeUrl(built.omioUrl);
-
-  const omioUrl =
-    safeUrl(built.omioUrl) ||
-    safeUrl(built.transportUrl);
-
-  const mapsUrl =
-    safeUrl(built.mapsUrl) ||
-    safeUrl(buildMapsSearchUrl(`${safeCity} travel`));
+  const secondaryTicketsUrl = safeUrl(built.ticketsSecondaryUrl);
 
   return {
     ticketsUrl,
     flightsUrl,
 
     staysUrl: hotelsUrl,
-    trainsUrl: transportUrl,
-    busesUrl: transportUrl,
-    transfersUrl,
+    trainsUrl: null,
+    busesUrl: null,
+    transfersUrl: null,
     insuranceUrl,
-    thingsUrl: experiencesUrl,
+    thingsUrl: null,
     carHireUrl: null,
-    mapsUrl,
+    mapsUrl: null,
     officialSiteUrl: null,
-    claimsUrl,
+    claimsUrl: null,
 
     // compatibility fields retained while surrounding trip-detail code
-    // still references the older names
+    // still references older names
     hotelsUrl,
-    experiencesUrl,
-    transportUrl,
-    omioUrl,
-  };
+    experiencesUrl: null,
+    transportUrl: null,
+    omioUrl: null,
+
+    // best extra compatibility value available for second ticket marketplace
+    secondaryTicketsUrl,
+  } as AffiliateUrls;
 }
 
 export function resolveFlightDestinationIata(cityName: string): string {
