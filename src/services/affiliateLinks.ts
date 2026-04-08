@@ -20,8 +20,6 @@ export type BuiltAffiliateLinks = {
   ticketsPrimaryUrl: string | null;
   ticketsSecondaryUrl: string | null;
   insuranceUrl: string | null;
-
-  // compatibility aliases for surrounding code while other files are being cleaned
   ticketsUrl: string | null;
 };
 
@@ -191,13 +189,13 @@ function buildSportsEvents365Url(args: {
   });
 }
 
-function buildFootballTicketsNetUrl(args: {
+function buildFootballTicketNetUrl(args: {
   city: string;
   startDate: string | null;
   endDate: string | null;
 }): string | null {
   const base =
-    resolveTrackedOrFallbackUrl(AffiliateConfig.footballticketsnetTracked) ||
+    resolveTrackedOrFallbackUrl(AffiliateConfig.footballticketnetTracked) ||
     resolveTrackedOrFallbackUrl("https://www.footballticketnet.com/");
 
   if (!base) return null;
@@ -233,7 +231,7 @@ export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffilia
     endDate,
   });
 
-  const ticketsSecondaryUrl = buildFootballTicketsNetUrl({
+  const ticketsSecondaryUrl = buildFootballTicketNetUrl({
     city,
     startDate,
     endDate,
