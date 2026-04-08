@@ -5,7 +5,32 @@ export type TripId = string;
 export type FixtureId = string;
 
 /* -------------------------------------------------------------------------- */
-/* Trip                                                                        */
+/* Partner / outbound link types                                              */
+/* -------------------------------------------------------------------------- */
+
+export type Provider =
+  | "aviasales"
+  | "expedia"
+  | "sportsevents365"
+  | "footballticketnet"
+  | "safetywing";
+
+export type PartnerLinkOpenMode = "in_app_browser" | "external_browser";
+
+export type PartnerLink = {
+  id: string;
+  provider: Provider;
+  title: string;
+  url: string;
+  openMode: PartnerLinkOpenMode;
+  campaign?: string;
+  createdAt: number;
+};
+
+export type ISODate = string;
+
+/* -------------------------------------------------------------------------- */
+/* Trip                                                                       */
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -111,14 +136,22 @@ export type Trip = {
   /* ---------------------------------------------------------------------- */
 
   /**
-   * Ticketing affiliate enrichment when a direct event mapping is known.
+   * Ticketing affiliate enrichment when a direct SportsEvents365 mapping is known.
+   * This remains explicit because SE365 is the current Tier 1 monetised ticket path.
    */
   sportsevents365EventId?: number;
 
   /**
-   * Preferred direct ticket URL when known.
+   * Preferred direct SportsEvents365 event URL when known.
    */
   sportsevents365EventUrl?: string;
+
+  /**
+   * Strategic / API-driven FootballTicketNet enrichment can be added later,
+   * but should not be treated as equivalent monetised booking state right now.
+   */
+  footballticketnetEventId?: string;
+  footballticketnetEventUrl?: string;
 };
 
 /* -------------------------------------------------------------------------- */
