@@ -12,6 +12,20 @@ export function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function normalizeProvider(provider?: string | null): string {
+  return clean(provider).toLowerCase();
+}
+
+function isSe365(provider?: string | null): boolean {
+  const p = normalizeProvider(provider);
+  return p === "sportsevents365" || p === "se365";
+}
+
+function isFtn(provider?: string | null): boolean {
+  const p = normalizeProvider(provider);
+  return p === "footballticketnet" || p === "ftn";
+}
+
 /**
  * =========
  * URL QUALITY
@@ -52,23 +66,90 @@ export function getTicketUrlQuality(option: TicketResolutionOption): TicketUrlQu
  * =========
  * CORE TICKET INTELLIGENCE (SINGLE SOURCE)
  * =========
+ *
+ * Commercial rule:
+ * - SportsEvents365 is Tier 1 monetised and should be treated as the strongest
+ *   commercial route when present.
+ * - FootballTicketNet is Tier 2 strategic and should be treated as a useful
+ *   fallback / broader inventory route, but not equal to SE365.
  */
 
 export function isStrongTicketOption(option: TicketResolutionOption): boolean {
   const reason = clean(option.reason);
   const urlQuality = getTicketUrlQuality(option);
 
-  // Exact matches → strong unless clearly search junk
+  if (isSe365(option.provider)) {
+    if (option.exact || reason === "exact_event") {
+      return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
+    }
+
+    if (reason === "partial_match") {
+      return urlQuality === "event" || urlQuality === "listing";
+    }
+
+    return false;
+  }
+
+  if (isFtn(option.provider)) {
+    if (option.exact || reason === "exact_event") {
+      return urlQuality === "event" || urlQuality === "listing";
+    }
+
+    if (reason === "partial_match") {
+      return urlQuality === "event" || urlQuality === "listing";
+    }
+
+    return false;
+  }
+
   if (option.exact || reason === "exact_event") {
     return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
   }
 
-  // Partial matches → only strong if deep-linked
   if (reason === "partial_match") {
     return urlQuality === "event" || urlQuality === "listing";
   }
 
   return false;
+}
+
+export function classifyTicketOption(
+  option: TicketResolutionOption
+): "strong" | "medium" | "weak" {
+  const reason = clean(option.reason);
+  const urlQuality = getTicketUrlQuality(option);
+
+  if (isSe365(option.provider)) {
+    if (option.exact || reason === "exact_event") return "strong";
+    if (reason === "partial_match" && (urlQuality === "event" || urlQuality === "listing")) {
+      return "strong";
+    }
+    return "medium";
+  }
+
+  if (isFtn(option.provider)) {
+    if (option.exact || reason === "exact_event") {
+      return urlQuality === "event" || urlQuality === "listing" ? "medium" : "weak";
+    }
+
+    if (reason === "partial_match") {
+      return urlQuality === "event" || urlQuality === "listing" ? "medium" : "weak";
+    }
+
+    return "weak";
+  }
+
+  if (option.exact || reason === "exact_event") {
+    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown"
+      ? "strong"
+      : "medium";
+  }
+
+  if (reason === "partial_match") {
+    return urlQuality === "event" || urlQuality === "listing" ? "medium" : "weak";
+  }
+
+  return "weak";
 }
 
 export function splitTicketOptions(options: TicketResolutionOption[]) {
@@ -83,6 +164,20 @@ export function splitTicketOptions(options: TicketResolutionOption[]) {
     }
   }
 
+  const sortByPriority = (a: TicketResolutionOption, b: TicketResolutionOption) => {
+    const aTier = isSe365(a.provider) ? 3 : isFtn(a.provider) ? 2 : 1;
+    const bTier = isSe365(b.provider) ? 3 : isFtn(b.provider) ? 2 : 1;
+
+    if (aTier !== bTier) return bTier - aTier;
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.exact && !b.exact) return -1;
+    if (!a.exact && b.exact) return 1;
+    return clean(a.provider).localeCompare(clean(b.provider));
+  };
+
+  strong.sort(sortByPriority);
+  weak.sort(sortByPriority);
+
   return { strong, weak };
 }
 
@@ -93,35 +188,19 @@ export function splitTicketOptions(options: TicketResolutionOption[]) {
  */
 
 export function providerShort(provider?: string | null): string {
-  const p = clean(provider).toLowerCase();
-
-  if (p.includes("footballticketsnet")) return "FTN";
-  if (p.includes("sportsevents365")) return "SE365";
-  if (p.includes("gigsberg")) return "GB";
-  if (p.includes("stubhub")) return "SH";
-  if (p.includes("viagogo")) return "VG";
-  if (p.includes("ticketmaster")) return "TM";
-
+  if (isFtn(provider)) return "FTN";
+  if (isSe365(provider)) return "SE365";
   return "T";
 }
 
 export function providerLabel(provider?: string | null): string {
-  const p = clean(provider).toLowerCase();
-
-  if (p.includes("footballticketsnet")) return "FootballTicketNet";
-  if (p.includes("sportsevents365")) return "SportsEvents365";
-  if (p.includes("gigsberg")) return "Gigsberg";
-  if (p.includes("stubhub")) return "StubHub";
-  if (p.includes("viagogo")) return "Viagogo";
-  if (p.includes("ticketmaster")) return "Ticketmaster";
-
+  if (isFtn(provider)) return "FootballTicketNet";
+  if (isSe365(provider)) return "SportsEvents365";
   return "Tickets";
 }
 
 export function providerBadgeStyle(provider?: string | null) {
-  const p = clean(provider).toLowerCase();
-
-  if (p.includes("footballticketsnet")) {
+  if (isFtn(provider)) {
     return {
       backgroundColor: "rgba(0,200,255,0.12)",
       borderColor: "rgba(0,200,255,0.35)",
@@ -129,19 +208,11 @@ export function providerBadgeStyle(provider?: string | null) {
     };
   }
 
-  if (p.includes("sportsevents365")) {
+  if (isSe365(provider)) {
     return {
       backgroundColor: "rgba(255,140,0,0.12)",
       borderColor: "rgba(255,140,0,0.35)",
       textColor: "#FF8C00",
-    };
-  }
-
-  if (p.includes("gigsberg")) {
-    return {
-      backgroundColor: "rgba(180,120,255,0.12)",
-      borderColor: "rgba(180,120,255,0.35)",
-      textColor: "#B478FF",
     };
   }
 
@@ -184,4 +255,61 @@ export function ticketProviderFromItem(item: any | null): string | null {
 export function itemResolvedScore(item: any | null): number | null {
   const val = item?.metadata?.score;
   return typeof val === "number" ? val : null;
+}
+
+/**
+ * =========
+ * AFFILIATE URL SHAPE
+ * =========
+ */
+
+export type AffiliateUrls = {
+  ticketsUrl: string | null;
+  flightsUrl: string | null;
+
+  staysUrl: string | null;
+  trainsUrl: string | null;
+  busesUrl: string | null;
+  transfersUrl: string | null;
+  insuranceUrl: string | null;
+  thingsUrl: string | null;
+  carHireUrl: string | null;
+  mapsUrl: string | null;
+  officialSiteUrl: string | null;
+  claimsUrl: string | null;
+
+  hotelsUrl?: string | null;
+  experiencesUrl?: string | null;
+  transportUrl?: string | null;
+  omioUrl?: string | null;
+
+  secondaryTicketsUrl?: string | null;
+};
+
+/**
+ * =========
+ * GENERIC SMALL HELPERS
+ * =========
+ */
+
+export function cleanUpper3(value: unknown, fallback = "LON"): string {
+  const raw = clean(value).toUpperCase();
+  return /^[A-Z]{3}$/.test(raw) ? raw : fallback;
+}
+
+export function getIsoDateOnly(value: unknown): string | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  const direct = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct?.[1]) return direct[1];
+
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return null;
+
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
