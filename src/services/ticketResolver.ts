@@ -46,6 +46,26 @@ function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
+function normalizeProvider(provider: unknown): string {
+  return clean(provider).toLowerCase();
+}
+
+function isSe365(provider: unknown): boolean {
+  const p = normalizeProvider(provider);
+  return p === "sportsevents365" || p === "se365";
+}
+
+function isFtn(provider: unknown): boolean {
+  const p = normalizeProvider(provider);
+  return p === "footballticketnet" || p === "ftn";
+}
+
+function providerPriority(provider: unknown): number {
+  if (isSe365(provider)) return 300;
+  if (isFtn(provider)) return 200;
+  return 100;
+}
+
 function safeJsonParse<T>(value: string): T | null {
   try {
     return JSON.parse(value) as T;
@@ -160,7 +180,7 @@ function dedupeAndSortOptions(options: TicketResolutionOption[]): TicketResoluti
   const byKey = new Map<string, TicketResolutionOption>();
 
   for (const option of options) {
-    const key = `${option.provider.toLowerCase()}|${option.url}`;
+    const key = `${normalizeProvider(option.provider)}|${option.url}`;
 
     const existing = byKey.get(key);
     if (!existing) {
@@ -181,8 +201,13 @@ function dedupeAndSortOptions(options: TicketResolutionOption[]): TicketResoluti
   }
 
   return Array.from(byKey.values()).sort((a, b) => {
+    const aPriority = providerPriority(a.provider);
+    const bPriority = providerPriority(b.provider);
+
     if (a.exact && !b.exact) return -1;
     if (!a.exact && b.exact) return 1;
+
+    if (aPriority !== bPriority) return bPriority - aPriority;
     if (b.score !== a.score) return b.score - a.score;
 
     const aHasPrice = Boolean(clean(a.priceText));
@@ -227,6 +252,30 @@ function isStrongOption(option: TicketResolutionOption | null | undefined): bool
   const reason = option.reason;
   const urlQuality = normalizeUrlQuality(option.urlQuality);
 
+  if (isSe365(option.provider)) {
+    if (option.exact || reason === "exact_event") {
+      return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
+    }
+
+    if (reason === "partial_match") {
+      return urlQuality === "event" || urlQuality === "listing";
+    }
+
+    return false;
+  }
+
+  if (isFtn(option.provider)) {
+    if (option.exact || reason === "exact_event") {
+      return urlQuality === "event" || urlQuality === "listing";
+    }
+
+    if (reason === "partial_match") {
+      return urlQuality === "event" || urlQuality === "listing";
+    }
+
+    return false;
+  }
+
   if (option.exact || reason === "exact_event") {
     return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
   }
@@ -247,6 +296,30 @@ function isStrongPrimary(args: {
   urlQuality: TicketUrlQuality;
 }): boolean {
   if (!hasUsablePrimaryFields(args)) return false;
+
+  if (isSe365(args.provider)) {
+    if (args.exact || args.reason === "exact_event") {
+      return args.urlQuality === "event" || args.urlQuality === "listing" || args.urlQuality === "unknown";
+    }
+
+    if (args.reason === "partial_match") {
+      return args.urlQuality === "event" || args.urlQuality === "listing";
+    }
+
+    return false;
+  }
+
+  if (isFtn(args.provider)) {
+    if (args.exact || args.reason === "exact_event") {
+      return args.urlQuality === "event" || args.urlQuality === "listing";
+    }
+
+    if (args.reason === "partial_match") {
+      return args.urlQuality === "event" || args.urlQuality === "listing";
+    }
+
+    return false;
+  }
 
   if (args.exact || args.reason === "exact_event") {
     return args.urlQuality === "event" || args.urlQuality === "listing" || args.urlQuality === "unknown";
