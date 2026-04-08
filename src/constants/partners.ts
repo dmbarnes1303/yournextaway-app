@@ -1,6 +1,9 @@
 // src/constants/partners.ts
 // Clean commercial partner registry.
 // Only approved partners exist here.
+// Tier model:
+// - Tier 1 = live monetised now
+// - Tier 2 = strategic / API-led / not monetised through affiliate tracking yet
 
 export const COMMERCIAL_PARTNER_CATEGORIES = [
   "tickets",
@@ -18,14 +21,14 @@ export const CANONICAL_PARTNER_IDS = [
   "aviasales",
   "expedia",
   "sportsevents365",
-  "footballticketsnet",
+  "footballticketnet",
   "safetywing",
 ] as const;
 
 export type PartnerId = (typeof CANONICAL_PARTNER_IDS)[number];
 export type CanonicalPartnerId = PartnerId;
 
-export type PartnerClassification = "LIVE_MONETISED";
+export type PartnerClassification = "TIER_1_MONETISED" | "TIER_2_STRATEGIC";
 
 export type PartnerCapabilityFlags = {
   affiliate: boolean;
@@ -71,8 +74,8 @@ function unique<T>(items: readonly T[]): T[] {
  * - no deleted partner config remains
  * - no legacy safetywingTracked remains
  * - no fake tracking params are invented
- * - if a partner's affiliate structure is unknown, use a clean direct URL field
- *   that can later be swapped for a real affiliate URL without changing logic
+ * - FTN is API / strategic right now, so this stays as a clean direct URL
+ *   until a real monetised outbound or API checkout implementation exists
  */
 export const AffiliateConfig = {
   aviasalesMarker: "700937",
@@ -82,12 +85,11 @@ export const AffiliateConfig = {
 
   sportsevents365Tracked: "https://www.sportsevents365.com/?a_aid=yna",
 
-  // Replace with real FTN affiliate URL if/when supplied.
-  footballticketsnetTracked: "https://www.footballticketnet.com/",
+  // FTN is currently strategic / API-led, not affiliate-monetised.
+  footballticketnetTracked: "https://www.footballticketnet.com/",
 
-  // Intentionally not named safetywingTracked.
-  // Replace with your real SafetyWing affiliate URL if/when supplied.
-  safetywingAffiliateUrl: "https://safetywing.com/",
+  safetywingAffiliateUrl:
+    "https://safetywing.com/?referenceID=26471369&utm_source=26471369&utm_medium=Ambassador",
 } as const;
 
 export const PARTNER_REGISTRY = [
@@ -95,7 +97,7 @@ export const PARTNER_REGISTRY = [
     id: "aviasales",
     display: { name: "Aviasales", badgeText: "AVA" },
     category: "flights",
-    classification: "LIVE_MONETISED",
+    classification: "TIER_1_MONETISED",
     live: true,
     capabilities: { affiliate: true, api: true },
     aliases: ["aviasales", "avia_sales"],
@@ -105,7 +107,7 @@ export const PARTNER_REGISTRY = [
     id: "expedia",
     display: { name: "Expedia", badgeText: "EXP" },
     category: "hotels",
-    classification: "LIVE_MONETISED",
+    classification: "TIER_1_MONETISED",
     live: true,
     capabilities: { affiliate: true, api: false },
     aliases: ["expedia"],
@@ -116,7 +118,7 @@ export const PARTNER_REGISTRY = [
     id: "sportsevents365",
     display: { name: "SportsEvents365", badgeText: "SE365" },
     category: "tickets",
-    classification: "LIVE_MONETISED",
+    classification: "TIER_1_MONETISED",
     live: true,
     capabilities: { affiliate: true, api: false },
     aliases: ["sportsevents365", "sports_events_365", "sports-events-365", "se365"],
@@ -124,29 +126,26 @@ export const PARTNER_REGISTRY = [
     trackedConfigKey: "sportsevents365Tracked",
   },
   {
-    id: "footballticketsnet",
-    display: { name: "FootballTicketsNet", badgeText: "FTN" },
+    id: "footballticketnet",
+    display: { name: "FootballTicketNet", badgeText: "FTN" },
     category: "tickets",
-    classification: "LIVE_MONETISED",
+    classification: "TIER_2_STRATEGIC",
     live: true,
-    capabilities: { affiliate: true, api: false },
+    capabilities: { affiliate: false, api: true },
     aliases: [
-      "footballticketsnet",
       "footballticketnet",
-      "football_tickets_net",
       "football_ticket_net",
-      "football-tickets-net",
       "football-ticket-net",
       "ftn",
     ],
     baseUrl: "https://www.footballticketnet.com/",
-    trackedConfigKey: "footballticketsnetTracked",
+    trackedConfigKey: "footballticketnetTracked",
   },
   {
     id: "safetywing",
     display: { name: "SafetyWing", badgeText: "SW" },
     category: "insurance",
-    classification: "LIVE_MONETISED",
+    classification: "TIER_1_MONETISED",
     live: true,
     capabilities: { affiliate: true, api: false },
     aliases: ["safetywing", "safety_wing", "safety-wing"],
@@ -269,6 +268,20 @@ export function getTrackedConfigValue(
   const cleaned = clean(value);
 
   return cleaned || null;
+}
+
+export function isTier1MonetisedPartner(
+  input: PartnerId | string | null | undefined
+): boolean {
+  const partner = getPartnerOrNull(input);
+  return partner?.classification === "TIER_1_MONETISED";
+}
+
+export function isTier2StrategicPartner(
+  input: PartnerId | string | null | undefined
+): boolean {
+  const partner = getPartnerOrNull(input);
+  return partner?.classification === "TIER_2_STRATEGIC";
 }
 
 export const PARTNER_REGISTRY_LIST = PARTNER_REGISTRY;
