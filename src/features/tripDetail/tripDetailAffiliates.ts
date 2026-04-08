@@ -107,10 +107,10 @@ export function buildAffiliateUrls(args: {
   });
 
   const ticketsUrl = safeUrl(built.ticketsPrimaryUrl);
+  const secondaryTicketsUrl = safeUrl(built.ticketsSecondaryUrl);
   const flightsUrl = safeUrl(built.flightsUrl);
   const hotelsUrl = safeUrl(built.hotelsUrl);
   const insuranceUrl = safeUrl(built.insuranceUrl);
-  const secondaryTicketsUrl = safeUrl(built.ticketsSecondaryUrl);
 
   return {
     ticketsUrl,
@@ -127,14 +127,11 @@ export function buildAffiliateUrls(args: {
     officialSiteUrl: null,
     claimsUrl: null,
 
-    // compatibility fields retained while surrounding trip-detail code
-    // still references older names
     hotelsUrl,
     experiencesUrl: null,
     transportUrl: null,
     omioUrl: null,
 
-    // best extra compatibility value available for second ticket marketplace
     secondaryTicketsUrl,
   } as AffiliateUrls;
 }
