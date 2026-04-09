@@ -35,7 +35,8 @@ export type SourceSurface =
   | "ticket_choice_alert"
   | "progress_strip"
   | "next_best_action"
-  | "smart_booking";
+  | "smart_booking"
+  | "match_screen";
 
 export type SourceSection =
   | "unknown"
@@ -448,7 +449,7 @@ export function mapTicketProviderToPartnerId(provider?: string | null): PartnerI
  * ========================================================================== */
 
 export function livePriceLine(item: any): string | null {
-  const raw = clean(item?.metadata?.priceText);
+  const raw = clean(item?.metadata?.resolvedPriceText || item?.metadata?.priceText);
 
   if (!raw) return null;
 
