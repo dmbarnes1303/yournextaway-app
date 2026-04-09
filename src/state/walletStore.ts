@@ -1,4 +1,3 @@
-// src/state/walletStore.ts
 import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
 
@@ -8,7 +7,10 @@ export type WalletBooking = {
   type: SavedItemType;
   title: string;
   status: SavedItemStatus;
-  provider?: string | null;
+  providerId?: string | null;
+  providerTier?: "tier1" | "tier2" | null;
+  providerCategory?: string | null;
+  partnerClickId?: string | null;
   url?: string | null;
   fixtureId?: number | null;
   home?: string | null;
@@ -18,6 +20,7 @@ export type WalletBooking = {
   hasProof: boolean;
   createdAt: number;
   updatedAt: number;
+  bookedAt?: number | null;
 };
 
 export type WalletTicket = WalletBooking & {
@@ -60,23 +63,26 @@ function getAttachments(item: SavedItem) {
 
 function mapSavedItemToWalletBooking(item: SavedItem): WalletBooking {
   const attachments = getAttachments(item);
-
   return {
     id: String(item.id),
     tripId: cleanString(item.tripId) || undefined,
     type: item.type,
     title: item.title ?? "Untitled",
     status: item.status,
-    provider: item.partnerId ?? null,
+    providerId: item.partnerId ?? null,
+    providerTier: item.partnerTier ?? null,
+    providerCategory: item.partnerCategory ?? null,
+    partnerClickId: item.partnerClickId ?? null,
     url: item.partnerUrl ?? null,
     fixtureId: toNumberOrNull(item.metadata?.fixtureId),
-    home: item.metadata?.home ?? null,
-    away: item.metadata?.away ?? null,
-    kickoffIso: item.metadata?.kickoffIso ?? null,
+    home: (item.metadata?.home as string) ?? null,
+    away: (item.metadata?.away as string) ?? null,
+    kickoffIso: (item.metadata?.kickoffIso as string) ?? null,
     attachmentCount: attachments.length,
     hasProof: attachments.length > 0,
     createdAt: Number(item.createdAt ?? Date.now()),
     updatedAt: Number(item.updatedAt ?? item.createdAt ?? Date.now()),
+    bookedAt: Number.isFinite(Number(item.bookedAt)) ? Number(item.bookedAt) : null,
   };
 }
 
@@ -93,11 +99,7 @@ async function ensureLoaded() {
 
 async function getAllWalletItems(): Promise<WalletBooking[]> {
   await ensureLoaded();
-
-  return savedItemsStore
-    .getAll()
-    .map(mapSavedItemToWalletBooking)
-    .sort(byUpdatedDesc);
+  return savedItemsStore.getAll().map(mapSavedItemToWalletBooking).sort(byUpdatedDesc);
 }
 
 async function getVisibleWalletItems(): Promise<WalletBooking[]> {
@@ -121,11 +123,10 @@ async function getSavedItems(): Promise<WalletBooking[]> {
 }
 
 async function getItemsForTrip(tripId: string): Promise<WalletBooking[]> {
-  const t = cleanString(tripId);
-  if (!t) return [];
-
+  const key = cleanString(tripId);
+  if (!key) return [];
   const all = await getAllWalletItems();
-  return all.filter((item) => item.tripId === t);
+  return all.filter((item) => item.tripId === key);
 }
 
 async function getVisibleItemsForTrip(tripId: string): Promise<WalletBooking[]> {
@@ -135,22 +136,16 @@ async function getVisibleItemsForTrip(tripId: string): Promise<WalletBooking[]> 
 
 async function getGroupedByTrip(): Promise<WalletTripGroup[]> {
   const all = await getVisibleWalletItems();
-
   const groups = new Map<string, WalletBooking[]>();
-
   for (const item of all) {
     const tripId = cleanString(item.tripId);
     if (!tripId) continue;
-
-    const existing = groups.get(tripId) ?? [];
-    existing.push(item);
-    groups.set(tripId, existing);
+    groups.set(tripId, [...(groups.get(tripId) ?? []), item]);
   }
 
   return Array.from(groups.entries())
     .map(([tripId, items]) => {
       const sorted = [...items].sort(byUpdatedDesc);
-
       return {
         tripId,
         items: sorted,
@@ -166,14 +161,11 @@ async function getGroupedByTrip(): Promise<WalletTripGroup[]> {
 
 async function getWalletSummary(): Promise<WalletSummary> {
   const all = await getAllWalletItems();
-
   const booked = all.filter((x) => x.status === "booked").length;
   const pending = all.filter((x) => x.status === "pending").length;
   const saved = all.filter((x) => x.status === "saved").length;
   const archived = all.filter((x) => x.status === "archived").length;
   const withProof = all.filter((x) => x.hasProof).length;
-  const withoutProof = all.length - withProof;
-
   return {
     total: all.length,
     booked,
@@ -181,23 +173,14 @@ async function getWalletSummary(): Promise<WalletSummary> {
     saved,
     archived,
     withProof,
-    withoutProof,
+    withoutProof: all.length - withProof,
   };
 }
-
-/* -------------------------------------------------------------------------- */
-/* Backward-compatible ticket selectors                                        */
-/* -------------------------------------------------------------------------- */
 
 function asWalletTicket(item: WalletBooking): WalletTicket | null {
   if (item.type !== "tickets") return null;
   if (item.status !== "pending" && item.status !== "booked") return null;
-
-  return {
-    ...item,
-    type: "tickets",
-    status: item.status,
-  };
+  return { ...item, type: "tickets", status: item.status };
 }
 
 async function getAllTickets(): Promise<WalletTicket[]> {
@@ -230,7 +213,6 @@ export default {
   getVisibleItemsForTrip,
   getGroupedByTrip,
   getWalletSummary,
-
   getAllTickets,
   getPendingTickets,
   getBookedTickets,
