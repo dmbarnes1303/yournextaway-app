@@ -43,6 +43,8 @@ export type LogPartnerEventInput = {
   metadata?: Record<string, unknown>;
 };
 
+const ANALYTICS_DEBUG_PREFIX = "[analytics]";
+
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
@@ -57,76 +59,126 @@ function safeExistingMetadata(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-async function maybe<T>(work: () => Promise<T>): Promise<T | null> {
-  if (!isSupabaseConfigured()) return null;
+function logInfo(message: string, context?: Record<string, unknown>) {
+  console.info(ANALYTICS_DEBUG_PREFIX, message, context ?? {});
+}
+
+function logWarn(message: string, context?: Record<string, unknown>) {
+  console.warn(ANALYTICS_DEBUG_PREFIX, message, context ?? {});
+}
+
+function logError(message: string, error: unknown, context?: Record<string, unknown>) {
+  console.error(ANALYTICS_DEBUG_PREFIX, message, {
+    ...(context ?? {}),
+    errorMessage: error instanceof Error ? error.message : String(error ?? "unknown_error"),
+    error,
+  });
+}
+
+async function maybe<T>(
+  operationName: string,
+  work: () => Promise<T>,
+  context?: Record<string, unknown>
+): Promise<T | null> {
+  if (!isSupabaseConfigured()) {
+    logWarn(`${operationName}: skipped because Supabase is not configured`, context);
+    return null;
+  }
+
   try {
-    return await work();
-  } catch {
+    const result = await work();
+    logInfo(`${operationName}: success`, context);
+    return result;
+  } catch (error) {
+    logError(`${operationName}: failed`, error, context);
     return null;
   }
 }
 
-export async function createPartnerClick(input: CreatePartnerClickInput): Promise<PartnerClickRecord | null> {
-  return maybe(async () => {
-    const supabase = getSupabaseClient();
-    const payload = {
-      trip_id: clean(input.tripId),
-      saved_item_id: clean(input.savedItemId) || null,
-      partner_id: clean(input.partnerId),
-      partner_category: clean(input.partnerCategory),
-      partner_tier: clean(input.partnerTier),
-      url: clean(input.url),
-      source_surface: clean(input.sourceSurface) || null,
-      source_section: clean(input.sourceSection) || null,
-      status: input.status ?? "clicked",
-      metadata: compactMetadata(input.metadata),
-    };
+export async function createPartnerClick(
+  input: CreatePartnerClickInput
+): Promise<PartnerClickRecord | null> {
+  const context = {
+    tripId: clean(input.tripId),
+    savedItemId: clean(input.savedItemId) || null,
+    partnerId: clean(input.partnerId),
+    partnerCategory: clean(input.partnerCategory),
+    partnerTier: clean(input.partnerTier),
+    sourceSurface: clean(input.sourceSurface) || null,
+    sourceSection: clean(input.sourceSection) || null,
+  };
 
-    const { data, error } = await supabase
-      .from("partner_clicks")
-      .insert(payload)
-      .select("*")
-      .single();
+  return maybe(
+    "createPartnerClick",
+    async () => {
+      const supabase = getSupabaseClient();
 
-    if (error) throw error;
-    return data as PartnerClickRecord;
-  });
+      const payload = {
+        trip_id: clean(input.tripId),
+        saved_item_id: clean(input.savedItemId) || null,
+        partner_id: clean(input.partnerId),
+        partner_category: clean(input.partnerCategory),
+        partner_tier: clean(input.partnerTier),
+        url: clean(input.url),
+        source_surface: clean(input.sourceSurface) || null,
+        source_section: clean(input.sourceSection) || null,
+        status: input.status ?? "clicked",
+        metadata: compactMetadata(input.metadata),
+      };
+
+      const { data, error } = await supabase
+        .from("partner_clicks")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+      return data as PartnerClickRecord;
+    },
+    context
+  );
 }
 
 export async function markPartnerClickReturned(args: {
   clickId: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
-  await maybe(async () => {
-    const supabase = getSupabaseClient();
-    const clickId = clean(args.clickId);
+  const clickId = clean(args.clickId);
+  const context = { clickId };
 
-    const { data: existingRow, error: fetchError } = await supabase
-      .from("partner_clicks")
-      .select("metadata")
-      .eq("id", clickId)
-      .single();
+  await maybe(
+    "markPartnerClickReturned",
+    async () => {
+      const supabase = getSupabaseClient();
 
-    if (fetchError) throw fetchError;
+      const { data: existingRow, error: fetchError } = await supabase
+        .from("partner_clicks")
+        .select("metadata")
+        .eq("id", clickId)
+        .single();
 
-    const existingMetadata = safeExistingMetadata(existingRow?.metadata);
-    const newMetadata = compactMetadata(args.metadata);
-    const mergedMetadata = compactMetadata({
-      ...existingMetadata,
-      ...newMetadata,
-    });
+      if (fetchError) throw fetchError;
 
-    const { error } = await supabase
-      .from("partner_clicks")
-      .update({
-        status: "returned",
-        returned_at: new Date().toISOString(),
-        metadata: mergedMetadata,
-      })
-      .eq("id", clickId);
+      const existingMetadata = safeExistingMetadata(existingRow?.metadata);
+      const newMetadata = compactMetadata(args.metadata);
+      const mergedMetadata = compactMetadata({
+        ...existingMetadata,
+        ...newMetadata,
+      });
 
-    if (error) throw error;
-  });
+      const { error } = await supabase
+        .from("partner_clicks")
+        .update({
+          status: "returned",
+          returned_at: new Date().toISOString(),
+          metadata: mergedMetadata,
+        })
+        .eq("id", clickId);
+
+      if (error) throw error;
+    },
+    context
+  );
 }
 
 export async function markPartnerClickConverted(args: {
@@ -138,38 +190,50 @@ export async function markPartnerClickConverted(args: {
   bookingStatus: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
-  await maybe(async () => {
-    const supabase = getSupabaseClient();
-    const clickId = clean(args.clickId);
+  const clickId = clean(args.clickId);
 
-    const { error: conversionError } = await supabase
-      .from("partner_conversions")
-      .upsert(
-        {
-          partner_click_id: clickId,
-          trip_id: clean(args.tripId),
+  await maybe(
+    "markPartnerClickConverted",
+    async () => {
+      const supabase = getSupabaseClient();
+
+      const { error: conversionError } = await supabase
+        .from("partner_conversions")
+        .upsert(
+          {
+            partner_click_id: clickId,
+            trip_id: clean(args.tripId),
+            saved_item_id: clean(args.savedItemId),
+            partner_id: clean(args.partnerId),
+            saved_item_type: clean(args.savedItemType),
+            booking_status: clean(args.bookingStatus),
+            metadata: compactMetadata(args.metadata),
+          },
+          { onConflict: "partner_click_id" }
+        );
+
+      if (conversionError) throw conversionError;
+
+      const { error: clickError } = await supabase
+        .from("partner_clicks")
+        .update({
           saved_item_id: clean(args.savedItemId),
-          partner_id: clean(args.partnerId),
-          saved_item_type: clean(args.savedItemType),
-          booking_status: clean(args.bookingStatus),
-          metadata: compactMetadata(args.metadata),
-        },
-        { onConflict: "partner_click_id" }
-      );
+          status: "converted",
+          converted_at: new Date().toISOString(),
+        })
+        .eq("id", clickId);
 
-    if (conversionError) throw conversionError;
-
-    const { error: clickError } = await supabase
-      .from("partner_clicks")
-      .update({
-        saved_item_id: clean(args.savedItemId),
-        status: "converted",
-        converted_at: new Date().toISOString(),
-      })
-      .eq("id", clickId);
-
-    if (clickError) throw clickError;
-  });
+      if (clickError) throw clickError;
+    },
+    {
+      clickId,
+      tripId: clean(args.tripId),
+      savedItemId: clean(args.savedItemId),
+      partnerId: clean(args.partnerId),
+      savedItemType: clean(args.savedItemType),
+      bookingStatus: clean(args.bookingStatus),
+    }
+  );
 }
 
 export async function attachSavedItemToPartnerClick(args: {
@@ -177,50 +241,73 @@ export async function attachSavedItemToPartnerClick(args: {
   savedItemId: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
-  await maybe(async () => {
-    const supabase = getSupabaseClient();
-    const clickId = clean(args.clickId);
+  const clickId = clean(args.clickId);
 
-    const { data: existingRow, error: fetchError } = await supabase
-      .from("partner_clicks")
-      .select("metadata")
-      .eq("id", clickId)
-      .single();
+  await maybe(
+    "attachSavedItemToPartnerClick",
+    async () => {
+      const supabase = getSupabaseClient();
 
-    if (fetchError) throw fetchError;
+      const { data: existingRow, error: fetchError } = await supabase
+        .from("partner_clicks")
+        .select("metadata")
+        .eq("id", clickId)
+        .single();
 
-    const existingMetadata = safeExistingMetadata(existingRow?.metadata);
-    const newMetadata = compactMetadata(args.metadata);
-    const mergedMetadata = compactMetadata({
-      ...existingMetadata,
-      ...newMetadata,
-    });
+      if (fetchError) throw fetchError;
 
-    const { error } = await supabase
-      .from("partner_clicks")
-      .update({
-        saved_item_id: clean(args.savedItemId),
-        metadata: mergedMetadata,
-      })
-      .eq("id", clickId);
+      const existingMetadata = safeExistingMetadata(existingRow?.metadata);
+      const newMetadata = compactMetadata(args.metadata);
+      const mergedMetadata = compactMetadata({
+        ...existingMetadata,
+        ...newMetadata,
+      });
 
-    if (error) throw error;
-  });
+      const { error } = await supabase
+        .from("partner_clicks")
+        .update({
+          saved_item_id: clean(args.savedItemId),
+          metadata: mergedMetadata,
+        })
+        .eq("id", clickId);
+
+      if (error) throw error;
+    },
+    {
+      clickId,
+      savedItemId: clean(args.savedItemId),
+    }
+  );
 }
 
 export async function logPartnerEvent(input: LogPartnerEventInput): Promise<void> {
-  await maybe(async () => {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase.from("partner_events").insert({
-      partner_click_id: clean(input.partnerClickId) || null,
-      trip_id: clean(input.tripId) || null,
-      saved_item_id: clean(input.savedItemId) || null,
-      event_name: clean(input.eventName),
-      partner_id: clean(input.partnerId) || null,
-      source_surface: clean(input.sourceSurface) || null,
-      source_section: clean(input.sourceSection) || null,
-      metadata: compactMetadata(input.metadata),
-    });
-    if (error) throw error;
-  });
+  await maybe(
+    "logPartnerEvent",
+    async () => {
+      const supabase = getSupabaseClient();
+
+      const payload = {
+        partner_click_id: clean(input.partnerClickId) || null,
+        trip_id: clean(input.tripId) || null,
+        saved_item_id: clean(input.savedItemId) || null,
+        event_name: clean(input.eventName),
+        partner_id: clean(input.partnerId) || null,
+        source_surface: clean(input.sourceSurface) || null,
+        source_section: clean(input.sourceSection) || null,
+        metadata: compactMetadata(input.metadata),
+      };
+
+      const { error } = await supabase.from("partner_events").insert(payload);
+      if (error) throw error;
+    },
+    {
+      partnerClickId: clean(input.partnerClickId) || null,
+      tripId: clean(input.tripId) || null,
+      savedItemId: clean(input.savedItemId) || null,
+      eventName: clean(input.eventName),
+      partnerId: clean(input.partnerId) || null,
+      sourceSurface: clean(input.sourceSurface) || null,
+      sourceSection: clean(input.sourceSection) || null,
+    }
+  );
 }
