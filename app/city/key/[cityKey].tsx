@@ -1,4 +1,3 @@
-// app/city/key/[cityKey].tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -11,7 +10,6 @@ import {
   Platform,
   Modal,
   RefreshControl,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -35,9 +33,6 @@ import type { CityGuide, CityTopThing } from "@/src/data/cityGuides/types";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getCityByKeyLive, type CityRecord } from "@/src/services/citiesRegistry";
 import { normalizeCityKey } from "@/src/utils/city";
-import { beginPartnerClick } from "@/src/services/partnerClicks";
-import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
-import tripsStore from "@/src/state/trips";
 
 /* -------------------------------------------------------------------------- */
 /* Utils */
@@ -229,34 +224,6 @@ function splitLinesToBullets(text: string) {
     .filter(Boolean);
 
   return { bullets, paragraph: "" };
-}
-
-function isValidHttpUrl(value: unknown): boolean {
-  const raw = safeStr(value);
-  if (!raw) return false;
-
-  const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-
-  try {
-    const url = new URL(withProto);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function isGetYourGuideUrl(value: unknown): boolean {
-  const raw = safeStr(value);
-  if (!raw) return false;
-
-  const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-
-  try {
-    const url = new URL(withProto);
-    return /(^|\.)getyourguide\./i.test(url.hostname);
-  } catch {
-    return false;
-  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -705,7 +672,6 @@ export default function CityScreen() {
   const [cityLive, setCityLive] = useState<CityRecord | null>(null);
   const [cityLiveLoading, setCityLiveLoading] = useState(true);
 
-  const guide = useMemo(() => getCityGuide(citySlug) as CityGuide | null, [citySlug]);
   const guideFull = useMemo(() => getCityGuideFull(citySlug), [citySlug]);
 
   const [loadingFx, setLoadingFx] = useState(true);
@@ -721,7 +687,6 @@ export default function CityScreen() {
 
   const cancelRef = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [openingThings, setOpeningThings] = useState(false);
 
   useEffect(() => {
     cancelRef.current = false;
@@ -874,46 +839,17 @@ export default function CityScreen() {
     return parts.join(" • ");
   }, [guideFull, guideBlocks]);
 
-  const guideThingsToDoUrl = useMemo(() => {
-    const canonical = safeStr(guide?.bookingLinks?.thingsToDo);
-    if (isValidHttpUrl(canonical)) return canonical;
-
-    const legacy = safeStr(guide?.thingsToDoUrl);
-    if (isValidHttpUrl(legacy)) return legacy;
-
-    const built = buildAffiliateLinks({
-      city: title,
-      startDate: from,
-      endDate: to,
-    }).experiencesUrl;
-
-    return isValidHttpUrl(built) ? safeStr(built) : "";
-  }, [guide, title, from, to]);
-
-  const hasThingsToDoUrl = useMemo(() => !!safeStr(guideThingsToDoUrl), [guideThingsToDoUrl]);
-  const thingsToDoIsTrackedFlowReady = useMemo(() => {
-    return !!safeStr(activeTripId) && hasThingsToDoUrl;
-  }, [activeTripId, hasThingsToDoUrl]);
-
-  const thingsToDoCtaLabel = useMemo(() => {
-    if (openingThings) return "Opening…";
-    if (!hasThingsToDoUrl) return "Things to do unavailable";
-    if (!activeTripId) return "Pick a fixture to unlock things to do";
-    return "Explore things to do";
-  }, [openingThings, hasThingsToDoUrl, activeTripId]);
-
-  const thingsToDoHelper = useMemo(() => {
-    if (!hasThingsToDoUrl) {
-      return "No valid city experiences link is available for this city yet.";
+  const guideHelper = useMemo(() => {
+    if (!guideFull) {
+      return "We’ll add this city soon. For now, use fixtures below to anchor your trip.";
     }
+
     if (!activeTripId) {
-      return "To keep partner clicks tracked and saved into Wallet, pick a fixture below and create a trip first.";
+      return "This guide is editorial only. Pick a fixture below to start a real trip.";
     }
-    if (isGetYourGuideUrl(guideThingsToDoUrl)) {
-      return "This opens the city’s tracked experiences link and saves the click to your trip.";
-    }
-    return "This opens the tracked experiences link for this city and saves the click to your trip.";
-  }, [hasThingsToDoUrl, activeTripId, guideThingsToDoUrl]);
+
+    return "This guide is editorial planning support. Use a fixture below to build the actual trip.";
+  }, [guideFull, activeTripId]);
 
   const progressLine = useMemo(() => {
     if (!loadingFx) return "";
@@ -955,62 +891,6 @@ export default function CityScreen() {
     },
     [router, activeTripId, from, to, title]
   );
-
-  const openThingsToDo = useCallback(async () => {
-    const url = safeStr(guideThingsToDoUrl);
-    if (!url || openingThings) return;
-
-    if (!isValidHttpUrl(url)) {
-      Alert.alert("Things to do unavailable", "This city does not have a valid experiences link yet.");
-      return;
-    }
-
-    if (!activeTripId) {
-      Alert.alert(
-        "Pick a fixture first",
-        "To keep experiences tracked and saved into Wallet, open a fixture below, build/save the trip, then come back and open things to do."
-      );
-      return;
-    }
-
-    setOpeningThings(true);
-
-    try {
-      if (!tripsStore.getState().loaded) {
-        await tripsStore.loadTrips();
-      }
-
-      const trip = tripsStore.getById(activeTripId);
-      if (!trip) {
-        Alert.alert(
-          "Trip not found",
-          "The linked trip no longer exists. Pick a fixture below and save a trip first."
-        );
-        return;
-      }
-
-      await beginPartnerClick({
-        tripId: activeTripId,
-        partnerId: "getyourguide",
-        url,
-        savedItemType: "things",
-        title: `Things to do in ${title}`,
-        metadata: {
-          city: title,
-          destination: title,
-          cityKey: citySlug || cityKeyParam,
-          from,
-          to,
-          source: "city_guide",
-          sourceType: isGetYourGuideUrl(url) ? "guide_direct" : "affiliate_fallback",
-        },
-      });
-    } catch {
-      Alert.alert("Unable to open", "The things-to-do link could not be opened right now.");
-    } finally {
-      setOpeningThings(false);
-    }
-  }, [guideThingsToDoUrl, openingThings, activeTripId, title, citySlug, cityKeyParam, from, to]);
 
   const bg = getCityBackground(citySlug || cityKeyParam);
   const bgSource = typeof bg === "string" ? { uri: bg } : bg;
@@ -1099,37 +979,9 @@ export default function CityScreen() {
                 ) : null}
               </View>
 
-              {guideFull && guidePreview ? (
-                <Text style={styles.blockNote}>{guidePreview}</Text>
-              ) : !guideFull ? (
-                <Text style={styles.blockNote}>
-                  We’ll add this city soon. For now, use fixtures below to anchor your trip.
-                </Text>
-              ) : null}
+              {guideFull && guidePreview ? <Text style={styles.blockNote}>{guidePreview}</Text> : null}
 
-              <Text style={styles.blockNote}>{thingsToDoHelper}</Text>
-
-              <Pressable
-                onPress={thingsToDoIsTrackedFlowReady ? openThingsToDo : undefined}
-                accessibilityRole="button"
-                accessibilityLabel={`${thingsToDoCtaLabel} in ${title}`}
-                disabled={!thingsToDoIsTrackedFlowReady || openingThings}
-                style={({ pressed }) => [
-                  styles.thingsBtn,
-                  (!thingsToDoIsTrackedFlowReady || openingThings) && styles.thingsBtnDisabled,
-                  (pressed || openingThings) && styles.pressed,
-                ]}
-                android_ripple={{ color: "rgba(79,224,138,0.10)" }}
-              >
-                <Text
-                  style={[
-                    styles.thingsBtnText,
-                    (!thingsToDoIsTrackedFlowReady || openingThings) && styles.thingsBtnTextDisabled,
-                  ]}
-                >
-                  {thingsToDoCtaLabel}
-                </Text>
-              </Pressable>
+              <Text style={styles.blockNote}>{guideHelper}</Text>
             </View>
           </GlassCard>
 
@@ -1309,33 +1161,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
-  },
-
-  thingsBtn: {
-    marginTop: 2,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(79,224,138,0.26)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(79,224,138,0.10)" : "rgba(79,224,138,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  thingsBtnDisabled: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
-  },
-  thingsBtnText: {
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.black,
-  },
-  thingsBtnTextDisabled: {
-    color: theme.colors.textTertiary,
   },
 
   center: { paddingVertical: 14, alignItems: "center", gap: 10 },
