@@ -1,11 +1,9 @@
-// src/features/tripDetail/helpers.ts
-
 import type {
   TicketResolutionOption,
   TicketResolutionResult,
 } from "@/src/services/ticketResolver";
 import type { PartnerId } from "@/src/constants/partners";
-import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
+import type { RankedTrip } from "@/src/features/tripFinder/types";
 
 /* ============================================================================
  * BASICS
@@ -60,23 +58,10 @@ export type SmartButton = {
 
 export type AffiliateUrls = {
   ticketsUrl: string | null;
+  secondaryTicketsUrl: string | null;
   flightsUrl: string | null;
-  staysUrl: string | null;
-  trainsUrl: string | null;
-  busesUrl: string | null;
-  transfersUrl: string | null;
+  hotelsUrl: string | null;
   insuranceUrl: string | null;
-  thingsUrl: string | null;
-  carHireUrl: string | null;
-  mapsUrl: string | null;
-  officialSiteUrl: string | null;
-  claimsUrl: string | null;
-
-  hotelsUrl?: string | null;
-  experiencesUrl?: string | null;
-  transportUrl?: string | null;
-  omioUrl?: string | null;
-  secondaryTicketsUrl?: string | null;
 };
 
 export type GuidanceArea = {
