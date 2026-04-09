@@ -48,9 +48,6 @@ export type TripWorkspaceCardProps = {
   affiliateUrls: {
     hotelsUrl?: string | null;
     flightsUrl?: string | null;
-    omioUrl?: string | null;
-    transfersUrl?: string | null;
-    experiencesUrl?: string | null;
     insuranceUrl?: string | null;
   } | null;
   cityName: string;
@@ -139,10 +136,10 @@ function friendlyTypeLabel(item: SavedItem): string {
   if (item.type === "flight") return "Flights";
   if (item.type === "hotel") return "Stay";
   if (item.type === "train") return "Rail";
-  if (item.type === "transfer") return "Transfers";
+  if (item.type === "transfer") return "Transport";
   if (item.type === "insurance") return "Insurance";
   if (item.type === "claim") return "Claims";
-  if (item.type === "things") return "Activities";
+  if (item.type === "things") return "Extras";
   if (item.type === "note" || item.type === "other") return "Notes";
   return "Item";
 }
@@ -165,11 +162,13 @@ function sectionTitle(sectionKey: WorkspaceSectionKey) {
 function sectionLead(sectionKey: WorkspaceSectionKey) {
   if (sectionKey === "tickets") return "Start here. Tickets anchor the whole trip.";
   if (sectionKey === "travel") return "Flights should be handled early, not guessed later.";
-  if (sectionKey === "stay") return "At the moment this is hotel search, not guaranteed best-value comparison.";
-  if (sectionKey === "transfers") {
-    return "Track local transport planning here, even though no transport booking partner is live yet.";
+  if (sectionKey === "stay") {
+    return "This currently opens Expedia hotel search, not a full best-value comparison system.";
   }
-  if (sectionKey === "things") return "Only add extras that improve the trip.";
+  if (sectionKey === "transfers") {
+    return "No live transport booking partner exists yet. Use this section for manual planning.";
+  }
+  if (sectionKey === "things") return "Extras are optional. Do not clutter the trip.";
   if (sectionKey === "insurance") return "Store cover and policy evidence in one place.";
   if (sectionKey === "claims") return "Keep refund, delay and compensation evidence together.";
   return "Keep useful planning notes here.";
@@ -194,10 +193,7 @@ function cleanUserFacingPriceLine(value: string | null) {
   const raw = clean(value);
   if (!raw) return null;
 
-  return raw
-    .replace(/\bLive price on\b/gi, "Live price •")
-    .replace(/\s+/g, " ")
-    .trim();
+  return raw.replace(/\bLive price on\b/gi, "Live price •").replace(/\s+/g, " ").trim();
 }
 
 function itemActionHint(item: SavedItem, livePrice: string | null) {
