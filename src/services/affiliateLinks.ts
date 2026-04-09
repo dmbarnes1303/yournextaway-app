@@ -108,16 +108,10 @@ function resolveDestinationIata(city: string): string | null {
   return /^[A-Z]{3}$/.test(resolved) ? resolved : null;
 }
 
-function mapCabinClassToTripClass(value: CabinClass): string {
-  switch (value) {
-    case "business":
-    case "first":
-      return "1";
-    case "premium":
-    case "economy":
-    default:
-      return "0";
-  }
+function mapCabinClassToTripClass(value: CabinClass): "0" | "1" | "2" {
+  if (value === "business") return "1";
+  if (value === "first") return "2";
+  return "0";
 }
 
 function buildFlightsUrl(args: {
@@ -128,22 +122,17 @@ function buildFlightsUrl(args: {
   passengers: number;
   cabinClass: CabinClass;
 }): string | null {
-  const city = clean(args.city);
   const origin = normalizeOriginIata(args.originIata);
-  const destination = resolveDestinationIata(city);
-  const departDate = args.startDate;
-  const returnDate = args.endDate;
+  const destination = resolveDestinationIata(args.city);
+  const departDate = normalizeYmd(args.startDate);
+  const returnDate = normalizeYmd(args.endDate);
   const marker = clean(AffiliateConfig.aviasalesMarker);
 
-  const fallback =
-    resolveTrackedOrFallbackUrl(AffiliateConfig.aviasalesFallback) ||
-    resolveTrackedOrFallbackUrl("https://www.aviasales.com/");
-
   if (!destination || !departDate) {
-    return fallback;
+    return null;
   }
 
-  return appendQuery("https://search.aviasales.com/flights", {
+  return appendQuery("https://www.aviasales.com/search", {
     origin_iata: origin,
     destination_iata: destination,
     depart_date: departDate,
