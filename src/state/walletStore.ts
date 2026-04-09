@@ -61,8 +61,25 @@ function getAttachments(item: SavedItem) {
   return Array.isArray(item.attachments) ? item.attachments : [];
 }
 
+function getHomeName(item: SavedItem): string | null {
+  const modern = cleanString(item.metadata?.homeName);
+  if (modern) return modern;
+
+  const legacy = cleanString(item.metadata?.home);
+  return legacy || null;
+}
+
+function getAwayName(item: SavedItem): string | null {
+  const modern = cleanString(item.metadata?.awayName);
+  if (modern) return modern;
+
+  const legacy = cleanString(item.metadata?.away);
+  return legacy || null;
+}
+
 function mapSavedItemToWalletBooking(item: SavedItem): WalletBooking {
   const attachments = getAttachments(item);
+
   return {
     id: String(item.id),
     tripId: cleanString(item.tripId) || undefined,
@@ -75,9 +92,9 @@ function mapSavedItemToWalletBooking(item: SavedItem): WalletBooking {
     partnerClickId: item.partnerClickId ?? null,
     url: item.partnerUrl ?? null,
     fixtureId: toNumberOrNull(item.metadata?.fixtureId),
-    home: (item.metadata?.home as string) ?? null,
-    away: (item.metadata?.away as string) ?? null,
-    kickoffIso: (item.metadata?.kickoffIso as string) ?? null,
+    home: getHomeName(item),
+    away: getAwayName(item),
+    kickoffIso: cleanString(item.metadata?.kickoffIso) || null,
     attachmentCount: attachments.length,
     hasProof: attachments.length > 0,
     createdAt: Number(item.createdAt ?? Date.now()),
@@ -137,6 +154,7 @@ async function getVisibleItemsForTrip(tripId: string): Promise<WalletBooking[]> 
 async function getGroupedByTrip(): Promise<WalletTripGroup[]> {
   const all = await getVisibleWalletItems();
   const groups = new Map<string, WalletBooking[]>();
+
   for (const item of all) {
     const tripId = cleanString(item.tripId);
     if (!tripId) continue;
@@ -146,6 +164,7 @@ async function getGroupedByTrip(): Promise<WalletTripGroup[]> {
   return Array.from(groups.entries())
     .map(([tripId, items]) => {
       const sorted = [...items].sort(byUpdatedDesc);
+
       return {
         tripId,
         items: sorted,
@@ -166,6 +185,7 @@ async function getWalletSummary(): Promise<WalletSummary> {
   const saved = all.filter((x) => x.status === "saved").length;
   const archived = all.filter((x) => x.status === "archived").length;
   const withProof = all.filter((x) => x.hasProof).length;
+
   return {
     total: all.length,
     booked,
