@@ -21,6 +21,23 @@ export function coerceId(value: unknown): string | null {
   return raw || null;
 }
 
+export function titleCaseCity(value: unknown): string {
+  const raw = clean(value);
+  if (!raw) return "";
+
+  return raw
+    .toLowerCase()
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((part) => {
+      if (part === "st") return "St";
+      if (part === "saint") return "Saint";
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
+
+
 export function defer(fn: () => void, delay = 0) {
   return setTimeout(fn, delay);
 }
