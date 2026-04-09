@@ -1,20 +1,3 @@
-// src/services/partnerClicks.ts
-//
-// Canonical partner click runtime.
-//
-// Responsibilities only:
-// - open tracked / untracked URLs
-// - create or reuse SavedItems
-// - persist last-click session state
-// - handle return-flow prompt state
-// - perform explicit, deterministic status transitions
-//
-// Non-responsibilities:
-// - partner registry definition
-// - partner display metadata
-// - outbound URL generation
-// - hidden category inference heuristics
-
 import { AppState, Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
@@ -23,67 +6,58 @@ import { readJson, writeJson } from "@/src/state/persist";
 import {
   getCanonicalPartnerId,
   getPartner,
-  isUtilityPartner,
   type PartnerCategory,
   type PartnerId,
+  type PartnerTier,
 } from "@/src/constants/partners";
 import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
+import {
+  attachSavedItemToPartnerClick,
+  createPartnerClick,
+  logPartnerEvent,
+  markPartnerClickConverted,
+  markPartnerClickReturned,
+} from "@/src/services/analytics";
 
 export type LastPartnerClick = {
+  clickId: string;
   itemId: string;
   tripId: string;
   partnerId: PartnerId;
+  partnerTier: PartnerTier;
   partnerCategory: PartnerCategory;
   savedItemType: SavedItemType;
   url: string;
+  sourceSurface?: string;
+  sourceSection?: string;
   createdAt: number;
   openedAt: number;
 };
 
-const STORAGE_KEY = "yna_last_partner_click_v2";
+const STORAGE_KEY = "yna_last_partner_click_v3";
 const CLICK_RETENTION_MS = 1000 * 60 * 60 * 6;
 const RETURN_DEDUPE_MS = 1500;
 
 let lastClick: LastPartnerClick | null = null;
 let lastClickLoaded = false;
-
 let watcherSubscribed = false;
 let appStateSub: { remove: () => void } | null = null;
 let onReturnHandler: ((click: LastPartnerClick) => void | Promise<void>) | null = null;
-
 let openInFlight = false;
 let returnInFlight = false;
 let lastReturnHandledAt = 0;
 
-/* -------------------------------------------------------------------------- */
-/* Canonical category -> SavedItemType mapping                                */
-/* -------------------------------------------------------------------------- */
-
 const CATEGORY_TO_SAVED_ITEM_TYPE: Record<PartnerCategory, SavedItemType> = {
   tickets: "tickets",
   flights: "flight",
-  stays: "hotel",
-  trains: "train",
-  buses: "train",
-  transfers: "transfer",
+  hotels: "hotel",
   insurance: "insurance",
-  things: "things",
-  car_hire: "other",
-  maps: "other",
-  official_site: "other",
-  claim: "claim",
-  note: "note",
-  other: "other",
 };
 
 export function mapPartnerCategoryToSavedItemType(category: PartnerCategory): SavedItemType {
   return CATEGORY_TO_SAVED_ITEM_TYPE[category];
 }
-
-/* -------------------------------------------------------------------------- */
-/* Helpers                                                                    */
-/* -------------------------------------------------------------------------- */
 
 function now(): number {
   return Date.now();
@@ -115,9 +89,7 @@ function isRecent(click: LastPartnerClick): boolean {
 function normalizeUrl(url: string): string {
   const raw = cleanString(url);
   if (!raw) return "";
-
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-
   try {
     const parsed = new URL(withProto);
     const protocol = (parsed.protocol || "https:").toLowerCase();
@@ -133,9 +105,7 @@ function normalizeUrl(url: string): string {
 function normalizeUrlLoose(url: string): string {
   const raw = cleanString(url);
   if (!raw) return "";
-
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-
   try {
     const parsed = new URL(withProto);
     const protocol = (parsed.protocol || "https:").toLowerCase();
@@ -153,7 +123,6 @@ function isDeterministicallyReusable(item: SavedItem): boolean {
 
 async function persistLastClick(next: LastPartnerClick | null): Promise<void> {
   lastClick = next;
-
   try {
     await writeJson(STORAGE_KEY, next);
   } catch {
@@ -168,51 +137,48 @@ async function clearLastClickState(): Promise<void> {
 async function loadLastClickOnce(): Promise<void> {
   if (lastClickLoaded) return;
   lastClickLoaded = true;
-
   try {
     const raw = await readJson<unknown>(STORAGE_KEY, null);
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
-
     const record = raw as Record<string, unknown>;
-
+    const clickId = cleanString(record.clickId);
     const itemId = cleanString(record.itemId);
     const tripId = cleanString(record.tripId);
     const rawPartnerId = cleanString(record.partnerId);
     const rawUrl = cleanString(record.url);
     const createdAt = Number(record.createdAt);
     const openedAt = Number(record.openedAt);
-
-    if (!itemId || !tripId || !rawPartnerId || !rawUrl) return;
+    if (!clickId || !itemId || !tripId || !rawPartnerId || !rawUrl) return;
     if (!Number.isFinite(createdAt) || createdAt <= 0) return;
     if (!Number.isFinite(openedAt) || openedAt <= 0) return;
 
     const partnerId = getCanonicalPartnerId(rawPartnerId);
     const partner = getPartner(partnerId);
-    const partnerCategory = partner.primaryCategory;
-
     const rawSavedItemType = cleanString(record.savedItemType);
     const savedItemType = isValidSavedItemType(rawSavedItemType)
       ? rawSavedItemType
-      : mapPartnerCategoryToSavedItemType(partnerCategory);
+      : mapPartnerCategoryToSavedItemType(partner.primaryCategory);
 
     const candidate: LastPartnerClick = {
+      clickId,
       itemId,
       tripId,
       partnerId,
-      partnerCategory,
+      partnerTier: partner.tier,
+      partnerCategory: partner.primaryCategory,
       savedItemType,
       url: normalizeUrl(rawUrl),
+      sourceSurface: cleanString(record.sourceSurface) || undefined,
+      sourceSection: cleanString(record.sourceSection) || undefined,
       createdAt,
       openedAt,
     };
 
     if (!candidate.url) return;
-
     if (!isRecent(candidate)) {
       await clearLastClickState();
       return;
     }
-
     lastClick = candidate;
   } catch {
     // ignore corrupt payloads
@@ -221,11 +187,10 @@ async function loadLastClickOnce(): Promise<void> {
 
 async function ensureSavedItemsLoaded(): Promise<void> {
   if (savedItemsStore.getState().loaded) return;
-
   try {
     await savedItemsStore.load();
   } catch {
-    // ignore load failure here
+    // ignore
   }
 }
 
@@ -233,19 +198,12 @@ function getItemById(itemId: string): SavedItem | undefined {
   return savedItemsStore.getById(itemId);
 }
 
-async function transitionIfCurrent(
-  itemId: string,
-  fromStatus: SavedItemStatus,
-  toStatus: SavedItemStatus
-): Promise<void> {
+async function transitionIfCurrent(itemId: string, fromStatus: SavedItemStatus, toStatus: SavedItemStatus): Promise<void> {
   const id = cleanString(itemId);
   if (!id) return;
-
   await ensureSavedItemsLoaded();
-
   const current = getItemById(id);
   if (!current || current.status !== fromStatus) return;
-
   try {
     await savedItemsStore.transitionStatus(id, toStatus);
   } catch {
@@ -256,12 +214,10 @@ async function transitionIfCurrent(
 async function openUrlInternal(url: string) {
   const normalized = normalizeUrl(url);
   if (!normalized) throw new Error("url is required");
-
   if (Platform.OS === "web") {
     window.open(normalized, "_blank", "noopener,noreferrer");
     return { type: "opened" as const };
   }
-
   return await WebBrowser.openBrowserAsync(normalized, {
     presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
     readerMode: false,
@@ -272,7 +228,6 @@ async function openUrlInternal(url: string) {
 
 async function openBrowserGuarded(url: string) {
   if (openInFlight) throw new Error("Partner open already in progress");
-
   openInFlight = true;
   try {
     return await openUrlInternal(url);
@@ -281,110 +236,65 @@ async function openBrowserGuarded(url: string) {
   }
 }
 
-function buildDefaultTitle(args: {
-  partnerName: string;
-  type: SavedItemType;
-  metadata?: Record<string, unknown>;
-}): string {
+function buildDefaultTitle(args: { partnerName: string; type: SavedItemType; metadata?: Record<string, unknown> }): string {
   const metadata = args.metadata as Record<string, unknown> | undefined;
-
-  const city =
-    cleanString(metadata?.city ?? metadata?.destination ?? metadata?.place) || null;
-
+  const city = cleanString(metadata?.city ?? metadata?.destination ?? metadata?.place) || null;
   const label = getSavedItemTypeLabel(args.type);
-
   switch (args.type) {
     case "hotel":
       return city ? `Stay: Hotels in ${city}` : "Stay: Hotels";
     case "flight":
       return city ? `Flights to ${city}` : "Flights";
-    case "train":
-      return city ? `Travel to ${city}` : "Travel";
-    case "transfer":
-      return city ? `Transfers in ${city}` : "Transfers";
-    case "things":
-      return city ? `Things to do in ${city}` : "Things to do";
     case "tickets":
       return city ? `Match tickets for ${city}` : "Match tickets";
     case "insurance":
-      return city
-        ? `Protect yourself: Travel insurance for ${city}`
-        : "Protect yourself: Travel insurance";
-    case "claim":
-      return "Claims & compensation";
-    case "note":
-      return "Note";
-    case "other":
+      return city ? `Travel insurance for ${city}` : "Travel insurance";
     default:
       return city ? `${label}: ${city}` : `${label}: ${args.partnerName}`;
   }
 }
 
-function findReusableItem(args: {
-  tripId: string;
-  partnerId: PartnerId;
-  url: string;
-  type: SavedItemType;
-}): SavedItem | null {
+function findReusableItem(args: { tripId: string; partnerId: PartnerId; url: string; type: SavedItemType }): SavedItem | null {
   const tripId = cleanString(args.tripId);
   const strictUrl = normalizeUrl(args.url);
   const looseUrl = normalizeUrlLoose(args.url);
-
   if (!tripId || !strictUrl) return null;
-
   const items = savedItemsStore.getAll();
-
   const matches = items.filter((item) => {
     if (cleanString(item.tripId) !== tripId) return false;
     if (cleanString(item.partnerId) !== args.partnerId) return false;
     if (String(item.type) !== String(args.type)) return false;
     if (!isDeterministicallyReusable(item)) return false;
-
     const itemStrict = normalizeUrl(cleanString(item.partnerUrl));
     const itemLoose = normalizeUrlLoose(cleanString(item.partnerUrl));
-
     return itemStrict === strictUrl || itemLoose === looseUrl;
   });
-
   if (!matches.length) return null;
-
-  return (
-    matches.find((item) => item.status === "pending") ??
-    matches.find((item) => item.status === "saved") ??
-    matches.find((item) => item.status === "booked") ??
-    null
-  );
+  return matches.find((item) => item.status === "pending") ?? matches.find((item) => item.status === "saved") ?? matches.find((item) => item.status === "booked") ?? null;
 }
 
-async function triggerReturnIfPresent(
-  _reason: "appstate" | "browser_dismiss"
-): Promise<void> {
+async function triggerReturnIfPresent(): Promise<void> {
   const ts = now();
   if (returnInFlight) return;
   if (ts - lastReturnHandledAt < RETURN_DEDUPE_MS) return;
-
   returnInFlight = true;
-
   try {
     await loadLastClickOnce();
-
     const click = lastClick;
     if (!click) return;
-
     if (!isRecent(click)) {
       await clearLastClickState();
       return;
     }
-
+    await markPartnerClickReturned({
+      clickId: click.clickId,
+      metadata: { returnedVia: "app_active" },
+    });
     const handler = onReturnHandler;
     if (!handler) return;
-
     await clearLastClickState();
-
     try {
       await Promise.resolve(handler(click));
-    } catch {
-      // never crash app due to return handler failure
     } finally {
       lastReturnHandledAt = now();
     }
@@ -393,23 +303,12 @@ async function triggerReturnIfPresent(
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Public runtime API                                                         */
-/* -------------------------------------------------------------------------- */
-
 export function getPartnerClicksDebugState() {
-  return {
-    opening: openInFlight,
-    subscribed: watcherSubscribed,
-    lastClick,
-  };
+  return { opening: openInFlight, subscribed: watcherSubscribed, lastClick };
 }
 
-export function ensurePartnerReturnWatcher(
-  onReturn: (click: LastPartnerClick) => void | Promise<void>
-) {
+export function ensurePartnerReturnWatcher(onReturn: (click: LastPartnerClick) => void | Promise<void>) {
   onReturnHandler = onReturn;
-
   if (watcherSubscribed) {
     return () => {
       onReturnHandler = null;
@@ -418,28 +317,21 @@ export function ensurePartnerReturnWatcher(
 
   watcherSubscribed = true;
   void loadLastClickOnce();
-
   let lastState = AppState.currentState;
-
   appStateSub = AppState.addEventListener("change", (nextState) => {
-    const becameActive =
-      Boolean(String(lastState).match(/inactive|background/)) && nextState === "active";
-
+    const becameActive = Boolean(String(lastState).match(/inactive|background/)) && nextState === "active";
     lastState = nextState;
-
     if (!becameActive) return;
-    void triggerReturnIfPresent("appstate");
+    void triggerReturnIfPresent();
   }) as { remove: () => void };
 
   return () => {
     onReturnHandler = null;
-
     try {
       appStateSub?.remove?.();
     } catch {
-      // ignore unsubscribe failure
+      // ignore
     }
-
     appStateSub = null;
     watcherSubscribed = false;
   };
@@ -451,10 +343,6 @@ export async function openUntrackedUrl(url: string) {
   return await openBrowserGuarded(normalized);
 }
 
-/**
- * Utility/simple opens only.
- * Tracked partner flows should go through beginPartnerClick.
- */
 export async function openPartnerUrl(url: string) {
   return await openUntrackedUrl(url);
 }
@@ -472,12 +360,10 @@ export async function beginPartnerClick(args: {
 
   const canonicalPartnerId = getCanonicalPartnerId(args.partnerId);
   const partner = getPartner(canonicalPartnerId);
-
   const url = normalizeUrl(args.url);
   if (!url) throw new Error("url is required");
 
-  const savedItemType =
-    args.savedItemType ?? mapPartnerCategoryToSavedItemType(partner.primaryCategory);
+  const savedItemType = args.savedItemType ?? mapPartnerCategoryToSavedItemType(partner.primaryCategory);
 
   await ensureSavedItemsLoaded();
 
@@ -491,7 +377,7 @@ export async function beginPartnerClick(args: {
   let createdNew = false;
   let promotedFromSaved = false;
 
-  if (item?.status === "saved" && !isUtilityPartner(canonicalPartnerId)) {
+  if (item?.status === "saved") {
     promotedFromSaved = true;
     await transitionIfCurrent(item.id, "saved", "pending");
     item = getItemById(item.id) ?? item;
@@ -500,19 +386,19 @@ export async function beginPartnerClick(args: {
   if (!item) {
     const title =
       cleanString(args.title) ||
-      buildDefaultTitle({
-        partnerName: partner.display.name,
-        type: savedItemType,
-        metadata: args.metadata,
-      });
+      buildDefaultTitle({ partnerName: partner.display.name, type: savedItemType, metadata: args.metadata });
 
     item = await savedItemsStore.add({
       tripId,
       type: savedItemType,
-      status: isUtilityPartner(canonicalPartnerId) ? "saved" : "pending",
+      status: "pending",
       title,
       partnerId: canonicalPartnerId,
       partnerUrl: url,
+      partnerTier: partner.tier,
+      partnerCategory: partner.primaryCategory,
+      sourceSurface: cleanString(args.metadata?.sourceSurface),
+      sourceSection: cleanString(args.metadata?.sourceSection),
       metadata: args.metadata,
     });
 
@@ -520,63 +406,157 @@ export async function beginPartnerClick(args: {
   }
 
   const itemForOpen = getItemById(item.id) ?? item;
-  const shouldTrackReturn =
-    !isUtilityPartner(canonicalPartnerId) && itemForOpen.status === "pending";
 
   const clickAt = now();
-
-  if (shouldTrackReturn) {
-    await persistLastClick({
-      itemId: itemForOpen.id,
-      tripId,
-      partnerId: canonicalPartnerId,
-      partnerCategory: partner.primaryCategory,
+  const click = await createPartnerClick({
+    tripId,
+    savedItemId: itemForOpen.id,
+    partnerId: canonicalPartnerId,
+    partnerCategory: partner.primaryCategory,
+    partnerTier: partner.tier,
+    url,
+    sourceSurface: cleanString(args.metadata?.sourceSurface) || null,
+    sourceSection: cleanString(args.metadata?.sourceSection) || null,
+    metadata: {
+      ...(args.metadata ?? {}),
       savedItemType,
-      url,
-      createdAt: clickAt,
-      openedAt: clickAt,
-    });
-  } else {
-    await clearLastClickState();
+      partnerTier: partner.tier,
+      partnerCategory: partner.primaryCategory,
+    },
+  });
+
+  if (!click?.id) {
+    throw new Error("Could not create partner click");
   }
+
+  if (itemForOpen.partnerClickId !== click.id) {
+    await savedItemsStore.update(itemForOpen.id, {
+      partnerClickId: click.id,
+      partnerTier: partner.tier,
+      partnerCategory: partner.primaryCategory,
+      sourceSurface: cleanString(args.metadata?.sourceSurface) || undefined,
+      sourceSection: cleanString(args.metadata?.sourceSection) || undefined,
+    });
+    await attachSavedItemToPartnerClick({
+      clickId: click.id,
+      savedItemId: itemForOpen.id,
+      metadata: {
+        linkedBy: createdNew ? "create" : "reuse",
+      },
+    });
+  }
+
+  await logPartnerEvent({
+    partnerClickId: click.id,
+    tripId,
+    savedItemId: itemForOpen.id,
+    eventName: "partner_click_created",
+    partnerId: canonicalPartnerId,
+    sourceSurface: cleanString(args.metadata?.sourceSurface) || null,
+    sourceSection: cleanString(args.metadata?.sourceSection) || null,
+    metadata: {
+      savedItemType,
+      reusedSavedItem: !createdNew,
+      promotedFromSaved,
+    },
+  });
+
+  await persistLastClick({
+    clickId: click.id,
+    itemId: itemForOpen.id,
+    tripId,
+    partnerId: canonicalPartnerId,
+    partnerTier: partner.tier,
+    partnerCategory: partner.primaryCategory,
+    savedItemType,
+    url,
+    sourceSurface: cleanString(args.metadata?.sourceSurface) || undefined,
+    sourceSection: cleanString(args.metadata?.sourceSection) || undefined,
+    createdAt: clickAt,
+    openedAt: clickAt,
+  });
 
   try {
     const browserResult = await openBrowserGuarded(url);
     const resultType = cleanString((browserResult as { type?: unknown })?.type).toLowerCase();
     const isDismissLike = resultType === "dismiss" || resultType === "cancel";
-
-    if (isDismissLike && shouldTrackReturn) {
-      await triggerReturnIfPresent("browser_dismiss");
+    if (isDismissLike) {
+      await triggerReturnIfPresent();
     }
-
     return getItemById(itemForOpen.id) ?? itemForOpen;
   } catch (error) {
     if (createdNew) {
       try {
         await savedItemsStore.remove(itemForOpen.id);
       } catch {
-        // ignore rollback failure
+        // ignore
       }
     } else if (promotedFromSaved) {
       await transitionIfCurrent(itemForOpen.id, "pending", "saved");
     }
+
+    await logPartnerEvent({
+      partnerClickId: click.id,
+      tripId,
+      savedItemId: itemForOpen.id,
+      eventName: "partner_click_open_failed",
+      partnerId: canonicalPartnerId,
+      sourceSurface: cleanString(args.metadata?.sourceSurface) || null,
+      sourceSection: cleanString(args.metadata?.sourceSection) || null,
+      metadata: { message: cleanString((error as Error)?.message) || "open_failed" },
+    });
 
     await clearLastClickState();
     throw error;
   }
 }
 
-export async function markBooked(itemId: string): Promise<void> {
+export async function markBooked(
+  itemId: string,
+  options?: { sourceSurface?: string; sourceSection?: string; metadata?: Record<string, unknown> }
+): Promise<void> {
   const id = cleanString(itemId);
   if (!id) return;
 
   await ensureSavedItemsLoaded();
-
   const current = getItemById(id);
   if (!current) return;
 
   if (current.status !== "booked") {
     await savedItemsStore.transitionStatus(id, "booked");
+  }
+
+  const refreshed = getItemById(id) ?? current;
+  if (refreshed.partnerClickId && refreshed.tripId && refreshed.partnerId) {
+    await markPartnerClickConverted({
+      clickId: refreshed.partnerClickId,
+      tripId: refreshed.tripId,
+      savedItemId: refreshed.id,
+      partnerId: getCanonicalPartnerId(refreshed.partnerId),
+      savedItemType: refreshed.type,
+      bookingStatus: "booked",
+      metadata: {
+        ...(options?.metadata ?? {}),
+        partnerTier: refreshed.partnerTier,
+        partnerCategory: refreshed.partnerCategory,
+      },
+    });
+
+    await logPartnerEvent({
+      partnerClickId: refreshed.partnerClickId,
+      tripId: refreshed.tripId,
+      savedItemId: refreshed.id,
+      eventName: "partner_booking_marked_booked",
+      partnerId: getCanonicalPartnerId(refreshed.partnerId),
+      sourceSurface: options?.sourceSurface ?? refreshed.sourceSurface,
+      sourceSection: options?.sourceSection ?? refreshed.sourceSection,
+      metadata: {
+        ...(options?.metadata ?? {}),
+        bookingStatus: "booked",
+        partnerTier: refreshed.partnerTier,
+        partnerCategory: refreshed.partnerCategory,
+      },
+    });
   }
 
   if (lastClick?.itemId === id) {
@@ -589,27 +569,37 @@ export async function markBooked(itemId: string): Promise<void> {
 export async function markNotBooked(itemId: string): Promise<void> {
   const id = cleanString(itemId);
   if (!id) return;
-
   await transitionIfCurrent(id, "pending", "saved");
-
+  const current = getItemById(id);
+  if (current?.partnerClickId) {
+    await logPartnerEvent({
+      partnerClickId: current.partnerClickId,
+      tripId: current.tripId,
+      savedItemId: current.id,
+      eventName: "partner_booking_not_booked",
+      partnerId: current.partnerId ? getCanonicalPartnerId(current.partnerId) : null,
+      sourceSurface: current.sourceSurface,
+      sourceSection: current.sourceSection,
+      metadata: {
+        partnerTier: current.partnerTier,
+        partnerCategory: current.partnerCategory,
+      },
+    });
+  }
   if (lastClick?.itemId === id) {
     await clearLastClickState();
   }
-
   lastReturnHandledAt = now();
 }
 
 export async function dismissReturnPrompt(itemId?: string): Promise<void> {
   await loadLastClickOnce();
-
   if (!lastClick) return;
-
   if (!itemId) {
     await clearLastClickState();
     lastReturnHandledAt = now();
     return;
   }
-
   const id = cleanString(itemId);
   if (id && lastClick.itemId === id) {
     await clearLastClickState();
@@ -631,7 +621,6 @@ export function __unsafeResetPartnerClickStateForDevOnly(): void {
   } catch {
     // ignore
   }
-
   appStateSub = null;
   watcherSubscribed = false;
   onReturnHandler = null;
@@ -640,6 +629,5 @@ export function __unsafeResetPartnerClickStateForDevOnly(): void {
   lastReturnHandledAt = 0;
   lastClick = null;
   lastClickLoaded = false;
-
   void clearLastClickState();
 }
