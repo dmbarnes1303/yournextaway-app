@@ -1,4 +1,3 @@
-// src/data/mockTripItems.ts
 import type { SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
 
 export type SavedItemSeed = {
@@ -36,7 +35,7 @@ export function buildMockSavedItemsForSeed(args: {
       title: `Flights to ${cityName}`,
       status: "saved",
       partnerId: "aviasales",
-      priceText: "Compare options",
+      priceText: "Compare flight options",
       currency: "GBP",
       metadata: { city: cityName },
     },
@@ -50,40 +49,13 @@ export function buildMockSavedItemsForSeed(args: {
       metadata: { city: cityName, startDate, endDate },
     },
     {
-      type: "transfer",
-      title: `Airport transfer — ${cityName}`,
-      status: "saved",
-      partnerId: "welcomepickups",
-      priceText: "Check prices",
-      currency: "EUR",
-      metadata: { city: cityName },
-    },
-    {
-      type: "things",
-      title: `Experiences in ${cityName}`,
-      status: "saved",
-      partnerId: "getyourguide",
-      priceText: "Browse top picks",
-      currency: "EUR",
-      metadata: { city: cityName },
-    },
-    {
       type: "insurance",
       title: "Travel insurance",
       status: "saved",
       partnerId: "safetywing",
-      priceText: "Get cover",
+      priceText: "Check cover",
       currency: "GBP",
       metadata: { city: cityName, startDate, endDate },
-    },
-    {
-      type: "claim",
-      title: "Flight compensation check",
-      status: "saved",
-      partnerId: "airhelp",
-      priceText: "Check eligibility",
-      currency: "GBP",
-      metadata: { city: cityName },
     },
     {
       type: "note",
@@ -96,6 +68,16 @@ export function buildMockSavedItemsForSeed(args: {
           `• Leave: ${endDate}\n` +
           `• Save 2–3 hotel options\n` +
           `• Confirm kickoff time before booking anything non-refundable`,
+      },
+    },
+    {
+      type: "note",
+      title: "Local transport reminder",
+      status: "saved",
+      metadata: {
+        text:
+          `Transport is not connected to a live booking partner in this build.\n` +
+          `Track airport, hotel and stadium movement manually here.`,
       },
     },
   ];
