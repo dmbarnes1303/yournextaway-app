@@ -343,7 +343,7 @@ export default function useTripDetailViewModel({
 
   const hotelAction = useMemo<PartnerActionBundle>(() => {
     return {
-      url: affiliateUrls?.hotelsUrl || affiliateUrls?.staysUrl,
+      url: affiliateUrls?.hotelsUrl,
       message: "We need a city and saved dates before hotel search can open.",
       config: {
         partnerId: "expedia",
@@ -354,7 +354,7 @@ export default function useTripDetailViewModel({
         },
       },
     };
-  }, [affiliateUrls?.hotelsUrl, affiliateUrls?.staysUrl, cityName]);
+  }, [affiliateUrls?.hotelsUrl, cityName]);
 
   const insuranceAction = useMemo<PartnerActionBundle>(() => {
     return {
@@ -489,7 +489,9 @@ export default function useTripDetailViewModel({
   }, [ticketState, flightState, hotelState, transportState, thingsState]);
 
   const completeCoreCount = useMemo(() => {
-    return bookingSteps.filter((step) => ["tickets", "flight", "hotel"].includes(step.key) && step.complete).length;
+    return bookingSteps.filter(
+      (step) => (step.key === "tickets" || step.key === "flight" || step.key === "hotel") && step.complete
+    ).length;
   }, [bookingSteps]);
 
   const tripCompletionPct = useMemo(() => {
@@ -836,4 +838,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-        }
+}
