@@ -70,8 +70,8 @@ export function getBookingWindow(args: {
   const explicitStart = clean(args.trip?.startDate) || null;
   const explicitEnd = clean(args.trip?.endDate) || null;
 
-  const fallbackStart = addDays(kickoffDate ?? null, -1);
-  const fallbackEnd = addDays(kickoffDate ?? null, 1);
+  const fallbackStart = addDays(kickoffDate, -1);
+  const fallbackEnd = addDays(kickoffDate, 1);
 
   return {
     startDate: explicitStart || fallbackStart,
@@ -106,34 +106,13 @@ export function buildAffiliateUrls(args: {
     cabinClass: "economy",
   });
 
-  const ticketsUrl = safeUrl(built.ticketsPrimaryUrl);
-  const secondaryTicketsUrl = safeUrl(built.ticketsSecondaryUrl);
-  const flightsUrl = safeUrl(built.flightsUrl);
-  const hotelsUrl = safeUrl(built.hotelsUrl);
-  const insuranceUrl = safeUrl(built.insuranceUrl);
-
   return {
-    ticketsUrl,
-    flightsUrl,
-
-    staysUrl: hotelsUrl,
-    trainsUrl: null,
-    busesUrl: null,
-    transfersUrl: null,
-    insuranceUrl,
-    thingsUrl: null,
-    carHireUrl: null,
-    mapsUrl: null,
-    officialSiteUrl: null,
-    claimsUrl: null,
-
-    hotelsUrl,
-    experiencesUrl: null,
-    transportUrl: null,
-    omioUrl: null,
-
-    secondaryTicketsUrl,
-  } as AffiliateUrls;
+    ticketsUrl: safeUrl(built.ticketsPrimaryUrl),
+    secondaryTicketsUrl: safeUrl(built.ticketsSecondaryUrl),
+    flightsUrl: safeUrl(built.flightsUrl),
+    hotelsUrl: safeUrl(built.hotelsUrl),
+    insuranceUrl: safeUrl(built.insuranceUrl),
+  };
 }
 
 export function resolveFlightDestinationIata(cityName: string): string {
