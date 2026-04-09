@@ -1,4 +1,3 @@
-// src/components/PlanTripBlock.tsx
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable, Alert } from "react-native";
 
@@ -67,36 +66,34 @@ export default function PlanTripBlock({
 
   if (!links) return null;
 
-  const transportUrl = links.transportUrl ?? links.omioUrl ?? null;
-
   return (
     <GlassCard style={styles.card}>
-      <Text style={styles.title}>{title ?? "Book this trip"}</Text>
+      <Text style={styles.title}>{title ?? "Search this trip"}</Text>
       <Text style={styles.subtitle}>
-        These open partner search pages for {cityName}.
+        These open supported partner search pages for {cityName}.
       </Text>
 
       <View style={styles.grid}>
-        <Pressable style={styles.btn} onPress={() => openUrl(links.hotelsUrl)}>
-          <Text style={styles.btnText}>Hotels</Text>
+        <Pressable style={styles.btn} onPress={() => openUrl(links.ticketsPrimaryUrl || links.ticketsUrl)}>
+          <Text style={styles.btnText}>Tickets</Text>
         </Pressable>
 
         <Pressable style={styles.btn} onPress={() => openUrl(links.flightsUrl)}>
           <Text style={styles.btnText}>Flights</Text>
         </Pressable>
 
-        <Pressable style={styles.btn} onPress={() => openUrl(transportUrl)}>
-          <Text style={styles.btnText}>Transport</Text>
+        <Pressable style={styles.btn} onPress={() => openUrl(links.hotelsUrl)}>
+          <Text style={styles.btnText}>Hotels</Text>
         </Pressable>
 
-        <Pressable style={styles.btn} onPress={() => openUrl(links.experiencesUrl)}>
-          <Text style={styles.btnText}>Experiences</Text>
+        <Pressable style={styles.btn} onPress={() => openUrl(links.insuranceUrl)}>
+          <Text style={styles.btnText}>Insurance</Text>
         </Pressable>
       </View>
 
-      <Pressable onPress={() => openUrl(links.mapsUrl)} style={styles.mapsWrap}>
-        <Text style={styles.maps}>Open maps search</Text>
-      </Pressable>
+      <Text style={styles.footnote}>
+        Hotel search currently opens Expedia for your saved city and dates.
+      </Text>
     </GlassCard>
   );
 }
@@ -142,13 +139,12 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
-  mapsWrap: {
+  footnote: {
     marginTop: 10,
-  },
-
-  maps: {
     color: theme.colors.textSecondary,
     textAlign: "center",
     fontWeight: theme.fontWeight.bold,
+    fontSize: 12,
+    lineHeight: 16,
   },
 });
