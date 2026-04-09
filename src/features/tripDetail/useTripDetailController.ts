@@ -19,7 +19,7 @@ import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 import type { WorkspaceSectionKey } from "@/src/core/tripWorkspace";
 import { sectionForSavedItemType } from "@/src/core/tripWorkspace";
 
-import { beginPartnerClick, openUntrackedUrl } from "@/src/services/partnerClicks";
+import { beginPartnerClick, markBooked, openUntrackedUrl } from "@/src/services/partnerClicks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 import { attachTicketProof } from "@/src/services/ticketAttachment";
 import {
@@ -300,53 +300,6 @@ function getTravelLaunchCandidate(
     };
   }
 
-  const trainsUrl = clean(
-    affiliateUrls?.trainsUrl || affiliateUrls?.omioUrl || affiliateUrls?.transportUrl
-  );
-  if (trainsUrl) {
-    return {
-      partnerId: "omio",
-      url: trainsUrl,
-      itemType: "train",
-      title: `Rail / bus to ${cityName}`,
-      sourceSection: "travel",
-      metadata: {
-        ...tripMeta,
-        travelMode: "rail_bus",
-      },
-    };
-  }
-
-  const busesUrl = clean(affiliateUrls?.busesUrl);
-  if (busesUrl) {
-    return {
-      partnerId: "omio",
-      url: busesUrl,
-      itemType: "train",
-      title: `Rail / bus to ${cityName}`,
-      sourceSection: "travel",
-      metadata: {
-        ...tripMeta,
-        travelMode: "rail_bus",
-      },
-    };
-  }
-
-  const transfersUrl = clean(affiliateUrls?.transfersUrl);
-  if (transfersUrl) {
-    return {
-      partnerId: "kiwitaxi",
-      url: transfersUrl,
-      itemType: "transfer",
-      title: `Transfers in ${cityName}`,
-      sourceSection: "transfers",
-      metadata: {
-        ...tripMeta,
-        travelMode: "transfer",
-      },
-    };
-  }
-
   return null;
 }
 
@@ -559,7 +512,7 @@ export default function useTripDetailController({
     });
   }
 
-  async function openSavedItem(item: SavedItem) {
+async function openSavedItem(item: SavedItem) {
     const partnerUrl = clean(item.partnerUrl);
     if (!partnerUrl) {
       Alert.alert(item.title || "Notes", clean(item.metadata?.text) || "No details saved.");
@@ -622,7 +575,16 @@ export default function useTripDetailController({
 
   async function markBookedSmart(item: SavedItem) {
     try {
-      await savedItemsStore.transitionStatus(item.id, "booked");
+      await markBooked(item.id, {
+        sourceSurface: "workspace_item",
+        sourceSection: inferSourceSectionFromSavedItemType(item.type),
+        metadata: {
+          partnerId: item.partnerId ?? null,
+          partnerTier: item.partnerTier ?? null,
+          partnerCategory: item.partnerCategory ?? null,
+        },
+      });
+
       defer(() => {
         confirmBookedAndOfferProof(item.id).catch(() => null);
       });
@@ -782,7 +744,7 @@ export default function useTripDetailController({
     );
   }
 
-  function getTicketContext(matchId: string): TicketContext | null {
+function getTicketContext(matchId: string): TicketContext | null {
     const mid = clean(matchId);
     if (!mid) return null;
 
@@ -819,8 +781,6 @@ export default function useTripDetailController({
   async function openOfficialTicketFallback(
     args: TicketContext & { officialTicketUrl: string }
   ) {
-    const title = `Official tickets: ${args.homeName} vs ${args.awayName}`;
-
     Alert.alert(
       "Official club tickets",
       `No strong reseller ticket routes were found right now. Try ${args.homeName}'s official ticket page instead.`,
@@ -828,30 +788,7 @@ export default function useTripDetailController({
         { text: "Cancel", style: "cancel" },
         {
           text: "Open official site",
-          onPress: () =>
-            void openPartnerLaunch({
-              partnerId: "official_site",
-              url: args.officialTicketUrl,
-              title,
-              savedItemType: "tickets",
-              sourceSurface: "ticket_choice_alert",
-              sourceSection: "tickets",
-              metadata: {
-                fixtureId: args.mid,
-                leagueId: args.leagueId,
-                leagueName: args.leagueName,
-                kickoffIso: args.kickoffIso,
-                homeName: args.homeName,
-                awayName: args.awayName,
-                tripStartDate: trip?.startDate ?? null,
-                tripEndDate: trip?.endDate ?? null,
-                ticketProvider: "official_site",
-                officialFallback: true,
-                strongRoute: false,
-              },
-              missingTitle: "Official site unavailable",
-              missingMessage: "The club ticket page is not available yet.",
-            }),
+          onPress: () => void openUntracked(args.officialTicketUrl),
         },
       ]
     );
@@ -1054,7 +991,7 @@ export default function useTripDetailController({
       return;
     }
 
-    const context = getTicketContext(mid);
+  const context = getTicketContext(mid);
     if (!context) {
       Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
       return;
@@ -1185,37 +1122,11 @@ export default function useTripDetailController({
   }
 
   async function launchThings() {
-    await openPartnerLaunch({
-      partnerId: "getyourguide",
-      url: getThingsUrl(affiliateUrls),
-      savedItemType: "things",
-      title: `Things to do in ${cityName}`,
-      sourceSurface: "workspace_cta",
-      sourceSection: "things",
-      metadata: {
-        tripStartDate: trip?.startDate ?? null,
-        tripEndDate: trip?.endDate ?? null,
-      },
-      missingTitle: "Experiences not ready",
-      missingMessage: "No activities available yet.",
-    });
+    Alert.alert("Experiences unavailable", "This build only supports approved commercial partners. Activities are not wired into the monetised runtime.");
   }
 
   async function launchTransfers() {
-    await openPartnerLaunch({
-      partnerId: "kiwitaxi",
-      url: getTransferUrl(affiliateUrls),
-      savedItemType: "transfer",
-      title: `Transfers in ${cityName}`,
-      sourceSurface: "workspace_cta",
-      sourceSection: "transfers",
-      metadata: {
-        tripStartDate: trip?.startDate ?? null,
-        tripEndDate: trip?.endDate ?? null,
-      },
-      missingTitle: "Transfers not ready",
-      missingMessage: "No transfer booking link is available yet.",
-    });
+    Alert.alert("Transfers unavailable", "This build only supports approved commercial partners. Transfers are not wired into the monetised runtime.");
   }
 
   async function onOpenSection(section: WorkspaceSectionKey | string) {
@@ -1290,4 +1201,5 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-                               }
+}
+
