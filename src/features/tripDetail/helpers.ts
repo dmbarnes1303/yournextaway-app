@@ -5,12 +5,11 @@ import type {
   TicketResolutionResult,
 } from "@/src/services/ticketResolver";
 import type { PartnerId } from "@/src/constants/partners";
+import type { RankedTrip, TravelDifficulty } from "@/src/features/tripFinder/types";
 
-/**
- * =========
+/* ============================================================================
  * BASICS
- * =========
- */
+ * ========================================================================== */
 
 export function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -21,41 +20,15 @@ export function coerceId(value: unknown): string | null {
   return raw || null;
 }
 
-export function titleCaseCity(value: unknown): string {
-  const raw = clean(value);
-  if (!raw) return "";
-
-  return raw
-    .toLowerCase()
-    .split(/[\s-]+/)
-    .filter(Boolean)
-    .map((part) => {
-      if (part === "st") return "St";
-      if (part === "saint") return "Saint";
-      return part.charAt(0).toUpperCase() + part.slice(1);
-    })
-    .join(" ");
-}
-
-export function buildMapsSearchUrl(query: unknown): string | null {
-  const q = clean(query);
-  if (!q) return null;
-
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-}
-
-
 export function defer(fn: () => void, delay = 0) {
   return setTimeout(fn, delay);
 }
 
 export type PlanValue = "not_set" | "free" | "premium";
 
-/**
- * =========
- * SIMPLE SHARED TYPES
- * =========
- */
+/* ============================================================================
+ * SHARED FEATURE TYPES
+ * ========================================================================== */
 
 export type SourceSurface =
   | "unknown"
@@ -88,7 +61,6 @@ export type SmartButton = {
 export type AffiliateUrls = {
   ticketsUrl: string | null;
   flightsUrl: string | null;
-
   staysUrl: string | null;
   trainsUrl: string | null;
   busesUrl: string | null;
@@ -104,15 +76,47 @@ export type AffiliateUrls = {
   experiencesUrl?: string | null;
   transportUrl?: string | null;
   omioUrl?: string | null;
-
   secondaryTicketsUrl?: string | null;
 };
 
-/**
- * =========
+export type GuidanceArea = {
+  area: string;
+  notes?: string;
+};
+
+export type TripFinderSummary = {
+  difficulty: string | null;
+  confidence: string | null;
+  reasons: string | null;
+  score: number | null;
+};
+
+/* ============================================================================
  * GENERIC SMALL HELPERS
- * =========
- */
+ * ========================================================================== */
+
+export function titleCaseCity(value: unknown): string {
+  const raw = clean(value);
+  if (!raw) return "";
+
+  return raw
+    .toLowerCase()
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((part) => {
+      if (part === "st") return "St";
+      if (part === "saint") return "Saint";
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
+
+export function buildMapsSearchUrl(query: unknown): string | null {
+  const q = clean(query);
+  if (!q) return null;
+
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
 
 export function cleanUpper3(value: unknown, fallback = "LON"): string {
   const raw = clean(value).toUpperCase();
@@ -140,11 +144,9 @@ export function isNumericId(value: unknown): boolean {
   return /^\d+$/.test(clean(value));
 }
 
-/**
- * =========
- * PROVIDER NORMALIZATION
- * =========
- */
+/* ============================================================================
+ * TICKET PROVIDER NORMALIZATION
+ * ========================================================================== */
 
 function normalizeProvider(provider?: string | null): string {
   return clean(provider).toLowerCase();
@@ -160,11 +162,9 @@ function isFtn(provider?: string | null): boolean {
   return p === "footballticketnet" || p === "footballticketnet.com" || p === "ftn";
 }
 
-/**
- * =========
- * URL QUALITY
- * =========
- */
+/* ============================================================================
+ * TICKET URL QUALITY
+ * ========================================================================== */
 
 export type TicketUrlQuality = "event" | "listing" | "search" | "unknown";
 
@@ -227,17 +227,9 @@ export function normalizeTicketUrlQuality(
   return "unknown";
 }
 
-/**
- * =========
- * CORE TICKET INTELLIGENCE
- * =========
- *
- * Commercial rule:
- * - SportsEvents365 is Tier 1 monetised and should be treated as the strongest
- *   commercial route when present.
- * - FootballTicketNet is Tier 2 strategic and should be treated as a useful
- *   fallback / broader inventory route, but not equal to SE365.
- */
+/* ============================================================================
+ * TICKET INTELLIGENCE
+ * ========================================================================== */
 
 export function isStrongTicketOption(option: TicketResolutionOption): boolean {
   const reason = clean(option.reason);
@@ -349,7 +341,7 @@ export function splitTicketOptions(options: TicketResolutionOption[]) {
 export function normalizeTicketOptions(
   resolved: TicketResolutionResult | null | undefined
 ): TicketResolutionOption[] {
-  const fromOptions = Array.isArray(resolved?.options) ? resolved!.options : [];
+  const fromOptions = Array.isArray(resolved?.options) ? resolved.options : [];
 
   const primaryCandidate =
     resolved?.provider && resolved?.url && resolved?.title && typeof resolved?.score === "number"
@@ -374,7 +366,6 @@ export function normalizeTicketOptions(
       : [];
 
   const merged = [...primaryCandidate, ...fromOptions];
-
   const seen = new Map<string, TicketResolutionOption>();
 
   for (const option of merged) {
@@ -407,9 +398,7 @@ export function normalizeTicketOptions(
 export function ticketResolverFailureMessage(
   resolved: TicketResolutionResult | null | undefined
 ): string {
-  if (!resolved) {
-    return "No ticket routes were returned.";
-  }
+  if (!resolved) return "No ticket routes were returned.";
 
   const error = clean(resolved.error);
 
@@ -422,11 +411,9 @@ export function ticketResolverFailureMessage(
   return "No usable ticket routes were found.";
 }
 
-/**
- * =========
- * PROVIDER DISPLAY (UI ONLY)
- * =========
- */
+/* ============================================================================
+ * PROVIDER DISPLAY
+ * ========================================================================== */
 
 export function providerShort(provider?: string | null): string {
   if (isFtn(provider)) return "FTN";
@@ -471,32 +458,20 @@ export function mapTicketProviderToPartnerId(provider?: string | null): PartnerI
   throw new Error(`Unsupported ticket provider: ${clean(provider)}`);
 }
 
-/**
- * =========
- * PRICE DISPLAY
- * =========
- */
+/* ============================================================================
+ * PRICE / ITEM DISPLAY
+ * ========================================================================== */
 
 export function livePriceLine(item: any): string | null {
   const raw = clean(item?.metadata?.priceText);
 
   if (!raw) return null;
 
-  return raw
-    .replace(/\bLive price on\b/gi, "Live price •")
-    .replace(/\s+/g, " ")
-    .trim();
+  return raw.replace(/\bLive price on\b/gi, "Live price •").replace(/\s+/g, " ").trim();
 }
-
-/**
- * =========
- * UI HELPERS
- * =========
- */
 
 export function ticketProviderFromItem(item: any | null): string | null {
   if (!item) return null;
-
   return clean(item?.metadata?.ticketProvider || item?.partnerId) || null;
 }
 
@@ -521,11 +496,9 @@ export function proCapHint(limit: number, used: number): string | undefined {
   return `Free plan cap reached (${used}/${limit}).`;
 }
 
-/**
- * =========
+/* ============================================================================
  * NOTES
- * =========
- */
+ * ========================================================================== */
 
 export function cleanNoteText(value: unknown): string {
   return clean(value).replace(/\s+/g, " ").trim();
@@ -538,11 +511,9 @@ export function noteTitleFromText(text: string): string {
   return `${cleaned.slice(0, 40).trim()}…`;
 }
 
-/**
- * =========
+/* ============================================================================
  * TRIP DETAIL DISPLAY
- * =========
- */
+ * ========================================================================== */
 
 export function summaryLine(trip: any): string {
   const city = clean(trip?.displayCity || trip?.venueCity || trip?.cityId);
@@ -614,4 +585,50 @@ export function formatKickoffMeta(
     tbc,
     dateIso,
   };
-    }
+}
+
+/* ============================================================================
+ * TRIP FINDER / LOGISTICS SHARED HELPERS
+ * ========================================================================== */
+
+export function difficultyLabel(value?: unknown): string | null {
+  const raw = clean(value).toLowerCase();
+
+  if (!raw) return null;
+  if (raw === "easy") return "Easy";
+  if (raw === "moderate") return "Moderate";
+  if (raw === "hard") return "Hard";
+  if (raw === "complex") return "Complex";
+
+  return null;
+}
+
+export function confidencePctLabel(value?: number | null): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+
+  const normalized = value <= 1 ? value * 100 : value;
+  const rounded = Math.max(0, Math.min(100, Math.round(normalized)));
+
+  return `${rounded}%`;
+}
+
+export function isLateKickoff(kickoffIso?: string | null): boolean {
+  const raw = clean(kickoffIso);
+  if (!raw) return false;
+
+  const dt = new Date(raw);
+  if (!Number.isFinite(dt.getTime())) return false;
+
+  return dt.getHours() >= 20;
+}
+
+export function rankReasonsText(trip: RankedTrip | null): string | null {
+  if (!trip) return null;
+
+  const lines = Array.isArray(trip?.breakdown?.reasonLines)
+    ? trip.breakdown.reasonLines.map((line) => clean(line)).filter(Boolean)
+    : [];
+
+  if (!lines.length) return null;
+  return lines.join(" • ");
+}
