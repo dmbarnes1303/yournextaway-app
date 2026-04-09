@@ -51,6 +51,7 @@ export type TripWorkspaceCardProps = {
     omioUrl?: string | null;
     transfersUrl?: string | null;
     experiencesUrl?: string | null;
+    insuranceUrl?: string | null;
   } | null;
   cityName: string;
   originIata: string;
@@ -163,10 +164,10 @@ function sectionTitle(sectionKey: WorkspaceSectionKey) {
 
 function sectionLead(sectionKey: WorkspaceSectionKey) {
   if (sectionKey === "tickets") return "Start here. Tickets anchor the whole trip.";
-  if (sectionKey === "travel") return "Flights and rail should be handled early, not guessed later.";
-  if (sectionKey === "stay") return "A bad hotel area ruins matchday logistics.";
+  if (sectionKey === "travel") return "Flights should be handled early, not guessed later.";
+  if (sectionKey === "stay") return "At the moment this is hotel search, not guaranteed best-value comparison.";
   if (sectionKey === "transfers") {
-    return "Sort the airport-city-stadium chain before it becomes friction.";
+    return "Track local transport planning here, even though no transport booking partner is live yet.";
   }
   if (sectionKey === "things") return "Only add extras that improve the trip.";
   if (sectionKey === "insurance") return "Store cover and policy evidence in one place.";
@@ -420,9 +421,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
 
   const hotelsUrl = affiliateUrls?.hotelsUrl ?? null;
   const flightsUrl = affiliateUrls?.flightsUrl ?? null;
-  const omioUrl = affiliateUrls?.omioUrl ?? null;
-  const transfersUrl = affiliateUrls?.transfersUrl ?? null;
-  const experiencesUrl = affiliateUrls?.experiencesUrl ?? null;
+  const insuranceUrl = affiliateUrls?.insuranceUrl ?? null;
 
   if (sectionKey === "tickets") {
     return (
@@ -431,8 +430,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
           <Pressable onPress={onOpenTicketsForPrimaryMatch} style={styles.sectionCta}>
             <Text style={styles.sectionCtaTitle}>Compare live ticket options</Text>
             <Text style={styles.sectionCtaBody}>
-              This is the anchor step. If tickets are not sorted, the rest of the trip is built on
-              guesswork.
+              This is the anchor step. If tickets are not sorted, the rest of the trip is built on guesswork.
             </Text>
           </Pressable>
         ) : (
@@ -477,9 +475,9 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
             }
             style={styles.sectionCta}
           >
-            <Text style={styles.sectionCtaTitle}>Open live stays</Text>
+            <Text style={styles.sectionCtaTitle}>Search hotels on Expedia</Text>
             <Text style={styles.sectionCtaBody}>
-              Use stay guidance before booking. Cheap in the wrong area is not smart value.
+              This currently opens Expedia hotel search for your saved city and dates. It is not a full best-value comparison engine.
             </Text>
           </Pressable>
         ) : null}
@@ -544,31 +542,6 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
               <Text style={styles.smallActionBtnText}>Flights</Text>
             </Pressable>
           ) : null}
-
-          {omioUrl ? (
-            <Pressable
-              onPress={() =>
-                onOpenPartner({
-                  partnerId: "omio",
-                  url: omioUrl,
-                  savedItemType: "train",
-                  title: `Trains & buses in ${cityName}`,
-                  metadata: {
-                    city: cityName,
-                    startDate: tripStartDate,
-                    endDate: tripEndDate,
-                    priceMode: "live",
-                    transportMode: "rail_bus",
-                    sourceSurface: "workspace_cta",
-                    sourceSection: "travel",
-                  },
-                })
-              }
-              style={styles.smallActionBtn}
-            >
-              <Text style={styles.smallActionBtnText}>Rail / Bus</Text>
-            </Pressable>
-          ) : null}
         </View>
 
         {items.length > 0 ? (
@@ -576,7 +549,7 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
         ) : (
           <EmptyState
             title="No travel items yet"
-            message="Flights or rail should be decided early. Leaving them vague is how trips get messy."
+            message="Flights should be decided early. Leaving them vague is how trips get messy."
           />
         )}
       </>
@@ -586,32 +559,15 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
   if (sectionKey === "transfers") {
     return (
       <>
-        {transfersUrl ? (
-          <Pressable
-            onPress={() =>
-              onOpenPartner({
-                partnerId: "kiwitaxi",
-                url: transfersUrl,
-                savedItemType: "transfer",
-                title: `Transfers in ${cityName}`,
-                metadata: {
-                  city: cityName,
-                  startDate: tripStartDate,
-                  endDate: tripEndDate,
-                  priceMode: "live",
-                  sourceSurface: "workspace_cta",
-                  sourceSection: "transfers",
-                },
-              })
-            }
-            style={styles.sectionCta}
-          >
-            <Text style={styles.sectionCtaTitle}>Open transfer options</Text>
-            <Text style={styles.sectionCtaBody}>
-              Handle airport-city-stadium movement before matchday friction hits.
-            </Text>
-          </Pressable>
-        ) : null}
+        <View style={styles.guidanceMiniBox}>
+          <Text style={styles.guidanceMiniTitle}>Transport planning</Text>
+          <Text style={styles.guidanceMiniLine}>
+            • No supported transport booking partner is live in this build yet.
+          </Text>
+          <Text style={styles.guidanceMiniLine}>
+            • Use this section to track airport, hotel and stadium movement manually.
+          </Text>
+        </View>
 
         {transportStops.length > 0 ? (
           <View style={styles.guidanceMiniBox}>
@@ -628,8 +584,8 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
           renderItemList(items, props)
         ) : (
           <EmptyState
-            title="No transfer items yet"
-            message="This section should remove local transport guesswork."
+            title="No transport items yet"
+            message="Use this section for manual transport planning until a real partner is wired in."
           />
         )}
       </>
@@ -637,31 +593,41 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
   }
 
   if (sectionKey === "things") {
+    return items.length > 0 ? (
+      renderItemList(items, props)
+    ) : (
+      <EmptyState
+        title="No extras saved yet"
+        message="Extras are optional. Do not pad the trip with pointless filler."
+      />
+    );
+  }
+
+  if (sectionKey === "insurance") {
     return (
       <>
-        {experiencesUrl ? (
+        {insuranceUrl ? (
           <Pressable
             onPress={() =>
               onOpenPartner({
-                partnerId: "getyourguide",
-                url: experiencesUrl,
-                savedItemType: "things",
-                title: `Experiences in ${cityName}`,
+                partnerId: "safetywing",
+                url: insuranceUrl,
+                savedItemType: "insurance",
+                title: `Travel insurance for ${cityName}`,
                 metadata: {
                   city: cityName,
                   startDate: tripStartDate,
                   endDate: tripEndDate,
-                  priceMode: "live",
                   sourceSurface: "workspace_cta",
-                  sourceSection: "things",
+                  sourceSection: "insurance",
                 },
               })
             }
             style={styles.sectionCta}
           >
-            <Text style={styles.sectionCtaTitle}>Open activities</Text>
+            <Text style={styles.sectionCtaTitle}>Open travel insurance</Text>
             <Text style={styles.sectionCtaBody}>
-              Add extras only if they improve the trip. Filler is pointless.
+              Insurance is optional for some trips, but if you use it, keep the policy route and proof in one place.
             </Text>
           </Pressable>
         ) : null}
@@ -670,22 +636,11 @@ const SectionContent = memo(function SectionContent(props: SectionContentProps) 
           renderItemList(items, props)
         ) : (
           <EmptyState
-            title="No things saved yet"
-            message="This section is optional. Good when useful, bad when bloated."
+            title="No insurance saved yet"
+            message="Store policy routes and cover records here."
           />
         )}
       </>
-    );
-  }
-
-  if (sectionKey === "insurance") {
-    return items.length > 0 ? (
-      renderItemList(items, props)
-    ) : (
-      <EmptyState
-        title="No insurance saved yet"
-        message="Store policy routes and cover records here."
-      />
     );
   }
 
