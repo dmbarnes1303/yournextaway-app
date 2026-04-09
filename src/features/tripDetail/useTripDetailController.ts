@@ -264,15 +264,7 @@ function buildPrimarySnapshotFromFixtureRow(
 }
 
 function getStayUrl(affiliateUrls?: AffiliateUrls | null): string {
-  return clean(affiliateUrls?.staysUrl || affiliateUrls?.hotelsUrl);
-}
-
-function getThingsUrl(affiliateUrls?: AffiliateUrls | null): string {
-  return clean(affiliateUrls?.thingsUrl || affiliateUrls?.experiencesUrl);
-}
-
-function getTransferUrl(affiliateUrls?: AffiliateUrls | null): string {
-  return clean(affiliateUrls?.transfersUrl);
+  return clean(affiliateUrls?.hotelsUrl);
 }
 
 function getTravelLaunchCandidate(
@@ -380,7 +372,12 @@ export default function useTripDetailController({
   }
 
   function onViewWallet() {
-    router.push("/(tabs)/wallet" as never);
+    const tripId = getResolvedTripId();
+
+    router.push({
+      pathname: "/(tabs)/wallet",
+      params: tripId ? { tripId } : {},
+    } as never);
   }
 
   function onUpgradePress() {
@@ -512,7 +509,7 @@ export default function useTripDetailController({
     });
   }
 
-async function openSavedItem(item: SavedItem) {
+  async function openSavedItem(item: SavedItem) {
     const partnerUrl = clean(item.partnerUrl);
     if (!partnerUrl) {
       Alert.alert(item.title || "Notes", clean(item.metadata?.text) || "No details saved.");
@@ -744,7 +741,7 @@ async function openSavedItem(item: SavedItem) {
     );
   }
 
-function getTicketContext(matchId: string): TicketContext | null {
+  function getTicketContext(matchId: string): TicketContext | null {
     const mid = clean(matchId);
     if (!mid) return null;
 
@@ -991,7 +988,7 @@ function getTicketContext(matchId: string): TicketContext | null {
       return;
     }
 
-  const context = getTicketContext(mid);
+    const context = getTicketContext(mid);
     if (!context) {
       Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
       return;
@@ -1122,11 +1119,17 @@ function getTicketContext(matchId: string): TicketContext | null {
   }
 
   async function launchThings() {
-    Alert.alert("Experiences unavailable", "This build only supports approved commercial partners. Activities are not wired into the monetised runtime.");
+    Alert.alert(
+      "Experiences unavailable",
+      "This build only supports approved commercial partners. Activities are not wired into the monetised runtime."
+    );
   }
 
   async function launchTransfers() {
-    Alert.alert("Transfers unavailable", "This build only supports approved commercial partners. Transfers are not wired into the monetised runtime.");
+    Alert.alert(
+      "Transfers unavailable",
+      "This build only supports approved commercial partners. Transfers are not wired into the monetised runtime."
+    );
   }
 
   async function onOpenSection(section: WorkspaceSectionKey | string) {
@@ -1201,5 +1204,4 @@ function getTicketContext(matchId: string): TicketContext | null {
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-}
-
+         }
