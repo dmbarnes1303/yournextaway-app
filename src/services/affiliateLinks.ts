@@ -1,4 +1,5 @@
 // src/services/affiliateLinks.ts
+
 import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 import { AffiliateConfig } from "@/src/constants/partners";
 import { formatIsoToYmd } from "@/src/utils/dates";
@@ -42,10 +43,6 @@ function normalizeYmd(value: unknown): string | null {
   } catch {
     return null;
   }
-}
-
-function toCompactYmd(value: string | null): string | null {
-  return value ? value.replace(/-/g, "") : null;
 }
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -111,6 +108,18 @@ function resolveDestinationIata(city: string): string | null {
   return /^[A-Z]{3}$/.test(resolved) ? resolved : null;
 }
 
+function mapCabinClassToTripClass(value: CabinClass): string {
+  switch (value) {
+    case "business":
+    case "first":
+      return "1";
+    case "premium":
+    case "economy":
+    default:
+      return "0";
+  }
+}
+
 function buildFlightsUrl(args: {
   city: string;
   originIata: string;
@@ -122,28 +131,31 @@ function buildFlightsUrl(args: {
   const city = clean(args.city);
   const origin = normalizeOriginIata(args.originIata);
   const destination = resolveDestinationIata(city);
-  const outbound = toCompactYmd(args.startDate);
-  const inbound = toCompactYmd(args.endDate);
+  const departDate = args.startDate;
+  const returnDate = args.endDate;
   const marker = clean(AffiliateConfig.aviasalesMarker);
 
   const fallback =
     resolveTrackedOrFallbackUrl(AffiliateConfig.aviasalesFallback) ||
     resolveTrackedOrFallbackUrl("https://www.aviasales.com/");
 
-  if (!destination || !outbound) {
+  if (!destination || !departDate) {
     return fallback;
   }
 
-  const routeToken = `${origin}${outbound}${destination}${inbound || ""}${Math.max(
-    1,
-    args.passengers
-  )}`;
-
-  const base = `https://www.aviasales.com/search/${routeToken}`;
-
-  return appendQuery(base, {
+  return appendQuery("https://search.aviasales.com/flights", {
+    origin_iata: origin,
+    destination_iata: destination,
+    depart_date: departDate,
+    return_date: returnDate,
+    adults: String(Math.max(1, args.passengers)),
+    children: "0",
+    infants: "0",
+    trip_class: mapCabinClassToTripClass(args.cabinClass),
+    one_way: returnDate ? "false" : "true",
     marker: marker || null,
-    cabin: args.cabinClass !== "economy" ? args.cabinClass : null,
+    locale: "en",
+    currency: "gbp",
   });
 }
 
