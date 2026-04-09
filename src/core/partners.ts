@@ -1,13 +1,5 @@
 // src/core/partners.ts
-//
-// LEGACY COMPATIBILITY SHIM
-//
-// This file is not a source of truth.
-// Canonical commercial partner data lives in:
-//   src/constants/partners.ts
-//
-// Keep this file thin and derived from the canonical registry so old imports
-// do not keep a second registry or second ID universe alive.
+// Compatibility shim over the canonical approved partner registry.
 
 import {
   canonicalizePartnerId as canonicalizePartnerIdFromRegistry,
@@ -47,20 +39,10 @@ function clean(value: unknown): string {
 }
 
 function toLegacyCategory(partner: PartnerDefinition): PartnerCategory {
-  if (partner.categories.includes("tickets")) return "tickets";
-  if (partner.categories.includes("flights")) return "flights";
-  if (partner.categories.includes("stays")) return "stays";
-  if (partner.categories.includes("transfers")) return "transfers";
-  if (partner.categories.includes("insurance")) return "insurance";
-  if (partner.categories.includes("things")) return "experiences";
-  if (partner.categories.includes("claim")) return "compensation";
-  if (partner.categories.includes("maps") || partner.categories.includes("official_site")) {
-    return "utility";
-  }
-  if (partner.categories.includes("trains") || partner.categories.includes("buses")) {
-    return "rail";
-  }
-
+  if (partner.category === "tickets") return "tickets";
+  if (partner.category === "flights") return "flights";
+  if (partner.category === "hotels") return "stays";
+  if (partner.category === "insurance") return "insurance";
   return "utility";
 }
 
@@ -76,12 +58,7 @@ function toLegacyPartner(partner: PartnerDefinition): Partner {
   };
 }
 
-/**
- * Legacy exported list.
- * Fully derived from the canonical registry.
- */
 export const PARTNERS = listAllPartners().map(toLegacyPartner) as readonly Partner[];
-
 export type PartnerId = CanonicalPartnerId;
 
 const PARTNER_MAP: Record<string, Partner> = Object.fromEntries(
@@ -111,50 +88,28 @@ export function getPartnersByCategory(category: PartnerCategory): Partner[] {
   if (category === "flights") {
     return getPartnersByCategoryFromRegistry("flights").map(toLegacyPartner);
   }
-  if (category === "rail") {
-    const trains = getPartnersByCategoryFromRegistry("trains");
-    const buses = getPartnersByCategoryFromRegistry("buses");
-    return [...new Map([...trains, ...buses].map((p) => [p.id, toLegacyPartner(p)])).values()];
-  }
   if (category === "stays") {
-    return getPartnersByCategoryFromRegistry("stays").map(toLegacyPartner);
-  }
-  if (category === "transfers") {
-    return getPartnersByCategoryFromRegistry("transfers").map(toLegacyPartner);
-  }
-  if (category === "experiences") {
-    return getPartnersByCategoryFromRegistry("things").map(toLegacyPartner);
+    return getPartnersByCategoryFromRegistry("hotels").map(toLegacyPartner);
   }
   if (category === "insurance") {
     return getPartnersByCategoryFromRegistry("insurance").map(toLegacyPartner);
   }
-  if (category === "compensation") {
-    return getPartnersByCategoryFromRegistry("claim").map(toLegacyPartner);
-  }
-
-  return [
-    ...getPartnersByCategoryFromRegistry("maps").map(toLegacyPartner),
-    ...getPartnersByCategoryFromRegistry("official_site").map(toLegacyPartner),
-  ];
+  return [];
 }
 
 export function getPartnerOrNull(id: string | null | undefined): Partner | null {
   const canonical = canonicalizePartnerIdFromRegistry(id);
   if (!canonical) return null;
-
   const partner = getPartnerOrNullFromRegistry(canonical);
   return partner ? toLegacyPartner(partner) : null;
 }
 
 export function getPartner(id: PartnerId | string): Partner {
   const canonical = canonicalizePartnerIdFromRegistry(id);
-
   if (!canonical) {
     throw new Error(`Unknown partner id: ${clean(id)}`);
   }
-
-  const partner = getPartnerFromRegistry(canonical);
-  return toLegacyPartner(partner);
+  return toLegacyPartner(getPartnerFromRegistry(canonical));
 }
 
 export function isPartnerId(id: string | null | undefined): id is PartnerId {
@@ -168,9 +123,7 @@ export function getCanonicalPartnerId(id: PartnerId | string): string {
 export function isSamePartner(a?: string | null, b?: string | null): boolean {
   const left = clean(a);
   const right = clean(b);
-
   if (!left || !right) return false;
-
   try {
     return getCanonicalPartnerId(left) === getCanonicalPartnerId(right);
   } catch {
@@ -178,10 +131,6 @@ export function isSamePartner(a?: string | null, b?: string | null): boolean {
   }
 }
 
-/**
- * Optional helper for migration/debugging.
- * Lets callers explicitly normalize legacy ids through the canonical registry.
- */
 export function canonicalizePartnerId(id: string | null | undefined): PartnerId | null {
   return canonicalizePartnerIdFromRegistry(id);
 }
