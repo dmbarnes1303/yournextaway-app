@@ -37,6 +37,13 @@ export function titleCaseCity(value: unknown): string {
     .join(" ");
 }
 
+export function buildMapsSearchUrl(query: unknown): string | null {
+  const q = clean(query);
+  if (!q) return null;
+
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
+
 
 export function defer(fn: () => void, delay = 0) {
   return setTimeout(fn, delay);
