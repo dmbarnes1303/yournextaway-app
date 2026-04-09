@@ -402,6 +402,8 @@ export default function TripBuildScreen() {
 
   const isEditing = !!params.tripId;
   const isPrefilledFlow = !!params.fixtureId && !isEditing;
+  const hasExplicitRouteDates =
+    isIsoDateOnly(params.from) || isIsoDateOnly(params.to);
 
   const [loading, setLoading] = useState(false);
   const [prefillLoading, setPrefillLoading] = useState(false);
@@ -434,7 +436,7 @@ export default function TripBuildScreen() {
   const [showNotes, setShowNotes] = useState(false);
   const [endTouched, setEndTouched] = useState<boolean>(Boolean(isIsoDateOnly(params.to)));
   const [hasManualDateOverride, setHasManualDateOverride] = useState<boolean>(
-    Boolean(isIsoDateOnly(params.from) || isIsoDateOnly(params.to))
+    hasExplicitRouteDates
   );
 
   const [editTrip, setEditTrip] = useState<Trip | null>(null);
@@ -528,16 +530,14 @@ export default function TripBuildScreen() {
         const primary = cleanText(t.fixtureIdPrimary) || (mids[0] ? String(mids[0]) : "");
         setExistingPrimaryId(primary || null);
 
-        if (isIsoDateOnly(params.from) || isIsoDateOnly(params.to)) {
+        if (hasExplicitRouteDates) {
           setStartIso(routeWindow.from);
           setEndIso(routeWindow.to);
           setEndTouched(true);
           setHasManualDateOverride(true);
         } else {
-          setStartIso(t.startDate);
-          setEndIso(t.endDate);
-          setEndTouched(true);
-          setHasManualDateOverride(true);
+          setHasManualDateOverride(false);
+          setEndTouched(false);
         }
 
         setNotes(t.notes ?? "");
@@ -558,9 +558,24 @@ export default function TripBuildScreen() {
             params.season
           );
           if (opt) setSelectedLeague(opt);
+
+          if (!hasExplicitRouteDates) {
+            const d0 = fixtureDateOnly(fx);
+            const derived = defaultTripWindowFromFixtureDate(d0);
+
+            if (derived.start) setStartIso(derived.start);
+            if (derived.end) setEndIso(derived.end);
+          }
         } else {
           setSelectedFixture(null);
           setPlaceholderTbcIds(new Set());
+
+          if (!hasExplicitRouteDates) {
+            setStartIso(t.startDate);
+            setEndIso(t.endDate);
+            setEndTouched(true);
+            setHasManualDateOverride(true);
+          }
         }
 
         setSetAsPrimaryOnSave(false);
@@ -577,7 +592,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [params.tripId, params.from, params.to, params.season, routeWindow]);
+  }, [params.tripId, params.season, routeWindow, hasExplicitRouteDates]);
 
   useEffect(() => {
     if (!isPrefilledFlow || !params.fixtureId) return;
@@ -597,10 +612,7 @@ export default function TripBuildScreen() {
         const ids = await computePlaceholderIdsForFixture(r, params.season);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
-        const hasFrom = isIsoDateOnly(params.from);
-        const hasTo = isIsoDateOnly(params.to);
-
-        if (hasFrom || hasTo) {
+        if (hasExplicitRouteDates) {
           setStartIso(routeWindow.from);
           setEndIso(routeWindow.to);
           setEndTouched(true);
@@ -640,13 +652,12 @@ export default function TripBuildScreen() {
     isPrefilledFlow,
     params.cityArea,
     setNotesIfEmpty,
-    params.from,
-    params.to,
     params.season,
     routeWindow,
+    hasExplicitRouteDates,
   ]);
 
-useEffect(() => {
+  useEffect(() => {
     if (isPrefilledFlow) return;
 
     let cancelled = false;
@@ -735,10 +746,8 @@ useEffect(() => {
     if (!selectedFixture) return;
 
     if (
-      isEditing ||
       hasManualDateOverride ||
-      isIsoDateOnly(params.from) ||
-      isIsoDateOnly(params.to)
+      hasExplicitRouteDates
     ) {
       if (isEditing) setSetAsPrimaryOnSave(false);
       return;
@@ -751,7 +760,9 @@ useEffect(() => {
     if (derived.end) setEndIso(derived.end);
 
     setEndTouched(false);
-  }, [selectedFixture, isEditing, hasManualDateOverride, params.from, params.to]);
+
+    if (isEditing) setSetAsPrimaryOnSave(false);
+  }, [selectedFixture, hasManualDateOverride, hasExplicitRouteDates, isEditing]);
 
   const selectedRankedTrip = useMemo<RankedTrip | null>(() => {
     if (!selectedFixture) return null;
@@ -1553,10 +1564,8 @@ useEffect(() => {
                         setError(null);
 
                         if (
-                          !isEditing &&
                           !hasManualDateOverride &&
-                          !isIsoDateOnly(params.from) &&
-                          !isIsoDateOnly(params.to)
+                          !hasExplicitRouteDates
                         ) {
                           const d0 = fixtureDateOnly(r);
                           const derived = defaultTripWindowFromFixtureDate(d0);
