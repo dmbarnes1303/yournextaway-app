@@ -74,7 +74,10 @@ export default function PlanTripBlock({
       </Text>
 
       <View style={styles.grid}>
-        <Pressable style={styles.btn} onPress={() => openUrl(links.ticketsPrimaryUrl || links.ticketsUrl)}>
+        <Pressable
+          style={styles.btn}
+          onPress={() => openUrl(links.ticketsPrimaryUrl || links.ticketsUrl)}
+        >
           <Text style={styles.btnText}>Tickets</Text>
         </Pressable>
 
