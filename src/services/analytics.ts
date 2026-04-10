@@ -44,6 +44,7 @@ export type LogPartnerEventInput = {
 };
 
 const ANALYTICS_DEBUG_PREFIX = "[analytics]";
+const LOCAL_CLICK_ID_PREFIX = "local_";
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -75,12 +76,28 @@ function logError(message: string, error: unknown, context?: Record<string, unkn
   });
 }
 
+export function isPartnerTrackingAvailable(): boolean {
+  return isSupabaseConfigured();
+}
+
+export function buildLocalPartnerClickId(seed?: string): string {
+  const suffix =
+    clean(seed) ||
+    `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return `${LOCAL_CLICK_ID_PREFIX}${suffix}`;
+}
+
+export function isTrackedPartnerClickId(clickId?: string | null): boolean {
+  const value = clean(clickId);
+  return Boolean(value) && !value.startsWith(LOCAL_CLICK_ID_PREFIX);
+}
+
 async function maybe<T>(
   operationName: string,
   work: () => Promise<T>,
   context?: Record<string, unknown>
 ): Promise<T | null> {
-  if (!isSupabaseConfigured()) {
+  if (!isPartnerTrackingAvailable()) {
     logWarn(`${operationName}: skipped because Supabase is not configured`, context);
     return null;
   }
@@ -144,6 +161,11 @@ export async function markPartnerClickReturned(args: {
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   const clickId = clean(args.clickId);
+  if (!isTrackedPartnerClickId(clickId)) {
+    logInfo("markPartnerClickReturned: skipped for local click", { clickId });
+    return;
+  }
+
   const context = { clickId };
 
   await maybe(
@@ -191,6 +213,10 @@ export async function markPartnerClickConverted(args: {
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   const clickId = clean(args.clickId);
+  if (!isTrackedPartnerClickId(clickId)) {
+    logInfo("markPartnerClickConverted: skipped for local click", { clickId });
+    return;
+  }
 
   await maybe(
     "markPartnerClickConverted",
@@ -242,6 +268,10 @@ export async function attachSavedItemToPartnerClick(args: {
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   const clickId = clean(args.clickId);
+  if (!isTrackedPartnerClickId(clickId)) {
+    logInfo("attachSavedItemToPartnerClick: skipped for local click", { clickId });
+    return;
+  }
 
   await maybe(
     "attachSavedItemToPartnerClick",
@@ -281,13 +311,23 @@ export async function attachSavedItemToPartnerClick(args: {
 }
 
 export async function logPartnerEvent(input: LogPartnerEventInput): Promise<void> {
+  const clickId = clean(input.partnerClickId) || null;
+
+  if (clickId && !isTrackedPartnerClickId(clickId)) {
+    logInfo("logPartnerEvent: skipped for local click", {
+      partnerClickId: clickId,
+      eventName: clean(input.eventName),
+    });
+    return;
+  }
+
   await maybe(
     "logPartnerEvent",
     async () => {
       const supabase = getSupabaseClient();
 
       const payload = {
-        partner_click_id: clean(input.partnerClickId) || null,
+        partner_click_id: clickId,
         trip_id: clean(input.tripId) || null,
         saved_item_id: clean(input.savedItemId) || null,
         event_name: clean(input.eventName),
@@ -301,7 +341,7 @@ export async function logPartnerEvent(input: LogPartnerEventInput): Promise<void
       if (error) throw error;
     },
     {
-      partnerClickId: clean(input.partnerClickId) || null,
+      partnerClickId: clickId,
       tripId: clean(input.tripId) || null,
       savedItemId: clean(input.savedItemId) || null,
       eventName: clean(input.eventName),
