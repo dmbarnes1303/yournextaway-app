@@ -1,4 +1,3 @@
-// app/(tabs)/wallet.tsx
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -359,6 +358,14 @@ function latestAttachment(itemId: string): WalletAttachment | null {
   return attachments[0] ?? null;
 }
 
+type DerivedCounts = {
+  total: number;
+  booked: number;
+  pending: number;
+  saved: number;
+  missingProof: number;
+};
+
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -471,7 +478,7 @@ export default function WalletScreen() {
 
           const haystack = [
             item.title,
-            item.provider ?? "",
+            item.providerId ?? "",
             item.home ?? "",
             item.away ?? "",
             item.tripId ?? "",
@@ -529,7 +536,7 @@ export default function WalletScreen() {
     return remoteDocs.reduce((sum, d) => sum + (Number(d.size) || 0), 0);
   }, [remoteDocs]);
 
-  const derivedCounts = useMemo(() => {
+  const derivedCounts = useMemo<DerivedCounts>(() => {
     const allItems = filteredGroups.flatMap((g) => g.items);
 
     return {
@@ -673,7 +680,7 @@ export default function WalletScreen() {
   async function onOpenTrip(tripId?: string) {
     const id = cleanString(tripId);
     if (!id) return;
-    router.push({ pathname: "/trip/[id]", params: { id } });
+    router.push({ pathname: "/trip/[id]", params: { id } } as any);
   }
 
   async function onAddProof(itemId: string) {
@@ -1379,7 +1386,7 @@ function WalletBookingCard({
           </View>
 
           <Text style={styles.docMeta} numberOfLines={1}>
-            {`${typeLabel}${item.provider ? ` • ${item.provider}` : ""}`}
+            {`${typeLabel}${item.providerId ? ` • ${item.providerId}` : ""}`}
           </Text>
 
           {fixtureLine ? (
