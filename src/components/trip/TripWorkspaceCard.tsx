@@ -192,7 +192,6 @@ function statusTone(status: SavedItem["status"]) {
 function cleanUserFacingPriceLine(value: string | null) {
   const raw = clean(value);
   if (!raw) return null;
-
   return raw.replace(/\bLive price on\b/gi, "Live price •").replace(/\s+/g, " ").trim();
 }
 
@@ -200,15 +199,15 @@ function itemActionHint(item: SavedItem, livePrice: string | null) {
   if (item.type === "note" || item.type === "other") return "Tap to open note";
 
   if (item.status === "booked" && !hasProof(item)) {
-    return "Booked, but proof still needs adding";
+    return "Marked booked, but proof still needs adding";
   }
 
   if (item.status === "booked") {
-    return "Booked and stored";
+    return "Marked booked and saved";
   }
 
   if (item.status === "pending") {
-    return "Awaiting confirmation";
+    return "Awaiting your confirmation";
   }
 
   if (item.status === "saved") {
@@ -329,7 +328,7 @@ const WorkspaceItemRow = memo(function WorkspaceItemRow({
       <View style={styles.itemActions}>
         {item.status !== "booked" ? (
           <Pressable onPress={() => onConfirmMarkBooked(item)} style={styles.smallBtn}>
-            <Text style={styles.smallBtnText}>Booked</Text>
+            <Text style={styles.smallBtnText}>Mark booked</Text>
           </Pressable>
         ) : missingProof ? (
           <Pressable
