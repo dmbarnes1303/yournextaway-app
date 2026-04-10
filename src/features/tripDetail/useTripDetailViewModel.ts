@@ -490,7 +490,9 @@ export default function useTripDetailViewModel({
 
   const completeCoreCount = useMemo(() => {
     return bookingSteps.filter(
-      (step) => (step.key === "tickets" || step.key === "flight" || step.key === "hotel") && step.complete
+      (step) =>
+        (step.key === "tickets" || step.key === "flight" || step.key === "hotel") &&
+        step.complete
     ).length;
   }, [bookingSteps]);
 
@@ -838,4 +840,4 @@ export default function useTripDetailViewModel({
     completionSummary,
     bookingPriceBoard,
   };
-}
+      }
