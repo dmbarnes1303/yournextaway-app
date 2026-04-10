@@ -1,4 +1,5 @@
 // src/services/partnerRegistry.ts
+
 import type { PartnerLink, Provider, ISODate } from "@/src/core/tripTypes";
 import { buildAffiliateLinks } from "@/src/services/affiliateLinks";
 
@@ -56,7 +57,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     output.push(
       makePartnerLink({
         provider: asProvider("expedia"),
-        title: "Hotels",
+        title: "Hotel search",
         url: links.hotelsUrl,
         campaign: "tier1_trip_hotels_expedia",
       })
@@ -67,7 +68,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     output.push(
       makePartnerLink({
         provider: asProvider("aviasales"),
-        title: "Flights",
+        title: "Flight search",
         url: links.flightsUrl,
         campaign: "tier1_trip_flights_aviasales",
       })
@@ -78,7 +79,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     output.push(
       makePartnerLink({
         provider: asProvider("sportsevents365"),
-        title: "Best ticket option",
+        title: "Ticket marketplace search",
         url: links.ticketsPrimaryUrl,
         campaign: "tier1_trip_tickets_se365",
       })
@@ -89,7 +90,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     output.push(
       makePartnerLink({
         provider: asProvider("footballticketnet"),
-        title: "Compare more ticket options",
+        title: "More ticket marketplace search",
         url: links.ticketsSecondaryUrl,
         campaign: "tier2_trip_tickets_ftn",
       })
@@ -100,7 +101,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     output.push(
       makePartnerLink({
         provider: asProvider("safetywing"),
-        title: "Insurance",
+        title: "Travel insurance",
         url: links.insuranceUrl,
         campaign: "tier1_trip_insurance_safetywing",
       })
