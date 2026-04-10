@@ -35,6 +35,11 @@ import walletStore, { type WalletTripGroup } from "@/src/state/walletStore";
 import type { SavedItem } from "@/src/core/savedItemTypes";
 
 import { getFlagImageUrl } from "@/src/utils/flagImages";
+import {
+  getTripProgress,
+  getTripProgressCounts,
+  type ProgressState,
+} from "@/src/services/tripProgress";
 
 const TRIPS_HEADER_LOGO = "";
 
@@ -94,6 +99,35 @@ const TRIP_CITY_META: Record<
     image:
       "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1600&h=900&q=80",
   },
+};
+
+type TripCounts = {
+  total: number;
+  pending: number;
+  booked: number;
+  saved: number;
+};
+
+type WalletMeta = {
+  booked: number;
+  pending: number;
+  proofs: number;
+  total: number;
+  missingProof: number;
+};
+
+type TripProgressMeta = {
+  states: {
+    tickets: ProgressState;
+    flight: ProgressState;
+    hotel: ProgressState;
+    transfer: ProgressState;
+    things: ProgressState;
+  };
+  bookedCore: number;
+  totalCore: number;
+  bookedOptional: number;
+  totalOptional: number;
 };
 
 function cleanString(value: unknown) {
@@ -165,15 +199,7 @@ function isUpcoming(t: Trip) {
 }
 
 function buildCountsIndex(items: SavedItem[]) {
-  const byTrip: Record<
-    string,
-    {
-      total: number;
-      pending: number;
-      booked: number;
-      saved: number;
-    }
-  > = {};
+  const byTrip: Record<string, TripCounts> = {};
 
   for (const it of items) {
     const tid = String(it.tripId ?? "").trim();
@@ -191,36 +217,61 @@ function buildCountsIndex(items: SavedItem[]) {
   return byTrip;
 }
 
-function badgeLabel(t: Trip, counts?: { pending: number; booked: number }) {
+function badgeLabel(progressMeta?: TripProgressMeta, counts?: TripCounts, t?: Trip) {
+  const bookedCore = progressMeta?.bookedCore ?? 0;
+  const totalCore = progressMeta?.totalCore ?? 3;
   const pending = counts?.pending ?? 0;
   const booked = counts?.booked ?? 0;
 
-  if (pending > 0) return { text: `${pending} pending`, kind: "pending" as const };
-  if (booked > 0) return { text: `${booked} booked`, kind: "booked" as const };
+  if (bookedCore === totalCore && totalCore > 0) {
+    return { text: "Core booked", kind: "booked" as const };
+  }
 
-  const noDates = !t.startDate || !t.endDate;
+  if (pending > 0) {
+    return { text: `${pending} pending`, kind: "pending" as const };
+  }
+
+  if (booked > 0) {
+    return { text: `${booked} booked`, kind: "booked" as const };
+  }
+
+  const noDates = !t?.startDate || !t?.endDate;
   if (noDates) return { text: "Draft", kind: "draft" as const };
 
-  return { text: "Ready", kind: "ready" as const };
+  return { text: "Planning", kind: "ready" as const };
 }
 
 function clamp2(n: number) {
   return Math.max(0, Math.min(99, n));
 }
 
-function tripProgress(counts?: { total: number; pending: number; booked: number; saved: number }) {
-  const c = counts ?? { total: 0, pending: 0, booked: 0, saved: 0 };
-  if (c.total <= 0) return 0;
-  return Math.max(0, Math.min(1, c.booked / c.total));
+function tripProgress(progressMeta?: TripProgressMeta) {
+  if (!progressMeta) return 0;
+  if (progressMeta.totalCore <= 0) return 0;
+  return Math.max(0, Math.min(1, progressMeta.bookedCore / progressMeta.totalCore));
 }
 
-function progressLabel(counts?: { total: number; pending: number; booked: number; saved: number }) {
-  const c = counts ?? { total: 0, pending: 0, booked: 0, saved: 0 };
-  if (c.total <= 0) return "Nothing saved yet";
-  if (c.booked === c.total) return "Everything booked";
-  if (c.booked > 0) return `${c.booked}/${c.total} booked`;
-  if (c.pending > 0) return `${c.pending} pending`;
-  return `${c.total} saved`;
+function stateLabel(state: ProgressState, label: string) {
+  if (state === "booked") return `${label} booked`;
+  if (state === "pending") return `${label} pending`;
+  if (state === "saved") return `${label} saved`;
+  return `${label} missing`;
+}
+
+function progressLabel(progressMeta?: TripProgressMeta) {
+  if (!progressMeta) return "Trip not started";
+
+  const { states, bookedCore, totalCore } = progressMeta;
+
+  if (bookedCore === totalCore && totalCore > 0) {
+    return "Core trip flow complete";
+  }
+
+  if (states.tickets !== "booked") return stateLabel(states.tickets, "Tickets");
+  if (states.flight !== "booked") return stateLabel(states.flight, "Flights");
+  if (states.hotel !== "booked") return stateLabel(states.hotel, "Hotel");
+
+  return "Core trip partly covered";
 }
 
 function getTripVisualMeta(t: Trip) {
@@ -233,7 +284,6 @@ function getTripVisualMeta(t: Trip) {
   const storedLeagueLogo = String((t as any)?.leagueLogo ?? "").trim() || null;
 
   const fallback = TRIP_CITY_META[slug] ?? null;
-
   const leagueId = storedLeagueId ?? fallback?.leagueId ?? null;
   const leagueMeta = leagueId ? LEAGUES.find((l) => l.leagueId === leagueId) ?? null : null;
 
@@ -254,16 +304,7 @@ function getTripVisualMeta(t: Trip) {
 }
 
 function buildWalletIndex(groups: WalletTripGroup[]) {
-  const byTrip: Record<
-    string,
-    {
-      booked: number;
-      pending: number;
-      proofs: number;
-      total: number;
-      missingProof: number;
-    }
-  > = {};
+  const byTrip: Record<string, WalletMeta> = {};
 
   for (const group of groups) {
     const tripId = String(group.tripId ?? "").trim();
@@ -279,6 +320,28 @@ function buildWalletIndex(groups: WalletTripGroup[]) {
   }
 
   return byTrip;
+}
+
+function buildProgressIndex(trips: Trip[]) {
+  const index: Record<string, TripProgressMeta> = {};
+
+  for (const trip of trips) {
+    const tripId = cleanString(trip.id);
+    if (!tripId) continue;
+
+    const states = getTripProgress(tripId);
+    const counts = getTripProgressCounts(tripId);
+
+    index[tripId] = {
+      states,
+      bookedCore: counts.bookedCore,
+      totalCore: counts.totalCore,
+      bookedOptional: counts.bookedOptional,
+      totalOptional: counts.totalOptional,
+    };
+  }
+
+  return index;
 }
 
 function buildCanonicalTripEditParams(t: Trip) {
@@ -375,6 +438,7 @@ export default function TripsScreen() {
 
   const countsIndex = useMemo(() => buildCountsIndex(items), [items]);
   const walletIndex = useMemo(() => buildWalletIndex(walletGroups), [walletGroups]);
+  const progressIndex = useMemo(() => buildProgressIndex(trips), [trips, items]);
 
   const upcoming = useMemo(() => trips.filter(isUpcoming), [trips]);
   const past = useMemo(() => trips.filter((t) => !isUpcoming(t)), [trips]);
@@ -395,6 +459,7 @@ export default function TripsScreen() {
 
   const featuredCounts = featuredTrip ? countsIndex[featuredTrip.id] : undefined;
   const featuredWallet = featuredTrip ? walletIndex[featuredTrip.id] : undefined;
+  const featuredProgress = featuredTrip ? progressIndex[featuredTrip.id] : undefined;
 
   const showEmpty = !loading && trips.length === 0;
 
@@ -508,7 +573,7 @@ export default function TripsScreen() {
                   <Text style={styles.kicker}>WORKSPACES</Text>
                   <Text style={styles.title}>Trips</Text>
                   <Text style={styles.subtitle}>
-                    Plan the trip, track key progress, and keep each football getaway in one clean workspace.
+                    Plan the trip, track real booking progress, and keep each football getaway in one clean workspace.
                   </Text>
                 </View>
 
@@ -588,15 +653,13 @@ export default function TripsScreen() {
 
           {!loading && featuredTrip ? (
             <View style={styles.section}>
-              <SectionHeader
-                title="Spotlight"
-                subtitle="Your most relevant workspace right now"
-              />
+              <SectionHeader title="Spotlight" subtitle="Your most relevant workspace right now" />
 
               <SpotlightTripCard
                 trip={featuredTrip}
                 counts={featuredCounts}
                 wallet={featuredWallet}
+                progressMeta={featuredProgress}
                 onOpen={openTrip}
                 onOpenWallet={goWalletForTrip}
               />
@@ -642,6 +705,7 @@ export default function TripsScreen() {
                     t={t}
                     counts={countsIndex[t.id]}
                     wallet={walletIndex[t.id]}
+                    progressMeta={progressIndex[t.id]}
                     deletingTripId={deletingTripId}
                     onOpen={openTrip}
                     onEdit={editTrip}
@@ -666,6 +730,7 @@ export default function TripsScreen() {
                     t={t}
                     counts={countsIndex[t.id]}
                     wallet={walletIndex[t.id]}
+                    progressMeta={progressIndex[t.id]}
                     deletingTripId={deletingTripId}
                     onOpen={openTrip}
                     onEdit={editTrip}
@@ -761,13 +826,7 @@ function WalletStrip({
   wallet,
   onPress,
 }: {
-  wallet?: {
-    booked: number;
-    pending: number;
-    proofs: number;
-    total: number;
-    missingProof: number;
-  };
+  wallet?: WalletMeta;
   onPress: () => void;
 }) {
   const booked = wallet?.booked ?? 0;
@@ -801,17 +860,19 @@ function SpotlightTripCard({
   trip,
   counts,
   wallet,
+  progressMeta,
   onOpen,
   onOpenWallet,
 }: {
   trip: Trip;
-  counts?: { total: number; pending: number; booked: number; saved: number };
-  wallet?: { booked: number; pending: number; proofs: number; total: number; missingProof: number };
+  counts?: TripCounts;
+  wallet?: WalletMeta;
+  progressMeta?: TripProgressMeta;
   onOpen: (t: Trip) => void;
   onOpenWallet: (t: Trip) => void;
 }) {
-  const badge = badgeLabel(trip, counts);
-  const progress = tripProgress(counts);
+  const badge = badgeLabel(progressMeta, counts, trip);
+  const progress = tripProgress(progressMeta);
   const visual = getTripVisualMeta(trip);
 
   return (
@@ -838,7 +899,7 @@ function SpotlightTripCard({
             </View>
 
             <Text style={styles.spotlightMeta}>{tripSummaryLine(trip)}</Text>
-            <Text style={styles.spotlightSub}>{progressLabel(counts)}</Text>
+            <Text style={styles.spotlightSub}>{progressLabel(progressMeta)}</Text>
 
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${Math.max(8, progress * 100)}%` }]} />
@@ -876,6 +937,7 @@ function TripCard({
   t,
   counts,
   wallet,
+  progressMeta,
   deletingTripId,
   onOpen,
   onEdit,
@@ -883,8 +945,9 @@ function TripCard({
   onOpenWallet,
 }: {
   t: Trip;
-  counts?: { total: number; pending: number; booked: number; saved: number };
-  wallet?: { booked: number; pending: number; proofs: number; total: number; missingProof: number };
+  counts?: TripCounts;
+  wallet?: WalletMeta;
+  progressMeta?: TripProgressMeta;
   deletingTripId: string | null;
   onOpen: (t: Trip) => void;
   onEdit: (t: Trip) => void;
@@ -893,8 +956,8 @@ function TripCard({
 }) {
   const c = counts ?? { total: 0, pending: 0, booked: 0, saved: 0 };
   const isDeleting = deletingTripId === t.id;
-  const badge = badgeLabel(t, c);
-  const progress = tripProgress(c);
+  const badge = badgeLabel(progressMeta, c, t);
+  const progress = tripProgress(progressMeta);
   const visual = getTripVisualMeta(t);
 
   return (
@@ -931,13 +994,13 @@ function TripCard({
             </View>
           </View>
 
-          <Text style={styles.tripProgressText}>{progressLabel(c)}</Text>
+          <Text style={styles.tripProgressText}>{progressLabel(progressMeta)}</Text>
 
           <View style={styles.progressTrackSmall}>
             <View
               style={[
                 styles.progressFillSmall,
-                { width: `${Math.max(c.total > 0 ? 8 : 0, progress * 100)}%` },
+                { width: `${Math.max(progressMeta ? 8 : 0, progress * 100)}%` },
               ]}
             />
           </View>
