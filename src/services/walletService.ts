@@ -9,12 +9,14 @@ export type WalletItemType =
   | "experience"
   | "other";
 
+export type WalletItemStatus = "saved" | "pending" | "booked";
+
 export type WalletItem = {
   id: string;
   tripId?: string;
   title: string;
   type: WalletItemType;
-  status: "pending" | "booked";
+  status: WalletItemStatus;
   partner?: string;
   url?: string;
   attachments?: number;
@@ -23,42 +25,43 @@ export type WalletItem = {
 
 function mapType(type: string): WalletItemType {
   switch (type) {
-    // Canonical current types
     case "ticket":
-      return "ticket";
-    case "flight":
-      return "flight";
-    case "hotel":
-      return "hotel";
-    case "transfer":
-      return "transfer";
-    case "things":
-      return "experience";
-
-    // Legacy compatibility
     case "tickets":
       return "ticket";
+    case "flight":
     case "flights":
       return "flight";
+    case "hotel":
     case "stays":
       return "hotel";
+    case "transfer":
     case "transfers":
       return "transfer";
+    case "things":
     case "experiences":
       return "experience";
-
     default:
       return "other";
   }
 }
 
-function toWalletItem(item: SavedItem): WalletItem {
+function mapStatus(status: SavedItem["status"]): WalletItemStatus | null {
+  if (status === "saved") return "saved";
+  if (status === "pending") return "pending";
+  if (status === "booked") return "booked";
+  return null;
+}
+
+function toWalletItem(item: SavedItem): WalletItem | null {
+  const status = mapStatus(item.status);
+  if (!status) return null;
+
   return {
     id: item.id,
     tripId: item.tripId,
     title: item.title,
     type: mapType(item.type),
-    status: item.status === "booked" ? "booked" : "pending",
+    status,
     partner: item.partnerId,
     url: item.partnerUrl,
     attachments: item.attachments?.length ?? 0,
@@ -78,9 +81,9 @@ async function getAll(): Promise<WalletItem[]> {
   const items = savedItemsStore.getAll();
 
   return items
-    .filter((i) => i.status === "pending" || i.status === "booked")
     .map(toWalletItem)
-    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    .filter(Boolean)
+    .sort((a, b) => (b!.createdAt ?? 0) - (a!.createdAt ?? 0)) as WalletItem[];
 }
 
 async function getBooked(): Promise<WalletItem[]> {
@@ -91,6 +94,11 @@ async function getBooked(): Promise<WalletItem[]> {
 async function getPending(): Promise<WalletItem[]> {
   const all = await getAll();
   return all.filter((i) => i.status === "pending");
+}
+
+async function getSaved(): Promise<WalletItem[]> {
+  const all = await getAll();
+  return all.filter((i) => i.status === "saved");
 }
 
 async function getForTrip(tripId: string): Promise<WalletItem[]> {
@@ -107,6 +115,7 @@ export default {
   getAll,
   getBooked,
   getPending,
+  getSaved,
   getForTrip,
   getBookedWithoutProof,
 };
