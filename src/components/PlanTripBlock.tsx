@@ -70,7 +70,7 @@ export default function PlanTripBlock({
     <GlassCard style={styles.card}>
       <Text style={styles.title}>{title ?? "Search this trip"}</Text>
       <Text style={styles.subtitle}>
-        These open supported partner search pages for {cityName}.
+        These buttons open partner search pages for {cityName}. They are search routes, not confirmed fixture-specific inventory.
       </Text>
 
       <View style={styles.grid}>
@@ -78,24 +78,24 @@ export default function PlanTripBlock({
           style={styles.btn}
           onPress={() => openUrl(links.ticketsPrimaryUrl || links.ticketsUrl)}
         >
-          <Text style={styles.btnText}>Tickets</Text>
+          <Text style={styles.btnText}>Search tickets</Text>
         </Pressable>
 
         <Pressable style={styles.btn} onPress={() => openUrl(links.flightsUrl)}>
-          <Text style={styles.btnText}>Flights</Text>
+          <Text style={styles.btnText}>Search flights</Text>
         </Pressable>
 
         <Pressable style={styles.btn} onPress={() => openUrl(links.hotelsUrl)}>
-          <Text style={styles.btnText}>Hotels</Text>
+          <Text style={styles.btnText}>Search hotels</Text>
         </Pressable>
 
         <Pressable style={styles.btn} onPress={() => openUrl(links.insuranceUrl)}>
-          <Text style={styles.btnText}>Insurance</Text>
+          <Text style={styles.btnText}>View insurance</Text>
         </Pressable>
       </View>
 
       <Text style={styles.footnote}>
-        Hotel search currently opens Expedia for your saved city and dates.
+        Ticket results are marketplace search links. Hotel search currently opens Expedia for your saved city and dates.
       </Text>
     </GlassCard>
   );
