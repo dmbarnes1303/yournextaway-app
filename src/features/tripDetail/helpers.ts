@@ -58,8 +58,8 @@ export type SmartButton = {
 };
 
 export type AffiliateUrls = {
-  ticketsUrl: string | null;
-  secondaryTicketsUrl: string | null;
+  ticketMarketplaceUrl: string | null;
+  secondaryTicketMarketplaceUrl: string | null;
   flightsUrl: string | null;
   hotelsUrl: string | null;
   insuranceUrl: string | null;
@@ -223,7 +223,7 @@ export function isStrongTicketOption(option: TicketResolutionOption): boolean {
 
   if (isSe365(option.provider)) {
     if (option.exact || reason === "exact_event") {
-      return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
+      return urlQuality === "event" || urlQuality === "listing";
     }
 
     if (reason === "partial_match") {
@@ -246,7 +246,7 @@ export function isStrongTicketOption(option: TicketResolutionOption): boolean {
   }
 
   if (option.exact || reason === "exact_event") {
-    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown";
+    return urlQuality === "event" || urlQuality === "listing";
   }
 
   if (reason === "partial_match") {
@@ -263,10 +263,17 @@ export function classifyTicketOption(
   const urlQuality = getTicketUrlQuality(option);
 
   if (isSe365(option.provider)) {
-    if (option.exact || reason === "exact_event") return "strong";
+    if (
+      (option.exact || reason === "exact_event") &&
+      (urlQuality === "event" || urlQuality === "listing")
+    ) {
+      return "strong";
+    }
+
     if (reason === "partial_match" && (urlQuality === "event" || urlQuality === "listing")) {
       return "strong";
     }
+
     return "medium";
   }
 
@@ -283,9 +290,7 @@ export function classifyTicketOption(
   }
 
   if (option.exact || reason === "exact_event") {
-    return urlQuality === "event" || urlQuality === "listing" || urlQuality === "unknown"
-      ? "strong"
-      : "medium";
+    return urlQuality === "event" || urlQuality === "listing" ? "strong" : "medium";
   }
 
   if (reason === "partial_match") {
@@ -469,7 +474,7 @@ export function itemResolvedScore(item: any | null): number | null {
 export function smartButtonSubtitle(item: any | null, fallback: string): string {
   if (!item) return fallback;
 
-  if (item.status === "booked") return "Booked";
+  if (item.status === "booked") return "Marked booked";
   if (item.status === "pending") return "Pending";
   if (item.status === "saved") return fallback;
 
