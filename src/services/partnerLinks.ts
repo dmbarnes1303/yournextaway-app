@@ -1,4 +1,5 @@
 // src/services/partnerLinks.ts
+
 import {
   AffiliateConfig,
   getCanonicalPartnerId,
@@ -25,11 +26,11 @@ function enc(value: unknown): string {
 }
 
 function safeUrl(value: unknown): string {
-  const url = clean(value);
-  if (!url) return "";
+  const raw = clean(value);
+  if (!raw) return "";
 
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(raw);
     if (!/^https?:$/i.test(parsed.protocol)) return "";
     return parsed.toString();
   } catch {
@@ -100,8 +101,6 @@ export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
     case "aviasales":
     case "expedia":
     case "safetywing":
-      return url;
-
     case "footballticketnet":
       return url;
 
@@ -110,19 +109,30 @@ export function buildAffiliateUrl(baseUrl: string, partnerId: string): string {
   }
 }
 
+/**
+ * Important:
+ * This does NOT verify that the URL is a clean exact-event route.
+ * It only applies affiliate handling to a provided ticket URL.
+ */
 export function buildTicketLink(args: {
   eventUrl: string;
   partnerId?: string | null;
 }): string | null {
-  const eventUrl = clean(args.eventUrl);
+  const inputUrl = clean(args.eventUrl);
   const partnerId = clean(args.partnerId) || "sportsevents365";
 
-  if (!eventUrl) return null;
+  if (!inputUrl) return null;
 
-  const tracked = buildAffiliateUrl(eventUrl, partnerId);
+  const tracked = buildAffiliateUrl(inputUrl, partnerId);
   return tracked || null;
 }
 
+/**
+ * Important:
+ * For ticket partners this returns marketplace/search-style affiliate routes
+ * generated from city/date context. It does NOT return resolver-verified
+ * fixture-specific ticket URLs.
+ */
 export function resolveAffiliateUrl(
   partnerId: string,
   ctx: ResolveAffiliateContext
@@ -130,7 +140,7 @@ export function resolveAffiliateUrl(
   const resolvedId = getResolvedPartnerId(partnerId);
   const city = clean(ctx.city);
 
-  if (!resolvedId) return null;
+  if (!resolvedId || !city) return null;
 
   const links = buildAffiliateLinks({
     city,
@@ -149,13 +159,13 @@ export function resolveAffiliateUrl(
       return clean(links.hotelsUrl) || null;
 
     case "sportsevents365": {
-      const direct = clean(links.ticketsPrimaryUrl);
-      return direct ? buildAffiliateUrl(direct, "sportsevents365") : null;
+      const marketplaceUrl = clean(links.ticketsPrimaryUrl);
+      return marketplaceUrl ? buildAffiliateUrl(marketplaceUrl, "sportsevents365") : null;
     }
 
     case "footballticketnet": {
-      const direct = clean(links.ticketsSecondaryUrl);
-      return direct ? buildAffiliateUrl(direct, "footballticketnet") : null;
+      const marketplaceUrl = clean(links.ticketsSecondaryUrl);
+      return marketplaceUrl ? buildAffiliateUrl(marketplaceUrl, "footballticketnet") : null;
     }
 
     case "safetywing":
