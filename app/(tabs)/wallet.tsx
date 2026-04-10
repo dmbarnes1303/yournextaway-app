@@ -17,9 +17,6 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-import * as DocumentPicker from "expo-document-picker";
-import * as ImagePicker from "expo-image-picker";
-
 import Background from "@/src/components/Background";
 import EmptyState from "@/src/components/EmptyState";
 import GlassCard from "@/src/components/GlassCard";
@@ -29,13 +26,6 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 import { LEAGUES } from "@/src/constants/football";
 
-import identity from "@/src/services/identity";
-import {
-  walletDelete,
-  walletList,
-  walletOpenOrShare,
-  walletUpload,
-} from "@/src/services/walletApi";
 import walletStore, {
   type WalletBooking,
   type WalletSummary,
@@ -52,14 +42,7 @@ import { attachTicketProof } from "@/src/services/ticketAttachment";
 import { openAttachment } from "@/src/services/walletAttachments";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
 
-type WalletDoc = {
-  key: string;
-  size: number;
-  uploaded?: string;
-};
-
 type CategoryFilter = "all" | SavedItemType;
-type UploadKind = "camera" | "photo" | "document";
 
 const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -140,30 +123,6 @@ function cleanString(v: unknown) {
 function getSingleParam(value: unknown) {
   if (Array.isArray(value)) return cleanString(value[0]);
   return cleanString(value);
-}
-
-function shortKeyName(key: string) {
-  const parts = String(key || "").split("/").filter(Boolean);
-  return parts[parts.length - 1] || key;
-}
-
-function formatSize(bytes: number) {
-  const b = Number(bytes || 0);
-  if (!Number.isFinite(b) || b <= 0) return "—";
-  const kb = b / 1024;
-  if (kb < 1024) return `${Math.max(1, Math.round(kb))} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
-
-function formatDate(uploaded?: string) {
-  if (!uploaded) return null;
-  const d = new Date(uploaded);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 function ordinal(day: number) {
@@ -248,7 +207,7 @@ function statusLabel(status: WalletBooking["status"]) {
     case "booked":
       return "Booked";
     case "pending":
-      return "Opened / not confirmed";
+      return "Opened / user not confirmed";
     case "saved":
       return "Saved shortlist";
     case "archived":
@@ -371,26 +330,17 @@ export default function WalletScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
 
-  const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const [summary, setSummary] = useState<WalletSummary | null>(null);
   const [groups, setGroups] = useState<WalletTripGroup[]>([]);
-  const [remoteDocs, setRemoteDocs] = useState<WalletDoc[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryFilter>("all");
-  const [remoteOpen, setRemoteOpen] = useState(false);
 
   const focusedTripIdParam = useMemo(() => getSingleParam(params?.tripId), [params]);
-
-  const loadUser = useCallback(async () => {
-    const uid = await identity.getWalletUserId();
-    setUserId(cleanString(uid));
-  }, []);
 
   const loadWallet = useCallback(async () => {
     try {
@@ -415,48 +365,18 @@ export default function WalletScreen() {
     }
   }, []);
 
-  const loadRemoteDocs = useCallback(async () => {
-    if (!userId) {
-      setRemoteDocs([]);
-      return;
-    }
-
-    try {
-      const res = await walletList({ prefix: `wallet/${userId}/`, limit: 250 });
-      const items = (res.items || []).map((i) => ({
-        key: i.key,
-        size: i.size,
-        uploaded: i.uploaded,
-      }));
-
-      items.sort((a, b) => (b.uploaded || "").localeCompare(a.uploaded || ""));
-      setRemoteDocs(items);
-    } catch {
-      setRemoteDocs([]);
-    }
-  }, [userId]);
-
   const refreshAll = useCallback(async () => {
     try {
       setRefreshing(true);
-      await Promise.all([loadWallet(), loadRemoteDocs()]);
+      await loadWallet();
     } finally {
       setRefreshing(false);
     }
-  }, [loadWallet, loadRemoteDocs]);
-
-  useEffect(() => {
-    loadUser().catch(() => null);
-  }, [loadUser]);
+  }, [loadWallet]);
 
   useEffect(() => {
     loadWallet().catch(() => null);
   }, [loadWallet]);
-
-  useEffect(() => {
-    if (!userId) return;
-    loadRemoteDocs().catch(() => null);
-  }, [userId, loadRemoteDocs]);
 
   useFocusEffect(
     useCallback(() => {
@@ -522,20 +442,6 @@ export default function WalletScreen() {
     });
   }, [baseFilteredGroups, focusedTripIdParam]);
 
-  const visibleRemoteDocs = useMemo(() => {
-    const q = cleanString(query).toLowerCase();
-    if (!q) return remoteDocs;
-
-    return remoteDocs.filter((d) => {
-      const name = shortKeyName(d.key).toLowerCase();
-      return name.includes(q);
-    });
-  }, [remoteDocs, query]);
-
-  const totalRemoteSize = useMemo(() => {
-    return remoteDocs.reduce((sum, d) => sum + (Number(d.size) || 0), 0);
-  }, [remoteDocs]);
-
   const derivedCounts = useMemo<DerivedCounts>(() => {
     const allItems = filteredGroups.flatMap((g) => g.items);
 
@@ -575,107 +481,6 @@ export default function WalletScreen() {
     if (!focusedTripIdParam) return null;
     return tripIndex[focusedTripIdParam] ?? null;
   }, [focusedTripIdParam, tripIndex]);
-
-  async function pickAsset(
-    kind: UploadKind
-  ): Promise<{ uri: string; name: string; mimeType: string } | null> {
-    if (kind === "document") {
-      const picked = await DocumentPicker.getDocumentAsync({
-        multiple: false,
-        copyToCacheDirectory: true,
-        type: "*/*",
-      });
-
-      if (picked.canceled) return null;
-
-      const file = picked.assets?.[0];
-      if (!file?.uri) return null;
-
-      return {
-        uri: file.uri,
-        name: file.name || "document",
-        mimeType: file.mimeType || "application/octet-stream",
-      };
-    }
-
-    const needsCamera = kind === "camera";
-
-    if (needsCamera) {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission needed", "Camera permission is required to take a photo.");
-        return null;
-      }
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission needed", "Photo permission is required to choose a photo.");
-        return null;
-      }
-    }
-
-    const res = needsCamera
-      ? await ImagePicker.launchCameraAsync({
-          quality: 0.9,
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        })
-      : await ImagePicker.launchImageLibraryAsync({
-          quality: 0.9,
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        });
-
-    if (res.canceled) return null;
-
-    const asset = res.assets?.[0];
-    if (!asset?.uri) return null;
-
-    return {
-      uri: asset.uri,
-      name: asset.fileName || `photo_${Date.now()}.jpg`,
-      mimeType: asset.mimeType || "image/jpeg",
-    };
-  }
-
-  function chooseRemoteUploadSource() {
-    if (!userId) {
-      Alert.alert("Wallet", "Identity is still loading. Try again in a moment.");
-      return;
-    }
-
-    Alert.alert("Upload backup document", "Choose what you want to upload.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Take photo", onPress: () => pickAndUploadRemote("camera").catch(() => null) },
-      { text: "Choose photo", onPress: () => pickAndUploadRemote("photo").catch(() => null) },
-      { text: "Choose document", onPress: () => pickAndUploadRemote("document").catch(() => null) },
-    ]);
-  }
-
-  async function pickAndUploadRemote(kind: UploadKind) {
-    if (!userId) return;
-
-    try {
-      setUploading(true);
-
-      const asset = await pickAsset(kind);
-      if (!asset) return;
-
-      await walletUpload({
-        fileUri: asset.uri,
-        filename: asset.name,
-        mimeType: asset.mimeType,
-        userId,
-        tripId: "unassigned",
-        category: "misc",
-      });
-
-      await loadRemoteDocs();
-      Alert.alert("Uploaded", "Backup document saved.");
-    } catch (e: any) {
-      Alert.alert("Upload failed", e?.message || "Could not upload.");
-    } finally {
-      setUploading(false);
-    }
-  }
 
   async function onOpenTrip(tripId?: string) {
     const id = cleanString(tripId);
@@ -763,36 +568,6 @@ export default function WalletScreen() {
     }
   }
 
-  async function viewRemoteDoc(key: string) {
-    try {
-      await walletOpenOrShare({ key });
-    } catch (e: any) {
-      Alert.alert("Open failed", e?.message || "Could not open file.");
-    }
-  }
-
-  async function deleteRemoteDoc(key: string) {
-    Alert.alert("Delete document?", "This will permanently remove it from remote backup storage.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          const prev = remoteDocs;
-          setRemoteDocs((d) => d.filter((x) => x.key !== key));
-
-          try {
-            await walletDelete({ key });
-            await loadRemoteDocs();
-          } catch (e: any) {
-            setRemoteDocs(prev);
-            Alert.alert("Delete failed", e?.message || "Could not delete file.");
-          }
-        },
-      },
-    ]);
-  }
-
   function FilterChip({ id, label }: { id: CategoryFilter; label: string }) {
     const active = id === category;
     const count =
@@ -852,24 +627,9 @@ export default function WalletScreen() {
                   <Text style={styles.kicker}>WALLET</Text>
                   <Text style={styles.h1}>Bookings & proofs</Text>
                   <Text style={styles.h2}>
-                    Keep booked items, pending confirmations, and proof files together without digging through separate screens.
+                    This screen only reflects trip-linked wallet truth: saved shortlist items, opened partner journeys, user-confirmed bookings, and proof attached to those bookings.
                   </Text>
                 </View>
-
-                <Pressable
-                  style={[styles.uploadBtn, (uploading || !userId) && { opacity: 0.6 }]}
-                  onPress={chooseRemoteUploadSource}
-                  disabled={uploading || !userId}
-                >
-                  {uploading ? (
-                    <ActivityIndicator />
-                  ) : (
-                    <>
-                      <Ionicons name="cloud-upload-outline" size={16} color={theme.colors.text} />
-                      <Text style={styles.uploadText}>Backup file</Text>
-                    </>
-                  )}
-                </Pressable>
               </View>
 
               <View style={styles.metricsRow}>
@@ -897,14 +657,14 @@ export default function WalletScreen() {
                   icon="airplane-outline"
                 />
                 <Metric
+                  label="Saved"
+                  value={String(derivedCounts.saved)}
+                  icon="bookmark-outline"
+                />
+                <Metric
                   label="Missing proof"
                   value={String(derivedCounts.missingProof)}
                   icon="alert-circle-outline"
-                />
-                <Metric
-                  label="Backups"
-                  value={String(remoteDocs.length)}
-                  icon="cloud-outline"
                 />
               </View>
 
@@ -974,8 +734,8 @@ export default function WalletScreen() {
                 title="No wallet activity yet"
                 message={
                   focusedTrip
-                    ? "This trip has no booked or pending wallet items yet. Start by saving tickets, travel or experiences from the trip workspace."
-                    : "Booked items and proof files will show here once you start building real trip activity."
+                    ? "This trip has no wallet-linked activity yet. Bookings only appear here after you save items, open partners, or confirm a booking in that trip."
+                    : "This Wallet only shows trip-linked booking activity and proof attached to those items."
                 }
               />
               <View style={styles.emptyActions}>
@@ -1031,52 +791,6 @@ export default function WalletScreen() {
               </View>
             </View>
           )}
-
-          <GlassCard style={styles.remoteSection} strength="subtle" noPadding>
-            <View style={styles.remoteInner}>
-              <View style={styles.remoteHeader}>
-                <View style={styles.remoteHeaderText}>
-                  <Text style={styles.remoteEyebrow}>Optional backup</Text>
-                  <Text style={styles.remoteTitle}>Extra backup documents</Text>
-                  <Text style={styles.remoteMeta}>
-                    Use this only for additional remote storage. It should not compete with the actual trip-linked wallet above.
-                  </Text>
-                </View>
-
-                <Pressable style={styles.remoteToggleBtn} onPress={() => setRemoteOpen((v) => !v)}>
-                  <Text style={styles.remoteToggleBtnText}>{remoteOpen ? "Hide" : "Show"}</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.remoteMetricsRow}>
-                <Metric label="Files" value={String(remoteDocs.length)} icon="document-outline" />
-                <Metric label="Storage" value={formatSize(totalRemoteSize)} icon="server-outline" />
-                <Metric label="User" value={userId ? "Ready" : "Loading"} icon="person-outline" />
-              </View>
-
-              {remoteOpen ? (
-                visibleRemoteDocs.length === 0 ? (
-                  <View style={styles.remoteEmptyWrap}>
-                    <EmptyState
-                      title="No backup documents"
-                      message="Add confirmations, screenshots, or receipts only if you want an extra remote copy."
-                    />
-                  </View>
-                ) : (
-                  <View style={styles.remoteList}>
-                    {visibleRemoteDocs.map((d) => (
-                      <RemoteDocRow
-                        key={d.key}
-                        d={d}
-                        viewRemoteDoc={viewRemoteDoc}
-                        deleteRemoteDoc={deleteRemoteDoc}
-                      />
-                    ))}
-                  </View>
-                )
-              ) : null}
-            </View>
-          </GlassCard>
         </ScrollView>
       </SafeAreaView>
     </Background>
@@ -1463,54 +1177,6 @@ function WalletBookingCard({
   );
 }
 
-function RemoteDocRow({
-  d,
-  viewRemoteDoc,
-  deleteRemoteDoc,
-}: {
-  d: WalletDoc;
-  viewRemoteDoc: (key: string) => Promise<void>;
-  deleteRemoteDoc: (key: string) => Promise<void>;
-}) {
-  const filename = shortKeyName(d.key);
-  const date = formatDate(d.uploaded);
-  const size = formatSize(d.size);
-
-  return (
-    <GlassCard style={styles.docCard} strength="subtle" noPadding>
-      <Pressable
-        onPress={() => viewRemoteDoc(d.key)}
-        style={({ pressed }) => [styles.docRow, pressed && styles.pressed]}
-        android_ripple={{ color: "rgba(255,255,255,0.05)" }}
-      >
-        <View style={styles.docIconWrap}>
-          <Ionicons name="cloud-outline" size={18} color={theme.colors.text} />
-        </View>
-
-        <View style={styles.docMain}>
-          <Text style={styles.docTitle} numberOfLines={1}>
-            {filename}
-          </Text>
-
-          <Text style={styles.docMeta} numberOfLines={1}>
-            {`Backup document • ${size}${date ? ` • ${date}` : ""}`}
-          </Text>
-        </View>
-      </Pressable>
-
-      <View style={styles.docActionsRow}>
-        <Pressable style={styles.smallBtn} onPress={() => viewRemoteDoc(d.key)}>
-          <Text style={styles.smallBtnText}>View</Text>
-        </Pressable>
-
-        <Pressable style={[styles.smallBtn, styles.smallBtnDanger]} onPress={() => deleteRemoteDoc(d.key)}>
-          <Text style={styles.smallBtnDangerText}>Delete</Text>
-        </Pressable>
-      </View>
-    </GlassCard>
-  );
-}
-
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.miniStat}>
@@ -1572,28 +1238,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: theme.fontWeight.bold,
-  },
-
-  uploadBtn: {
-    minHeight: 42,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(10,12,14,0.14)" : "rgba(10,12,14,0.10)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    minWidth: 118,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  uploadText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: 12,
   },
 
   focusStrip: {
@@ -2275,81 +1919,6 @@ const styles = StyleSheet.create({
     width: 18,
     height: 13,
     borderRadius: 3,
-  },
-
-  remoteSection: {
-    borderRadius: 24,
-    overflow: "hidden",
-    opacity: 0.96,
-  },
-
-  remoteInner: {
-    padding: 16,
-    gap: 12,
-  },
-
-  remoteHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-
-  remoteHeaderText: {
-    flex: 1,
-  },
-
-  remoteEyebrow: {
-    color: theme.colors.textTertiary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: 10,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-
-  remoteTitle: {
-    marginTop: 4,
-    color: theme.colors.text,
-    fontWeight: theme.fontWeight.black,
-    fontSize: 16,
-  },
-
-  remoteMeta: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.bold,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-
-  remoteToggleBtn: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-
-  remoteToggleBtnText: {
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.black,
-    fontSize: 12,
-  },
-
-  remoteMetricsRow: {
-    flexDirection: "row",
-    gap: 10,
-    opacity: 0.92,
-  },
-
-  remoteEmptyWrap: {
-    marginTop: 4,
-  },
-
-  remoteList: {
-    gap: 10,
-    marginTop: 2,
   },
 
   pressed: {
