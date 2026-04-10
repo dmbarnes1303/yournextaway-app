@@ -107,8 +107,8 @@ export function buildAffiliateUrls(args: {
   });
 
   return {
-    ticketsUrl: safeUrl(built.ticketsPrimaryUrl),
-    secondaryTicketsUrl: safeUrl(built.ticketsSecondaryUrl),
+    ticketMarketplaceUrl: safeUrl(built.ticketsPrimaryUrl),
+    secondaryTicketMarketplaceUrl: safeUrl(built.ticketsSecondaryUrl),
     flightsUrl: safeUrl(built.flightsUrl),
     hotelsUrl: safeUrl(built.hotelsUrl),
     insuranceUrl: safeUrl(built.insuranceUrl),
