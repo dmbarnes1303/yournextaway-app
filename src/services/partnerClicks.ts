@@ -14,7 +14,10 @@ import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/saved
 import { getSavedItemTypeLabel } from "@/src/core/savedItemTypes";
 import {
   attachSavedItemToPartnerClick,
+  buildLocalPartnerClickId,
   createPartnerClick,
+  isPartnerTrackingAvailable,
+  isTrackedPartnerClickId,
   logPartnerEvent,
   markPartnerClickConverted,
   markPartnerClickReturned,
@@ -33,9 +36,10 @@ export type LastPartnerClick = {
   sourceSection?: string;
   createdAt: number;
   openedAt: number;
+  tracked: boolean;
 };
 
-const STORAGE_KEY = "yna_last_partner_click_v3";
+const STORAGE_KEY = "yna_last_partner_click_v4";
 const CLICK_RETENTION_MS = 1000 * 60 * 60 * 6;
 const RETURN_DEDUPE_MS = 1500;
 const DEBUG_PREFIX = "[partnerClicks]";
@@ -170,6 +174,7 @@ async function loadLastClickOnce(): Promise<void> {
     const rawUrl = cleanString(record.url);
     const createdAt = Number(record.createdAt);
     const openedAt = Number(record.openedAt);
+    const tracked = Boolean(record.tracked);
 
     if (!clickId || !itemId || !tripId || !rawPartnerId || !rawUrl) return;
     if (!Number.isFinite(createdAt) || createdAt <= 0) return;
@@ -196,6 +201,7 @@ async function loadLastClickOnce(): Promise<void> {
       sourceSection: cleanString(record.sourceSection) || undefined,
       createdAt,
       openedAt,
+      tracked,
     };
 
     if (!candidate.url) return;
@@ -357,10 +363,12 @@ async function triggerReturnIfPresent(): Promise<void> {
       return;
     }
 
-    await markPartnerClickReturned({
-      clickId: click.clickId,
-      metadata: { returnedVia: "app_active" },
-    });
+    if (click.tracked && isTrackedPartnerClickId(click.clickId)) {
+      await markPartnerClickReturned({
+        clickId: click.clickId,
+        metadata: { returnedVia: "app_active" },
+      });
+    }
 
     const handler = onReturnHandler;
     if (!handler) return;
@@ -386,6 +394,7 @@ export function getPartnerClicksDebugState() {
     opening: openInFlight,
     subscribed: watcherSubscribed,
     lastClick,
+    trackingAvailable: isPartnerTrackingAvailable(),
   };
 }
 
@@ -502,8 +511,9 @@ export async function beginPartnerClick(args: {
 
   const itemForOpen = getItemById(item.id) ?? item;
   const clickAt = now();
+  const trackingAvailable = isPartnerTrackingAvailable();
 
-  const click = await createPartnerClick({
+  const trackedClick = await createPartnerClick({
     tripId,
     savedItemId: itemForOpen.id,
     partnerId: canonicalPartnerId,
@@ -520,45 +530,56 @@ export async function beginPartnerClick(args: {
     },
   });
 
-  if (!click?.id) {
-    throw new Error("Could not create partner click");
+  const clickId = trackedClick?.id || buildLocalPartnerClickId(itemForOpen.id);
+  const tracked = Boolean(trackedClick?.id);
+
+  if (!tracked && !trackingAvailable) {
+    logWarn("Partner click proceeding without server-side tracking", {
+      tripId,
+      itemId: itemForOpen.id,
+      partnerId: canonicalPartnerId,
+    });
   }
 
-  if (itemForOpen.partnerClickId !== click.id) {
+  if (itemForOpen.partnerClickId !== clickId) {
     await savedItemsStore.update(itemForOpen.id, {
-      partnerClickId: click.id,
+      partnerClickId: clickId,
       partnerTier: partner.tier,
       partnerCategory: partner.primaryCategory,
       sourceSurface: cleanString(args.metadata?.sourceSurface) || undefined,
       sourceSection: cleanString(args.metadata?.sourceSection) || undefined,
     });
 
-    await attachSavedItemToPartnerClick({
-      clickId: click.id,
+    if (tracked) {
+      await attachSavedItemToPartnerClick({
+        clickId,
+        savedItemId: itemForOpen.id,
+        metadata: {
+          linkedBy: createdNew ? "create" : "reuse",
+        },
+      });
+    }
+  }
+
+  if (tracked) {
+    await logPartnerEvent({
+      partnerClickId: clickId,
+      tripId,
       savedItemId: itemForOpen.id,
+      eventName: "partner_click_created",
+      partnerId: canonicalPartnerId,
+      sourceSurface: cleanString(args.metadata?.sourceSurface) || null,
+      sourceSection: cleanString(args.metadata?.sourceSection) || null,
       metadata: {
-        linkedBy: createdNew ? "create" : "reuse",
+        savedItemType,
+        reusedSavedItem: !createdNew,
+        promotedFromSaved,
       },
     });
   }
 
-  await logPartnerEvent({
-    partnerClickId: click.id,
-    tripId,
-    savedItemId: itemForOpen.id,
-    eventName: "partner_click_created",
-    partnerId: canonicalPartnerId,
-    sourceSurface: cleanString(args.metadata?.sourceSurface) || null,
-    sourceSection: cleanString(args.metadata?.sourceSection) || null,
-    metadata: {
-      savedItemType,
-      reusedSavedItem: !createdNew,
-      promotedFromSaved,
-    },
-  });
-
   await persistLastClick({
-    clickId: click.id,
+    clickId,
     itemId: itemForOpen.id,
     tripId,
     partnerId: canonicalPartnerId,
@@ -570,6 +591,7 @@ export async function beginPartnerClick(args: {
     sourceSection: cleanString(args.metadata?.sourceSection) || undefined,
     createdAt: clickAt,
     openedAt: clickAt,
+    tracked,
   });
 
   try {
@@ -595,24 +617,26 @@ export async function beginPartnerClick(args: {
       await transitionIfCurrent(itemForOpen.id, "pending", "saved");
     }
 
-    await logPartnerEvent({
-      partnerClickId: click.id,
-      tripId,
-      savedItemId: itemForOpen.id,
-      eventName: "partner_click_open_failed",
-      partnerId: canonicalPartnerId,
-      sourceSurface: cleanString(args.metadata?.sourceSurface) || null,
-      sourceSection: cleanString(args.metadata?.sourceSection) || null,
-      metadata: {
-        message: cleanString((error as Error)?.message) || "open_failed",
-      },
-    });
+    if (tracked) {
+      await logPartnerEvent({
+        partnerClickId: clickId,
+        tripId,
+        savedItemId: itemForOpen.id,
+        eventName: "partner_click_open_failed",
+        partnerId: canonicalPartnerId,
+        sourceSurface: cleanString(args.metadata?.sourceSurface) || null,
+        sourceSection: cleanString(args.metadata?.sourceSection) || null,
+        metadata: {
+          message: cleanString((error as Error)?.message) || "open_failed",
+        },
+      });
+    }
 
     await clearLastClickState();
     logError("beginPartnerClick browser open failed", error, {
       tripId,
       itemId: itemForOpen.id,
-      clickId: click.id,
+      clickId,
       partnerId: canonicalPartnerId,
     });
 
@@ -640,10 +664,14 @@ export async function markBooked(
   }
 
   const refreshed = getItemById(id) ?? current;
+  const trackedClickId =
+    refreshed.partnerClickId && isTrackedPartnerClickId(refreshed.partnerClickId)
+      ? refreshed.partnerClickId
+      : null;
 
-  if (refreshed.partnerClickId && refreshed.tripId && refreshed.partnerId) {
+  if (trackedClickId && refreshed.tripId && refreshed.partnerId) {
     await markPartnerClickConverted({
-      clickId: refreshed.partnerClickId,
+      clickId: trackedClickId,
       tripId: refreshed.tripId,
       savedItemId: refreshed.id,
       partnerId: getCanonicalPartnerId(refreshed.partnerId),
@@ -657,7 +685,7 @@ export async function markBooked(
     });
 
     await logPartnerEvent({
-      partnerClickId: refreshed.partnerClickId,
+      partnerClickId: trackedClickId,
       tripId: refreshed.tripId,
       savedItemId: refreshed.id,
       eventName: "partner_booking_marked_booked",
@@ -693,10 +721,14 @@ export async function markNotBooked(itemId: string): Promise<void> {
 
   await transitionIfCurrent(id, "pending", "saved");
   const current = getItemById(id);
+  const trackedClickId =
+    current?.partnerClickId && isTrackedPartnerClickId(current.partnerClickId)
+      ? current.partnerClickId
+      : null;
 
-  if (current?.partnerClickId) {
+  if (current?.tripId && trackedClickId) {
     await logPartnerEvent({
-      partnerClickId: current.partnerClickId,
+      partnerClickId: trackedClickId,
       tripId: current.tripId,
       savedItemId: current.id,
       eventName: "partner_booking_not_booked",
