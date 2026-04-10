@@ -453,8 +453,8 @@ function TicketCard({
           : locked
             ? "Start trip to open partner"
             : blockedWeakOpen
-              ? "Open fallback route"
-              : "Open ticket partner"}
+              ? "View fallback route on partner site"
+              : "View on partner site"}
       </Text>
     </Pressable>
   );
@@ -577,7 +577,7 @@ export default function MatchScreen() {
     if (!tripId) {
       Alert.alert(
         "Start a trip first",
-        "To open ticket partners and track bookings in Wallet, start a trip from this match first."
+        "To open partner sites and track your own booking decisions in Wallet, start a trip from this match first."
       );
       buildTrip();
       return;
@@ -768,7 +768,7 @@ export default function MatchScreen() {
                 <Text style={styles.sectionTitle}>Tickets</Text>
                 <Text style={styles.sectionSub}>
                   {ticketsLocked
-                    ? "You can compare the full marketplace spread here, but open partners from a trip if you want booking tracking in Wallet."
+                    ? "You can compare the full marketplace spread here, but open partner sites from a trip if you want your own booking actions tracked in Wallet."
                     : "Stronger routes are shown first. Fallback marketplaces are still shown, but clearly marked so the user is not misled."}
                 </Text>
               </View>
