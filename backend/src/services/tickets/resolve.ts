@@ -45,7 +45,7 @@ const CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 1000 * 60 * 10;
 const PROVIDER_TIMEOUT_MS = 4500;
 const MAX_RETURNED_OPTIONS = 4;
-const RESOLVER_VERSION = "v5-provider-aware-output-stubhub";
+const RESOLVER_VERSION = "v6-honest-ticket-strength";
 
 const MIN_EXACT_EVENT_SCORE = 72;
 const MIN_PARTIAL_MATCH_SCORE = 60;
@@ -53,8 +53,8 @@ const MIN_SEARCH_FALLBACK_SCORE = 54;
 const MIN_SELECTED_SCORE = 62;
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
-  footballticketsnet: 1,
-  sportsevents365: 2,
+  sportsevents365: 1,
+  footballticketsnet: 2,
   stubhub: 3,
   gigsberg: 4,
 };
@@ -222,7 +222,6 @@ function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean 
     const parsed = new URL(raw);
     const host = parsed.hostname.toLowerCase();
     const allowedRoots = PROVIDER_HOST_ALLOWLIST[provider] ?? [];
-
     return allowedRoots.some((root) => host === root || host.endsWith(`.${root}`));
   } catch {
     return false;
@@ -239,9 +238,7 @@ function detectUrlQuality(candidate: Pick<TicketCandidate, "url">): CandidateUrl
     const path = parsed.pathname.toLowerCase();
     const query = parsed.search.toLowerCase();
 
-    if (host.includes("sjv.io")) {
-      return "search";
-    }
+    if (host.includes("sjv.io")) return "search";
 
     const looksSearch =
       path === "/search" ||
@@ -272,44 +269,51 @@ function getProviderBias(
 ): number {
   if (provider === "sportsevents365") {
     if (reason === "exact_event" && urlQuality === "event") return 14;
-    if (reason === "partial_match" && urlQuality === "event") return 10;
-    if (urlQuality === "listing") return 8;
+    if (reason === "exact_event" && urlQuality === "listing") return 9;
+    if (reason === "partial_match" && urlQuality === "event") return 8;
+    if (reason === "partial_match" && urlQuality === "listing") return 5;
     if (reason === "search_fallback") return -8;
     if (urlQuality === "search") return -10;
-    return 4;
+    if (urlQuality === "unknown") return -8;
+    return 2;
   }
 
   if (provider === "footballticketsnet") {
     if (reason === "exact_event" && urlQuality === "event") return 11;
+    if (reason === "exact_event" && urlQuality === "listing") return 6;
     if (reason === "partial_match" && urlQuality === "event") return 7;
-    if (urlQuality === "listing") return 3;
+    if (reason === "partial_match" && urlQuality === "listing") return 4;
     if (reason === "search_fallback") return -12;
     if (urlQuality === "search") return -14;
-    return 2;
+    if (urlQuality === "unknown") return -10;
+    return 1;
   }
 
   if (provider === "stubhub") {
+    if (reason === "exact_event" && urlQuality === "event") return 4;
+    if (reason === "partial_match" && urlQuality === "event") return 2;
     if (reason === "search_fallback") return -6;
     if (urlQuality === "search") return -8;
+    if (urlQuality === "unknown") return -8;
     return -2;
   }
 
-  if (reason === "exact_event" && (urlQuality === "event" || urlQuality === "listing")) {
-    return 9;
+  if (provider === "gigsberg") {
+    if (reason === "exact_event" && urlQuality === "event") return 3;
+    if (reason === "partial_match" && urlQuality === "event") return 1;
+    if (reason === "search_fallback") return -7;
+    if (urlQuality === "search") return -9;
+    if (urlQuality === "unknown") return -8;
+    return -2;
   }
-  if (reason === "partial_match" && (urlQuality === "event" || urlQuality === "listing")) {
-    return 6;
-  }
-  if (urlQuality === "listing") return 7;
-  if (reason === "search_fallback") return -11;
-  if (urlQuality === "search") return -13;
-  return 1;
+
+  return 0;
 }
 
 function getUrlBias(urlQuality: CandidateUrlQuality): number {
   if (urlQuality === "event") return 12;
   if (urlQuality === "listing") return 8;
-  if (urlQuality === "unknown") return -6;
+  if (urlQuality === "unknown") return -12;
   return -24;
 }
 
@@ -347,12 +351,24 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
     adjustedScore = Math.min(adjustedScore, 58);
   }
 
+  if (candidate.provider === "gigsberg") {
+    adjustedScore = Math.min(adjustedScore, 58);
+  }
+
   if (candidate.reason === "exact_event" && urlQuality === "search") {
     adjustedScore -= 35;
   }
 
+  if (candidate.reason === "exact_event" && urlQuality === "unknown") {
+    adjustedScore -= 18;
+  }
+
   if (candidate.reason === "partial_match" && urlQuality === "search") {
     adjustedScore -= 18;
+  }
+
+  if (candidate.reason === "partial_match" && urlQuality === "unknown") {
+    adjustedScore -= 10;
   }
 
   if (candidate.reason === "search_fallback" && urlQuality !== "search") {
@@ -562,16 +578,21 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 }
 
 function passesReasonFloor(candidate: TicketCandidate): boolean {
-  const adjusted = assessCandidate(candidate).adjustedScore;
+  const assessment = assessCandidate(candidate);
+  const adjusted = assessment.adjustedScore;
+  const urlQuality = assessment.urlQuality;
 
   if (candidate.reason === "exact_event") {
+    if (urlQuality === "search" || urlQuality === "unknown") return false;
     return adjusted >= MIN_EXACT_EVENT_SCORE;
   }
 
   if (candidate.reason === "partial_match") {
+    if (urlQuality === "search" || urlQuality === "unknown") return false;
     return adjusted >= MIN_PARTIAL_MATCH_SCORE;
   }
 
+  if (urlQuality !== "search") return false;
   return adjusted >= MIN_SEARCH_FALLBACK_SCORE;
 }
 
@@ -587,6 +608,26 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
     const aAssessment = assessCandidate(a);
     const bAssessment = assessCandidate(b);
+
+    const aQualityRank =
+      aAssessment.urlQuality === "event"
+        ? 1
+        : aAssessment.urlQuality === "listing"
+          ? 2
+          : aAssessment.urlQuality === "search"
+            ? 3
+            : 4;
+
+    const bQualityRank =
+      bAssessment.urlQuality === "event"
+        ? 1
+        : bAssessment.urlQuality === "listing"
+          ? 2
+          : bAssessment.urlQuality === "search"
+            ? 3
+            : 4;
+
+    if (aQualityRank !== bQualityRank) return aQualityRank - bQualityRank;
 
     if (aAssessment.adjustedScore !== bAssessment.adjustedScore) {
       return bAssessment.adjustedScore - aAssessment.adjustedScore;
