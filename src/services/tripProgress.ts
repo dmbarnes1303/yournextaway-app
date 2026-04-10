@@ -16,6 +16,13 @@ export type TripHealth = {
   missing: string[];
 };
 
+export type TripProgressCounts = {
+  bookedCore: number;
+  totalCore: number;
+  bookedOptional: number;
+  totalOptional: number;
+};
+
 type ProgressBucketKey = keyof TripProgress;
 
 const EMPTY_PROGRESS: TripProgress = {
@@ -34,12 +41,15 @@ const PROGRESS_BUCKET_TYPES: Record<ProgressBucketKey, SavedItemType[]> = {
   things: ["things"],
 };
 
+const CORE_BUCKETS: ProgressBucketKey[] = ["tickets", "flight", "hotel"];
+const OPTIONAL_BUCKETS: ProgressBucketKey[] = ["transfer", "things"];
+
 const HEALTH_WEIGHTS: Record<ProgressBucketKey, number> = {
-  tickets: 40,
-  hotel: 25,
-  flight: 20,
-  transfer: 10,
-  things: 5,
+  tickets: 45,
+  flight: 30,
+  hotel: 20,
+  transfer: 3,
+  things: 2,
 };
 
 const HEALTH_MISSING_LABELS: Record<ProgressBucketKey, string> = {
@@ -80,10 +90,7 @@ function getTripItems(tripId: string): SavedItem[] {
     .filter((item) => !isArchived(item));
 }
 
-function filterBucketItems(
-  items: SavedItem[],
-  bucketKey: ProgressBucketKey
-): SavedItem[] {
+function filterBucketItems(items: SavedItem[], bucketKey: ProgressBucketKey): SavedItem[] {
   const allowedTypes = PROGRESS_BUCKET_TYPES[bucketKey];
   return items.filter((item) => allowedTypes.includes(item.type));
 }
@@ -96,10 +103,7 @@ function reduceProgressState(items: SavedItem[]): ProgressState {
   return "empty";
 }
 
-function getBookedOnlyHealthPoints(
-  state: ProgressState,
-  weight: number
-): number {
+function getBookedOnlyHealthPoints(state: ProgressState, weight: number): number {
   return state === "booked" ? weight : 0;
 }
 
@@ -116,6 +120,20 @@ export function getTripProgress(tripId: string): TripProgress {
     hotel: reduceProgressState(filterBucketItems(tripItems, "hotel")),
     transfer: reduceProgressState(filterBucketItems(tripItems, "transfer")),
     things: reduceProgressState(filterBucketItems(tripItems, "things")),
+  };
+}
+
+export function getTripProgressCounts(tripId: string): TripProgressCounts {
+  const progress = getTripProgress(tripId);
+
+  const bookedCore = CORE_BUCKETS.filter((key) => progress[key] === "booked").length;
+  const bookedOptional = OPTIONAL_BUCKETS.filter((key) => progress[key] === "booked").length;
+
+  return {
+    bookedCore,
+    totalCore: CORE_BUCKETS.length,
+    bookedOptional,
+    totalOptional: OPTIONAL_BUCKETS.length,
   };
 }
 
