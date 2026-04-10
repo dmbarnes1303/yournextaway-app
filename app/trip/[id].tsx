@@ -119,8 +119,8 @@ function plannerCardMeta(args: {
   if (key === "tickets") {
     if (hasBooked) {
       return {
-        subtitle: "Tickets booked",
-        status: "Booked",
+        subtitle: "Tickets marked booked",
+        status: "Marked booked",
         tone: "strong",
       };
     }
@@ -143,8 +143,8 @@ function plannerCardMeta(args: {
   if (key === "travel") {
     if (hasBooked) {
       return {
-        subtitle: "Travel booked",
-        status: "Booked",
+        subtitle: "Travel marked booked",
+        status: "Marked booked",
         tone: "strong",
       };
     }
@@ -167,8 +167,8 @@ function plannerCardMeta(args: {
   if (key === "stay") {
     if (hasBooked) {
       return {
-        subtitle: "Stay booked",
-        status: "Booked",
+        subtitle: "Stay marked booked",
+        status: "Marked booked",
         tone: "strong",
       };
     }
@@ -190,8 +190,8 @@ function plannerCardMeta(args: {
 
   if (hasBooked) {
     return {
-      subtitle: "Extras booked",
-      status: "Booked",
+      subtitle: "Extras marked booked",
+      status: "Marked booked",
       tone: "optional",
     };
   }
@@ -349,7 +349,7 @@ export default function TripDetailScreen() {
     }
 
     if ((vm.tripCompletionPct ?? 0) >= 65) {
-      return "The core trip is taking real shape now, but anything not actually booked still needs finishing.";
+      return "The core trip is taking real shape now, but anything not actually marked booked still needs finishing.";
     }
 
     if ((vm.tripCompletionPct ?? 0) >= 35) {
@@ -491,7 +491,7 @@ export default function TripDetailScreen() {
                       : styles.completionPillEarly,
                 ]}
               >
-                <Text style={styles.completionPillText}>{vm.tripCompletionPct}% covered</Text>
+                <Text style={styles.completionPillText}>{vm.tripCompletionPct}% booked</Text>
               </View>
             ) : null}
           </View>
@@ -521,28 +521,28 @@ export default function TripDetailScreen() {
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Tickets</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasTickets ? "Booked" : ticketCount > 0 ? "In progress" : "Not booked"}
+                {vm.hasTickets ? "Marked booked" : ticketCount > 0 ? "In progress" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Travel</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasFlight ? "Booked" : travelCount > 0 ? "In progress" : "Not booked"}
+                {vm.hasFlight ? "Marked booked" : travelCount > 0 ? "In progress" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Stay</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasHotel ? "Booked" : stayCount > 0 ? "In progress" : "Not booked"}
+                {vm.hasHotel ? "Marked booked" : stayCount > 0 ? "In progress" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Extras</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasThings ? "Booked" : thingsCount > 0 ? "Optional / started" : "Optional"}
+                {vm.hasThings ? "Marked booked" : thingsCount > 0 ? "Optional / started" : "Optional"}
               </Text>
             </View>
           </View>
@@ -633,7 +633,7 @@ export default function TripDetailScreen() {
 
           <Text style={styles.plannerFootnote}>
             Tickets and flights are stronger booking steps. Stay, transport and extras may still be
-            link-based or in progress until actually booked.
+            link-based or in progress until actually marked booked.
           </Text>
         </GlassCard>
 
@@ -668,7 +668,7 @@ export default function TripDetailScreen() {
             ) : null}
 
             {!vm.hasFlight ? (
-              <Text style={styles.guidanceText}>• Travel is not actually booked yet.</Text>
+              <Text style={styles.guidanceText}>• Travel is not actually marked booked yet.</Text>
             ) : null}
 
             {!vm.hasHotel ? (
