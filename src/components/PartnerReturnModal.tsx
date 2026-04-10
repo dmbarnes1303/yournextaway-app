@@ -106,7 +106,7 @@ export default function PartnerReturnModal({
           {meta ? <Text style={styles.meta}>{meta}</Text> : null}
 
           <Text style={styles.subtext}>
-            We can’t see what happened on the partner site. This just helps you track your trip.
+            We can’t see what happened on the partner site. This only helps you track your trip.
           </Text>
 
           {busy ? (
