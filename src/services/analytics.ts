@@ -112,6 +112,39 @@ async function maybe<T>(
   }
 }
 
+function normalizeVerificationStatus(metadata?: Record<string, unknown>): "unverified" | "proof_attached" | "verified" {
+  const raw = clean(metadata?.verificationStatus).toLowerCase();
+
+  if (raw === "proof_attached") return "proof_attached";
+  if (raw === "verified") return "verified";
+  return "unverified";
+}
+
+function normalizeConversionSource(metadata?: Record<string, unknown>): "user_confirmed" | "system_verified" | "manual_admin" {
+  const raw = clean(metadata?.conversionSource).toLowerCase();
+
+  if (raw === "system_verified") return "system_verified";
+  if (raw === "manual_admin") return "manual_admin";
+  return "user_confirmed";
+}
+
+function buildLaunchSafeConversionMetadata(
+  metadata?: Record<string, unknown>
+): Record<string, unknown> {
+  const compact = compactMetadata(metadata);
+
+  const verificationStatus = normalizeVerificationStatus(compact);
+  const conversionSource = normalizeConversionSource(compact);
+
+  return compactMetadata({
+    ...compact,
+    conversionSource,
+    verificationStatus,
+    launchTruthModel:
+      "conversion rows may reflect user-confirmed bookings rather than verified partner confirmations",
+  });
+}
+
 export async function createPartnerClick(
   input: CreatePartnerClickInput
 ): Promise<PartnerClickRecord | null> {
@@ -222,6 +255,7 @@ export async function markPartnerClickConverted(args: {
     "markPartnerClickConverted",
     async () => {
       const supabase = getSupabaseClient();
+      const conversionMetadata = buildLaunchSafeConversionMetadata(args.metadata);
 
       const { error: conversionError } = await supabase
         .from("partner_conversions")
@@ -233,12 +267,28 @@ export async function markPartnerClickConverted(args: {
             partner_id: clean(args.partnerId),
             saved_item_type: clean(args.savedItemType),
             booking_status: clean(args.bookingStatus),
-            metadata: compactMetadata(args.metadata),
+            metadata: conversionMetadata,
           },
           { onConflict: "partner_click_id" }
         );
 
       if (conversionError) throw conversionError;
+
+      const { data: existingRow, error: fetchError } = await supabase
+        .from("partner_clicks")
+        .select("metadata")
+        .eq("id", clickId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const existingMetadata = safeExistingMetadata(existingRow?.metadata);
+      const mergedClickMetadata = compactMetadata({
+        ...existingMetadata,
+        ...conversionMetadata,
+        savedItemType: clean(args.savedItemType),
+        bookingStatus: clean(args.bookingStatus),
+      });
 
       const { error: clickError } = await supabase
         .from("partner_clicks")
@@ -246,6 +296,7 @@ export async function markPartnerClickConverted(args: {
           saved_item_id: clean(args.savedItemId),
           status: "converted",
           converted_at: new Date().toISOString(),
+          metadata: mergedClickMetadata,
         })
         .eq("id", clickId);
 
@@ -258,6 +309,8 @@ export async function markPartnerClickConverted(args: {
       partnerId: clean(args.partnerId),
       savedItemType: clean(args.savedItemType),
       bookingStatus: clean(args.bookingStatus),
+      conversionSource: normalizeConversionSource(args.metadata),
+      verificationStatus: normalizeVerificationStatus(args.metadata),
     }
   );
 }
@@ -350,4 +403,4 @@ export async function logPartnerEvent(input: LogPartnerEventInput): Promise<void
       sourceSection: clean(input.sourceSection) || null,
     }
   );
-}
+    }
