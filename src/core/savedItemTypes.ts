@@ -19,6 +19,8 @@ export type SavedItemMetadata = Record<string, unknown>;
 export type SavedItemPartnerTier = "tier1" | "tier2";
 export type SavedItemPartnerCategory = "tickets" | "flights" | "hotels" | "insurance";
 
+export type SavedItemBookingVerificationStatus = "none" | "unverified" | "proof_attached" | "verified";
+
 export const SAVED_ITEM_TYPES: readonly SavedItemType[] = [
   "tickets",
   "hotel",
@@ -81,6 +83,37 @@ export function normalizeSavedItemStatus(input: unknown): SavedItemStatus | null
   if (!raw) return null;
   if (STATUS_SET.has(raw)) return raw as SavedItemStatus;
   return null;
+}
+
+export function getSavedItemStatusLabel(status: SavedItemStatus): string {
+  switch (status) {
+    case "saved":
+      return "Saved shortlist";
+    case "pending":
+      return "Opened / not confirmed";
+    case "booked":
+      return "Booked by you";
+    case "archived":
+      return "Archived";
+    default:
+      return status;
+  }
+}
+
+export function getSavedItemBookingVerificationStatus(args: {
+  status: SavedItemStatus;
+  attachmentCount?: number;
+  explicitVerificationStatus?: unknown;
+}): SavedItemBookingVerificationStatus {
+  const explicit = cleanString(args.explicitVerificationStatus).toLowerCase();
+
+  if (explicit === "verified") return "verified";
+  if (explicit === "proof_attached") return "proof_attached";
+  if (explicit === "unverified") return "unverified";
+
+  if (args.status !== "booked") return "none";
+  if (Number(args.attachmentCount ?? 0) > 0) return "proof_attached";
+  return "unverified";
 }
 
 export type SavedItemUiGroup =
@@ -199,7 +232,9 @@ export function normalizeWalletAttachment(input: unknown): WalletAttachment | nu
 
 export function normalizeWalletAttachments(input: unknown): WalletAttachment[] {
   if (!Array.isArray(input)) return [];
-  return input.map((entry) => normalizeWalletAttachment(entry)).filter((entry): entry is WalletAttachment => entry !== null);
+  return input
+    .map((entry) => normalizeWalletAttachment(entry))
+    .filter((entry): entry is WalletAttachment => entry !== null);
 }
 
 export type SavedItem = {
@@ -292,7 +327,17 @@ export function normalizeSavedItem(input: unknown): SavedItem | null {
   const status = normalizeSavedItemStatus(raw.status);
   const createdAt = Number(raw.createdAt);
   const updatedAt = Number(raw.updatedAt);
-  if (!id || !title || !type || !status || !Number.isFinite(createdAt) || createdAt <= 0 || !Number.isFinite(updatedAt) || updatedAt <= 0) {
+
+  if (
+    !id ||
+    !title ||
+    !type ||
+    !status ||
+    !Number.isFinite(createdAt) ||
+    createdAt <= 0 ||
+    !Number.isFinite(updatedAt) ||
+    updatedAt <= 0
+  ) {
     return null;
   }
 
@@ -326,5 +371,7 @@ export function normalizeSavedItem(input: unknown): SavedItem | null {
 
 export function normalizeSavedItems(input: unknown): SavedItem[] {
   if (!Array.isArray(input)) return [];
-  return input.map((entry) => normalizeSavedItem(entry)).filter((entry): entry is SavedItem => entry !== null);
+  return input
+    .map((entry) => normalizeSavedItem(entry))
+    .filter((entry): entry is SavedItem => entry !== null);
 }
