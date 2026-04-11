@@ -43,8 +43,22 @@ export type LogPartnerEventInput = {
   metadata?: Record<string, unknown>;
 };
 
+type AnalyticsHealthState = {
+  trackingConfigured: boolean;
+  lastTrackingErrorAt: number | null;
+  lastTrackingErrorMessage: string | null;
+  lastTrackingOperation: string | null;
+};
+
 const ANALYTICS_DEBUG_PREFIX = "[analytics]";
 const LOCAL_CLICK_ID_PREFIX = "local_";
+
+let analyticsHealth: AnalyticsHealthState = {
+  trackingConfigured: isSupabaseConfigured(),
+  lastTrackingErrorAt: null,
+  lastTrackingErrorMessage: null,
+  lastTrackingOperation: null,
+};
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -76,14 +90,35 @@ function logError(message: string, error: unknown, context?: Record<string, unkn
   });
 }
 
+function markTrackingFailure(operationName: string, error: unknown) {
+  analyticsHealth = {
+    trackingConfigured: isSupabaseConfigured(),
+    lastTrackingErrorAt: Date.now(),
+    lastTrackingErrorMessage:
+      error instanceof Error ? error.message : String(error ?? "unknown_error"),
+    lastTrackingOperation: operationName,
+  };
+}
+
+function clearTrackingFailure() {
+  analyticsHealth = {
+    trackingConfigured: isSupabaseConfigured(),
+    lastTrackingErrorAt: analyticsHealth.lastTrackingErrorAt,
+    lastTrackingErrorMessage: analyticsHealth.lastTrackingErrorMessage,
+    lastTrackingOperation: analyticsHealth.lastTrackingOperation,
+  };
+}
+
 export function isPartnerTrackingAvailable(): boolean {
   return isSupabaseConfigured();
 }
 
+export function getAnalyticsHealthState(): AnalyticsHealthState {
+  return { ...analyticsHealth };
+}
+
 export function buildLocalPartnerClickId(seed?: string): string {
-  const suffix =
-    clean(seed) ||
-    `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const suffix = clean(seed) || `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   return `${LOCAL_CLICK_ID_PREFIX}${suffix}`;
 }
 
@@ -99,20 +134,25 @@ async function maybe<T>(
 ): Promise<T | null> {
   if (!isPartnerTrackingAvailable()) {
     logWarn(`${operationName}: skipped because Supabase is not configured`, context);
+    markTrackingFailure(operationName, "Supabase not configured");
     return null;
   }
 
   try {
     const result = await work();
+    clearTrackingFailure();
     logInfo(`${operationName}: success`, context);
     return result;
   } catch (error) {
+    markTrackingFailure(operationName, error);
     logError(`${operationName}: failed`, error, context);
     return null;
   }
 }
 
-function normalizeVerificationStatus(metadata?: Record<string, unknown>): "unverified" | "proof_attached" | "verified" {
+function normalizeVerificationStatus(
+  metadata?: Record<string, unknown>
+): "unverified" | "proof_attached" | "verified" {
   const raw = clean(metadata?.verificationStatus).toLowerCase();
 
   if (raw === "proof_attached") return "proof_attached";
@@ -120,7 +160,9 @@ function normalizeVerificationStatus(metadata?: Record<string, unknown>): "unver
   return "unverified";
 }
 
-function normalizeConversionSource(metadata?: Record<string, unknown>): "user_confirmed" | "system_verified" | "manual_admin" {
+function normalizeConversionSource(
+  metadata?: Record<string, unknown>
+): "user_confirmed" | "system_verified" | "manual_admin" {
   const raw = clean(metadata?.conversionSource).toLowerCase();
 
   if (raw === "system_verified") return "system_verified";
@@ -403,4 +445,4 @@ export async function logPartnerEvent(input: LogPartnerEventInput): Promise<void
       sourceSection: clean(input.sourceSection) || null,
     }
   );
-    }
+}
