@@ -28,33 +28,6 @@ type FtnListResponse = {
   message?: string;
 };
 
-type FtnTicketLike = {
-  id?: string | number;
-  ticket_id?: string | number;
-  listing_id?: string | number;
-  url?: string;
-  event_url?: string;
-  ticket_url?: string;
-  link?: string;
-
-  price?: string | number | Record<string, unknown>;
-  min_price?: string | number | Record<string, unknown>;
-  lowest_price?: string | number | Record<string, unknown>;
-  total_price?: string | number | Record<string, unknown>;
-  price_total?: string | number | Record<string, unknown>;
-
-  currency?: string;
-  currency_code?: string;
-  curr?: string;
-  symbol?: string;
-
-  quantity?: string | number;
-  qty?: string | number;
-  block?: string;
-  section?: string;
-  category?: string;
-};
-
 type FtnGetEventResponse =
   | {
       success?: boolean | string | number;
@@ -1025,7 +998,7 @@ export async function resolveFtnCandidate(
   });
 
   return {
-    provider: "footballticketsnet",
+    provider: "footballticketnet",
     exact,
     score: finalScore,
     url: affiliateUrl,
@@ -1033,4 +1006,4 @@ export async function resolveFtnCandidate(
     priceText,
     reason,
   };
-}
+    }
