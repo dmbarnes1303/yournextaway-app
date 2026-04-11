@@ -16,6 +16,7 @@ import {
   attachSavedItemToPartnerClick,
   buildLocalPartnerClickId,
   createPartnerClick,
+  getAnalyticsHealthState,
   isPartnerTrackingAvailable,
   isTrackedPartnerClickId,
   logPartnerEvent,
@@ -37,6 +38,17 @@ export type LastPartnerClick = {
   createdAt: number;
   openedAt: number;
   tracked: boolean;
+};
+
+export type PartnerClickHealth = {
+  opening: boolean;
+  subscribed: boolean;
+  lastClick: LastPartnerClick | null;
+  trackingAvailable: boolean;
+  trackingDegraded: boolean;
+  lastTrackingErrorAt: number | null;
+  lastTrackingErrorMessage: string | null;
+  lastTrackingOperation: string | null;
 };
 
 const STORAGE_KEY = "yna_last_partner_click_v4";
@@ -389,12 +401,18 @@ async function triggerReturnIfPresent(): Promise<void> {
   }
 }
 
-export function getPartnerClicksDebugState() {
+export function getPartnerClicksDebugState(): PartnerClickHealth {
+  const analytics = getAnalyticsHealthState();
+
   return {
     opening: openInFlight,
     subscribed: watcherSubscribed,
     lastClick,
     trackingAvailable: isPartnerTrackingAvailable(),
+    trackingDegraded: Boolean(analytics.lastTrackingErrorAt),
+    lastTrackingErrorAt: analytics.lastTrackingErrorAt,
+    lastTrackingErrorMessage: analytics.lastTrackingErrorMessage,
+    lastTrackingOperation: analytics.lastTrackingOperation,
   };
 }
 
@@ -440,10 +458,6 @@ export async function openUntrackedUrl(url: string) {
   const normalized = normalizeUrl(url);
   if (!normalized) throw new Error("url is required");
   return await openBrowserGuarded(normalized);
-}
-
-export async function openPartnerUrl(url: string) {
-  return await openUntrackedUrl(url);
 }
 
 export async function beginPartnerClick(args: {
@@ -533,11 +547,13 @@ export async function beginPartnerClick(args: {
   const clickId = trackedClick?.id || buildLocalPartnerClickId(itemForOpen.id);
   const tracked = Boolean(trackedClick?.id);
 
-  if (!tracked && !trackingAvailable) {
-    logWarn("Partner click proceeding without server-side tracking", {
+  if (!tracked) {
+    logWarn("Partner click opened without server-side tracking", {
       tripId,
       itemId: itemForOpen.id,
       partnerId: canonicalPartnerId,
+      trackingAvailable,
+      analyticsHealth: getAnalyticsHealthState(),
     });
   }
 
@@ -609,9 +625,13 @@ export async function beginPartnerClick(args: {
       try {
         await savedItemsStore.remove(itemForOpen.id);
       } catch (removeError) {
-        logError("Failed to remove newly created pending item after browser open failure", removeError, {
-          itemId: itemForOpen.id,
-        });
+        logError(
+          "Failed to remove newly created pending item after browser open failure",
+          removeError,
+          {
+            itemId: itemForOpen.id,
+          }
+        );
       }
     } else if (promotedFromSaved) {
       await transitionIfCurrent(itemForOpen.id, "pending", "saved");
@@ -796,4 +816,4 @@ export function __unsafeResetPartnerClickStateForDevOnly(): void {
   lastClickLoaded = false;
 
   void clearLastClickState();
-    }
+  }
