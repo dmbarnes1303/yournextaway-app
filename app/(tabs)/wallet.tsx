@@ -205,9 +205,9 @@ function iconForAttachmentKind(
 function statusLabel(status: WalletBooking["status"]) {
   switch (status) {
     case "booked":
-      return "Booked";
+      return "Booked by you";
     case "pending":
-      return "Opened / user not confirmed";
+      return "Opened / not confirmed";
     case "saved":
       return "Saved shortlist";
     case "archived":
@@ -627,14 +627,16 @@ export default function WalletScreen() {
                   <Text style={styles.kicker}>WALLET</Text>
                   <Text style={styles.h1}>Bookings & proofs</Text>
                   <Text style={styles.h2}>
-                    This screen only reflects trip-linked wallet truth: saved shortlist items, opened partner journeys, user-confirmed bookings, and proof attached to those bookings.
+                    This screen reflects trip-linked Wallet truth only: saved shortlist items,
+                    opened partner journeys, user-confirmed bookings, and proof attached to those
+                    bookings.
                   </Text>
                 </View>
               </View>
 
               <View style={styles.metricsRow}>
                 <Metric
-                  label="Booked"
+                  label="Booked by you"
                   value={String(summary?.booked ?? 0)}
                   icon="checkmark-done-outline"
                 />
@@ -922,7 +924,7 @@ function WalletSpotlightCard({
               </View>
 
               <StatusPill
-                text={booked > 0 ? "Booked live" : pending > 0 ? "Pending live" : "Saved live"}
+                text={booked > 0 ? "Booked by you" : pending > 0 ? "Pending live" : "Saved live"}
                 tone={booked > 0 ? "booked" : pending > 0 ? "pending" : "saved"}
               />
             </View>
@@ -950,7 +952,7 @@ function WalletSpotlightCard({
               {proofs > 0
                 ? `${proofs} proof file${proofs === 1 ? "" : "s"} attached`
                 : booked > 0
-                  ? "Booked items still need proof uploads"
+                  ? "User-confirmed booked items still need proof uploads"
                   : "No confirmed proofs yet"}
             </Text>
 
@@ -1033,7 +1035,7 @@ function WalletGroupCard({
             </View>
 
             <Text style={styles.groupMeta}>
-              {`${booked} booked • ${pending} pending • ${saved} saved • ${proofs} with proof`}
+              {`${booked} booked by you • ${pending} pending • ${saved} saved • ${proofs} with proof`}
             </Text>
           </View>
 
