@@ -1,5 +1,11 @@
 import savedItemsStore from "@/src/state/savedItems";
-import type { SavedItem, SavedItemStatus, SavedItemType } from "@/src/core/savedItemTypes";
+import {
+  getSavedItemStatusLabel,
+  type SavedItem,
+  type SavedItemStatus,
+  type SavedItemType,
+  type SavedItemBookingVerificationStatus,
+} from "@/src/core/savedItemTypes";
 
 export type WalletItem = {
   id: string;
@@ -7,6 +13,7 @@ export type WalletItem = {
   type: SavedItemType;
   title: string;
   status: SavedItemStatus;
+  statusLabel: string;
   providerId?: string | null;
   providerTier?: "tier1" | "tier2" | null;
   providerCategory?: string | null;
@@ -18,6 +25,8 @@ export type WalletItem = {
   kickoffIso?: string | null;
   attachmentCount: number;
   hasProof: boolean;
+  bookingConfidence: "none" | "user_confirmed" | "proof_attached";
+  bookingVerificationStatus: SavedItemBookingVerificationStatus;
   createdAt: number;
   updatedAt: number;
   bookedAt?: number | null;
@@ -77,8 +86,25 @@ function getAwayName(item: SavedItem): string | null {
   return legacy || null;
 }
 
+function deriveBookingVerificationStatus(item: SavedItem): SavedItemBookingVerificationStatus {
+  const attachments = getAttachments(item);
+
+  if (item.status !== "booked") return "none";
+  if (attachments.length > 0) return "proof_attached";
+  return "unverified";
+}
+
+function deriveBookingConfidence(
+  verificationStatus: SavedItemBookingVerificationStatus
+): WalletItem["bookingConfidence"] {
+  if (verificationStatus === "proof_attached") return "proof_attached";
+  if (verificationStatus === "unverified") return "user_confirmed";
+  return "none";
+}
+
 function mapSavedItemToWalletItem(item: SavedItem): WalletItem {
   const attachments = getAttachments(item);
+  const bookingVerificationStatus = deriveBookingVerificationStatus(item);
 
   return {
     id: String(item.id),
@@ -86,6 +112,7 @@ function mapSavedItemToWalletItem(item: SavedItem): WalletItem {
     type: item.type,
     title: item.title ?? "Untitled",
     status: item.status,
+    statusLabel: getSavedItemStatusLabel(item.status),
     providerId: item.partnerId ?? null,
     providerTier: item.partnerTier ?? null,
     providerCategory: item.partnerCategory ?? null,
@@ -97,6 +124,8 @@ function mapSavedItemToWalletItem(item: SavedItem): WalletItem {
     kickoffIso: cleanString(item.metadata?.kickoffIso) || null,
     attachmentCount: attachments.length,
     hasProof: attachments.length > 0,
+    bookingConfidence: deriveBookingConfidence(bookingVerificationStatus),
+    bookingVerificationStatus,
     createdAt: Number(item.createdAt ?? Date.now()),
     updatedAt: Number(item.updatedAt ?? item.createdAt ?? Date.now()),
     bookedAt: Number.isFinite(Number(item.bookedAt)) ? Number(item.bookedAt) : null,
