@@ -69,7 +69,7 @@ async function addProofIfMissing(itemId: string) {
     }
 
     if (before.status !== "booked") {
-      showOkAlert("Not booked", "Only booked items can store booking proof.");
+      showOkAlert("Not booked", "Only user-confirmed booked items can store booking proof.");
       return;
     }
 
@@ -80,7 +80,6 @@ async function addProofIfMissing(itemId: string) {
 
     const attachment = await pickAndStoreAttachmentForItem(id);
 
-    // Defensive: the picker may throw or may return nothing on cancel in some implementations.
     if (!attachment) return;
 
     await ensureSavedItemsLoaded();
@@ -109,9 +108,10 @@ async function addProofIfMissing(itemId: string) {
 
 /**
  * Call after an item is marked "booked".
- * - stores a last-booked pointer for Wallet highlighting
- * - confirms wallet state
- * - offers proof upload if no proof exists yet
+ * Launch truth:
+ * - booked = user-confirmed booked
+ * - not app-verified
+ * - proof can be added for stronger wallet evidence
  */
 export async function confirmBookedAndOfferProof(itemId: string) {
   const id = cleanString(itemId);
@@ -129,16 +129,19 @@ export async function confirmBookedAndOfferProof(itemId: string) {
   const attachments = getAttachments(item);
 
   if (attachments.length > 0) {
-    showOkAlert("Added to Wallet", `"${title}" is booked and saved in your Wallet.`);
+    showOkAlert(
+      "Saved in Wallet",
+      `"${title}" is marked as booked by you and stored in Wallet.`
+    );
     return;
   }
 
   const message =
-    `"${title}" is now marked as booked.\n\n` +
+    `"${title}" is now marked as booked by you.\n\n` +
     `Want to add booking proof (PDF or screenshot) for offline access?`;
 
   Alert.alert(
-    "Added to Wallet",
+    "Saved in Wallet",
     message,
     [
       { text: "Not now", style: "cancel" },
