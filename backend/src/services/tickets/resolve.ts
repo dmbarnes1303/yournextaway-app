@@ -1,7 +1,5 @@
 import { resolveFtnCandidate } from "./ftn.js";
 import { resolveSe365Candidate } from "./se365.js";
-import { resolveStubhubCandidate } from "./stubhub.js";
-import { resolveGigsbergCandidate } from "./gigsberg.js";
 import type {
   CandidateUrlQuality,
   TicketCandidate,
@@ -45,7 +43,7 @@ const CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 1000 * 60 * 10;
 const PROVIDER_TIMEOUT_MS = 4500;
 const MAX_RETURNED_OPTIONS = 4;
-const RESOLVER_VERSION = "v6-honest-ticket-strength";
+const RESOLVER_VERSION = "v7-launch-ftn-se365-only";
 
 const MIN_EXACT_EVENT_SCORE = 72;
 const MIN_PARTIAL_MATCH_SCORE = 60;
@@ -54,33 +52,21 @@ const MIN_SELECTED_SCORE = 62;
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
   sportsevents365: 1,
-  footballticketsnet: 2,
-  stubhub: 3,
-  gigsberg: 4,
+  footballticketnet: 2,
 };
 
 const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
-  footballticketsnet: [
+  footballticketnet: [
     "footballticketnet.com",
     "www.footballticketnet.com",
     "footballticketsnet.com",
     "www.footballticketsnet.com",
   ],
   sportsevents365: ["sportsevents365.com", "www.sportsevents365.com"],
-  stubhub: [
-    "stubhubinternational.sjv.io",
-    "stubhub.com",
-    "www.stubhub.com",
-    "stubhub.ie",
-    "www.stubhub.ie",
-    "stubhub.co.uk",
-    "www.stubhub.co.uk",
-  ],
-  gigsberg: ["gigsberg.com", "www.gigsberg.com"],
 };
 
 const PROVIDER_STATS: Record<TicketProviderId, ProviderStats> = {
-  footballticketsnet: {
+  footballticketnet: {
     calls: 0,
     successes: 0,
     nulls: 0,
@@ -91,26 +77,6 @@ const PROVIDER_STATS: Record<TicketProviderId, ProviderStats> = {
     lastErrorAt: null,
   },
   sportsevents365: {
-    calls: 0,
-    successes: 0,
-    nulls: 0,
-    timeouts: 0,
-    errors: 0,
-    lastDurationMs: null,
-    lastSuccessAt: null,
-    lastErrorAt: null,
-  },
-  stubhub: {
-    calls: 0,
-    successes: 0,
-    nulls: 0,
-    timeouts: 0,
-    errors: 0,
-    lastDurationMs: null,
-    lastSuccessAt: null,
-    lastErrorAt: null,
-  },
-  gigsberg: {
     calls: 0,
     successes: 0,
     nulls: 0,
@@ -278,7 +244,7 @@ function getProviderBias(
     return 2;
   }
 
-  if (provider === "footballticketsnet") {
+  if (provider === "footballticketnet") {
     if (reason === "exact_event" && urlQuality === "event") return 11;
     if (reason === "exact_event" && urlQuality === "listing") return 6;
     if (reason === "partial_match" && urlQuality === "event") return 7;
@@ -287,24 +253,6 @@ function getProviderBias(
     if (urlQuality === "search") return -14;
     if (urlQuality === "unknown") return -10;
     return 1;
-  }
-
-  if (provider === "stubhub") {
-    if (reason === "exact_event" && urlQuality === "event") return 4;
-    if (reason === "partial_match" && urlQuality === "event") return 2;
-    if (reason === "search_fallback") return -6;
-    if (urlQuality === "search") return -8;
-    if (urlQuality === "unknown") return -8;
-    return -2;
-  }
-
-  if (provider === "gigsberg") {
-    if (reason === "exact_event" && urlQuality === "event") return 3;
-    if (reason === "partial_match" && urlQuality === "event") return 1;
-    if (reason === "search_fallback") return -7;
-    if (urlQuality === "search") return -9;
-    if (urlQuality === "unknown") return -8;
-    return -2;
   }
 
   return 0;
@@ -346,14 +294,6 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
     reasonBias +
     providerBias +
     priceBonus;
-
-  if (candidate.provider === "stubhub") {
-    adjustedScore = Math.min(adjustedScore, 58);
-  }
-
-  if (candidate.provider === "gigsberg") {
-    adjustedScore = Math.min(adjustedScore, 58);
-  }
 
   if (candidate.reason === "exact_event" && urlQuality === "search") {
     adjustedScore -= 35;
@@ -736,27 +676,21 @@ export async function resolveTicket(
   });
 
   const checkedProviders: TicketResolution["checkedProviders"] = [
-    "footballticketsnet",
+    "footballticketnet",
     "sportsevents365",
-    "stubhub",
-    "gigsberg",
   ];
 
   const providerPromises: Array<Promise<TicketCandidate | null>> = [
-    runProvider("footballticketsnet", () => resolveFtnCandidate(input)),
+    runProvider("footballticketnet", () => resolveFtnCandidate(input)),
     runProvider("sportsevents365", () => resolveSe365Candidate(input)),
-    runProvider("stubhub", () => resolveStubhubCandidate(input)),
-    runProvider("gigsberg", () => resolveGigsbergCandidate(input)),
   ];
 
   const settled = await Promise.allSettled(providerPromises);
 
   const candidates: TicketCandidate[] = [];
   const providerOrder: TicketProviderId[] = [
-    "footballticketsnet",
+    "footballticketnet",
     "sportsevents365",
-    "stubhub",
-    "gigsberg",
   ];
 
   for (let i = 0; i < settled.length; i += 1) {
@@ -820,4 +754,4 @@ export async function resolveTicket(
   }
 
   return result;
-  }
+}
