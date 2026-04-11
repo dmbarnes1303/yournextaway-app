@@ -79,7 +79,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     output.push(
       makePartnerLink({
         provider: asProvider("sportsevents365"),
-        title: "Ticket marketplace search",
+        title: "Best ticket option",
         url: links.ticketsPrimaryUrl,
         campaign: "tier1_trip_tickets_se365",
       })
@@ -90,7 +90,7 @@ export function getPartnerLinksForTrip(ctx: PartnerContext): PartnerLink[] {
     output.push(
       makePartnerLink({
         provider: asProvider("footballticketnet"),
-        title: "More ticket marketplace search",
+        title: "Compare more ticket options",
         url: links.ticketsSecondaryUrl,
         campaign: "tier2_trip_tickets_ftn",
       })
