@@ -1,5 +1,3 @@
-// src/components/PartnerReturnModal.tsx
-
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -18,7 +16,6 @@ type Props = {
   visible: boolean;
   itemId: string | null;
   click?: LastPartnerClick | null;
-
   onBooked: (itemId: string) => Promise<void>;
   onNotBooked: (itemId: string) => Promise<void>;
   onNotNow: (itemId: string) => Promise<void>;
@@ -80,10 +77,12 @@ export default function PartnerReturnModal({
           await onBooked(id);
           return;
         }
+
         if (kind === "notBooked") {
           await onNotBooked(id);
           return;
         }
+
         await onNotNow(id);
       } finally {
         setLoading(null);
@@ -101,12 +100,13 @@ export default function PartnerReturnModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleDismiss}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.title}>Did you complete a booking?</Text>
+          <Text style={styles.title}>Did you book this on the partner site?</Text>
 
           {meta ? <Text style={styles.meta}>{meta}</Text> : null}
 
           <Text style={styles.subtext}>
-            We can’t see what happened on the partner site. This only helps you track your trip.
+            We can’t verify bookings automatically. Your choice only updates your trip
+            tracker and Wallet unless you add proof.
           </Text>
 
           {busy ? (
@@ -125,16 +125,16 @@ export default function PartnerReturnModal({
               </Pressable>
 
               <Pressable style={[styles.btn, styles.btnPrimary]} onPress={() => void run("booked")}>
-                <Text style={styles.btnText}>Yes — I booked this</Text>
+                <Text style={styles.btnText}>Yes — I booked it</Text>
               </Pressable>
             </View>
           )}
 
-          {!busy && (
+          {!busy ? (
             <Pressable onPress={handleDismiss} style={styles.dismiss}>
               <Text style={styles.dismissText}>Close</Text>
             </Pressable>
-          )}
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -205,6 +205,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 12,
+    textAlign: "center",
   },
   dismiss: {
     alignSelf: "center",
