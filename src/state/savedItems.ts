@@ -18,7 +18,12 @@ import { readJson, writeJson } from "@/src/state/persist";
 import { deleteAttachmentFile } from "@/src/services/walletAttachments";
 
 const STORAGE_KEY = "yna_saved_items_v2";
-const VALID_STATUS: ReadonlySet<SavedItemStatus> = new Set(["saved", "pending", "booked", "archived"]);
+const VALID_STATUS: ReadonlySet<SavedItemStatus> = new Set([
+  "saved",
+  "pending",
+  "booked",
+  "archived",
+]);
 
 type SavedItemsState = {
   loaded: boolean;
@@ -171,7 +176,10 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
       currency: cleanOptionalString(args.currency),
       metadata: isPlainObject(args.metadata) ? args.metadata : undefined,
       attachments: normalizeWalletAttachments(args.attachments),
-      bookedAt: Number.isFinite(Number(args.bookedAt)) ? Number(args.bookedAt) : undefined,
+      bookedAt:
+        Number.isFinite(Number(args.bookedAt)) && status === "booked"
+          ? Number(args.bookedAt)
+          : undefined,
       createdAt,
       updatedAt: createdAt,
     });
@@ -193,9 +201,25 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     const next = get().items.map((item) => {
       if (item.id !== cleanId) return item;
       changed = true;
+
+      const nextStatus =
+        "status" in patch
+          ? normalizeSavedItemStatus(patch.status) ?? item.status
+          : item.status;
+
+      const explicitBookedAt =
+        "bookedAt" in patch
+          ? Number.isFinite(Number(patch.bookedAt))
+            ? Number(patch.bookedAt)
+            : undefined
+          : item.bookedAt;
+
+      const bookedAt = nextStatus === "booked" ? explicitBookedAt ?? item.bookedAt ?? now() : undefined;
+
       const merged: SavedItem = {
         ...item,
         ...patch,
+        status: nextStatus,
         tripId: "tripId" in patch ? cleanOptionalString(patch.tripId) : item.tripId,
         title: "title" in patch ? cleanString(patch.title) || item.title : item.title,
         partnerId: "partnerId" in patch ? cleanOptionalString(patch.partnerId) : item.partnerId,
@@ -216,18 +240,13 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
         currency: "currency" in patch ? cleanOptionalString(patch.currency) : item.currency,
         metadata:
           "metadata" in patch
-            ? (isPlainObject(patch.metadata) ? patch.metadata : undefined)
+            ? isPlainObject(patch.metadata)
+              ? patch.metadata
+              : undefined
             : item.metadata,
         attachments:
-          "attachments" in patch
-            ? normalizeWalletAttachments(patch.attachments)
-            : item.attachments,
-        bookedAt:
-          "bookedAt" in patch && Number.isFinite(Number(patch.bookedAt))
-            ? Number(patch.bookedAt)
-            : "bookedAt" in patch
-              ? undefined
-              : item.bookedAt,
+          "attachments" in patch ? normalizeWalletAttachments(patch.attachments) : item.attachments,
+        bookedAt,
         updatedAt: now(),
       };
 
@@ -258,7 +277,7 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
 
     await get().update(cleanId, {
       status: target,
-      bookedAt: target === "booked" ? now() : current.bookedAt,
+      bookedAt: target === "booked" ? now() : undefined,
     });
   },
 
@@ -272,8 +291,10 @@ const useSavedItemsStore = create<SavedItemsState>((set, get) => ({
     if (!item) throw new Error("Saved item not found");
 
     const existing = item.attachments ?? [];
-    const nextAttachments = [...existing.filter((x) => x.id !== normalized.id && x.uri !== normalized.uri), normalized]
-      .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    const nextAttachments = [
+      ...existing.filter((x) => x.id !== normalized.id && x.uri !== normalized.uri),
+      normalized,
+    ].sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 
     await get().update(cleanId, { attachments: nextAttachments });
   },
@@ -396,7 +417,10 @@ const savedItemsStore = {
   getByTripId: (tripId?: string) => {
     const cleanTripId = cleanOptionalString(tripId);
     if (!cleanTripId) return [];
-    return useSavedItemsStore.getState().items.filter((entry) => entry.tripId === cleanTripId).map((entry) => cloneItem(entry) as SavedItem);
+    return useSavedItemsStore
+      .getState()
+      .items.filter((entry) => entry.tripId === cleanTripId)
+      .map((entry) => cloneItem(entry) as SavedItem);
   },
 };
 
