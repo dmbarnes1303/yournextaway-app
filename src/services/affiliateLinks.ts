@@ -1,5 +1,3 @@
-// src/services/affiliateLinks.ts
-
 import { getIataCityCodeForCity } from "@/src/constants/iataCities";
 import { AffiliateConfig } from "@/src/constants/partners";
 import { formatIsoToYmd } from "@/src/utils/dates";
@@ -93,10 +91,6 @@ function appendQuery(
 
 function resolveTrackedUrl(trackedValue: unknown): string | null {
   return safeUrl(trackedValue);
-}
-
-function resolveDirectUrl(value: unknown): string | null {
-  return safeUrl(value);
 }
 
 function normalizeOriginIata(value: unknown): string {
@@ -195,11 +189,10 @@ function buildFootballTicketNetUrl(args: {
   startDate: string | null;
   endDate: string | null;
 }): string | null {
-  const base =
-    resolveTrackedUrl(AffiliateConfig.footballticketnetTracked) ||
-    resolveDirectUrl("https://www.footballticketnet.com/");
-
-  if (!base) return null;
+  const base = resolveTrackedUrl(AffiliateConfig.footballticketnetTracked);
+  if (!base) {
+    return null;
+  }
 
   const city = clean(args.city);
 
