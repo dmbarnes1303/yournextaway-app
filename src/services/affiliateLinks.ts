@@ -91,11 +91,12 @@ function appendQuery(
   return `${safeBase}${joiner}${queryString}`;
 }
 
-function resolveTrackedOrFallbackUrl(
-  trackedValue: unknown,
-  fallbackValue: unknown = null
-): string | null {
-  return safeUrl(trackedValue) || safeUrl(fallbackValue);
+function resolveTrackedUrl(trackedValue: unknown): string | null {
+  return safeUrl(trackedValue);
+}
+
+function resolveDirectUrl(value: unknown): string | null {
+  return safeUrl(value);
 }
 
 function normalizeOriginIata(value: unknown): string {
@@ -157,11 +158,10 @@ function buildHotelsUrl(args: {
   const city = clean(args.city);
   if (!city) return null;
 
-  const base =
-    resolveTrackedOrFallbackUrl(AffiliateConfig.expediaTracked) ||
-    resolveTrackedOrFallbackUrl("https://www.expedia.co.uk/Hotel-Search");
-
-  if (!base) return null;
+  const base = resolveTrackedUrl(AffiliateConfig.expediaTracked);
+  if (!base) {
+    return null;
+  }
 
   return appendQuery(base, {
     destination: city,
@@ -177,7 +177,7 @@ function buildSportsEvents365Url(args: {
   startDate: string | null;
   endDate: string | null;
 }): string | null {
-  const base = resolveTrackedOrFallbackUrl(AffiliateConfig.sportsevents365Tracked);
+  const base = resolveTrackedUrl(AffiliateConfig.sportsevents365Tracked);
   if (!base) return null;
 
   const city = clean(args.city);
@@ -196,8 +196,8 @@ function buildFootballTicketNetUrl(args: {
   endDate: string | null;
 }): string | null {
   const base =
-    resolveTrackedOrFallbackUrl(AffiliateConfig.footballticketnetTracked) ||
-    resolveTrackedOrFallbackUrl("https://www.footballticketnet.com/");
+    resolveTrackedUrl(AffiliateConfig.footballticketnetTracked) ||
+    resolveDirectUrl("https://www.footballticketnet.com/");
 
   if (!base) return null;
 
@@ -212,10 +212,7 @@ function buildFootballTicketNetUrl(args: {
 }
 
 function buildInsuranceUrl(): string | null {
-  return (
-    resolveTrackedOrFallbackUrl(AffiliateConfig.safetywingAffiliateUrl) ||
-    resolveTrackedOrFallbackUrl("https://safetywing.com/")
-  );
+  return resolveTrackedUrl(AffiliateConfig.safetywingAffiliateUrl);
 }
 
 export function buildAffiliateLinks(args: BuildAffiliateLinksArgs): BuiltAffiliateLinks {
