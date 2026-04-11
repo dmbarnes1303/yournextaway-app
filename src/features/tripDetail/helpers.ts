@@ -138,14 +138,30 @@ function normalizeProvider(provider?: string | null): string {
   return clean(provider).toLowerCase();
 }
 
-function isSe365(provider?: string | null): boolean {
+function canonicalTicketProvider(provider?: string | null): string {
   const p = normalizeProvider(provider);
-  return p === "sportsevents365" || p === "se365";
+
+  if (p === "sportsevents365" || p === "se365") return "sportsevents365";
+
+  if (
+    p === "footballticketnet" ||
+    p === "footballticketsnet" ||
+    p === "footballticketnet.com" ||
+    p === "footballticketsnet.com" ||
+    p === "ftn"
+  ) {
+    return "footballticketnet";
+  }
+
+  return p;
+}
+
+function isSe365(provider?: string | null): boolean {
+  return canonicalTicketProvider(provider) === "sportsevents365";
 }
 
 function isFtn(provider?: string | null): boolean {
-  const p = normalizeProvider(provider);
-  return p === "footballticketnet" || p === "footballticketnet.com" || p === "ftn";
+  return canonicalTicketProvider(provider) === "footballticketnet";
 }
 
 /* ============================================================================
@@ -338,7 +354,7 @@ export function normalizeTicketOptions(
     resolved?.provider && resolved?.url && resolved?.title && typeof resolved?.score === "number"
       ? [
           {
-            provider: resolved.provider,
+            provider: canonicalTicketProvider(resolved.provider),
             exact: Boolean(resolved.exact),
             score: resolved.score,
             rawScore: typeof resolved.rawScore === "number" ? resolved.rawScore : null,
@@ -360,12 +376,14 @@ export function normalizeTicketOptions(
   const seen = new Map<string, TicketResolutionOption>();
 
   for (const option of merged) {
-    const key = `${normalizeProvider(option.provider)}|${clean(option.url)}`;
+    const canonicalProvider = canonicalTicketProvider(option.provider);
+    const key = `${canonicalProvider}|${clean(option.url)}`;
     const existing = seen.get(key);
 
     if (!existing) {
       seen.set(key, {
         ...option,
+        provider: canonicalProvider,
         urlQuality: normalizeTicketUrlQuality(option.urlQuality, option.url),
       });
       continue;
@@ -378,6 +396,7 @@ export function normalizeTicketOptions(
     if (replace) {
       seen.set(key, {
         ...option,
+        provider: canonicalProvider,
         urlQuality: normalizeTicketUrlQuality(option.urlQuality, option.url),
       });
     }
@@ -449,6 +468,34 @@ export function mapTicketProviderToPartnerId(provider?: string | null): PartnerI
   throw new Error(`Unsupported ticket provider: ${clean(provider)}`);
 }
 
+export function ticketUrlQualityLabel(value?: string | null): string | null {
+  const quality = normalizeTicketUrlQuality(value);
+
+  if (quality === "event") return "Direct event route";
+  if (quality === "listing") return "Listing route";
+  if (quality === "search") return "Search route";
+  return "Unknown route";
+}
+
+export function optionReasonLabel(reason?: string | null): string {
+  const raw = clean(reason);
+
+  if (raw === "exact_event") return "Exact fixture";
+  if (raw === "partial_match") return "Related listing";
+  if (raw === "search_fallback") return "Fallback search";
+  return "Unknown";
+}
+
+export function ticketConfidenceLabel(score?: number | null): string {
+  const n = typeof score === "number" && Number.isFinite(score) ? score : null;
+
+  if (n == null) return "Unknown confidence";
+  if (n >= 85) return "High confidence";
+  if (n >= 70) return "Good confidence";
+  if (n >= 60) return "Moderate confidence";
+  return "Low confidence";
+}
+
 /* ============================================================================
  * PRICE / ITEM DISPLAY
  * ========================================================================== */
@@ -463,7 +510,7 @@ export function livePriceLine(item: any): string | null {
 
 export function ticketProviderFromItem(item: any | null): string | null {
   if (!item) return null;
-  return clean(item?.metadata?.ticketProvider || item?.partnerId) || null;
+  return canonicalTicketProvider(clean(item?.metadata?.ticketProvider || item?.partnerId) || null) || null;
 }
 
 export function itemResolvedScore(item: any | null): number | null {
