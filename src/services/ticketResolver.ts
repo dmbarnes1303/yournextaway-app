@@ -57,13 +57,25 @@ function isSe365(provider: unknown): boolean {
 
 function isFtn(provider: unknown): boolean {
   const p = normalizeProvider(provider);
-  return p === "footballticketnet" || p === "ftn";
+  return (
+    p === "footballticketnet" ||
+    p === "footballticketsnet" ||
+    p === "footballticketnet.com" ||
+    p === "footballticketsnet.com" ||
+    p === "ftn"
+  );
 }
 
 function providerPriority(provider: unknown): number {
   if (isSe365(provider)) return 300;
   if (isFtn(provider)) return 200;
   return 100;
+}
+
+function canonicalizeProvider(provider: unknown): string {
+  if (isSe365(provider)) return "sportsevents365";
+  if (isFtn(provider)) return "footballticketnet";
+  return clean(provider);
 }
 
 function safeJsonParse<T>(value: string): T | null {
@@ -156,7 +168,7 @@ function normalizeOption(input: unknown): TicketResolutionOption | null {
 
   const obj = input as Record<string, unknown>;
 
-  const provider = clean(obj.provider);
+  const provider = canonicalizeProvider(obj.provider);
   const url = safeUrl(obj.url);
   const title = clean(obj.title);
   const score = normalizeScore(obj.score);
@@ -226,7 +238,7 @@ function normalizeCheckedProviders(value: unknown): string[] {
   const out: string[] = [];
 
   for (const entry of value) {
-    const next = clean(entry);
+    const next = canonicalizeProvider(entry);
     if (!next) continue;
     const key = next.toLowerCase();
     if (seen.has(key)) continue;
@@ -347,7 +359,7 @@ function normalizeResolutionResult(
 
   const fallbackTop = normalizedOptions[0] ?? null;
 
-  const provider = clean(input.provider) || fallbackTop?.provider || null;
+  const provider = canonicalizeProvider(clean(input.provider) || fallbackTop?.provider || null);
   const url = safeUrl(input.url) || fallbackTop?.url || null;
   const title = clean(input.title) || fallbackTop?.title || null;
   const priceText = clean(input.priceText) || fallbackTop?.priceText || null;
