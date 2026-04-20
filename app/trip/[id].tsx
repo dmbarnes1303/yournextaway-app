@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -21,10 +22,22 @@ import { theme } from "@/src/constants/theme";
 
 import storage from "@/src/services/storage";
 
+import savedItemsStore from "@/src/state/savedItems";
+
 import useTripDetailController from "@/src/features/tripDetail/useTripDetailController";
 import useTripDetailViewModel from "@/src/features/tripDetail/useTripDetailViewModel";
 import useTripDetailData from "@/src/features/tripDetail/useTripDetailData";
 import useTripWorkspace from "@/src/features/tripDetail/useTripWorkspace";
+
+import {
+  ensurePartnerReturnWatcher,
+  markBooked,
+  markNotBooked,
+  dismissReturnPrompt,
+} from "@/src/services/partnerClicks";
+import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
+
+import type { SavedItemType } from "@/src/core/savedItemTypes";
 
 import {
   type PlanValue,
@@ -211,6 +224,31 @@ function plannerCardMeta(args: {
   };
 }
 
+function inferSourceSectionFromSavedItemType(type?: SavedItemType) {
+  switch (type) {
+    case "tickets":
+      return "tickets";
+    case "hotel":
+      return "stay";
+    case "flight":
+    case "train":
+      return "travel";
+    case "transfer":
+      return "transfers";
+    case "things":
+      return "things";
+    case "insurance":
+      return "insurance";
+    case "claim":
+      return "claims";
+    case "note":
+    case "other":
+      return "notes";
+    default:
+      return "unknown";
+  }
+}
+
 export default function TripDetailScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -237,6 +275,7 @@ export default function TripDetailScreen() {
   const [ticketLoading, setTicketLoading] = useState(false);
 
   const isPro = plan === "premium";
+  const returnPromptBusyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -281,13 +320,14 @@ export default function TripDetailScreen() {
     ticketsByMatchId: data.ticketsByMatchId,
     affiliateUrls: data.affiliateUrls,
     setTicketLoading,
+    setActiveWorkspaceSection: workspace.setActiveSection,
   });
 
   const vm = useTripDetailViewModel({
     trip,
     tripsLoaded,
     savedLoaded,
-    workspaceLoaded: true,
+    workspaceLoaded: workspace.workspaceLoaded,
     routeTripId,
     cityName: data.cityName,
     originIata,
@@ -302,8 +342,89 @@ export default function TripDetailScreen() {
     isPro,
     kickoffTbc: data.kickoffMeta.tbc,
     controller,
+    setActiveWorkspaceSection: workspace.setActiveSection,
     bookingPriceBoard: data.bookingPriceBoard,
   });
+
+  useEffect(() => {
+    const cleanup = ensurePartnerReturnWatcher(async (click) => {
+      if (!click?.itemId) return;
+
+      if (returnPromptBusyRef.current === click.itemId) return;
+      returnPromptBusyRef.current = click.itemId;
+
+      try {
+        await savedItemsStore.load();
+        const item = savedItemsStore.getById(click.itemId);
+
+        if (!item) {
+          await dismissReturnPrompt(click.itemId);
+          return;
+        }
+
+        if (item.status === "booked") {
+          await dismissReturnPrompt(item.id);
+          return;
+        }
+
+        const section = inferSourceSectionFromSavedItemType(item.type);
+
+        Alert.alert(
+          "Did you complete this booking?",
+          `"${item.title}" was opened. Mark it as booked only if you actually completed the booking.`,
+          [
+            {
+              text: "Not now",
+              style: "cancel",
+              onPress: () => {
+                void dismissReturnPrompt(item.id);
+                returnPromptBusyRef.current = null;
+              },
+            },
+            {
+              text: "No",
+              onPress: () => {
+                void markNotBooked(item.id)
+                  .catch(() => null)
+                  .finally(() => {
+                    returnPromptBusyRef.current = null;
+                  });
+              },
+            },
+            {
+              text: "Yes, booked",
+              onPress: () => {
+                void markBooked(item.id, {
+                  sourceSurface: "workspace_cta",
+                  sourceSection: section,
+                  metadata: {
+                    partnerId: item.partnerId ?? null,
+                    partnerTier: item.partnerTier ?? null,
+                    partnerCategory: item.partnerCategory ?? null,
+                  },
+                })
+                  .then(() => confirmBookedAndOfferProof(item.id))
+                  .catch(() => {
+                    Alert.alert(
+                      "Couldn’t update booking",
+                      "The booking was opened, but the app could not mark it as booked."
+                    );
+                  })
+                  .finally(() => {
+                    returnPromptBusyRef.current = null;
+                  });
+              },
+            },
+          ],
+          { cancelable: true }
+        );
+      } catch {
+        returnPromptBusyRef.current = null;
+      }
+    });
+
+    return cleanup;
+  }, []);
 
   const isMissingTrip = !trip && tripsLoaded;
 
