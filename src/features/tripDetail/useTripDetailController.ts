@@ -440,6 +440,26 @@ export default function useTripDetailController({
     }
   }
 
+  async function openTrackedPartner(args: {
+    partnerId: PartnerId | string;
+    url: string;
+    title: string;
+    savedItemType?: SavedItemType;
+    metadata?: Record<string, unknown>;
+  }) {
+    await openPartnerLaunch({
+      partnerId: args.partnerId,
+      url: args.url,
+      title: args.title,
+      savedItemType: args.savedItemType,
+      sourceSurface: safeSourceSurface(args.metadata?.sourceSurface),
+      sourceSection: safeSourceSection(args.metadata?.sourceSection, args.savedItemType),
+      metadata: args.metadata,
+      missingTitle: "Partner not ready",
+      missingMessage: "This booking link is not available yet.",
+    });
+  }
+
   async function openSavedItem(item: SavedItem) {
     const partnerUrl = clean(item.partnerUrl);
     if (!partnerUrl) {
@@ -1106,6 +1126,7 @@ export default function useTripDetailController({
     onUpgradePress,
     onOpenSection,
     openUntracked,
+    openTrackedPartner,
     openSavedItem,
     confirmArchive,
     confirmMarkBooked,
@@ -1124,4 +1145,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-          }
+}
