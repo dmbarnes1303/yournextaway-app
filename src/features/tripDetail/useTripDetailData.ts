@@ -48,7 +48,12 @@ import {
 } from "@/src/features/tripDetail/tripDetailSelectors";
 
 import { getFixtureById } from "@/src/services/apiFootball";
-import { getTripHealth, getTripProgress } from "@/src/services/tripProgress";
+import {
+  getTripHealth,
+  getTripProgress,
+  type TripHealth,
+  type TripProgress,
+} from "@/src/services/tripProgress";
 import type { Trip } from "@/src/state/trips";
 
 type Props = {
@@ -57,13 +62,18 @@ type Props = {
   originIata: string;
 };
 
-const EMPTY_PROGRESS = {
+const EMPTY_PROGRESS: TripProgress = {
   tickets: "empty",
   flight: "empty",
   hotel: "empty",
   transfer: "empty",
   things: "empty",
-} as const;
+};
+
+const EMPTY_HEALTH: TripHealth = {
+  score: 0,
+  missing: [],
+};
 
 function normalizeNumericMatchIds(trip: Trip | null): string[] {
   const ids = Array.isArray(trip?.matchIds) ? trip.matchIds : [];
@@ -253,26 +263,19 @@ export default function useTripDetailData({ trip, savedItems, originIata }: Prop
     return buildBookingPriceBoard(savedItems);
   }, [savedItems]);
 
-  const progress = useMemo(() => {
+  const progress = useMemo<TripProgress>(() => {
     if (!activeTripId) return EMPTY_PROGRESS;
-    return getTripProgress(activeTripId) || EMPTY_PROGRESS;
-  }, [activeTripId]);
 
-  const readiness = useMemo(() => {
+    return getTripProgress(activeTripId) || EMPTY_PROGRESS;
+  }, [activeTripId, savedItems]);
+
+  const readiness = useMemo<TripHealth>(() => {
     if (!activeTripId) {
-      return {
-        score: 0,
-        missing: [] as string[],
-      };
+      return EMPTY_HEALTH;
     }
 
-    return (
-      getTripHealth(activeTripId) || {
-        score: 0,
-        missing: [] as string[],
-      }
-    );
-  }, [activeTripId]);
+    return getTripHealth(activeTripId) || EMPTY_HEALTH;
+  }, [activeTripId, savedItems]);
 
   const dateIsoForPrimaryMatch = useMemo(() => {
     return buildDateIsoForPrimaryMatch({
