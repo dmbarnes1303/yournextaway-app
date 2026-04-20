@@ -21,7 +21,6 @@ import {
   safeFixtureTitle,
   formatKickoffMeta,
   statusLabel,
-  ticketConfidenceLabel,
   providerLabel,
 } from "@/src/components/trip/tripUi";
 
@@ -69,6 +68,18 @@ function StatusBadge({ status }: { status: SavedItem["status"] }) {
       <Text style={styles.badgeText}>{statusLabel(status)}</Text>
     </View>
   );
+}
+
+function ticketConfidenceLabel(score: number | null | undefined): string {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    return "Route confidence unknown";
+  }
+
+  if (score >= 90) return "Very strong route";
+  if (score >= 75) return "Strong route";
+  if (score >= 60) return "Usable route";
+  if (score >= 40) return "Weak route";
+  return "Low-confidence route";
 }
 
 function ticketStateLine(args: {
@@ -147,10 +158,12 @@ function urgencyLine(args: {
   const { isPrimary, ticketItem, certaintyLine } = args;
 
   if (isPrimary && !ticketItem) return "Primary match not ticketed yet";
-  if (isPrimary && ticketItem?.status === "pending")
+  if (isPrimary && ticketItem?.status === "pending") {
     return "Primary match still needs booking confirmation";
-  if (isPrimary && ticketItem?.status === "saved")
+  }
+  if (isPrimary && ticketItem?.status === "saved") {
     return "Primary match has ticket routes saved";
+  }
   if (isPrimary && ticketItem?.status === "booked") return "Primary match anchored";
 
   return certaintyLine;
