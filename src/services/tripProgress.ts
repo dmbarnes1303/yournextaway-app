@@ -1,5 +1,9 @@
 import savedItemsStore from "@/src/state/savedItems";
-import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
+import type {
+  SavedItem,
+  SavedItemPartnerCategory,
+  SavedItemType,
+} from "@/src/core/savedItemTypes";
 
 export type ProgressState = "empty" | "saved" | "pending" | "booked";
 
@@ -33,14 +37,6 @@ const EMPTY_PROGRESS: TripProgress = {
   things: "empty",
 };
 
-const PROGRESS_BUCKET_TYPES: Record<ProgressBucketKey, SavedItemType[]> = {
-  tickets: ["tickets"],
-  flight: ["flight"],
-  hotel: ["hotel"],
-  transfer: ["train", "transfer"],
-  things: ["things"],
-};
-
 const CORE_BUCKETS: ProgressBucketKey[] = ["tickets", "flight", "hotel"];
 const OPTIONAL_BUCKETS: ProgressBucketKey[] = ["transfer", "things"];
 
@@ -62,6 +58,10 @@ const HEALTH_MISSING_LABELS: Record<ProgressBucketKey, string> = {
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function lower(value: unknown): string {
+  return clean(value).toLowerCase();
 }
 
 function isArchived(item: SavedItem): boolean {
@@ -90,9 +90,89 @@ function getTripItems(tripId: string): SavedItem[] {
     .filter((item) => !isArchived(item));
 }
 
+function getPartnerCategory(item: SavedItem): SavedItemPartnerCategory | null {
+  const category = lower(item.partnerCategory);
+
+  if (
+    category === "tickets" ||
+    category === "flights" ||
+    category === "hotels" ||
+    category === "insurance"
+  ) {
+    return category;
+  }
+
+  return null;
+}
+
+function getSourceSection(item: SavedItem): string {
+  return lower(item.sourceSection || item.metadata?.sourceSection);
+}
+
+function getSourceSurface(item: SavedItem): string {
+  return lower(item.sourceSurface || item.metadata?.sourceSurface);
+}
+
+function getProviderHint(item: SavedItem): string {
+  return lower(item.partnerId || item.metadata?.provider || item.metadata?.partnerId);
+}
+
+function itemBelongsToBucket(item: SavedItem, bucketKey: ProgressBucketKey): boolean {
+  const type = item.type;
+  const partnerCategory = getPartnerCategory(item);
+  const sourceSection = getSourceSection(item);
+  const sourceSurface = getSourceSurface(item);
+  const providerHint = getProviderHint(item);
+
+  if (bucketKey === "tickets") {
+    return (
+      type === "tickets" ||
+      partnerCategory === "tickets" ||
+      sourceSection === "tickets"
+    );
+  }
+
+  if (bucketKey === "flight") {
+    return (
+      type === "flight" ||
+      partnerCategory === "flights" ||
+      sourceSection === "travel" ||
+      providerHint === "aviasales"
+    );
+  }
+
+  if (bucketKey === "hotel") {
+    return (
+      type === "hotel" ||
+      partnerCategory === "hotels" ||
+      sourceSection === "stay" ||
+      providerHint === "expedia"
+    );
+  }
+
+  if (bucketKey === "transfer") {
+    return (
+      type === "train" ||
+      type === "transfer" ||
+      sourceSection === "transfers" ||
+      sourceSection === "transport"
+    );
+  }
+
+  if (bucketKey === "things") {
+    return (
+      type === "things" ||
+      sourceSection === "things" ||
+      sourceSection === "extras" ||
+      sourceSurface === "things"
+    );
+  }
+
+  return false;
+}
+
 function filterBucketItems(items: SavedItem[], bucketKey: ProgressBucketKey): SavedItem[] {
-  const allowedTypes = PROGRESS_BUCKET_TYPES[bucketKey];
-  return items.filter((item) => allowedTypes.includes(item.type));
+  return items.filter((item) => itemBelongsToBucket(item, bucketKey));
 }
 
 function reduceProgressState(items: SavedItem[]): ProgressState {
