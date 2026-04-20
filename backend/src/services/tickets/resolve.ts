@@ -715,6 +715,17 @@ export async function resolveTicket(
     }
   }
 
+  console.log(
+    "FINAL CANDIDATES",
+    candidates.map((c) => ({
+      provider: c.provider,
+      reason: c.reason,
+      raw: c.score,
+      adjusted: assessCandidate(c).adjustedScore,
+      urlQuality: detectUrlQuality(c),
+    }))
+  );
+
   const result = buildResolution(candidates, checkedProviders);
 
   if (result.ok) {
@@ -752,4 +763,4 @@ export async function resolveTicket(
   }
 
   return result;
-}
+  }
