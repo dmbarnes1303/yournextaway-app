@@ -1,211 +1,262 @@
-type AliasMap = Record<string, string[]>;
+/* ============================================================================
+ * TEAM ALIAS REGISTRY (SCALABLE + SAFE MATCHING)
+ * ========================================================================== */
 
-const TEAM_ALIASES: AliasMap = {
-  arsenal: ["arsenal", "arsenal fc"],
-  chelsea: ["chelsea", "chelsea fc"],
-  liverpool: ["liverpool", "liverpool fc"],
-  manchesterunited: ["manchester united", "man utd", "man united", "manchester utd"],
-  manchestercity: ["manchester city", "man city", "manchester city fc"],
-  tottenhamhotspur: ["tottenham hotspur", "tottenham", "spurs"],
-  newcastleunited: ["newcastle united", "newcastle", "newcastle utd"],
-  astonvilla: ["aston villa", "aston villa fc"],
-  westhamunited: ["west ham united", "west ham"],
-  wolverhamptonwanderers: ["wolverhampton wanderers", "wolves", "wolverhampton"],
-  brightonandhovealbion: [
-    "brighton and hove albion",
-    "brighton & hove albion",
-    "brighton",
-  ],
-  leicestercity: ["leicester city", "leicester"],
-  leedsunited: ["leeds united", "leeds"],
-  everton: ["everton", "everton fc"],
-  southampton: ["southampton", "southampton fc"],
-  brentford: ["brentford", "brentford fc"],
-  fulham: ["fulham", "fulham fc"],
-  crystalpalace: ["crystal palace", "palace", "crystal palace fc"],
-  nottinghamforest: ["nottingham forest", "forest", "nottm forest"],
+export type TeamAliasEntry = {
+  key: string;
+  displayName: string;
+  country?: string;
+  competitions?: string[];
 
-  internazionale: ["inter", "inter milan", "internazionale", "fc internazionale milano"],
-  acmilan: ["ac milan", "milan", "associazione calcio milan"],
-  juventus: ["juventus", "juve", "juventus fc"],
-  roma: ["roma", "as roma", "a s roma"],
-  lazio: ["lazio", "ss lazio", "s s lazio"],
-  napoli: ["napoli", "ssc napoli", "s s c napoli"],
-  atalanta: ["atalanta", "atalanta bc"],
-  fiorentina: ["fiorentina", "acf fiorentina"],
-  bologna: ["bologna", "bologna fc"],
-  torino: ["torino", "torino fc"],
-  parma: ["parma", "parma calcio", "parma calcio 1913"],
+  strongAliases: string[];   // exact / high confidence
+  weakAliases?: string[];    // short / risky / nickname
 
-  barcelona: ["barcelona", "fc barcelona", "barca", "barça"],
-  realmadrid: ["real madrid", "real madrid cf"],
-  atleticodemadrid: ["atletico madrid", "atlético madrid", "atletico", "club atletico de madrid"],
-  sevilla: ["sevilla", "sevilla fc"],
-  valencia: ["valencia", "valencia cf"],
-  villarreal: ["villarreal", "villarreal cf"],
-  realbetis: ["real betis", "betis", "real betis balompie", "real betis balompié"],
-  realsociedad: ["real sociedad", "sociedad", "real sociedad de futbol", "real sociedad de fútbol"],
-  athleticclub: ["athletic club", "athletic bilbao", "bilbao"],
-  girona: ["girona", "girona fc"],
+  blockedTokens?: string[];  // prevent bad matches (u23, women etc)
 
-  parissaintgermain: ["paris saint germain", "paris saint-germain", "paris sg", "psg"],
-  marseille: ["marseille", "olympique de marseille"],
-  lyon: ["lyon", "olympique lyonnais"],
-  monaco: ["monaco", "as monaco"],
-  lille: ["lille", "losc", "lille osc"],
-  nice: ["nice", "ogc nice"],
-
-  bayernmunich: ["bayern munich", "bayern", "fc bayern", "fc bayern munich", "bayern münchen"],
-  borussiadortmund: ["borussia dortmund", "dortmund", "bvb"],
-  bayerleverkusen: ["bayer leverkusen", "leverkusen", "bayer 04 leverkusen"],
-  rbleipzig: ["rb leipzig", "leipzig", "rasenballsport leipzig"],
-  eintrachtfrankfurt: ["eintracht frankfurt", "frankfurt"],
-  borussiamonchengladbach: [
-    "borussia monchengladbach",
-    "borussia mönchengladbach",
-    "monchengladbach",
-    "gladbach",
-  ],
-  vfbstuttgart: ["vfb stuttgart", "stuttgart"],
-  vflwolfsburg: ["vfl wolfsburg", "wolfsburg"],
-  tsghoffenheim: ["tsg hoffenheim", "hoffenheim", "1899 hoffenheim"],
-
-  ajax: ["ajax", "afc ajax"],
-  psv: ["psv", "psv eindhoven"],
-  feyenoord: ["feyenoord", "feyenoord rotterdam"],
-  fctwente: ["fc twente", "twente"],
-  azalkmaar: ["az alkmaar", "az"],
-
-  benfica: ["benfica", "sl benfica", "sport lisboa e benfica"],
-  sportingcp: ["sporting cp", "sporting", "sporting lisbon", "sporting clube de portugal"],
-  porto: ["porto", "fc porto", "f c porto"],
-
-  celtic: ["celtic", "celtic fc"],
-  rangers: ["rangers", "rangers fc"],
-
-  galatasaray: ["galatasaray", "galatasaray sk"],
-  fenerbahce: ["fenerbahce", "fenerbahçe", "fenerbahce sk", "fenerbahçe sk"],
-  besiktas: ["besiktas", "beşiktaş", "besiktas jk", "beşiktaş jk"],
+  providerAliases?: {
+    footballticketnet?: string[];
+    sportsevents365?: string[];
+  };
 };
 
-const REMOVABLE_WORDS = new Set([
-  "fc",
-  "cf",
-  "afc",
-  "sc",
-  "sk",
-  "jk",
-  "club",
-  "de",
-  "the",
-]);
+/* ============================================================================
+ * NORMALISATION
+ * ========================================================================== */
 
-function clean(value: unknown): string {
+export function clean(value: unknown): string {
   return String(value ?? "")
-    .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\b(fc|cf|afc|sc|sk|jk|club|de|the)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function tokenize(value: string): string[] {
-  return clean(value)
-    .split(" ")
-    .map((part) => part.trim())
-    .filter(Boolean);
+function uniq(arr: string[]): string[] {
+  return Array.from(new Set(arr.map(clean).filter(Boolean)));
 }
 
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((v) => clean(v)).filter(Boolean)));
-}
+/* ============================================================================
+ * REGISTRY (PHASE 1 — TOP LEAGUES ONLY)
+ * ========================================================================== */
 
-function titleCaseFromClean(value: string): string {
-  return value
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
+export const TEAM_REGISTRY: TeamAliasEntry[] = [
+  /* ========================= EPL ========================= */
 
-function canonicalKey(value: string): string {
-  return clean(value).replace(/\s+/g, "");
-}
+  {
+    key: "arsenal",
+    displayName: "Arsenal",
+    country: "england",
+    competitions: ["premier-league"],
+    strongAliases: ["arsenal", "arsenal fc"],
+  },
 
-function stripRemovableWords(tokens: string[]): string[] {
-  return tokens.filter((token) => !REMOVABLE_WORDS.has(token));
-}
+  {
+    key: "manchester-united",
+    displayName: "Manchester United",
+    country: "england",
+    competitions: ["premier-league"],
+    strongAliases: ["manchester united"],
+    weakAliases: ["man utd", "man united"],
+  },
 
-function generateLooseVariants(name: string): string[] {
-  const base = clean(name);
-  if (!base) return [];
+  {
+    key: "manchester-city",
+    displayName: "Manchester City",
+    country: "england",
+    competitions: ["premier-league"],
+    strongAliases: ["manchester city"],
+    weakAliases: ["man city"],
+  },
 
-  const variants = new Set<string>();
-  variants.add(base);
+  {
+    key: "tottenham",
+    displayName: "Tottenham",
+    country: "england",
+    competitions: ["premier-league"],
+    strongAliases: ["tottenham hotspur"],
+    weakAliases: ["tottenham", "spurs"],
+  },
 
-  const tokens = tokenize(base);
-  const strippedTokens = stripRemovableWords(tokens);
+  {
+    key: "newcastle",
+    displayName: "Newcastle United",
+    country: "england",
+    competitions: ["premier-league"],
+    strongAliases: ["newcastle united"],
+    weakAliases: ["newcastle"],
+  },
 
-  if (strippedTokens.length) {
-    variants.add(strippedTokens.join(" "));
-  }
+  /* ========================= SERIE A ========================= */
 
-  const softStripped = base
-    .replace(/\bunited\b/g, "")
-    .replace(/\bcity\b/g, "")
-    .replace(/\bhotspur\b/g, "")
-    .replace(/\bwanderers\b/g, "")
-    .replace(/\balbion\b/g, "")
-    .replace(/\bathletic\b/g, "")
-    .replace(/\breal\b/g, "")
-    .replace(/\bassociation\b/g, "")
-    .replace(/\bcalcio\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  {
+    key: "inter",
+    displayName: "Inter Milan",
+    country: "italy",
+    competitions: ["serie-a"],
+    strongAliases: [
+      "inter milan",
+      "internazionale",
+      "fc internazionale milano",
+    ],
+    weakAliases: ["inter"],
+    blockedTokens: ["women", "u19", "u20", "u21", "youth"],
+  },
 
-  if (softStripped && softStripped !== base) {
-    variants.add(softStripped);
-  }
+  {
+    key: "ac-milan",
+    displayName: "AC Milan",
+    country: "italy",
+    competitions: ["serie-a"],
+    strongAliases: ["ac milan", "associazione calcio milan"],
+    weakAliases: ["milan"],
+  },
 
-  if (tokens.length >= 2) {
-    variants.add(tokens.slice(0, 2).join(" "));
-    variants.add(tokens[0]);
-  }
+  {
+    key: "juventus",
+    displayName: "Juventus",
+    country: "italy",
+    competitions: ["serie-a"],
+    strongAliases: ["juventus"],
+    weakAliases: ["juve"],
+  },
 
-  if (strippedTokens.length >= 2) {
-    variants.add(strippedTokens.slice(0, 2).join(" "));
-    variants.add(strippedTokens[0]);
-  }
+  {
+    key: "napoli",
+    displayName: "Napoli",
+    country: "italy",
+    competitions: ["serie-a"],
+    strongAliases: ["napoli", "ssc napoli"],
+  },
 
-  return unique(Array.from(variants));
-}
+  {
+    key: "roma",
+    displayName: "AS Roma",
+    country: "italy",
+    competitions: ["serie-a"],
+    strongAliases: ["as roma", "a s roma"],
+    weakAliases: ["roma"],
+  },
 
-export function expandTeamAliases(name: string): string[] {
-  const normalized = clean(name);
-  if (!normalized) return [];
+  /* ========================= LA LIGA ========================= */
 
-  const inputKey = canonicalKey(normalized);
+  {
+    key: "real-madrid",
+    displayName: "Real Madrid",
+    country: "spain",
+    competitions: ["la-liga"],
+    strongAliases: ["real madrid"],
+  },
 
-  for (const aliases of Object.values(TEAM_ALIASES)) {
-    const normalizedAliases = unique(aliases);
-    const aliasKeys = new Set(normalizedAliases.map((alias) => canonicalKey(alias)));
+  {
+    key: "barcelona",
+    displayName: "Barcelona",
+    country: "spain",
+    competitions: ["la-liga"],
+    strongAliases: ["fc barcelona"],
+    weakAliases: ["barcelona", "barca"],
+  },
 
-    if (aliasKeys.has(inputKey)) {
-      return unique([
-        ...normalizedAliases,
-        ...normalizedAliases.flatMap(generateLooseVariants),
-      ]);
+  {
+    key: "atletico-madrid",
+    displayName: "Atletico Madrid",
+    country: "spain",
+    competitions: ["la-liga"],
+    strongAliases: ["atletico madrid"],
+    weakAliases: ["atletico"],
+  },
+
+  /* ========================= BUNDESLIGA ========================= */
+
+  {
+    key: "bayern",
+    displayName: "Bayern Munich",
+    country: "germany",
+    competitions: ["bundesliga"],
+    strongAliases: ["bayern munich", "fc bayern munich"],
+    weakAliases: ["bayern"],
+  },
+
+  {
+    key: "dortmund",
+    displayName: "Borussia Dortmund",
+    country: "germany",
+    competitions: ["bundesliga"],
+    strongAliases: ["borussia dortmund"],
+    weakAliases: ["dortmund", "bvb"],
+  },
+
+  {
+    key: "leipzig",
+    displayName: "RB Leipzig",
+    country: "germany",
+    competitions: ["bundesliga"],
+    strongAliases: ["rb leipzig"],
+    weakAliases: ["leipzig"],
+  },
+
+  /* ========================= FRANCE ========================= */
+
+  {
+    key: "psg",
+    displayName: "Paris Saint-Germain",
+    country: "france",
+    competitions: ["ligue-1"],
+    strongAliases: ["paris saint germain"],
+    weakAliases: ["psg"],
+  },
+];
+
+/* ============================================================================
+ * MATCH ENGINE
+ * ========================================================================== */
+
+export type TeamAliasMatch = {
+  key: string;
+  displayName: string;
+  strong: string[];
+  weak: string[];
+  all: string[];
+};
+
+export function resolveTeamAliases(name: string): TeamAliasMatch | null {
+  const input = clean(name);
+  if (!input) return null;
+
+  for (const entry of TEAM_REGISTRY) {
+    const strong = uniq(entry.strongAliases);
+    const weak = uniq(entry.weakAliases ?? []);
+
+    const blocked = entry.blockedTokens ?? [];
+    if (blocked.some((t) => input.includes(t))) {
+      continue;
+    }
+
+    const strongMatch = strong.some((alias) => input === alias || input.includes(alias));
+    if (strongMatch) {
+      return {
+        key: entry.key,
+        displayName: entry.displayName,
+        strong,
+        weak,
+        all: [...strong, ...weak],
+      };
+    }
+
+    const weakMatch = weak.some((alias) => input === alias);
+    if (weakMatch) {
+      return {
+        key: entry.key,
+        displayName: entry.displayName,
+        strong,
+        weak,
+        all: [...strong, ...weak],
+      };
     }
   }
 
-  return unique([normalized, ...generateLooseVariants(normalized)]);
-}
-
-export function getPreferredTeamName(name: string): string {
-  const aliases = expandTeamAliases(name);
-  if (aliases.length === 0) return clean(name);
-  return titleCaseFromClean(aliases[0]);
+  return null;
 }
