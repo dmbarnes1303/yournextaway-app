@@ -161,26 +161,9 @@ function getOptionUrlQuality(option: TicketResolutionOption) {
   return normalizeTicketUrlQuality(option.urlQuality, option.url);
 }
 
-function formatTicketPrice(price?: string | null, option?: TicketResolutionOption): string {
+function formatTicketPrice(price?: string | null): string {
   const p = clean(price);
-  const quality = option ? getOptionUrlQuality(option) : "unknown";
-  const reason = clean(option?.reason);
-
-  if (!p) {
-    return quality === "search" || reason === "search_fallback"
-      ? "Check price on partner"
-      : "View live price";
-  }
-
-  if (/^[£€$]/.test(p)) {
-    return quality === "search" || reason === "search_fallback" ? p : `From ${p}`;
-  }
-
-  if (/^(GBP|EUR|USD)\s/i.test(p)) {
-    return quality === "search" || reason === "search_fallback" ? p : `From ${p}`;
-  }
-
-  return p;
+  return p || "View live price";
 }
 
 function reasonTone(reason?: string | null): MatchStrengthTone {
@@ -196,8 +179,8 @@ function summaryHeadline(
   fallbackCount: number
 ): string {
   if (!result && strongCount === 0 && fallbackCount === 0) return "No results loaded";
-  if (strongCount > 0) return "Strong ticket routes found";
-  if (fallbackCount > 0) return "Only fallback ticket routes found";
+  if (strongCount > 0) return "Stronger ticket routes found";
+  if (fallbackCount > 0) return "Only fallback routes found";
   return "No ticket routes found";
 }
 
@@ -207,11 +190,11 @@ function summaryBody(
   fallbackCount: number
 ): string {
   if (!result && strongCount === 0 && fallbackCount === 0) {
-    return "Tap Compare tickets to check all available providers for this fixture.";
+    return "Tap Compare tickets to check the routes the resolver can find for this fixture.";
   }
 
   if (strongCount > 0) {
-    return "These include stronger routes like direct event pages or useful listing pages. Fallback marketplaces are shown separately below.";
+    return "These are the stronger resolver-returned routes for this fixture. Fallback marketplaces are shown separately below.";
   }
 
   if (fallbackCount > 0) {
@@ -392,7 +375,7 @@ function TicketCard({
       onPress={onPress}
     >
       <View style={styles.ticketTopRow}>
-        <Text style={styles.ticketPrice}>{formatTicketPrice(option.priceText, option)}</Text>
+        <Text style={styles.ticketPrice}>{formatTicketPrice(option.priceText)}</Text>
 
         <View
           style={[
@@ -571,15 +554,30 @@ export default function MatchScreen() {
     }
   }
 
+  function promptStartTripThenOpen(option: TicketResolutionOption) {
+    Alert.alert(
+      "Start a trip first",
+      "To open partner sites and track your own booking decisions in Wallet, start a trip from this match first.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Start trip",
+          onPress: () => {
+            router.push({
+              pathname: "/trip/build",
+              params: tripBuildParams,
+            } as never);
+          },
+        },
+      ]
+    );
+  }
+
   async function openTicket(option: TicketResolutionOption) {
     if (!option.url) return;
 
     if (!tripId) {
-      Alert.alert(
-        "Start a trip first",
-        "To open partner sites and track your own booking decisions in Wallet, start a trip from this match first."
-      );
-      buildTrip();
+      promptStartTripThenOpen(option);
       return;
     }
 
@@ -768,7 +766,7 @@ export default function MatchScreen() {
                 <Text style={styles.sectionTitle}>Tickets</Text>
                 <Text style={styles.sectionSub}>
                   {ticketsLocked
-                    ? "You can compare the full marketplace spread here, but open partner sites from a trip if you want your own booking actions tracked in Wallet."
+                    ? "You can compare the resolver-returned routes here, but opening partner sites is tied to starting a trip so your booking actions can be tracked in Wallet."
                     : "Stronger routes are shown first. Fallback marketplaces are still shown, but clearly marked so the user is not misled."}
                 </Text>
               </View>
@@ -799,13 +797,22 @@ export default function MatchScreen() {
                   </View>
 
                   <View style={styles.resolverSummaryRow}>
+                    <Text style={styles.resolverSummaryLabel}>Returned routes</Text>
+                    <Text style={styles.resolverSummaryValue}>
+                      {allOptions.length > 0
+                        ? `${allOptions.length} route${allOptions.length === 1 ? "" : "s"} returned`
+                        : "No routes returned"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.resolverSummaryRow}>
                     <Text style={styles.resolverSummaryLabel}>Route mix</Text>
                     <Text style={styles.resolverSummaryValue}>
                       {strongOptionCount > 0
                         ? `${strongOptionCount} stronger route${strongOptionCount === 1 ? "" : "s"}`
                         : "No stronger routes"}
                       {weakOptionCount > 0
-                        ? ` • ${weakOptionCount} fallback marketplace${weakOptionCount === 1 ? "" : "s"}`
+                        ? ` • ${weakOptionCount} fallback route${weakOptionCount === 1 ? "" : "s"}`
                         : ""}
                     </Text>
                   </View>
@@ -850,7 +857,7 @@ export default function MatchScreen() {
             {fallbackOptions.length > 0 ? (
               <View style={styles.ticketSection}>
                 <View style={styles.ticketSectionHeader}>
-                  <Text style={styles.ticketSectionTitle}>More marketplaces</Text>
+                  <Text style={styles.ticketSectionTitle}>Fallback routes</Text>
                   <SectionBadge label={`${fallbackOptions.length}`} />
                 </View>
 
@@ -877,7 +884,7 @@ export default function MatchScreen() {
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyTitle}>No ticket routes loaded yet</Text>
                 <Text style={styles.emptyText}>
-                  Tap “Compare tickets” first. This screen now shows the full provider spread instead of hiding marketplaces behind a top-3 cut.
+                  Tap “Compare tickets” first. This screen shows the routes the resolver returns for this fixture, not some fake claim of total marketplace coverage.
                 </Text>
               </View>
             ) : null}
