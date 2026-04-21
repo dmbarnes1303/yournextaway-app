@@ -254,9 +254,33 @@ function isDistinctiveSingleToken(token: string): boolean {
   return token.length >= 6 && !GENERIC_CLUB_TOKENS.has(token);
 }
 
+function parseDdMmYyyy(raw: string): Date | null {
+  const match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+
+  const dd = Number(match[1]);
+  const mm = Number(match[2]);
+  const yyyy = Number(match[3]);
+
+  const d = new Date(Date.UTC(yyyy, mm - 1, dd));
+
+  if (
+    d.getUTCFullYear() !== yyyy ||
+    d.getUTCMonth() !== mm - 1 ||
+    d.getUTCDate() !== dd
+  ) {
+    return null;
+  }
+
+  return d;
+}
+
 function safeDate(v?: string): Date | null {
   const raw = clean(v);
   if (!raw) return null;
+
+  const ddmmyyyy = parseDdMmYyyy(raw);
+  if (ddmmyyyy) return ddmmyyyy;
 
   const d = new Date(raw);
   if (!Number.isFinite(d.getTime())) return null;
@@ -264,8 +288,12 @@ function safeDate(v?: string): Date | null {
   return d;
 }
 
+function toUtcDayStart(d: Date): number {
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
 function absDays(a: Date, b: Date): number {
-  return Math.floor(Math.abs(a.getTime() - b.getTime()) / 86400000);
+  return Math.floor(Math.abs(toUtcDayStart(a) - toUtcDayStart(b)) / 86400000);
 }
 
 function numberFromUnknown(v: unknown): number | null {
