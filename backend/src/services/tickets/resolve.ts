@@ -44,12 +44,12 @@ const CACHE = new Map<string, CacheEntry>();
 
 const CACHE_TTL_MS = 1000 * 60 * 10;
 const MAX_RETURNED_OPTIONS = 4;
-const RESOLVER_VERSION = "v11-value-aware-ranking";
+const RESOLVER_VERSION = "v12-trust-first-routing";
 
-const MIN_EXACT_EVENT_SCORE = 60;
-const MIN_PARTIAL_MATCH_SCORE = 48;
+const MIN_EXACT_EVENT_SCORE = 62;
+const MIN_PARTIAL_MATCH_SCORE = 50;
 const MIN_SEARCH_FALLBACK_SCORE = 40;
-const MIN_SELECTED_SCORE = 40;
+const MIN_SELECTED_SCORE = 42;
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
   sportsevents365: 1,
@@ -200,7 +200,7 @@ function isAllowedProviderUrl(provider: TicketProviderId, url: string): boolean 
   }
 }
 
-function detectUrlQuality(candidate: Pick<TicketCandidate, "url">): CandidateUrlQuality {
+function inferUrlQualityFromUrl(candidate: Pick<TicketCandidate, "url">): CandidateUrlQuality {
   const raw = clean(candidate.url);
   if (!raw) return "unknown";
 
@@ -221,6 +221,7 @@ function detectUrlQuality(candidate: Pick<TicketCandidate, "url">): CandidateUrl
       query.includes("q=") ||
       query.includes("query=") ||
       query.includes("text=") ||
+      query.includes("event_id=") ||
       query.includes("search");
 
     if (looksSearch) return "search";
@@ -234,31 +235,36 @@ function detectUrlQuality(candidate: Pick<TicketCandidate, "url">): CandidateUrl
   }
 }
 
+function getCandidateUrlQuality(candidate: TicketCandidate): CandidateUrlQuality {
+  if (candidate.urlQuality) return candidate.urlQuality;
+  return inferUrlQualityFromUrl(candidate);
+}
+
 function getProviderBias(
   provider: TicketProviderId,
   reason: TicketCandidate["reason"],
   urlQuality: CandidateUrlQuality
 ): number {
   if (provider === "sportsevents365") {
-    if (reason === "exact_event" && urlQuality === "event") return 14;
-    if (reason === "exact_event" && urlQuality === "listing") return 9;
-    if (reason === "partial_match" && urlQuality === "event") return 8;
-    if (reason === "partial_match" && urlQuality === "listing") return 5;
+    if (reason === "exact_event" && urlQuality === "event") return 12;
+    if (reason === "exact_event" && urlQuality === "listing") return 7;
+    if (reason === "partial_match" && urlQuality === "event") return 7;
+    if (reason === "partial_match" && urlQuality === "listing") return 4;
     if (reason === "search_fallback") return -2;
     if (urlQuality === "search") return -4;
-    if (urlQuality === "unknown") return -4;
-    return 2;
+    if (urlQuality === "unknown") return -5;
+    return 1;
   }
 
   if (provider === "footballticketnet") {
-    if (reason === "exact_event" && urlQuality === "event") return 11;
-    if (reason === "exact_event" && urlQuality === "listing") return 6;
-    if (reason === "partial_match" && urlQuality === "event") return 7;
-    if (reason === "partial_match" && urlQuality === "listing") return 4;
+    if (reason === "exact_event" && urlQuality === "event") return 8;
+    if (reason === "exact_event" && urlQuality === "listing") return 4;
+    if (reason === "partial_match" && urlQuality === "event") return 5;
+    if (reason === "partial_match" && urlQuality === "listing") return 3;
     if (reason === "search_fallback") return -4;
     if (urlQuality === "search") return -6;
-    if (urlQuality === "unknown") return -6;
-    return 1;
+    if (urlQuality === "unknown") return -7;
+    return 0;
   }
 
   return 0;
@@ -266,34 +272,31 @@ function getProviderBias(
 
 function getUrlBias(urlQuality: CandidateUrlQuality): number {
   if (urlQuality === "event") return 12;
-  if (urlQuality === "listing") return 8;
-  if (urlQuality === "search") return -10;
-  if (urlQuality === "unknown") return -6;
-  return -10;
+  if (urlQuality === "listing") return 7;
+  if (urlQuality === "search") return -12;
+  if (urlQuality === "unknown") return -8;
+  return -12;
 }
 
 function getReasonBias(reason: TicketCandidate["reason"]): number {
   if (reason === "exact_event") return 8;
   if (reason === "partial_match") return 0;
-  return -2;
+  return -3;
 }
 
-/**
- * Small absolute price signal.
- * The real value sorting happens comparatively against other valid candidates.
- */
 function getPriceBonus(candidate: TicketCandidate): number {
   const amount = parsePriceAmount(candidate.priceText);
   if (amount == null) return 0;
 
-  if (amount > 0 && amount <= 60) return 3;
-  if (amount <= 120) return 2;
-  if (amount <= 250) return 1;
+  if (amount > 0 && amount <= 60) return 2;
+  if (amount <= 120) return 1;
   return 0;
 }
 
-function getBaseAssessment(candidate: TicketCandidate): Omit<CandidateAssessment, "finalAdjustedScore" | "valueAdjustment"> {
-  const urlQuality = detectUrlQuality(candidate);
+function getBaseAssessment(
+  candidate: TicketCandidate
+): Omit<CandidateAssessment, "finalAdjustedScore" | "valueAdjustment"> {
+  const urlQuality = getCandidateUrlQuality(candidate);
   const urlBias = getUrlBias(urlQuality);
   const reasonBias = getReasonBias(candidate.reason);
   const providerBias = getProviderBias(candidate.provider, candidate.reason, urlQuality);
@@ -306,20 +309,16 @@ function getBaseAssessment(candidate: TicketCandidate): Omit<CandidateAssessment
     providerBias +
     priceBonus;
 
-  if (candidate.reason === "exact_event" && urlQuality === "search") {
-    baseAdjustedScore -= 15;
-  }
-
-  if (candidate.reason === "exact_event" && urlQuality === "unknown") {
-    baseAdjustedScore -= 8;
+  if (candidate.reason === "exact_event" && urlQuality !== "event") {
+    baseAdjustedScore -= 18;
   }
 
   if (candidate.reason === "partial_match" && urlQuality === "search") {
-    baseAdjustedScore -= 6;
+    baseAdjustedScore -= 8;
   }
 
   if (candidate.reason === "partial_match" && urlQuality === "unknown") {
-    baseAdjustedScore -= 4;
+    baseAdjustedScore -= 6;
   }
 
   return {
@@ -332,10 +331,6 @@ function getBaseAssessment(candidate: TicketCandidate): Omit<CandidateAssessment
   };
 }
 
-/**
- * Compare price only among already-valid candidates.
- * This is the real "best value wins" layer.
- */
 function getValueAdjustment(
   candidate: TicketCandidate,
   peers: TicketCandidate[]
@@ -357,12 +352,22 @@ function getValueAdjustment(
   }
 
   const spreadRatio = (maxPrice - minPrice) / Math.max(minPrice, 1);
-  const maxSwing = Math.min(14, Math.max(1, Math.round(spreadRatio * 5)));
+  const maxSwing = Math.min(10, Math.max(1, Math.round(spreadRatio * 4)));
 
   const position = (candidatePrice - minPrice) / (maxPrice - minPrice);
-  const centered = 1 - position * 2; // cheapest=+1, priciest=-1
+  const centered = 1 - position * 2;
 
   return Math.round(centered * maxSwing);
+}
+
+function candidateIsTrustedEnoughForValue(candidate: TicketCandidate): boolean {
+  const base = getBaseAssessment(candidate);
+
+  if (candidate.reason === "search_fallback") return false;
+  if (base.urlQuality === "search" || base.urlQuality === "unknown") return false;
+  if (base.baseAdjustedScore < MIN_PARTIAL_MATCH_SCORE) return false;
+
+  return true;
 }
 
 function assessCandidate(
@@ -370,7 +375,15 @@ function assessCandidate(
   peers: TicketCandidate[] = [candidate]
 ): CandidateAssessment {
   const base = getBaseAssessment(candidate);
-  const valueAdjustment = getValueAdjustment(candidate, peers);
+
+  const trustedPeers = peers.filter(candidateIsTrustedEnoughForValue);
+  const allowValueLayer =
+    candidateIsTrustedEnoughForValue(candidate) && trustedPeers.length >= 2;
+
+  const valueAdjustment = allowValueLayer
+    ? getValueAdjustment(candidate, trustedPeers)
+    : 0;
+
   const finalAdjustedScore = Math.max(0, base.baseAdjustedScore + valueAdjustment);
 
   return {
@@ -391,7 +404,8 @@ function summarizeCandidate(
   return {
     provider: candidate.provider,
     exact: candidate.exact,
-    rawScore: candidate.score,
+    rawScore: candidate.rawScore ?? candidate.score,
+    providerScore: candidate.score,
     baseAdjustedScore: assessment.baseAdjustedScore,
     finalAdjustedScore: assessment.finalAdjustedScore,
     valueAdjustment: assessment.valueAdjustment,
@@ -580,17 +594,19 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 function passesReasonFloor(candidate: TicketCandidate): boolean {
   const assessment = assessCandidate(candidate, [candidate]);
   const adjusted = assessment.baseAdjustedScore;
+  const urlQuality = assessment.urlQuality;
 
   if (candidate.reason === "exact_event") {
-    return adjusted >= MIN_EXACT_EVENT_SCORE;
+    return urlQuality === "event" && adjusted >= MIN_EXACT_EVENT_SCORE;
   }
 
   if (candidate.reason === "partial_match") {
-    return adjusted >= MIN_PARTIAL_MATCH_SCORE;
+    return (urlQuality === "event" || urlQuality === "listing") &&
+      adjusted >= MIN_PARTIAL_MATCH_SCORE;
   }
 
   if (candidate.reason === "search_fallback") {
-    return adjusted >= MIN_SEARCH_FALLBACK_SCORE;
+    return urlQuality === "search" && adjusted >= MIN_SEARCH_FALLBACK_SCORE;
   }
 
   return false;
@@ -636,7 +652,13 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
     const aPrice = parsePriceAmount(a.priceText);
     const bPrice = parsePriceAmount(b.priceText);
 
-    if (aPrice != null && bPrice != null && aPrice !== bPrice) {
+    if (
+      aAssessment.urlQuality !== "search" &&
+      bAssessment.urlQuality !== "search" &&
+      aPrice != null &&
+      bPrice != null &&
+      aPrice !== bPrice
+    ) {
       return aPrice - bPrice;
     }
 
@@ -656,7 +678,7 @@ function toOption(candidate: TicketCandidate, peers: TicketCandidate[]) {
     provider: candidate.provider,
     exact: candidate.exact,
     score: assessment.finalAdjustedScore,
-    rawScore: candidate.score,
+    rawScore: candidate.rawScore ?? candidate.score,
     url: candidate.url,
     title: candidate.title,
     priceText: candidate.priceText ?? null,
@@ -690,7 +712,7 @@ function buildResolution(
     provider: best.provider,
     exact: best.exact,
     score: bestAssessment.finalAdjustedScore,
-    rawScore: best.score,
+    rawScore: best.rawScore ?? best.score,
     url: best.url,
     title: best.title,
     priceText: best.priceText ?? null,
@@ -787,7 +809,8 @@ export async function resolveTicket(
       return {
         provider: c.provider,
         reason: c.reason,
-        raw: c.score,
+        providerScore: c.score,
+        rawScore: c.rawScore ?? c.score,
         baseAdjusted: assessment.baseAdjustedScore,
         valueAdjustment: assessment.valueAdjustment,
         finalAdjusted: assessment.finalAdjustedScore,
