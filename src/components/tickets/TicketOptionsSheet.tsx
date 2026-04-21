@@ -12,8 +12,6 @@ import { theme } from "@/src/constants/theme";
 import {
   providerLabel,
   providerShort,
-  classifyTicketOption,
-  ticketConfidenceLabel,
 } from "@/src/features/tripDetail/helpers";
 
 import type { TicketResolutionOption } from "@/src/services/ticketResolver";
@@ -30,43 +28,17 @@ type Props = {
   onOpenOfficial?: (() => void) | null;
 };
 
-type TicketStrength = "strong" | "medium" | "weak";
-
 type DisplayOption = {
   option: TicketResolutionOption;
-  strength: TicketStrength;
 };
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function reasonLabel(option: TicketResolutionOption): string | null {
-  if (option.reason === "exact_event" && option.exact) return "Exact fixture";
-  if (option.reason === "partial_match") return "Related listing";
-  if (option.reason === "search_fallback") return "Fallback search";
-  return null;
-}
-
-function strengthLabel(strength: TicketStrength): string {
-  if (strength === "strong") return "Best match";
-  if (strength === "medium") return "Usable option";
-  return "Weak fallback";
-}
-
-function ctaLabel(strength: TicketStrength): string {
-  if (strength === "strong") return "View tickets →";
-  if (strength === "medium") return "Compare option →";
-  return "Search carefully →";
-}
-
-function priceLabel(option: TicketResolutionOption, strength: TicketStrength): string {
+function priceLabel(option: TicketResolutionOption): string {
   const price = clean(option.priceText);
-
-  if (price) return price;
-  if (strength === "strong") return "View prices";
-  if (strength === "medium") return "Check option";
-  return "Check availability";
+  return price || "View live price";
 }
 
 function providerTone(provider?: string | null) {
@@ -95,55 +67,29 @@ function providerTone(provider?: string | null) {
   };
 }
 
-function resolveDisplayStrength(option: TicketResolutionOption): TicketStrength {
-  return classifyTicketOption(option);
-}
+function compareOptions(a: DisplayOption, b: DisplayOption): number {
+  const aHasPrice = Boolean(clean(a.option.priceText));
+  const bHasPrice = Boolean(clean(b.option.priceText));
 
-function compareDisplayOptions(a: DisplayOption, b: DisplayOption): number {
-  const strengthWeight = { strong: 3, medium: 2, weak: 1 };
-
-  if (strengthWeight[a.strength] !== strengthWeight[b.strength]) {
-    return strengthWeight[b.strength] - strengthWeight[a.strength];
-  }
-
-  if (a.option.exact && !b.option.exact) return -1;
-  if (!a.option.exact && b.option.exact) return 1;
-
-  if (a.option.score !== b.option.score) return b.option.score - a.option.score;
-
-  const aPrice = clean(a.option.priceText);
-  const bPrice = clean(b.option.priceText);
-
-  if (aPrice && !bPrice) return -1;
-  if (!aPrice && bPrice) return 1;
+  if (aHasPrice && !bHasPrice) return -1;
+  if (!aHasPrice && bHasPrice) return 1;
 
   return clean(a.option.provider).localeCompare(clean(b.option.provider));
 }
 
 function OptionCard({
   option,
-  strength,
   onPress,
 }: {
   option: TicketResolutionOption;
-  strength: TicketStrength;
   onPress: () => void;
 }) {
   const provider = providerLabel(option.provider);
   const short = providerShort(option.provider);
-  const reason = reasonLabel(option);
   const providerStyle = providerTone(option.provider);
 
   return (
-    <Pressable
-      style={[
-        styles.optionCard,
-        strength === "strong" && styles.strongCard,
-        strength === "medium" && styles.mediumCard,
-        strength === "weak" && styles.weakCard,
-      ]}
-      onPress={onPress}
-    >
+    <Pressable style={styles.optionCard} onPress={onPress}>
       <View style={styles.optionTopRow}>
         <View style={styles.providerBlock}>
           <View
@@ -164,28 +110,20 @@ function OptionCard({
 
           <View style={styles.providerTextWrap}>
             <Text style={styles.provider}>{provider}</Text>
-            {reason ? <Text style={styles.reason}>{reason}</Text> : null}
+            <Text style={styles.providerSub}>Affiliate partner</Text>
           </View>
         </View>
 
-        <Text style={[styles.price, strength === "weak" && styles.priceWeak]}>
-          {priceLabel(option, strength)}
-        </Text>
+        <Text style={styles.price}>{priceLabel(option)}</Text>
       </View>
 
       <View style={styles.optionBottomRow}>
-        <Text style={[styles.scoreText, strength === "weak" && styles.scoreTextWeak]}>
-          {strengthLabel(strength)} • {ticketConfidenceLabel(option.score)}
+        <Text style={styles.metaText}>
+          {clean(option.title) || "Tickets"}
         </Text>
 
-        <Text style={styles.cta}>{ctaLabel(strength)}</Text>
+        <Text style={styles.cta}>View tickets →</Text>
       </View>
-
-      {strength === "weak" ? (
-        <Text style={styles.warningText}>
-          Fallback route only. Verify the exact fixture on the partner page.
-        </Text>
-      ) : null}
     </Pressable>
   );
 }
@@ -201,7 +139,7 @@ export default function TicketOptionsSheet({
   onCompareAll,
   onOpenOfficial,
 }: Props) {
-  const { mergedOptions, weakOnly } = useMemo(() => {
+  const mergedOptions = useMemo(() => {
     const combined = [
       ...(Array.isArray(strongOptions) ? strongOptions : []),
       ...(Array.isArray(weakOptions) ? weakOptions : []),
@@ -210,25 +148,16 @@ export default function TicketOptionsSheet({
     const seen = new Set<string>();
     const deduped = combined.filter((option) => {
       const key = `${clean(option.provider)}|${clean(option.url)}`;
+      if (!key) return false;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    const mergedOptions: DisplayOption[] = deduped
-      .map((option) => ({
-        option,
-        strength: resolveDisplayStrength(option),
-      }))
-      .sort(compareDisplayOptions)
-      .slice(0, 5);
-
-    return {
-      mergedOptions,
-      weakOnly:
-        mergedOptions.length > 0 &&
-        mergedOptions.every(({ strength }) => strength === "weak"),
-    };
+    return deduped
+      .map((option) => ({ option }))
+      .sort(compareOptions)
+      .slice(0, 8);
   }, [strongOptions, weakOptions]);
 
   return (
@@ -244,29 +173,18 @@ export default function TicketOptionsSheet({
           </Text>
 
           <Text style={styles.subtitle}>
-            {clean(subtitle) || "Compare ticket providers"}
+            {clean(subtitle) || "Choose a ticket partner"}
           </Text>
-
-          {weakOnly ? (
-            <View style={styles.noticeBox}>
-              <Text style={styles.noticeTitle}>Only fallback routes found</Text>
-              <Text style={styles.noticeText}>
-                These options may still help, but they are weaker than a direct
-                event or strong listing route.
-              </Text>
-            </View>
-          ) : null}
 
           <ScrollView
             style={styles.optionsWrap}
             contentContainerStyle={styles.optionsContent}
             showsVerticalScrollIndicator={false}
           >
-            {mergedOptions.map(({ option, strength }, index) => (
+            {mergedOptions.map(({ option }, index) => (
               <OptionCard
                 key={`${option.provider}-${option.url}-${index}`}
                 option={option}
-                strength={strength}
                 onPress={() => onSelect(option)}
               />
             ))}
@@ -274,7 +192,7 @@ export default function TicketOptionsSheet({
 
           <View style={styles.footerActions}>
             <Pressable style={styles.secondaryBtn} onPress={onCompareAll}>
-              <Text style={styles.secondaryBtnText}>Compare all options</Text>
+              <Text style={styles.secondaryBtnText}>Open full match view</Text>
             </Pressable>
 
             {onOpenOfficial ? (
@@ -340,28 +258,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  noticeBox: {
-    marginTop: 14,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,200,80,0.22)",
-    backgroundColor: "rgba(255,200,80,0.08)",
-    gap: 4,
-  },
-
-  noticeTitle: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: theme.colors.text,
-  },
-
-  noticeText: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: theme.colors.textSecondary,
-  },
-
   optionsWrap: {
     marginTop: 16,
     maxHeight: 360,
@@ -379,20 +275,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     gap: 10,
-  },
-
-  strongCard: {
-    borderColor: theme.colors.accent,
-    backgroundColor: "rgba(255,255,255,0.06)",
-  },
-
-  mediumCard: {
-    borderColor: "rgba(120,170,255,0.18)",
-  },
-
-  weakCard: {
-    borderColor: "rgba(255,200,80,0.18)",
-    backgroundColor: "rgba(255,255,255,0.035)",
   },
 
   optionTopRow: {
@@ -434,7 +316,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  reason: {
+  providerSub: {
     marginTop: 3,
     fontSize: 12,
     color: theme.colors.textMuted,
@@ -447,10 +329,6 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  priceWeak: {
-    color: theme.colors.textSecondary,
-  },
-
   optionBottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -458,28 +336,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  scoreText: {
+  metaText: {
     fontSize: 12,
     color: theme.colors.textSecondary,
     fontWeight: "700",
     flex: 1,
   },
 
-  scoreTextWeak: {
-    color: "rgba(255,215,140,1)",
-  },
-
   cta: {
     fontSize: 12,
     fontWeight: "900",
     color: theme.colors.text,
-  },
-
-  warningText: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: "rgba(255,215,140,1)",
-    fontWeight: "700",
   },
 
   footerActions: {
