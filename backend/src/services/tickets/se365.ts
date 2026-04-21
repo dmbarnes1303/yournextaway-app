@@ -156,7 +156,6 @@ const GENERIC_CLUB_TOKENS = new Set([
   "fc",
   "fk",
   "if",
-  "inter",
   "jk",
   "lokomotiv",
   "olympique",
@@ -212,14 +211,26 @@ function splitTokens(value: string): string[] {
     .filter(Boolean);
 }
 
+function unique<T>(values: T[]): T[] {
+  return Array.from(new Set(values));
+}
+
 function significantTokens(value: string): string[] {
   return splitTokens(value).filter(
     (token) => token.length >= 3 && !GENERIC_CLUB_TOKENS.has(token)
   );
 }
 
-function unique<T>(values: T[]): T[] {
-  return Array.from(new Set(values));
+function strongAliasTokens(value: string): string[] {
+  const raw = splitTokens(value).filter((token) => token.length >= 3);
+  const reduced = raw.filter((token) => !GENERIC_CLUB_TOKENS.has(token));
+
+  if (raw.length >= 2) {
+    if (reduced.length >= 2) return reduced;
+    return raw;
+  }
+
+  return reduced.length ? reduced : raw;
 }
 
 function hasWholeWord(haystack: string, needle: string): boolean {
@@ -631,62 +642,55 @@ function evaluateParticipantMatch(
   }
 
   const participantTokens = splitTokens(name);
-  const participantSignificantTokens = significantTokens(name);
+  const participantStrongTokens = strongAliasTokens(name);
 
   let best: ParticipantMatch | null = null;
 
   for (const alias of aliases) {
     const aliasTokens = splitTokens(alias);
-    const aliasSignificant = significantTokens(alias);
+    const aliasStrong = strongAliasTokens(alias);
 
-    if (!aliasSignificant.length) {
-      continue;
-    }
+    if (!aliasStrong.length) continue;
 
-    const aliasIsSingleDistinctiveToken =
-      aliasSignificant.length === 1 && isDistinctiveSingleToken(aliasSignificant[0]);
-
-    const aliasIsMultiWordStrong =
-      aliasTokens.length >= 2 && aliasSignificant.length >= 1;
-
-    if (aliasIsMultiWordStrong && hasAllTokens(participantTokens, aliasSignificant)) {
-      const score = aliasSignificant.length >= 2 ? 96 : 92;
-      if (!best || score > best.score) {
-        best = {
-          participant,
-          score,
-          teamName: preferred,
-          normalizedTeamName,
-          matchedBy: "alias_contains",
-        };
+    if (aliasTokens.length >= 2) {
+      if (aliasStrong.length >= 2 && hasAllTokens(participantTokens, aliasStrong)) {
+        const score = aliasStrong.length >= 3 ? 96 : 92;
+        if (!best || score > best.score) {
+          best = {
+            participant,
+            score,
+            teamName: preferred,
+            normalizedTeamName,
+            matchedBy: "alias_contains",
+          };
+        }
       }
       continue;
     }
 
-    if (
-      aliasIsSingleDistinctiveToken &&
-      hasWholeWord(name, aliasSignificant[0])
-    ) {
-      const score = 84;
-      if (!best || score > best.score) {
-        best = {
-          participant,
-          score,
-          teamName: preferred,
-          normalizedTeamName,
-          matchedBy: "alias_contains",
-        };
+    if (aliasStrong.length === 1 && isDistinctiveSingleToken(aliasStrong[0])) {
+      if (hasWholeWord(name, aliasStrong[0])) {
+        const score = 84;
+        if (!best || score > best.score) {
+          best = {
+            participant,
+            score,
+            teamName: preferred,
+            normalizedTeamName,
+            matchedBy: "alias_contains",
+          };
+        }
       }
     }
   }
 
-  const preferredSignificant = significantTokens(preferred);
+  const preferredStrong = strongAliasTokens(preferred);
   const matchedPreferredTokens = countMatchedTokens(
-    participantSignificantTokens,
-    preferredSignificant
+    participantStrongTokens,
+    preferredStrong
   );
 
-  if (preferredSignificant.length >= 2 && matchedPreferredTokens >= 2) {
+  if (preferredStrong.length >= 2 && matchedPreferredTokens >= 2) {
     const score = 78 + Math.min(8, matchedPreferredTokens);
     if (!best || score > best.score) {
       best = {
