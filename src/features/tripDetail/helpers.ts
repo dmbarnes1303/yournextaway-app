@@ -100,7 +100,6 @@ export function titleCaseCity(value: unknown): string {
 export function buildMapsSearchUrl(query: unknown): string | null {
   const q = clean(query);
   if (!q) return null;
-
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
@@ -233,41 +232,57 @@ export function normalizeTicketUrlQuality(
  * TICKET INTELLIGENCE
  * ========================================================================== */
 
-export function isStrongTicketOption(option: TicketResolutionOption): boolean {
-  const reason = clean(option.reason);
+function getReasonWeight(reason?: string | null): number {
+  const raw = clean(reason);
+  if (raw === "exact_event") return 3;
+  if (raw === "partial_match") return 2;
+  if (raw === "search_fallback") return 1;
+  return 0;
+}
+
+function getUrlQualityWeight(urlQuality: TicketUrlQuality): number {
+  if (urlQuality === "event") return 4;
+  if (urlQuality === "listing") return 3;
+  if (urlQuality === "search") return 1;
+  return 0;
+}
+
+function getNumericScore(option: TicketResolutionOption): number {
+  return typeof option.score === "number" && Number.isFinite(option.score) ? option.score : 0;
+}
+
+function getParsedPrice(option: TicketResolutionOption): number | null {
+  const raw = clean(option.priceText);
+  if (!raw) return null;
+
+  const match = raw.match(/(\d{1,3}(?:[,\d]{0,})(?:\.\d{1,2})?)/);
+  if (!match) return null;
+
+  const parsed = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function optionSortValue(option: TicketResolutionOption) {
   const urlQuality = getTicketUrlQuality(option);
+  const price = getParsedPrice(option);
 
-  if (isSe365(option.provider)) {
-    if (option.exact || reason === "exact_event") {
-      return urlQuality === "event" || urlQuality === "listing";
-    }
+  return {
+    exact: option.exact ? 1 : 0,
+    reasonWeight: getReasonWeight(option.reason),
+    urlWeight: getUrlQualityWeight(urlQuality),
+    score: getNumericScore(option),
+    hasPrice: price != null ? 1 : 0,
+    price: price ?? Number.POSITIVE_INFINITY,
+    provider: canonicalTicketProvider(option.provider),
+  };
+}
 
-    if (reason === "partial_match") {
-      return urlQuality === "event" || urlQuality === "listing";
-    }
+export function isStrongTicketOption(option: TicketResolutionOption): boolean {
+  const urlQuality = getTicketUrlQuality(option);
+  const reasonWeight = getReasonWeight(option.reason);
 
-    return false;
-  }
-
-  if (isFtn(option.provider)) {
-    if (option.exact || reason === "exact_event") {
-      return urlQuality === "event" || urlQuality === "listing";
-    }
-
-    if (reason === "partial_match") {
-      return urlQuality === "event" || urlQuality === "listing";
-    }
-
-    return false;
-  }
-
-  if (option.exact || reason === "exact_event") {
-    return urlQuality === "event" || urlQuality === "listing";
-  }
-
-  if (reason === "partial_match") {
-    return urlQuality === "event" || urlQuality === "listing";
-  }
+  if (option.exact && (urlQuality === "event" || urlQuality === "listing")) return true;
+  if (reasonWeight >= 2 && (urlQuality === "event" || urlQuality === "listing")) return true;
 
   return false;
 }
@@ -275,45 +290,37 @@ export function isStrongTicketOption(option: TicketResolutionOption): boolean {
 export function classifyTicketOption(
   option: TicketResolutionOption
 ): "strong" | "medium" | "weak" {
-  const reason = clean(option.reason);
   const urlQuality = getTicketUrlQuality(option);
+  const reasonWeight = getReasonWeight(option.reason);
+  const score = getNumericScore(option);
 
-  if (isSe365(option.provider)) {
-    if (
-      (option.exact || reason === "exact_event") &&
-      (urlQuality === "event" || urlQuality === "listing")
-    ) {
-      return "strong";
-    }
+  if (option.exact && (urlQuality === "event" || urlQuality === "listing")) return "strong";
+  if (reasonWeight >= 2 && (urlQuality === "event" || urlQuality === "listing") && score >= 60) {
+    return "strong";
+  }
 
-    if (reason === "partial_match" && (urlQuality === "event" || urlQuality === "listing")) {
-      return "strong";
-    }
-
+  if (reasonWeight >= 2 || urlQuality === "listing" || urlQuality === "event") {
     return "medium";
   }
 
-  if (isFtn(option.provider)) {
-    if (option.exact || reason === "exact_event") {
-      return urlQuality === "event" || urlQuality === "listing" ? "medium" : "weak";
-    }
-
-    if (reason === "partial_match") {
-      return urlQuality === "event" || urlQuality === "listing" ? "medium" : "weak";
-    }
-
-    return "weak";
-  }
-
-  if (option.exact || reason === "exact_event") {
-    return urlQuality === "event" || urlQuality === "listing" ? "strong" : "medium";
-  }
-
-  if (reason === "partial_match") {
-    return urlQuality === "event" || urlQuality === "listing" ? "medium" : "weak";
-  }
-
   return "weak";
+}
+
+function compareTicketOptions(a: TicketResolutionOption, b: TicketResolutionOption): number {
+  const av = optionSortValue(a);
+  const bv = optionSortValue(b);
+
+  if (av.exact !== bv.exact) return bv.exact - av.exact;
+  if (av.reasonWeight !== bv.reasonWeight) return bv.reasonWeight - av.reasonWeight;
+  if (av.urlWeight !== bv.urlWeight) return bv.urlWeight - av.urlWeight;
+  if (av.score !== bv.score) return bv.score - av.score;
+
+  if (av.hasPrice !== bv.hasPrice) return bv.hasPrice - av.hasPrice;
+  if (av.price !== bv.price) return av.price - bv.price;
+
+  if (av.provider !== bv.provider) return av.provider.localeCompare(bv.provider);
+
+  return clean(a.title).localeCompare(clean(b.title));
 }
 
 export function splitTicketOptions(options: TicketResolutionOption[]) {
@@ -328,19 +335,8 @@ export function splitTicketOptions(options: TicketResolutionOption[]) {
     }
   }
 
-  const sortByPriority = (a: TicketResolutionOption, b: TicketResolutionOption) => {
-    const aTier = isSe365(a.provider) ? 3 : isFtn(a.provider) ? 2 : 1;
-    const bTier = isSe365(b.provider) ? 3 : isFtn(b.provider) ? 2 : 1;
-
-    if (aTier !== bTier) return bTier - aTier;
-    if (b.score !== a.score) return b.score - a.score;
-    if (a.exact && !b.exact) return -1;
-    if (!a.exact && b.exact) return 1;
-    return clean(a.provider).localeCompare(clean(b.provider));
-  };
-
-  strong.sort(sortByPriority);
-  weak.sort(sortByPriority);
+  strong.sort(compareTicketOptions);
+  weak.sort(compareTicketOptions);
 
   return { strong, weak };
 }
@@ -380,29 +376,23 @@ export function normalizeTicketOptions(
     const key = `${canonicalProvider}|${clean(option.url)}`;
     const existing = seen.get(key);
 
+    const normalized: TicketResolutionOption = {
+      ...option,
+      provider: canonicalProvider,
+      urlQuality: normalizeTicketUrlQuality(option.urlQuality, option.url),
+    };
+
     if (!existing) {
-      seen.set(key, {
-        ...option,
-        provider: canonicalProvider,
-        urlQuality: normalizeTicketUrlQuality(option.urlQuality, option.url),
-      });
+      seen.set(key, normalized);
       continue;
     }
 
-    const replace =
-      Boolean(option.exact && !existing.exact) ||
-      Number(option.score ?? 0) > Number(existing.score ?? 0);
-
-    if (replace) {
-      seen.set(key, {
-        ...option,
-        provider: canonicalProvider,
-        urlQuality: normalizeTicketUrlQuality(option.urlQuality, option.url),
-      });
+    if (compareTicketOptions(normalized, existing) < 0) {
+      seen.set(key, normalized);
     }
   }
 
-  return Array.from(seen.values());
+  return Array.from(seen.values()).sort(compareTicketOptions);
 }
 
 export function ticketResolverFailureMessage(
@@ -502,7 +492,6 @@ export function ticketConfidenceLabel(score?: number | null): string {
 
 export function livePriceLine(item: any): string | null {
   const raw = clean(item?.metadata?.resolvedPriceText || item?.metadata?.priceText);
-
   if (!raw) return null;
 
   return raw.replace(/\bLive price on\b/gi, "Live price •").replace(/\s+/g, " ").trim();
@@ -587,9 +576,8 @@ export function formatKickoffMeta(
   const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
   const validDate = kickoffDate && Number.isFinite(kickoffDate.getTime()) ? kickoffDate : null;
 
-  const midnight = validDate
-    ? validDate.getHours() === 0 && validDate.getMinutes() === 0
-    : true;
+  const midnight =
+    validDate ? validDate.getHours() === 0 && validDate.getMinutes() === 0 : true;
 
   const tbc =
     Boolean(trip?.kickoffTbc) ||
