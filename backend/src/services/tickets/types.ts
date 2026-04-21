@@ -8,10 +8,12 @@ export type TicketCandidate = {
   provider: TicketProviderId;
   exact: boolean;
   score: number;
+  rawScore?: number | null;
   url: string;
   title: string;
   priceText?: string | null;
   reason: TicketCandidateReason;
+  urlQuality?: CandidateUrlQuality;
 };
 
 export type TicketResolutionOption = {
