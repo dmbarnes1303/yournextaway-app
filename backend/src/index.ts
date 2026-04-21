@@ -42,19 +42,6 @@ type CacheEntry<T> = {
   value: T;
 };
 
-type TicketUrlQuality = "event" | "listing" | "search" | "unknown";
-
-type EnrichedTicketOption = {
-  provider: string;
-  exact: boolean;
-  score: number | null;
-  url: string | null;
-  title: string | null;
-  priceText?: string | null;
-  reason: string;
-  urlQuality: TicketUrlQuality;
-};
-
 const FIXTURES_CACHE_TTL_MS = 60 * 1000;
 const FIXTURE_CACHE_TTL_MS = 60 * 1000;
 const FIXTURES_BY_ROUND_CACHE_TTL_MS = 60 * 1000;
@@ -95,58 +82,6 @@ function isValidKickoffIso(value: unknown): boolean {
 
   const date = new Date(raw);
   return Number.isFinite(date.getTime());
-}
-
-function detectTicketUrlQuality(urlValue: unknown): TicketUrlQuality {
-  const raw = clean(urlValue);
-  if (!raw) return "unknown";
-
-  try {
-    const parsed = new URL(raw);
-    const path = parsed.pathname.toLowerCase();
-    const query = parsed.search.toLowerCase();
-
-    const looksSearch =
-      path === "/search" ||
-      path.startsWith("/search/") ||
-      path.includes("/events/search") ||
-      path.includes("/event/search") ||
-      path.includes("/search-results") ||
-      query.includes("q=") ||
-      query.includes("query=") ||
-      query.includes("text=");
-
-    if (looksSearch) return "search";
-    if (path.includes("/listing") || path.includes("/listings")) return "listing";
-    if (path.includes("/event") || path.includes("/events")) return "event";
-    if (path.includes("/ticket") || path.includes("/tickets")) return "event";
-
-    return "unknown";
-  } catch {
-    return "unknown";
-  }
-}
-
-function enrichTicketOptions(options: unknown): EnrichedTicketOption[] {
-  if (!Array.isArray(options)) return [];
-
-  return options.map((option) => {
-    const obj = option as Record<string, unknown>;
-
-    return {
-      provider: clean(obj.provider) || "unknown",
-      exact: Boolean(obj.exact),
-      score:
-        typeof obj.score === "number" && Number.isFinite(obj.score)
-          ? obj.score
-          : null,
-      url: clean(obj.url) || null,
-      title: clean(obj.title) || null,
-      priceText: clean(obj.priceText) || null,
-      reason: clean(obj.reason) || "unknown",
-      urlQuality: detectTicketUrlQuality(obj.url),
-    };
-  });
 }
 
 function getAllowedOrigin(requestOrigin: unknown): string | null {
@@ -1136,6 +1071,7 @@ app.get<{
       provider: null,
       exact: false,
       score: null,
+      rawScore: null,
       url: null,
       title: null,
       priceText: null,
@@ -1154,6 +1090,7 @@ app.get<{
       provider: null,
       exact: false,
       score: null,
+      rawScore: null,
       url: null,
       title: null,
       priceText: null,
@@ -1190,36 +1127,47 @@ app.get<{
       debugNoCache,
     });
 
-    const enrichedOptions = enrichTicketOptions(result.options);
-    const selectedUrlQuality = detectTicketUrlQuality(result.url);
-
     request.log.info(
       {
         requestId: request.id,
         fixtureId: fixtureId ?? null,
         provider: result.provider,
         exact: result.exact,
-        score: result.score,
         reason: result.reason,
-        urlQuality: selectedUrlQuality,
         checkedProviders: result.checkedProviders,
         ok: result.ok,
+        optionCount: Array.isArray(result.options) ? result.options.length : 0,
       },
       "Ticket resolve request completed"
     );
 
-    /**
-     * Important:
-     * No result is not a route-level 404.
-     * The endpoint exists and handled the request correctly.
-     * Returning 200 avoids frontend error-state pollution.
-     */
     reply.code(200);
 
     return {
-      ...result,
-      urlQuality: selectedUrlQuality,
-      options: enrichedOptions,
+      ok: result.ok,
+      provider: result.provider,
+      exact: result.exact,
+      score: null,
+      rawScore: null,
+      url: result.url,
+      title: result.title,
+      priceText: result.priceText,
+      reason: result.reason,
+      checkedProviders: result.checkedProviders,
+      options: Array.isArray(result.options)
+        ? result.options.map((option) => ({
+            provider: option.provider,
+            exact: option.exact,
+            score: null,
+            rawScore: null,
+            url: option.url,
+            title: option.title,
+            priceText: option.priceText ?? null,
+            reason: option.reason,
+            urlQuality: option.urlQuality,
+          }))
+        : [],
+      urlQuality: result.urlQuality,
       requestId: request.id,
     };
   } catch (error) {
@@ -1244,6 +1192,7 @@ app.get<{
       provider: null,
       exact: false,
       score: null,
+      rawScore: null,
       url: null,
       title: null,
       priceText: null,
