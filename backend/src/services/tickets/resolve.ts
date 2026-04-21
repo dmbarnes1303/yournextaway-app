@@ -41,9 +41,8 @@ type CandidateAssessment = {
 const CACHE = new Map<string, CacheEntry>();
 
 const CACHE_TTL_MS = 1000 * 60 * 10;
-const PROVIDER_TIMEOUT_MS = 12000;
 const MAX_RETURNED_OPTIONS = 4;
-const RESOLVER_VERSION = "v9-launch-fallback-friendly";
+const RESOLVER_VERSION = "v10-provider-specific-timeouts-fast-se365";
 
 const MIN_EXACT_EVENT_SCORE = 60;
 const MIN_PARTIAL_MATCH_SCORE = 48;
@@ -53,6 +52,11 @@ const MIN_SELECTED_SCORE = 40;
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
   sportsevents365: 1,
   footballticketnet: 2,
+};
+
+const PROVIDER_TIMEOUTS_MS: Record<TicketProviderId, number> = {
+  footballticketnet: 9000,
+  sportsevents365: 14000,
 };
 
 const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
@@ -392,10 +396,10 @@ function recordProviderCall(
 
 async function withTimeout<T>(
   provider: TicketProviderId,
-  fn: () => Promise<T>,
-  timeoutMs = PROVIDER_TIMEOUT_MS
+  fn: () => Promise<T>
 ): Promise<TimedResult<T>> {
   const startedAt = Date.now();
+  const timeoutMs = PROVIDER_TIMEOUTS_MS[provider];
 
   return new Promise((resolve) => {
     let settled = false;
@@ -670,6 +674,7 @@ export async function resolveTicket(
   console.log("[tickets] resolve start", {
     key: cacheKey,
     input: summarizeInput(input),
+    providerTimeoutsMs: PROVIDER_TIMEOUTS_MS,
   });
 
   const checkedProviders: TicketResolution["checkedProviders"] = [
@@ -716,7 +721,7 @@ export async function resolveTicket(
   }
 
   console.log(
-    "FINAL CANDIDATES",
+    "[tickets] final candidates",
     candidates.map((c) => ({
       provider: c.provider,
       reason: c.reason,
