@@ -139,6 +139,39 @@ const SE365_TICKET_BONUS_CAP = 10;
 const SE365_PARTICIPANT_LIST_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const SE365_TEAM_PARTICIPANT_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 
+const GENERIC_CLUB_TOKENS = new Set([
+  "ac",
+  "afc",
+  "athletic",
+  "atletico",
+  "bsc",
+  "ca",
+  "calcio",
+  "cf",
+  "city",
+  "club",
+  "de",
+  "deportivo",
+  "dynamo",
+  "fc",
+  "fk",
+  "if",
+  "inter",
+  "jk",
+  "lokomotiv",
+  "olympique",
+  "racing",
+  "real",
+  "sc",
+  "sk",
+  "sporting",
+  "sv",
+  "the",
+  "town",
+  "ud",
+  "united",
+]);
+
 let PARTICIPANT_LIST_CACHE: ParticipantListCacheEntry | null = null;
 const TEAM_PARTICIPANT_CACHE = new Map<string, TeamParticipantCacheEntry>();
 
@@ -170,6 +203,44 @@ function normalizeName(value: string): string {
     .replace(/\bthe\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function splitTokens(value: string): string[] {
+  return normalizeName(value)
+    .split(" ")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function significantTokens(value: string): string[] {
+  return splitTokens(value).filter(
+    (token) => token.length >= 3 && !GENERIC_CLUB_TOKENS.has(token)
+  );
+}
+
+function unique<T>(values: T[]): T[] {
+  return Array.from(new Set(values));
+}
+
+function hasWholeWord(haystack: string, needle: string): boolean {
+  const value = ` ${normalizeName(haystack)} `;
+  const target = ` ${normalizeName(needle)} `;
+  return Boolean(target.trim()) && value.includes(target);
+}
+
+function hasAllTokens(haystackTokens: string[], neededTokens: string[]): boolean {
+  if (!neededTokens.length) return false;
+  const haystack = new Set(haystackTokens);
+  return neededTokens.every((token) => haystack.has(token));
+}
+
+function countMatchedTokens(haystackTokens: string[], targetTokens: string[]): number {
+  const haystack = new Set(haystackTokens);
+  return targetTokens.filter((token) => haystack.has(token)).length;
+}
+
+function isDistinctiveSingleToken(token: string): boolean {
+  return token.length >= 6 && !GENERIC_CLUB_TOKENS.has(token);
 }
 
 function safeDate(v?: string): Date | null {
@@ -539,44 +610,100 @@ function evaluateParticipantMatch(
 
   const preferred = getPreferredTeamName(teamName);
   const normalizedTeamName = normalizeName(preferred);
-  const aliases = expandTeamAliases(preferred).map(normalizeName);
-  const exactSet = new Set(aliases);
+  const normalizedParticipant = normalizeName(name);
 
-  const normalized = normalizeName(name);
-  let score = -1000;
-  let matchedBy: ParticipantMatch["matchedBy"] | null = null;
+  const aliases = unique(
+    expandTeamAliases(preferred)
+      .map((alias) => normalizeName(alias))
+      .filter(Boolean)
+  );
 
-  if (exactSet.has(normalized)) {
-    score = 100;
-    matchedBy = "exact";
-  } else if (
-    aliases.some((alias) => alias && (normalized.includes(alias) || alias.includes(normalized)))
-  ) {
-    score = 76;
-    matchedBy = "alias_contains";
-  } else {
-    const tokens = normalizedTeamName.split(" ").filter((x) => x.length >= 4);
-    const matched = tokens.filter((token) => normalized.includes(token)).length;
-    if (matched >= 2) {
-      score = 55;
-      matchedBy = "token_match";
-    } else if (matched === 1) {
-      score = 20;
-      matchedBy = "token_match";
+  if (!aliases.length) return null;
+
+  if (aliases.includes(normalizedParticipant)) {
+    return {
+      participant,
+      score: 100,
+      teamName: preferred,
+      normalizedTeamName,
+      matchedBy: "exact",
+    };
+  }
+
+  const participantTokens = splitTokens(name);
+  const participantSignificantTokens = significantTokens(name);
+
+  let best: ParticipantMatch | null = null;
+
+  for (const alias of aliases) {
+    const aliasTokens = splitTokens(alias);
+    const aliasSignificant = significantTokens(alias);
+
+    if (!aliasSignificant.length) {
+      continue;
+    }
+
+    const aliasIsSingleDistinctiveToken =
+      aliasSignificant.length === 1 && isDistinctiveSingleToken(aliasSignificant[0]);
+
+    const aliasIsMultiWordStrong =
+      aliasTokens.length >= 2 && aliasSignificant.length >= 1;
+
+    if (aliasIsMultiWordStrong && hasAllTokens(participantTokens, aliasSignificant)) {
+      const score = aliasSignificant.length >= 2 ? 96 : 92;
+      if (!best || score > best.score) {
+        best = {
+          participant,
+          score,
+          teamName: preferred,
+          normalizedTeamName,
+          matchedBy: "alias_contains",
+        };
+      }
+      continue;
+    }
+
+    if (
+      aliasIsSingleDistinctiveToken &&
+      hasWholeWord(name, aliasSignificant[0])
+    ) {
+      const score = 84;
+      if (!best || score > best.score) {
+        best = {
+          participant,
+          score,
+          teamName: preferred,
+          normalizedTeamName,
+          matchedBy: "alias_contains",
+        };
+      }
     }
   }
 
-  if (score < SE365_MIN_PARTICIPANT_SCORE || !matchedBy) {
-    return null;
+  const preferredSignificant = significantTokens(preferred);
+  const matchedPreferredTokens = countMatchedTokens(
+    participantSignificantTokens,
+    preferredSignificant
+  );
+
+  if (preferredSignificant.length >= 2 && matchedPreferredTokens >= 2) {
+    const score = 78 + Math.min(8, matchedPreferredTokens);
+    if (!best || score > best.score) {
+      best = {
+        participant,
+        score,
+        teamName: preferred,
+        normalizedTeamName,
+        matchedBy: "token_match",
+      };
+    }
   }
 
-  return {
-    participant,
-    score,
-    teamName: preferred,
-    normalizedTeamName,
-    matchedBy,
-  };
+  if (best && best.score >= SE365_MIN_PARTICIPANT_SCORE) {
+    return best;
+  }
+
+  return null;
 }
 
 function findBestParticipantMatch(
