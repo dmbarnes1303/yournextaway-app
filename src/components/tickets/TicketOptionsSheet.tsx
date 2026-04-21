@@ -13,6 +13,7 @@ import {
   providerLabel,
   providerShort,
   classifyTicketOption,
+  ticketConfidenceLabel,
 } from "@/src/features/tripDetail/helpers";
 
 import type { TicketResolutionOption } from "@/src/services/ticketResolver";
@@ -40,20 +41,6 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function normalizeProvider(provider?: string | null): string {
-  return clean(provider).toLowerCase();
-}
-
-function isSe365(provider?: string | null): boolean {
-  const raw = normalizeProvider(provider);
-  return raw === "sportsevents365" || raw === "se365";
-}
-
-function isFtn(provider?: string | null): boolean {
-  const raw = normalizeProvider(provider);
-  return raw === "footballticketnet" || raw === "ftn";
-}
-
 function reasonLabel(option: TicketResolutionOption): string | null {
   if (option.reason === "exact_event" && option.exact) return "Exact fixture";
   if (option.reason === "partial_match") return "Related listing";
@@ -61,52 +48,31 @@ function reasonLabel(option: TicketResolutionOption): string | null {
   return null;
 }
 
-function strengthLabel(strength: TicketStrength, provider?: string | null): string {
-  if (isSe365(provider)) return "Best revenue option";
-  if (isFtn(provider)) return "Strategic fallback";
-
+function strengthLabel(strength: TicketStrength): string {
   if (strength === "strong") return "Best match";
-  if (strength === "medium") return "Good option";
+  if (strength === "medium") return "Usable option";
   return "Weak fallback";
 }
 
-function ctaLabel(strength: TicketStrength, provider?: string | null): string {
-  if (isSe365(provider)) return "View best ticket option →";
-  if (isFtn(provider)) return "Compare more options →";
-
+function ctaLabel(strength: TicketStrength): string {
   if (strength === "strong") return "View tickets →";
-  if (strength === "medium") return "View options →";
+  if (strength === "medium") return "Compare option →";
   return "Search carefully →";
 }
 
-function priceLabel(
-  option: TicketResolutionOption,
-  strength: TicketStrength,
-  provider?: string | null
-): string {
+function priceLabel(option: TicketResolutionOption, strength: TicketStrength): string {
   const price = clean(option.priceText);
 
-  if (isSe365(provider)) {
-    return price || "Best option";
-  }
-
-  if (isFtn(provider)) {
-    return price || "More options";
-  }
-
-  if (strength === "strong") {
-    return price || "View prices";
-  }
-
-  if (strength === "medium") {
-    return price || "Check options";
-  }
-
+  if (price) return price;
+  if (strength === "strong") return "View prices";
+  if (strength === "medium") return "Check option";
   return "Check availability";
 }
 
 function providerTone(provider?: string | null) {
-  if (isFtn(provider)) {
+  const raw = clean(provider).toLowerCase();
+
+  if (raw === "footballticketnet" || raw === "ftn") {
     return {
       borderColor: "rgba(120,170,255,0.30)",
       backgroundColor: "rgba(120,170,255,0.12)",
@@ -114,7 +80,7 @@ function providerTone(provider?: string | null) {
     };
   }
 
-  if (isSe365(provider)) {
+  if (raw === "sportsevents365" || raw === "se365") {
     return {
       borderColor: "rgba(87,162,56,0.30)",
       backgroundColor: "rgba(87,162,56,0.12)",
@@ -130,13 +96,28 @@ function providerTone(provider?: string | null) {
 }
 
 function resolveDisplayStrength(option: TicketResolutionOption): TicketStrength {
-  if (isSe365(option.provider)) return "strong";
-  if (isFtn(option.provider)) return "medium";
+  return classifyTicketOption(option);
+}
 
-  const helperStrength = classifyTicketOption(option);
-  if (helperStrength === "strong") return "strong";
-  if (helperStrength === "medium") return "medium";
-  return "weak";
+function compareDisplayOptions(a: DisplayOption, b: DisplayOption): number {
+  const strengthWeight = { strong: 3, medium: 2, weak: 1 };
+
+  if (strengthWeight[a.strength] !== strengthWeight[b.strength]) {
+    return strengthWeight[b.strength] - strengthWeight[a.strength];
+  }
+
+  if (a.option.exact && !b.option.exact) return -1;
+  if (!a.option.exact && b.option.exact) return 1;
+
+  if (a.option.score !== b.option.score) return b.option.score - a.option.score;
+
+  const aPrice = clean(a.option.priceText);
+  const bPrice = clean(b.option.priceText);
+
+  if (aPrice && !bPrice) return -1;
+  if (!aPrice && bPrice) return 1;
+
+  return clean(a.option.provider).localeCompare(clean(b.option.provider));
 }
 
 function OptionCard({
@@ -188,31 +169,19 @@ function OptionCard({
         </View>
 
         <Text style={[styles.price, strength === "weak" && styles.priceWeak]}>
-          {priceLabel(option, strength, option.provider)}
+          {priceLabel(option, strength)}
         </Text>
       </View>
 
       <View style={styles.optionBottomRow}>
         <Text style={[styles.scoreText, strength === "weak" && styles.scoreTextWeak]}>
-          {strengthLabel(strength, option.provider)}
+          {strengthLabel(strength)} • {ticketConfidenceLabel(option.score)}
         </Text>
 
-        <Text style={styles.cta}>{ctaLabel(strength, option.provider)}</Text>
+        <Text style={styles.cta}>{ctaLabel(strength)}</Text>
       </View>
 
-      {isSe365(option.provider) ? (
-        <Text style={styles.goodText}>
-          Primary monetised ticket route for this app.
-        </Text>
-      ) : null}
-
-      {isFtn(option.provider) ? (
-        <Text style={styles.infoText}>
-          Secondary strategic route. Useful for broader inventory checks.
-        </Text>
-      ) : null}
-
-      {strength === "weak" && !isFtn(option.provider) ? (
+      {strength === "weak" ? (
         <Text style={styles.warningText}>
           Fallback route only. Verify the exact fixture on the partner page.
         </Text>
@@ -233,44 +202,32 @@ export default function TicketOptionsSheet({
   onOpenOfficial,
 }: Props) {
   const { mergedOptions, weakOnly } = useMemo(() => {
-    const strong = Array.isArray(strongOptions) ? strongOptions : [];
-    const weak = Array.isArray(weakOptions) ? weakOptions : [];
-    const combined = [...strong, ...weak];
+    const combined = [
+      ...(Array.isArray(strongOptions) ? strongOptions : []),
+      ...(Array.isArray(weakOptions) ? weakOptions : []),
+    ];
 
     const seen = new Set<string>();
-    const deduped = combined.filter((option, index) => {
-      const key = `${clean(option.provider)}|${clean(option.url)}|${index}`;
+    const deduped = combined.filter((option) => {
+      const key = `${clean(option.provider)}|${clean(option.url)}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    const prioritized = [...deduped].sort((a, b) => {
-      const aSe365 = isSe365(a.provider) ? 1 : 0;
-      const bSe365 = isSe365(b.provider) ? 1 : 0;
-      if (aSe365 !== bSe365) return bSe365 - aSe365;
-
-      const aFtn = isFtn(a.provider) ? 1 : 0;
-      const bFtn = isFtn(b.provider) ? 1 : 0;
-      if (aFtn !== bFtn) return bFtn - aFtn;
-
-      const aStrength = resolveDisplayStrength(a);
-      const bStrength = resolveDisplayStrength(b);
-
-      const weight = { strong: 3, medium: 2, weak: 1 };
-      return weight[bStrength] - weight[aStrength];
-    });
-
-    const mergedOptions: DisplayOption[] = prioritized.slice(0, 5).map((option) => ({
-      option,
-      strength: resolveDisplayStrength(option),
-    }));
+    const mergedOptions: DisplayOption[] = deduped
+      .map((option) => ({
+        option,
+        strength: resolveDisplayStrength(option),
+      }))
+      .sort(compareDisplayOptions)
+      .slice(0, 5);
 
     return {
       mergedOptions,
       weakOnly:
         mergedOptions.length > 0 &&
-        mergedOptions.every(({ strength, option }) => strength === "weak" && !isFtn(option.provider)),
+        mergedOptions.every(({ strength }) => strength === "weak"),
     };
   }, [strongOptions, weakOptions]);
 
@@ -305,16 +262,14 @@ export default function TicketOptionsSheet({
             contentContainerStyle={styles.optionsContent}
             showsVerticalScrollIndicator={false}
           >
-            {mergedOptions.map(({ option, strength }, index) => {
-              return (
-                <OptionCard
-                  key={`${option.provider}-${option.url}-${index}`}
-                  option={option}
-                  strength={strength}
-                  onPress={() => onSelect(option)}
-                />
-              );
-            })}
+            {mergedOptions.map(({ option, strength }, index) => (
+              <OptionCard
+                key={`${option.provider}-${option.url}-${index}`}
+                option={option}
+                strength={strength}
+                onPress={() => onSelect(option)}
+              />
+            ))}
           </ScrollView>
 
           <View style={styles.footerActions}>
@@ -518,20 +473,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
     color: theme.colors.text,
-  },
-
-  goodText: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: "rgba(214,241,200,1)",
-    fontWeight: "700",
-  },
-
-  infoText: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: "rgba(210,226,255,1)",
-    fontWeight: "700",
   },
 
   warningText: {
