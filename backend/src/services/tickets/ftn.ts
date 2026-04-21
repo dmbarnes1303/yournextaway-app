@@ -59,6 +59,10 @@ type ScoredEvent = {
   hasDirectUrl: boolean;
   penalty: number;
   leagueScore: number;
+  homeScore: number;
+  awayScore: number;
+  titleHomeScore: number;
+  titleAwayScore: number;
 };
 
 const FTN_FETCH_TIMEOUT_MS = 6500;
@@ -70,12 +74,89 @@ const FTN_SEARCH_FALLBACK_PENALTY = 45;
 const FTN_WEAK_DIRECT_URL_PENALTY = 10;
 const FTN_TICKET_FETCH_BONUS_CAP = 12;
 
+const GENERIC_CLUB_TOKENS = new Set([
+  "ac",
+  "afc",
+  "athletic",
+  "atletico",
+  "bsc",
+  "ca",
+  "calcio",
+  "cf",
+  "city",
+  "club",
+  "de",
+  "deportivo",
+  "dynamo",
+  "fc",
+  "fk",
+  "if",
+  "jk",
+  "lokomotiv",
+  "olympique",
+  "racing",
+  "real",
+  "sc",
+  "sk",
+  "sporting",
+  "sv",
+  "the",
+  "town",
+  "ud",
+  "united",
+]);
+
 function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
 
 function norm(v: unknown): string {
-  return clean(v).toLowerCase();
+  return clean(v)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\bfc\b/g, " ")
+    .replace(/\bcf\b/g, " ")
+    .replace(/\bafc\b/g, " ")
+    .replace(/\bsc\b/g, " ")
+    .replace(/\bsk\b/g, " ")
+    .replace(/\bjk\b/g, " ")
+    .replace(/\bclub\b/g, " ")
+    .replace(/\bde\b/g, " ")
+    .replace(/\bthe\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function uniq(values: string[]): string[] {
+  return Array.from(new Set(values.map((v) => norm(v)).filter(Boolean)));
+}
+
+function splitTokens(value: unknown): string[] {
+  return norm(value)
+    .split(" ")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function strongTokens(value: unknown): string[] {
+  const raw = splitTokens(value).filter((token) => token.length >= 3);
+  const reduced = raw.filter((token) => !GENERIC_CLUB_TOKENS.has(token));
+
+  if (raw.length >= 2) {
+    if (reduced.length >= 2) return reduced;
+    return raw;
+  }
+
+  return reduced.length ? reduced : raw;
+}
+
+function hasWholeWord(haystack: unknown, needle: unknown): boolean {
+  const value = ` ${norm(haystack)} `;
+  const target = ` ${norm(needle)} `;
+  return Boolean(target.trim()) && value.includes(target);
 }
 
 function safeDate(v?: string): Date | null {
@@ -181,46 +262,94 @@ function isBadStandaloneToken(text: string, token: string): boolean {
   return value.includes(needle);
 }
 
-function teamsMatchLoose(
-  title: string,
-  inputHomeVariants: string[],
-  inputAwayVariants: string[]
-): boolean {
-  const titleNorm = norm(title);
-  const homeMatch = inputHomeVariants.some((variant) => titleNorm.includes(norm(variant)));
-  const awayMatch = inputAwayVariants.some((variant) => titleNorm.includes(norm(variant)));
-  return homeMatch && awayMatch;
+function teamAliases(teamName: string): string[] {
+  return uniq(expandTeamAliases(teamName));
+}
+
+function scoreNameAgainstTeam(candidateName: string, teamName: string): number {
+  const candidate = norm(candidateName);
+  if (!candidate) return 0;
+
+  const aliases = teamAliases(teamName);
+  if (!aliases.length) return 0;
+
+  if (aliases.includes(candidate)) return 100;
+
+  let best = 0;
+
+  for (const alias of aliases) {
+    if (!alias) continue;
+
+    if (hasWholeWord(candidate, alias)) {
+      const aliasTokenCount = splitTokens(alias).length;
+      best = Math.max(best, aliasTokenCount >= 2 ? 94 : 82);
+    }
+
+    const aliasStrong = strongTokens(alias);
+    const candidateStrong = strongTokens(candidate);
+
+    if (aliasStrong.length >= 2) {
+      const allPresent = aliasStrong.every((token) => candidateStrong.includes(token));
+      if (allPresent) {
+        best = Math.max(best, aliasStrong.length >= 3 ? 92 : 88);
+      }
+    } else if (aliasStrong.length === 1) {
+      const token = aliasStrong[0];
+      if (token.length >= 6 && candidateStrong.includes(token)) {
+        best = Math.max(best, 78);
+      }
+    }
+  }
+
+  return best;
+}
+
+function scoreTitleAgainstTeam(title: string, teamName: string): number {
+  const normalizedTitle = norm(title);
+  if (!normalizedTitle) return 0;
+
+  const aliases = teamAliases(teamName);
+  if (!aliases.length) return 0;
+
+  let best = 0;
+
+  for (const alias of aliases) {
+    if (!alias) continue;
+
+    if (hasWholeWord(normalizedTitle, alias)) {
+      const aliasTokenCount = splitTokens(alias).length;
+      best = Math.max(best, aliasTokenCount >= 2 ? 86 : 72);
+    }
+
+    const aliasStrong = strongTokens(alias);
+    const titleStrong = strongTokens(normalizedTitle);
+
+    if (aliasStrong.length >= 2) {
+      const allPresent = aliasStrong.every((token) => titleStrong.includes(token));
+      if (allPresent) {
+        best = Math.max(best, 80);
+      }
+    } else if (aliasStrong.length === 1) {
+      const token = aliasStrong[0];
+      if (token.length >= 6 && titleStrong.includes(token)) {
+        best = Math.max(best, 68);
+      }
+    }
+  }
+
+  return best;
 }
 
 function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
-  const inputHomeVariants = expandTeamAliases(input.homeName);
-  const inputAwayVariants = expandTeamAliases(input.awayName);
-
-  const evHome = norm(eventHome(ev));
-  const evAway = norm(eventAway(ev));
-
-  if (evHome && evAway) {
-    const homeMatch = inputHomeVariants.some((variant) => evHome === norm(variant));
-    const awayMatch = inputAwayVariants.some((variant) => evAway === norm(variant));
-    return homeMatch && awayMatch;
-  }
-
-  return false;
+  const homeScore = scoreNameAgainstTeam(eventHome(ev), input.homeName);
+  const awayScore = scoreNameAgainstTeam(eventAway(ev), input.awayName);
+  return homeScore >= 95 && awayScore >= 95;
 }
 
 function reversedTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
-  const inputHomeVariants = expandTeamAliases(input.homeName);
-  const inputAwayVariants = expandTeamAliases(input.awayName);
-
-  const evHome = norm(eventHome(ev));
-  const evAway = norm(eventAway(ev));
-
-  if (!evHome || !evAway) return false;
-
-  const homeReversed = inputAwayVariants.some((variant) => evHome === norm(variant));
-  const awayReversed = inputHomeVariants.some((variant) => evAway === norm(variant));
-
-  return homeReversed && awayReversed;
+  const homeScore = scoreNameAgainstTeam(eventHome(ev), input.awayName);
+  const awayScore = scoreNameAgainstTeam(eventAway(ev), input.homeName);
+  return homeScore >= 95 && awayScore >= 95;
 }
 
 function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
@@ -437,22 +566,33 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): ScoredEvent {
   let score = 0;
 
   const title = eventTitle(ev);
-  const evHome = eventHome(ev);
-  const evAway = eventAway(ev);
 
-  const inputHomeVariants = expandTeamAliases(input.homeName);
-  const inputAwayVariants = expandTeamAliases(input.awayName);
+  const homeScore = scoreNameAgainstTeam(eventHome(ev), input.homeName);
+  const awayScore = scoreNameAgainstTeam(eventAway(ev), input.awayName);
+  const reversedHomeScore = scoreNameAgainstTeam(eventHome(ev), input.awayName);
+  const reversedAwayScore = scoreNameAgainstTeam(eventAway(ev), input.homeName);
 
-  const exactTeams = exactTeamsMatch(ev, input);
-  const reversedTeams = reversedTeamsMatch(ev, input);
-  const looseTeams = title
-    ? teamsMatchLoose(title, inputHomeVariants, inputAwayVariants)
-    : false;
+  const titleHomeScore = scoreTitleAgainstTeam(title, input.homeName);
+  const titleAwayScore = scoreTitleAgainstTeam(title, input.awayName);
 
-  if (exactTeams) score += 82;
-  else if (reversedTeams) score += 8;
-  else if (evHome && evAway) score -= 50;
-  else if (looseTeams) score += 42;
+  const exactTeams = homeScore >= 95 && awayScore >= 95;
+  const reversedTeams = reversedHomeScore >= 95 && reversedAwayScore >= 95;
+  const looseTeams =
+    Math.max(homeScore, titleHomeScore) >= 70 &&
+    Math.max(awayScore, titleAwayScore) >= 70;
+
+  if (exactTeams) {
+    score += 82;
+  } else if (reversedTeams) {
+    score += 8;
+  } else if (looseTeams) {
+    score += 42;
+  } else {
+    score -= 1000;
+  }
+
+  if (homeScore >= 70 && awayScore >= 70) score += 10;
+  if (titleHomeScore >= 70 && titleAwayScore >= 70) score += 4;
 
   const kickoff = safeDate(input.kickoffIso);
   const evDt = safeDate(eventDate(ev));
@@ -486,8 +626,6 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): ScoredEvent {
   const hasDirectUrl = hasUsableEventUrl(ev);
   if (hasDirectUrl) score += 8;
 
-  if (!exactTeams && !looseTeams) score -= 1000;
-
   return {
     ev,
     score,
@@ -496,6 +634,10 @@ function scoreEvent(ev: FtnEvent, input: TicketResolveInput): ScoredEvent {
     hasDirectUrl,
     penalty,
     leagueScore,
+    homeScore,
+    awayScore,
+    titleHomeScore,
+    titleAwayScore,
   };
 }
 
@@ -713,7 +855,10 @@ function ticketDataBonus(tickets: NormalizedFtnTicket[]): number {
   return Math.min(FTN_TICKET_FETCH_BONUS_CAP, bonus);
 }
 
-function bestTicketPriceText(tickets: NormalizedFtnTicket[], eventLevelPrice: string | null): string | null {
+function bestTicketPriceText(
+  tickets: NormalizedFtnTicket[],
+  eventLevelPrice: string | null
+): string | null {
   const withPrice = tickets.find((ticket) => clean(ticket.priceText));
   return withPrice?.priceText ?? eventLevelPrice;
 }
@@ -901,7 +1046,7 @@ export async function resolveFtnCandidate(
   if (!best) {
     console.log("[FTN] events returned but no strong match", {
       count: events.length,
-      sample: events.slice(0, 5).map((ev) => {
+      sample: events.slice(0, 8).map((ev) => {
         const scored = scoreEvent(ev, input);
         return {
           ...summarizeEvent(ev),
@@ -911,6 +1056,10 @@ export async function resolveFtnCandidate(
           hasDirectUrl: scored.hasDirectUrl,
           penalty: scored.penalty,
           leagueScore: scored.leagueScore,
+          homeScore: scored.homeScore,
+          awayScore: scored.awayScore,
+          titleHomeScore: scored.titleHomeScore,
+          titleAwayScore: scored.titleAwayScore,
         };
       }),
     });
@@ -937,6 +1086,10 @@ export async function resolveFtnCandidate(
         exactTeams: best.exactTeams,
         sameDay: best.sameDay,
         penalty: best.penalty,
+        homeScore: best.homeScore,
+        awayScore: best.awayScore,
+        titleHomeScore: best.titleHomeScore,
+        titleAwayScore: best.titleAwayScore,
       },
     });
   }
@@ -994,6 +1147,10 @@ export async function resolveFtnCandidate(
       ticketCount: tickets.length,
       topTicket: tickets[0] ? summarizeTicket(tickets[0]) : null,
       affiliateUrl,
+      homeScore: best.homeScore,
+      awayScore: best.awayScore,
+      titleHomeScore: best.titleHomeScore,
+      titleAwayScore: best.titleAwayScore,
     },
   });
 
@@ -1006,4 +1163,4 @@ export async function resolveFtnCandidate(
     priceText,
     reason,
   };
-    }
+      }
