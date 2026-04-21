@@ -94,6 +94,10 @@ type ScoredEvent = {
   sameDay: boolean;
   hasDirectUrl: boolean;
   reasons: string[];
+  homeScore: number;
+  awayScore: number;
+  titleHomeScore: number;
+  titleAwayScore: number;
 };
 
 type ParticipantMatch = {
@@ -222,6 +226,14 @@ function unique<T>(values: T[]): T[] {
   return Array.from(new Set(values));
 }
 
+function normalizedAliases(teamName: string): string[] {
+  return unique(
+    expandTeamAliases(teamName)
+      .map((alias) => normalizeName(alias))
+      .filter(Boolean)
+  );
+}
+
 function strongAliasTokens(value: string): string[] {
   const raw = splitTokens(value).filter((token) => token.length >= 3);
   const reduced = raw.filter((token) => !GENERIC_CLUB_TOKENS.has(token));
@@ -253,6 +265,86 @@ function countMatchedTokens(haystackTokens: string[], targetTokens: string[]): n
 
 function isDistinctiveSingleToken(token: string): boolean {
   return token.length >= 6 && !GENERIC_CLUB_TOKENS.has(token);
+}
+
+function scoreNameAgainstTeam(candidateName: string, teamName: string): number {
+  const candidate = normalizeName(candidateName);
+  if (!candidate) return 0;
+
+  const aliases = normalizedAliases(teamName);
+  if (!aliases.length) return 0;
+
+  if (aliases.includes(candidate)) return 100;
+
+  const candidateTokens = splitTokens(candidate);
+  const candidateStrong = strongAliasTokens(candidate);
+
+  let best = 0;
+
+  for (const alias of aliases) {
+    if (!alias) continue;
+
+    if (hasWholeWord(candidate, alias)) {
+      const aliasTokenCount = splitTokens(alias).length;
+      best = Math.max(best, aliasTokenCount >= 2 ? 94 : 82);
+    }
+
+    const aliasStrong = strongAliasTokens(alias);
+
+    if (aliasStrong.length >= 2) {
+      if (hasAllTokens(candidateTokens, aliasStrong)) {
+        best = Math.max(best, aliasStrong.length >= 3 ? 92 : 88);
+      }
+      continue;
+    }
+
+    if (aliasStrong.length === 1 && isDistinctiveSingleToken(aliasStrong[0])) {
+      if (candidateStrong.includes(aliasStrong[0])) {
+        best = Math.max(best, 78);
+      }
+    }
+  }
+
+  return best;
+}
+
+function scoreTitleAgainstTeam(title: string, teamName: string): number {
+  const normalizedTitle = normalizeName(title);
+  if (!normalizedTitle) return 0;
+
+  const aliases = normalizedAliases(teamName);
+  if (!aliases.length) return 0;
+
+  const titleTokens = splitTokens(normalizedTitle);
+  const titleStrong = strongAliasTokens(normalizedTitle);
+
+  let best = 0;
+
+  for (const alias of aliases) {
+    if (!alias) continue;
+
+    if (hasWholeWord(normalizedTitle, alias)) {
+      const aliasTokenCount = splitTokens(alias).length;
+      best = Math.max(best, aliasTokenCount >= 2 ? 86 : 72);
+    }
+
+    const aliasStrong = strongAliasTokens(alias);
+
+    if (aliasStrong.length >= 2) {
+      if (hasAllTokens(titleTokens, aliasStrong)) {
+        best = Math.max(best, 80);
+      }
+      continue;
+    }
+
+    if (aliasStrong.length === 1 && isDistinctiveSingleToken(aliasStrong[0])) {
+      if (titleStrong.includes(aliasStrong[0])) {
+        best = Math.max(best, 68);
+      }
+    }
+  }
+
+  return best;
 }
 
 function parseDdMmYyyy(raw: string): Date | null {
@@ -1216,16 +1308,17 @@ function eventMatchScore(
       sameDay: false,
       hasDirectUrl: false,
       reasons: ["bad_variant"],
+      homeScore: 0,
+      awayScore: 0,
+      titleHomeScore: 0,
+      titleAwayScore: 0,
     };
   }
 
-  const homeAliases = expandTeamAliases(getPreferredTeamName(input.homeName)).map(normalizeName);
-  const awayAliases = expandTeamAliases(getPreferredTeamName(input.awayName)).map(normalizeName);
-
-  const homeName = normalizeName(eventHomeName(ev));
-  const awayName = normalizeName(eventAwayName(ev));
-  const title = normalizeName(eventName(ev));
-  const participants = eventParticipantNames(ev).map(normalizeName);
+  const homeNameText = eventHomeName(ev);
+  const awayNameText = eventAwayName(ev);
+  const titleText = eventName(ev);
+  const participants = eventParticipantNames(ev);
 
   const participantIds = new Set(
     (Array.isArray(ev.participants) ? ev.participants : [])
@@ -1233,23 +1326,31 @@ function eventMatchScore(
       .filter(Boolean)
   );
 
-  const homeExact =
-    homeAliases.some((alias) => alias && homeName === alias) ||
-    homeAliases.some((alias) => alias && participants.includes(alias));
+  const participantHomeScore = participants.reduce(
+    (best, name) => Math.max(best, scoreNameAgainstTeam(name, input.homeName)),
+    0
+  );
+  const participantAwayScore = participants.reduce(
+    (best, name) => Math.max(best, scoreNameAgainstTeam(name, input.awayName)),
+    0
+  );
 
-  const awayExact =
-    awayAliases.some((alias) => alias && awayName === alias) ||
-    awayAliases.some((alias) => alias && participants.includes(alias));
+  const homeScore = Math.max(
+    scoreNameAgainstTeam(homeNameText, input.homeName),
+    participantHomeScore
+  );
+  const awayScore = Math.max(
+    scoreNameAgainstTeam(awayNameText, input.awayName),
+    participantAwayScore
+  );
 
-  const homeLoose =
-    homeExact ||
-    homeAliases.some((alias) => alias && (title.includes(alias) || homeName.includes(alias)));
+  const titleHomeScore = scoreTitleAgainstTeam(titleText, input.homeName);
+  const titleAwayScore = scoreTitleAgainstTeam(titleText, input.awayName);
 
-  const awayLoose =
-    awayExact ||
-    awayAliases.some((alias) => alias && (title.includes(alias) || awayName.includes(alias)));
-
-  const exactTeams = homeExact && awayExact;
+  const exactTeams = homeScore >= 95 && awayScore >= 95;
+  const looseTeams =
+    Math.max(homeScore, titleHomeScore) >= 70 &&
+    Math.max(awayScore, titleAwayScore) >= 70;
 
   if (homeParticipantId && participantIds.has(homeParticipantId)) {
     score += 18;
@@ -1264,12 +1365,22 @@ function eventMatchScore(
   if (exactTeams) {
     score += 48;
     reasons.push("both_teams_exact");
-  } else if (homeLoose && awayLoose) {
+  } else if (looseTeams) {
     score += 24;
     reasons.push("both_teams_loose");
   } else {
     score -= 1000;
     reasons.push("team_match_failed");
+  }
+
+  if (homeScore >= 70 && awayScore >= 70) {
+    score += 10;
+    reasons.push("side_names_reliable");
+  }
+
+  if (titleHomeScore >= 70 && titleAwayScore >= 70) {
+    score += 4;
+    reasons.push("title_contains_both");
   }
 
   const kickoff = safeDate(input.kickoffIso);
@@ -1320,6 +1431,10 @@ function eventMatchScore(
     sameDay,
     hasDirectUrl,
     reasons,
+    homeScore,
+    awayScore,
+    titleHomeScore,
+    titleAwayScore,
   };
 }
 
@@ -1448,8 +1563,9 @@ export async function resolveSe365Candidate(
       : buildTrackedSearchFallback(input);
 
     if (resolvedUrl) {
-      const baseScore = eventMatchScore(cachedEvent, input).score;
-      let finalScore = Math.min(100, Math.max(SE365_MIN_STRONG_EVENT_SCORE, baseScore) + ticketData.score);
+      const baseScored = eventMatchScore(cachedEvent, input);
+      let finalScore =
+        Math.min(100, Math.max(SE365_MIN_STRONG_EVENT_SCORE, baseScored.score) + ticketData.score);
       const usedSearchFallback = !directUrl;
 
       if (usedSearchFallback) {
@@ -1571,6 +1687,10 @@ export async function resolveSe365Candidate(
         sameDay: x.sameDay,
         hasDirectUrl: x.hasDirectUrl,
         reasons: x.reasons,
+        homeScore: x.homeScore,
+        awayScore: x.awayScore,
+        titleHomeScore: x.titleHomeScore,
+        titleAwayScore: x.titleAwayScore,
       })),
   });
 
@@ -1632,6 +1752,10 @@ export async function resolveSe365Candidate(
       ticketCount: tickets.length,
       bestTicket: ticketData.bestTicket ? summarizeTicket(ticketData.bestTicket) : null,
       elapsedMs: Date.now() - startedAt,
+      homeScore: best.homeScore,
+      awayScore: best.awayScore,
+      titleHomeScore: best.titleHomeScore,
+      titleAwayScore: best.titleAwayScore,
     },
   });
 
@@ -1648,4 +1772,4 @@ export async function resolveSe365Candidate(
         ? "exact_event"
         : "partial_match",
   };
-    }
+      }
