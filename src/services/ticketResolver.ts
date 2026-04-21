@@ -66,12 +66,6 @@ function isFtn(provider: unknown): boolean {
   );
 }
 
-function providerPriority(provider: unknown): number {
-  if (isSe365(provider)) return 300;
-  if (isFtn(provider)) return 200;
-  return 100;
-}
-
 function canonicalizeProvider(provider: unknown): string {
   if (isSe365(provider)) return "sportsevents365";
   if (isFtn(provider)) return "footballticketnet";
@@ -163,6 +157,17 @@ function normalizeScore(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function parsePriceAmount(priceText?: string | null): number | null {
+  const raw = clean(priceText);
+  if (!raw) return null;
+
+  const match = raw.match(/(\d{1,3}(?:[,\d]{0,})(?:\.\d{1,2})?)/);
+  if (!match) return null;
+
+  const value = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(value) ? value : null;
+}
+
 function normalizeOption(input: unknown): TicketResolutionOption | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
 
@@ -188,47 +193,78 @@ function normalizeOption(input: unknown): TicketResolutionOption | null {
   };
 }
 
+function getReasonRank(reason: TicketResolutionOption["reason"]): number {
+  if (reason === "exact_event") return 3;
+  if (reason === "partial_match") return 2;
+  if (reason === "search_fallback") return 1;
+  return 0;
+}
+
+function getUrlQualityRank(urlQuality?: TicketUrlQuality): number {
+  const q = normalizeUrlQuality(urlQuality);
+  if (q === "event") return 4;
+  if (q === "listing") return 3;
+  if (q === "search") return 1;
+  return 0;
+}
+
+function providerTieBreak(provider: string): number {
+  if (isFtn(provider)) return 1;
+  if (isSe365(provider)) return 2;
+  return 9;
+}
+
+function compareOptions(a: TicketResolutionOption, b: TicketResolutionOption): number {
+  if (a.exact && !b.exact) return -1;
+  if (!a.exact && b.exact) return 1;
+
+  const aReason = getReasonRank(a.reason);
+  const bReason = getReasonRank(b.reason);
+  if (aReason !== bReason) return bReason - aReason;
+
+  const aQuality = getUrlQualityRank(a.urlQuality);
+  const bQuality = getUrlQualityRank(b.urlQuality);
+  if (aQuality !== bQuality) return bQuality - aQuality;
+
+  if (a.score !== b.score) return b.score - a.score;
+
+  const aPrice = parsePriceAmount(a.priceText);
+  const bPrice = parsePriceAmount(b.priceText);
+
+  if (aPrice != null && bPrice != null && aPrice !== bPrice) {
+    return aPrice - bPrice;
+  }
+
+  const aHasPrice = aPrice != null;
+  const bHasPrice = bPrice != null;
+  if (aHasPrice && !bHasPrice) return -1;
+  if (!aHasPrice && bHasPrice) return 1;
+
+  const aTie = providerTieBreak(a.provider);
+  const bTie = providerTieBreak(b.provider);
+  if (aTie !== bTie) return aTie - bTie;
+
+  return clean(a.provider).localeCompare(clean(b.provider));
+}
+
 function dedupeAndSortOptions(options: TicketResolutionOption[]): TicketResolutionOption[] {
   const byKey = new Map<string, TicketResolutionOption>();
 
   for (const option of options) {
     const key = `${normalizeProvider(option.provider)}|${option.url}`;
-
     const existing = byKey.get(key);
+
     if (!existing) {
       byKey.set(key, option);
       continue;
     }
 
-    const shouldReplace =
-      (option.exact && !existing.exact) ||
-      option.score > existing.score ||
-      (option.score === existing.score &&
-        Boolean(clean(option.priceText)) &&
-        !Boolean(clean(existing.priceText)));
-
-    if (shouldReplace) {
+    if (compareOptions(option, existing) < 0) {
       byKey.set(key, option);
     }
   }
 
-  return Array.from(byKey.values()).sort((a, b) => {
-    const aPriority = providerPriority(a.provider);
-    const bPriority = providerPriority(b.provider);
-
-    if (a.exact && !b.exact) return -1;
-    if (!a.exact && b.exact) return 1;
-
-    if (aPriority !== bPriority) return bPriority - aPriority;
-    if (b.score !== a.score) return b.score - a.score;
-
-    const aHasPrice = Boolean(clean(a.priceText));
-    const bHasPrice = Boolean(clean(b.priceText));
-    if (aHasPrice && !bHasPrice) return -1;
-    if (!aHasPrice && bHasPrice) return 1;
-
-    return a.provider.localeCompare(b.provider);
-  });
+  return Array.from(byKey.values()).sort(compareOptions);
 }
 
 function normalizeCheckedProviders(value: unknown): string[] {
@@ -319,9 +355,7 @@ function normalizeResolutionResult(
   const rawScore = normalizeScore(input.rawScore) ?? fallbackTop?.rawScore ?? null;
 
   const exact =
-    typeof input.exact === "boolean"
-      ? input.exact
-      : Boolean(fallbackTop?.exact);
+    typeof input.exact === "boolean" ? input.exact : Boolean(fallbackTop?.exact);
 
   const topLevelReason = normalizeTopLevelReason(
     input.reason,
@@ -395,9 +429,7 @@ export async function resolveTicketForFixture(
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
 
-  const timeout = controller
-    ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-    : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : null;
 
   try {
     const res = await fetch(url, {
