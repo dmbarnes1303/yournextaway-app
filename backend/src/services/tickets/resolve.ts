@@ -494,4 +494,4 @@ export async function resolveTicket(
   }
 
   return result;
-}
+            }
