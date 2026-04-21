@@ -41,7 +41,7 @@ type CandidateAssessment = {
 const CACHE = new Map<string, CacheEntry>();
 
 const CACHE_TTL_MS = 1000 * 60 * 10;
-const PROVIDER_TIMEOUT_MS = 4500;
+const PROVIDER_TIMEOUT_MS = 12000;
 const MAX_RETURNED_OPTIONS = 4;
 const RESOLVER_VERSION = "v9-launch-fallback-friendly";
 
