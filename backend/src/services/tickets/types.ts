@@ -2,7 +2,10 @@ export type TicketProviderId = "footballticketnet" | "sportsevents365";
 
 export type CandidateUrlQuality = "event" | "listing" | "search" | "unknown";
 
-export type TicketCandidateReason = "exact_event" | "partial_match" | "search_fallback";
+export type TicketCandidateReason =
+  | "exact_event"
+  | "partial_match"
+  | "search_fallback";
 
 export type TicketCandidate = {
   provider: TicketProviderId;
@@ -25,7 +28,7 @@ export type TicketResolutionOption = {
   title: string;
   priceText: string | null;
   reason: TicketCandidateReason;
-  urlQuality?: CandidateUrlQuality;
+  urlQuality: CandidateUrlQuality;
 };
 
 export type TicketResolution = {
