@@ -96,6 +96,32 @@ type ScoredEvent = {
   reasons: string[];
 };
 
+type ParticipantMatch = {
+  participant: Se365Participant;
+  score: number;
+  teamName: string;
+  normalizedTeamName: string;
+  matchedBy: "exact" | "alias_contains" | "token_match";
+};
+
+type TeamParticipantCacheEntry = {
+  expires: number;
+  participant: Se365Participant;
+};
+
+type ParticipantListCacheEntry = {
+  expires: number;
+  participants: Se365Participant[];
+};
+
+type ResolveParticipantsResult = {
+  homeParticipant: Se365Participant | null;
+  awayParticipant: Se365Participant | null;
+  participantsSource: "team_cache" | "list_cache" | "live_scan" | "live_scan_partial";
+  pagesScanned: number;
+  scannedCount: number;
+};
+
 const SE365_FETCH_TIMEOUT_MS = 7000;
 const SE365_EVENT_TYPE_ID = "1000";
 const SE365_PARTICIPANTS_PER_PAGE = 100;
@@ -109,6 +135,12 @@ const SE365_MIN_EXACT_EVENT_SCORE = 94;
 const SE365_FALLBACK_SCORE = 22;
 const SE365_SEARCH_FALLBACK_PENALTY = 40;
 const SE365_TICKET_BONUS_CAP = 10;
+
+const SE365_PARTICIPANT_LIST_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+const SE365_TEAM_PARTICIPANT_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+
+let PARTICIPANT_LIST_CACHE: ParticipantListCacheEntry | null = null;
+const TEAM_PARTICIPANT_CACHE = new Map<string, TeamParticipantCacheEntry>();
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -445,99 +477,356 @@ function eventHasBadVariant(ev: Se365Event): boolean {
   return hasBadVariantText(value);
 }
 
+function cleanupParticipantCaches(): void {
+  const now = Date.now();
+
+  if (PARTICIPANT_LIST_CACHE && now > PARTICIPANT_LIST_CACHE.expires) {
+    PARTICIPANT_LIST_CACHE = null;
+  }
+
+  for (const [key, entry] of TEAM_PARTICIPANT_CACHE.entries()) {
+    if (now > entry.expires) {
+      TEAM_PARTICIPANT_CACHE.delete(key);
+    }
+  }
+}
+
+function getTeamCacheKey(teamName: string): string {
+  return normalizeName(getPreferredTeamName(teamName));
+}
+
+function getCachedTeamParticipant(teamName: string): Se365Participant | null {
+  cleanupParticipantCaches();
+
+  const key = getTeamCacheKey(teamName);
+  const entry = TEAM_PARTICIPANT_CACHE.get(key);
+  if (!entry) return null;
+
+  return entry.participant;
+}
+
+function setCachedTeamParticipant(teamName: string, participant: Se365Participant): void {
+  const key = getTeamCacheKey(teamName);
+  if (!key || !participantId(participant)) return;
+
+  TEAM_PARTICIPANT_CACHE.set(key, {
+    expires: Date.now() + SE365_TEAM_PARTICIPANT_CACHE_TTL_MS,
+    participant,
+  });
+}
+
+function getCachedParticipantList(): Se365Participant[] | null {
+  cleanupParticipantCaches();
+  return PARTICIPANT_LIST_CACHE?.participants ?? null;
+}
+
+function setCachedParticipantList(participants: Se365Participant[]): void {
+  if (!participants.length) return;
+
+  PARTICIPANT_LIST_CACHE = {
+    expires: Date.now() + SE365_PARTICIPANT_LIST_CACHE_TTL_MS,
+    participants,
+  };
+}
+
+function evaluateParticipantMatch(
+  participant: Se365Participant,
+  teamName: string
+): ParticipantMatch | null {
+  const name = participantName(participant);
+  if (!name) return null;
+  if (hasBadVariantText(name)) return null;
+
+  const preferred = getPreferredTeamName(teamName);
+  const normalizedTeamName = normalizeName(preferred);
+  const aliases = expandTeamAliases(preferred).map(normalizeName);
+  const exactSet = new Set(aliases);
+
+  const normalized = normalizeName(name);
+  let score = -1000;
+  let matchedBy: ParticipantMatch["matchedBy"] | null = null;
+
+  if (exactSet.has(normalized)) {
+    score = 100;
+    matchedBy = "exact";
+  } else if (
+    aliases.some((alias) => alias && (normalized.includes(alias) || alias.includes(normalized)))
+  ) {
+    score = 76;
+    matchedBy = "alias_contains";
+  } else {
+    const tokens = normalizedTeamName.split(" ").filter((x) => x.length >= 4);
+    const matched = tokens.filter((token) => normalized.includes(token)).length;
+    if (matched >= 2) {
+      score = 55;
+      matchedBy = "token_match";
+    } else if (matched === 1) {
+      score = 20;
+      matchedBy = "token_match";
+    }
+  }
+
+  if (score < SE365_MIN_PARTICIPANT_SCORE || !matchedBy) {
+    return null;
+  }
+
+  return {
+    participant,
+    score,
+    teamName: preferred,
+    normalizedTeamName,
+    matchedBy,
+  };
+}
+
 function findBestParticipantMatch(
   participants: Se365Participant[],
   teamName: string
 ): Se365Participant | null {
-  const preferred = getPreferredTeamName(teamName);
-  const aliases = expandTeamAliases(preferred).map(normalizeName);
-  const exactSet = new Set(aliases);
-
-  let best: { participant: Se365Participant; score: number } | null = null;
+  let best: ParticipantMatch | null = null;
 
   for (const participant of participants) {
-    const name = participantName(participant);
-    if (!name) continue;
-    if (hasBadVariantText(name)) continue;
+    const match = evaluateParticipantMatch(participant, teamName);
+    if (!match) continue;
 
-    const normalized = normalizeName(name);
-    let score = -1000;
-
-    if (exactSet.has(normalized)) {
-      score = 100;
-    } else if (aliases.some((alias) => normalized.includes(alias) || alias.includes(normalized))) {
-      score = 76;
-    } else {
-      const tokens = normalizeName(preferred).split(" ").filter((x) => x.length >= 4);
-      const matched = tokens.filter((token) => normalized.includes(token)).length;
-      if (matched >= 2) score = 55;
-      else if (matched === 1) score = 20;
-    }
-
-    if (!best || score > best.score) {
-      best = { participant, score };
+    if (!best || match.score > best.score) {
+      best = match;
     }
   }
 
-  return best && best.score >= SE365_MIN_PARTICIPANT_SCORE ? best.participant : null;
+  return best?.participant ?? null;
 }
 
-async function fetchParticipantsPages(): Promise<Se365Participant[]> {
-  const out: Se365Participant[] = [];
+function findBestParticipantMatchDetailed(
+  participants: Se365Participant[],
+  teamName: string
+): ParticipantMatch | null {
+  let best: ParticipantMatch | null = null;
+
+  for (const participant of participants) {
+    const match = evaluateParticipantMatch(participant, teamName);
+    if (!match) continue;
+
+    if (!best || match.score > best.score) {
+      best = match;
+    }
+  }
+
+  return best;
+}
+
+async function fetchParticipantsPage(
+  page: number
+): Promise<Se365Participant[] | null> {
   const base = buildBaseUrl();
   const apiKey = clean(env.se365ApiKey);
 
-  for (let page = 1; page <= SE365_MAX_PARTICIPANT_PAGES; page += 1) {
-    const url = new URL(`${base}/participants`);
-    url.searchParams.set("apiKey", apiKey);
-    url.searchParams.set("eventTypeId", SE365_EVENT_TYPE_ID);
-    url.searchParams.set("perPage", String(SE365_PARTICIPANTS_PER_PAGE));
-    url.searchParams.set("page", String(page));
+  const url = new URL(`${base}/participants`);
+  url.searchParams.set("apiKey", apiKey);
+  url.searchParams.set("eventTypeId", SE365_EVENT_TYPE_ID);
+  url.searchParams.set("perPage", String(SE365_PARTICIPANTS_PER_PAGE));
+  url.searchParams.set("page", String(page));
 
-    const res = await fetchText(url.toString());
+  const res = await fetchText(url.toString());
 
-    if (!res.ok) {
-      console.log("[SE365] participants non-200 response", {
-        page,
-        status: res.status,
-        url: url.toString(),
-        body: res.body.slice(0, 500),
-      });
-      if (page === 1) return [];
-      break;
-    }
-
-    let parsed: Se365ParticipantsResponse = null;
-    try {
-      parsed = res.body ? (JSON.parse(res.body) as Se365ParticipantsResponse) : null;
-    } catch {
-      console.log("[SE365] participants invalid JSON", {
-        page,
-        url: url.toString(),
-        body: res.body.slice(0, 500),
-      });
-      if (page === 1) return [];
-      break;
-    }
-
-    const pageItems = extractParticipants(parsed);
-
-    console.log("[SE365] participants page", {
+  if (!res.ok) {
+    console.log("[SE365] participants non-200 response", {
       page,
-      count: pageItems.length,
-      sample: pageItems.slice(0, 5).map(summarizeParticipant),
+      status: res.status,
+      url: url.toString(),
+      body: res.body.slice(0, 500),
+    });
+    return null;
+  }
+
+  let parsed: Se365ParticipantsResponse = null;
+  try {
+    parsed = res.body ? (JSON.parse(res.body) as Se365ParticipantsResponse) : null;
+  } catch {
+    console.log("[SE365] participants invalid JSON", {
+      page,
+      url: url.toString(),
+      body: res.body.slice(0, 500),
+    });
+    return null;
+  }
+
+  const pageItems = extractParticipants(parsed);
+
+  console.log("[SE365] participants page", {
+    page,
+    count: pageItems.length,
+    sample: pageItems.slice(0, 5).map(summarizeParticipant),
+  });
+
+  return pageItems;
+}
+
+async function resolveParticipantsForTeams(
+  homeTeamName: string,
+  awayTeamName: string
+): Promise<ResolveParticipantsResult> {
+  const cachedHome = getCachedTeamParticipant(homeTeamName);
+  const cachedAway = getCachedTeamParticipant(awayTeamName);
+
+  if (cachedHome && cachedAway) {
+    console.log("[SE365] participant matches from team cache", {
+      homeParticipant: summarizeParticipant(cachedHome),
+      awayParticipant: summarizeParticipant(cachedAway),
     });
 
-    if (!pageItems.length) break;
+    return {
+      homeParticipant: cachedHome,
+      awayParticipant: cachedAway,
+      participantsSource: "team_cache",
+      pagesScanned: 0,
+      scannedCount: 0,
+    };
+  }
 
-    out.push(...pageItems);
+  const cachedParticipants = getCachedParticipantList();
+  if (cachedParticipants?.length) {
+    const homeFromList = cachedHome ?? findBestParticipantMatch(cachedParticipants, homeTeamName);
+    const awayFromList = cachedAway ?? findBestParticipantMatch(cachedParticipants, awayTeamName);
+
+    if (homeFromList) setCachedTeamParticipant(homeTeamName, homeFromList);
+    if (awayFromList) setCachedTeamParticipant(awayTeamName, awayFromList);
+
+    console.log("[SE365] participant lookup from full list cache", {
+      cachedCount: cachedParticipants.length,
+      homeParticipant: homeFromList ? summarizeParticipant(homeFromList) : null,
+      awayParticipant: awayFromList ? summarizeParticipant(awayFromList) : null,
+    });
+
+    return {
+      homeParticipant: homeFromList,
+      awayParticipant: awayFromList,
+      participantsSource: "list_cache",
+      pagesScanned: 0,
+      scannedCount: cachedParticipants.length,
+    };
+  }
+
+  const aggregated: Se365Participant[] = [];
+  let homeBest: ParticipantMatch | null = cachedHome
+    ? {
+        participant: cachedHome,
+        score: 100,
+        teamName: getPreferredTeamName(homeTeamName),
+        normalizedTeamName: normalizeName(getPreferredTeamName(homeTeamName)),
+        matchedBy: "exact",
+      }
+    : null;
+  let awayBest: ParticipantMatch | null = cachedAway
+    ? {
+        participant: cachedAway,
+        score: 100,
+        teamName: getPreferredTeamName(awayTeamName),
+        normalizedTeamName: normalizeName(getPreferredTeamName(awayTeamName)),
+        matchedBy: "exact",
+      }
+    : null;
+
+  let pagesScanned = 0;
+  let completedFullScan = true;
+
+  for (let page = 1; page <= SE365_MAX_PARTICIPANT_PAGES; page += 1) {
+    const pageItems = await fetchParticipantsPage(page);
+    pagesScanned = page;
+
+    if (pageItems == null) {
+      completedFullScan = false;
+      break;
+    }
+
+    if (!pageItems.length) {
+      break;
+    }
+
+    aggregated.push(...pageItems);
+
+    if (!homeBest) {
+      const pageHomeBest = findBestParticipantMatchDetailed(pageItems, homeTeamName);
+      if (pageHomeBest) {
+        homeBest = pageHomeBest;
+        console.log("[SE365] found home participant during live scan", {
+          page,
+          score: pageHomeBest.score,
+          matchedBy: pageHomeBest.matchedBy,
+          participant: summarizeParticipant(pageHomeBest.participant),
+        });
+      }
+    }
+
+    if (!awayBest) {
+      const pageAwayBest = findBestParticipantMatchDetailed(pageItems, awayTeamName);
+      if (pageAwayBest) {
+        awayBest = pageAwayBest;
+        console.log("[SE365] found away participant during live scan", {
+          page,
+          score: pageAwayBest.score,
+          matchedBy: pageAwayBest.matchedBy,
+          participant: summarizeParticipant(pageAwayBest.participant),
+        });
+      }
+    }
+
+    if (homeBest?.participant) {
+      setCachedTeamParticipant(homeTeamName, homeBest.participant);
+    }
+
+    if (awayBest?.participant) {
+      setCachedTeamParticipant(awayTeamName, awayBest.participant);
+    }
+
+    if (homeBest && awayBest) {
+      console.log("[SE365] early stop participant scan", {
+        page,
+        scannedCount: aggregated.length,
+        homeParticipant: summarizeParticipant(homeBest.participant),
+        awayParticipant: summarizeParticipant(awayBest.participant),
+      });
+
+      completedFullScan = false;
+      return {
+        homeParticipant: homeBest.participant,
+        awayParticipant: awayBest.participant,
+        participantsSource: "live_scan",
+        pagesScanned,
+        scannedCount: aggregated.length,
+      };
+    }
 
     if (pageItems.length < SE365_PARTICIPANTS_PER_PAGE) {
       break;
     }
   }
 
-  return out;
+  if (aggregated.length) {
+    setCachedParticipantList(aggregated);
+  }
+
+  const finalHome = homeBest?.participant ?? findBestParticipantMatch(aggregated, homeTeamName);
+  const finalAway = awayBest?.participant ?? findBestParticipantMatch(aggregated, awayTeamName);
+
+  if (finalHome) setCachedTeamParticipant(homeTeamName, finalHome);
+  if (finalAway) setCachedTeamParticipant(awayTeamName, finalAway);
+
+  console.log("[SE365] participant scan finished", {
+    completedFullScan,
+    pagesScanned,
+    scannedCount: aggregated.length,
+    homeParticipant: finalHome ? summarizeParticipant(finalHome) : null,
+    awayParticipant: finalAway ? summarizeParticipant(finalAway) : null,
+  });
+
+  return {
+    homeParticipant: finalHome,
+    awayParticipant: finalAway,
+    participantsSource: completedFullScan ? "live_scan" : "live_scan_partial",
+    pagesScanned,
+    scannedCount: aggregated.length,
+  };
 }
 
 async function fetchParticipantEvents(participantIdValue: string): Promise<Se365Event[]> {
@@ -648,7 +937,9 @@ async function fetchTicketsForEvent(eventIdValue: string): Promise<Se365Ticket[]
 
 function dedupeEvents(events: Se365Event[]): Se365Event[] {
   return Array.from(
-    new Map(events.map((ev) => [`${eventId(ev)}|${eventName(ev)}|${eventDate(ev)}`, ev])).values()
+    new Map(
+      events.map((ev) => [`${eventId(ev)}|${eventName(ev)}|${eventDate(ev)}`, ev])
+    ).values()
   );
 }
 
@@ -882,35 +1173,28 @@ export async function resolveSe365Candidate(
     leagueId: clean(input.leagueId) || null,
   });
 
-  const participants = await fetchParticipantsPages();
+  const participantResolution = await resolveParticipantsForTeams(homeName, awayName);
 
-  if (!participants.length) {
-    const fallback = buildTrackedSearchFallback(input);
-    console.log("[SE365] participants empty, using fallback", { fallback });
-    if (!fallback) return null;
-
-    return {
-      provider: "sportsevents365",
-      exact: false,
-      score: SE365_FALLBACK_SCORE,
-      url: fallback,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "search_fallback",
-    };
-  }
-
-  const homeParticipant = findBestParticipantMatch(participants, homeName);
-  const awayParticipant = findBestParticipantMatch(participants, awayName);
-
-  console.log("[SE365] participant matches", {
-    homeParticipant: homeParticipant ? summarizeParticipant(homeParticipant) : null,
-    awayParticipant: awayParticipant ? summarizeParticipant(awayParticipant) : null,
+  console.log("[SE365] participant resolution summary", {
+    source: participantResolution.participantsSource,
+    pagesScanned: participantResolution.pagesScanned,
+    scannedCount: participantResolution.scannedCount,
+    homeParticipant: participantResolution.homeParticipant
+      ? summarizeParticipant(participantResolution.homeParticipant)
+      : null,
+    awayParticipant: participantResolution.awayParticipant
+      ? summarizeParticipant(participantResolution.awayParticipant)
+      : null,
   });
 
-  if (!homeParticipant || !awayParticipant) {
+  if (!participantResolution.homeParticipant || !participantResolution.awayParticipant) {
     const fallback = buildTrackedSearchFallback(input);
-    console.log("[SE365] participant match incomplete, using fallback", { fallback });
+    console.log("[SE365] participant match incomplete, using fallback", {
+      fallback,
+      source: participantResolution.participantsSource,
+      pagesScanned: participantResolution.pagesScanned,
+      scannedCount: participantResolution.scannedCount,
+    });
     if (!fallback) return null;
 
     return {
@@ -924,14 +1208,18 @@ export async function resolveSe365Candidate(
     };
   }
 
-  const homeParticipantId = participantId(homeParticipant);
-  const awayParticipantId = participantId(awayParticipant);
+  const homeParticipantId = participantId(participantResolution.homeParticipant);
+  const awayParticipantId = participantId(participantResolution.awayParticipant);
 
   const events = await fetchParticipantEvents(homeParticipantId);
 
   if (!events.length) {
     const fallback = buildTrackedSearchFallback(input);
-    console.log("[SE365] participant events empty, using fallback", { fallback });
+    console.log("[SE365] participant events empty, using fallback", {
+      fallback,
+      homeParticipantId,
+      awayParticipantId,
+    });
     if (!fallback) return null;
 
     return {
