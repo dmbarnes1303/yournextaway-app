@@ -31,18 +31,20 @@ type TimedResult<T> = {
 
 type CandidateAssessment = {
   urlQuality: CandidateUrlQuality;
-  adjustedScore: number;
+  baseAdjustedScore: number;
+  finalAdjustedScore: number;
   providerBias: number;
   urlBias: number;
   reasonBias: number;
   priceBonus: number;
+  valueAdjustment: number;
 };
 
 const CACHE = new Map<string, CacheEntry>();
 
 const CACHE_TTL_MS = 1000 * 60 * 10;
 const MAX_RETURNED_OPTIONS = 4;
-const RESOLVER_VERSION = "v10-provider-specific-timeouts-fast-se365";
+const RESOLVER_VERSION = "v11-value-aware-ranking";
 
 const MIN_EXACT_EVENT_SCORE = 60;
 const MIN_PARTIAL_MATCH_SCORE = 48;
@@ -276,24 +278,28 @@ function getReasonBias(reason: TicketCandidate["reason"]): number {
   return -2;
 }
 
+/**
+ * Small absolute price signal.
+ * The real value sorting happens comparatively against other valid candidates.
+ */
 function getPriceBonus(candidate: TicketCandidate): number {
   const amount = parsePriceAmount(candidate.priceText);
   if (amount == null) return 0;
 
-  if (amount > 0 && amount <= 60) return 5;
-  if (amount <= 120) return 4;
-  if (amount <= 250) return 3;
-  return 2;
+  if (amount > 0 && amount <= 60) return 3;
+  if (amount <= 120) return 2;
+  if (amount <= 250) return 1;
+  return 0;
 }
 
-function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
+function getBaseAssessment(candidate: TicketCandidate): Omit<CandidateAssessment, "finalAdjustedScore" | "valueAdjustment"> {
   const urlQuality = detectUrlQuality(candidate);
   const urlBias = getUrlBias(urlQuality);
   const reasonBias = getReasonBias(candidate.reason);
   const providerBias = getProviderBias(candidate.provider, candidate.reason, urlQuality);
   const priceBonus = getPriceBonus(candidate);
 
-  let adjustedScore =
+  let baseAdjustedScore =
     candidate.score +
     urlBias +
     reasonBias +
@@ -301,24 +307,24 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
     priceBonus;
 
   if (candidate.reason === "exact_event" && urlQuality === "search") {
-    adjustedScore -= 15;
+    baseAdjustedScore -= 15;
   }
 
   if (candidate.reason === "exact_event" && urlQuality === "unknown") {
-    adjustedScore -= 8;
+    baseAdjustedScore -= 8;
   }
 
   if (candidate.reason === "partial_match" && urlQuality === "search") {
-    adjustedScore -= 6;
+    baseAdjustedScore -= 6;
   }
 
   if (candidate.reason === "partial_match" && urlQuality === "unknown") {
-    adjustedScore -= 4;
+    baseAdjustedScore -= 4;
   }
 
   return {
     urlQuality,
-    adjustedScore: Math.max(0, adjustedScore),
+    baseAdjustedScore: Math.max(0, baseAdjustedScore),
     providerBias,
     urlBias,
     reasonBias,
@@ -326,16 +332,69 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
   };
 }
 
-function summarizeCandidate(candidate: TicketCandidate | null) {
+/**
+ * Compare price only among already-valid candidates.
+ * This is the real "best value wins" layer.
+ */
+function getValueAdjustment(
+  candidate: TicketCandidate,
+  peers: TicketCandidate[]
+): number {
+  const candidatePrice = parsePriceAmount(candidate.priceText);
+  if (candidatePrice == null) return 0;
+
+  const pricedPeers = peers
+    .map((peer) => parsePriceAmount(peer.priceText))
+    .filter((price): price is number => price != null && price > 0);
+
+  if (pricedPeers.length < 2) return 0;
+
+  const minPrice = Math.min(...pricedPeers);
+  const maxPrice = Math.max(...pricedPeers);
+
+  if (!Number.isFinite(minPrice) || !Number.isFinite(maxPrice) || maxPrice <= minPrice) {
+    return 0;
+  }
+
+  const spreadRatio = (maxPrice - minPrice) / Math.max(minPrice, 1);
+  const maxSwing = Math.min(14, Math.max(1, Math.round(spreadRatio * 5)));
+
+  const position = (candidatePrice - minPrice) / (maxPrice - minPrice);
+  const centered = 1 - position * 2; // cheapest=+1, priciest=-1
+
+  return Math.round(centered * maxSwing);
+}
+
+function assessCandidate(
+  candidate: TicketCandidate,
+  peers: TicketCandidate[] = [candidate]
+): CandidateAssessment {
+  const base = getBaseAssessment(candidate);
+  const valueAdjustment = getValueAdjustment(candidate, peers);
+  const finalAdjustedScore = Math.max(0, base.baseAdjustedScore + valueAdjustment);
+
+  return {
+    ...base,
+    valueAdjustment,
+    finalAdjustedScore,
+  };
+}
+
+function summarizeCandidate(
+  candidate: TicketCandidate | null,
+  peers: TicketCandidate[] = candidate ? [candidate] : []
+) {
   if (!candidate) return null;
 
-  const assessment = assessCandidate(candidate);
+  const assessment = assessCandidate(candidate, peers);
 
   return {
     provider: candidate.provider,
     exact: candidate.exact,
     rawScore: candidate.score,
-    adjustedScore: assessment.adjustedScore,
+    baseAdjustedScore: assessment.baseAdjustedScore,
+    finalAdjustedScore: assessment.finalAdjustedScore,
+    valueAdjustment: assessment.valueAdjustment,
     reason: candidate.reason,
     title: candidate.title,
     priceText: candidate.priceText ?? null,
@@ -497,15 +556,15 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
       continue;
     }
 
-    const currentAssessment = assessCandidate(candidate);
-    const existingAssessment = assessCandidate(existing);
+    const currentAssessment = assessCandidate(candidate, candidates);
+    const existingAssessment = assessCandidate(existing, candidates);
 
-    if (currentAssessment.adjustedScore > existingAssessment.adjustedScore) {
+    if (currentAssessment.finalAdjustedScore > existingAssessment.finalAdjustedScore) {
       map.set(key, candidate);
       continue;
     }
 
-    if (currentAssessment.adjustedScore === existingAssessment.adjustedScore) {
+    if (currentAssessment.finalAdjustedScore === existingAssessment.finalAdjustedScore) {
       const currentRank = PROVIDER_PRIORITY[candidate.provider] ?? 99;
       const existingRank = PROVIDER_PRIORITY[existing.provider] ?? 99;
 
@@ -519,8 +578,8 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 }
 
 function passesReasonFloor(candidate: TicketCandidate): boolean {
-  const assessment = assessCandidate(candidate);
-  const adjusted = assessment.adjustedScore;
+  const assessment = assessCandidate(candidate, [candidate]);
+  const adjusted = assessment.baseAdjustedScore;
 
   if (candidate.reason === "exact_event") {
     return adjusted >= MIN_EXACT_EVENT_SCORE;
@@ -547,8 +606,8 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
     const bReasonRank = reasonRank(b.reason);
     if (aReasonRank !== bReasonRank) return aReasonRank - bReasonRank;
 
-    const aAssessment = assessCandidate(a);
-    const bAssessment = assessCandidate(b);
+    const aAssessment = assessCandidate(a, candidates);
+    const bAssessment = assessCandidate(b, candidates);
 
     const aQualityRank =
       aAssessment.urlQuality === "event"
@@ -570,8 +629,8 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
     if (aQualityRank !== bQualityRank) return aQualityRank - bQualityRank;
 
-    if (aAssessment.adjustedScore !== bAssessment.adjustedScore) {
-      return bAssessment.adjustedScore - aAssessment.adjustedScore;
+    if (aAssessment.finalAdjustedScore !== bAssessment.finalAdjustedScore) {
+      return bAssessment.finalAdjustedScore - aAssessment.finalAdjustedScore;
     }
 
     const aPrice = parsePriceAmount(a.priceText);
@@ -590,13 +649,13 @@ function sortCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
   });
 }
 
-function toOption(candidate: TicketCandidate) {
-  const assessment = assessCandidate(candidate);
+function toOption(candidate: TicketCandidate, peers: TicketCandidate[]) {
+  const assessment = assessCandidate(candidate, peers);
 
   return {
     provider: candidate.provider,
     exact: candidate.exact,
-    score: assessment.adjustedScore,
+    score: assessment.finalAdjustedScore,
     rawScore: candidate.score,
     url: candidate.url,
     title: candidate.title,
@@ -610,7 +669,8 @@ function buildResolution(
   candidates: TicketCandidate[],
   checkedProviders: TicketResolution["checkedProviders"]
 ): TicketResolution {
-  const filtered = filterWeakCandidates(dedupeCandidates(candidates));
+  const deduped = dedupeCandidates(candidates);
+  const filtered = filterWeakCandidates(deduped);
   const sorted = sortCandidates(filtered);
   const top = sorted.slice(0, MAX_RETURNED_OPTIONS);
 
@@ -619,9 +679,9 @@ function buildResolution(
   }
 
   const best = top[0];
-  const bestAssessment = assessCandidate(best);
+  const bestAssessment = assessCandidate(best, top);
 
-  if (bestAssessment.adjustedScore < MIN_SELECTED_SCORE) {
+  if (bestAssessment.finalAdjustedScore < MIN_SELECTED_SCORE) {
     return buildNotFound(checkedProviders);
   }
 
@@ -629,14 +689,14 @@ function buildResolution(
     ok: true,
     provider: best.provider,
     exact: best.exact,
-    score: bestAssessment.adjustedScore,
+    score: bestAssessment.finalAdjustedScore,
     rawScore: best.score,
     url: best.url,
     title: best.title,
     priceText: best.priceText ?? null,
     reason: best.reason,
     checkedProviders,
-    options: top.map(toOption),
+    options: top.map((candidate) => toOption(candidate, top)),
     urlQuality: bestAssessment.urlQuality,
   };
 }
@@ -703,7 +763,7 @@ export async function resolveTicket(
     if (result.status === "fulfilled") {
       console.log("[tickets] provider result", {
         provider,
-        candidate: summarizeCandidate(result.value),
+        candidate: summarizeCandidate(result.value, candidates),
       });
 
       if (result.value) {
@@ -722,13 +782,20 @@ export async function resolveTicket(
 
   console.log(
     "[tickets] final candidates",
-    candidates.map((c) => ({
-      provider: c.provider,
-      reason: c.reason,
-      raw: c.score,
-      adjusted: assessCandidate(c).adjustedScore,
-      urlQuality: detectUrlQuality(c),
-    }))
+    candidates.map((c) => {
+      const assessment = assessCandidate(c, candidates);
+      return {
+        provider: c.provider,
+        reason: c.reason,
+        raw: c.score,
+        baseAdjusted: assessment.baseAdjustedScore,
+        valueAdjustment: assessment.valueAdjustment,
+        finalAdjusted: assessment.finalAdjustedScore,
+        urlQuality: assessment.urlQuality,
+        priceText: c.priceText ?? null,
+        parsedPrice: parsePriceAmount(c.priceText),
+      };
+    })
   );
 
   const result = buildResolution(candidates, checkedProviders);
@@ -749,6 +816,7 @@ export async function resolveTicket(
         rawScore: option.rawScore ?? null,
         exact: option.exact,
         priceText: option.priceText ?? null,
+        parsedPrice: parsePriceAmount(option.priceText),
         url: option.url,
         urlQuality: option.urlQuality ?? null,
       })),
