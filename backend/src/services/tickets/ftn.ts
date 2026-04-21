@@ -1,6 +1,10 @@
 import crypto from "node:crypto";
 import { env, hasFtnConfig } from "../../lib/env.js";
-import type { TicketCandidate, TicketResolveInput } from "./types.js";
+import type {
+  CandidateUrlQuality,
+  TicketCandidate,
+  TicketResolveInput,
+} from "./types.js";
 import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
 
 type FtnEvent = {
@@ -63,6 +67,12 @@ type ScoredEvent = {
   awayScore: number;
   titleHomeScore: number;
   titleAwayScore: number;
+};
+
+type BestOutbound = {
+  url: string;
+  isSearchFallback: boolean;
+  urlQuality: CandidateUrlQuality;
 };
 
 const FTN_FETCH_TIMEOUT_MS = 6500;
@@ -340,18 +350,6 @@ function scoreTitleAgainstTeam(title: string, teamName: string): number {
   return best;
 }
 
-function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
-  const homeScore = scoreNameAgainstTeam(eventHome(ev), input.homeName);
-  const awayScore = scoreNameAgainstTeam(eventAway(ev), input.awayName);
-  return homeScore >= 95 && awayScore >= 95;
-}
-
-function reversedTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
-  const homeScore = scoreNameAgainstTeam(eventHome(ev), input.awayName);
-  const awayScore = scoreNameAgainstTeam(eventAway(ev), input.homeName);
-  return homeScore >= 95 && awayScore >= 95;
-}
-
 function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
   const haystack = [eventTitle(ev), eventHome(ev), eventAway(ev)].join(" ").toLowerCase();
   const inputText = [input.homeName, input.awayName, input.leagueName ?? ""].join(" ").toLowerCase();
@@ -473,24 +471,49 @@ function normalizeFtnUrl(raw: unknown): string {
   }
 }
 
-function hasUsableEventUrl(ev: FtnEvent): boolean {
-  const normalized = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
-  if (!normalized) return false;
+function getFtnUrlQuality(url: string): CandidateUrlQuality {
+  const normalized = normalizeFtnUrl(url);
+  if (!normalized) return "unknown";
 
   try {
     const parsed = new URL(normalized);
     const path = parsed.pathname.toLowerCase();
     const query = parsed.search.toLowerCase();
 
-    if (!path || path === "/") return false;
-    if (path.startsWith("/search")) return false;
-    if (path.includes("404")) return false;
-    if (query.includes("text=") || query.includes("q=")) return false;
+    if (!path || path === "/") return "unknown";
 
-    return true;
+    if (
+      path.startsWith("/search") ||
+      query.includes("text=") ||
+      query.includes("q=") ||
+      query.includes("event_id=")
+    ) {
+      return "search";
+    }
+
+    if (path.includes("/listing") || path.includes("/listings")) {
+      return "listing";
+    }
+
+    if (
+      path.includes("/event") ||
+      path.includes("/events") ||
+      path.includes("/ticket") ||
+      path.includes("/tickets")
+    ) {
+      return "event";
+    }
+
+    return "unknown";
   } catch {
-    return false;
+    return "unknown";
   }
+}
+
+function hasUsableEventUrl(ev: FtnEvent): boolean {
+  const normalized = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
+  if (!normalized) return false;
+  return getFtnUrlQuality(normalized) === "event";
 }
 
 function buildStableSearchUrl(input: TicketResolveInput): string {
@@ -863,38 +886,46 @@ function bestTicketPriceText(
   return withPrice?.priceText ?? eventLevelPrice;
 }
 
-function bestTicketUrl(
+function bestTicketOutbound(
   tickets: NormalizedFtnTicket[],
   event: FtnEvent,
   input: TicketResolveInput
-): { url: string; isSearchFallback: boolean } {
+): BestOutbound {
   const ticketLevelUrl = tickets.find((ticket) => clean(ticket.url))?.url;
   if (ticketLevelUrl) {
+    const urlQuality = getFtnUrlQuality(ticketLevelUrl);
     return {
       url: ticketLevelUrl,
-      isSearchFallback: false,
+      isSearchFallback: urlQuality === "search" || urlQuality === "unknown",
+      urlQuality,
     };
   }
 
   const directEventUrl = normalizeFtnUrl(clean(event.event_url) || clean(event.url));
-  if (directEventUrl && hasUsableEventUrl(event)) {
-    return {
-      url: directEventUrl,
-      isSearchFallback: false,
-    };
+  if (directEventUrl) {
+    const urlQuality = getFtnUrlQuality(directEventUrl);
+    if (urlQuality === "event" || urlQuality === "listing") {
+      return {
+        url: directEventUrl,
+        isSearchFallback: false,
+        urlQuality,
+      };
+    }
   }
 
   const id = eventId(event);
   if (id) {
     return {
       url: buildEventIdUrl(id),
-      isSearchFallback: false,
+      isSearchFallback: true,
+      urlQuality: "search",
     };
   }
 
   return {
     url: buildStableSearchUrl(input),
     isSearchFallback: true,
+    urlQuality: "search",
   };
 }
 
@@ -1095,7 +1126,7 @@ export async function resolveFtnCandidate(
   }
 
   const priceText = bestTicketPriceText(tickets, eventPrice(best.ev));
-  const outbound = bestTicketUrl(tickets, best.ev, input);
+  const outbound = bestTicketOutbound(tickets, best.ev, input);
   const affiliateUrl = appendAffiliate(outbound.url);
 
   if (!affiliateUrl) {
@@ -1116,6 +1147,8 @@ export async function resolveFtnCandidate(
 
   if (outbound.isSearchFallback) {
     finalScore = Math.max(0, finalScore - FTN_SEARCH_FALLBACK_PENALTY);
+  } else if (outbound.urlQuality !== "event" && outbound.urlQuality !== "listing") {
+    finalScore = Math.max(0, finalScore - FTN_WEAK_DIRECT_URL_PENALTY);
   } else if (!best.hasDirectUrl && !tickets.some((ticket) => ticket.url)) {
     finalScore = Math.max(0, finalScore - FTN_WEAK_DIRECT_URL_PENALTY);
   }
@@ -1123,6 +1156,7 @@ export async function resolveFtnCandidate(
   const exact =
     best.exactTeams &&
     best.sameDay &&
+    outbound.urlQuality === "event" &&
     !outbound.isSearchFallback &&
     finalScore >= FTN_MIN_EXACT_SCORE;
 
@@ -1143,6 +1177,7 @@ export async function resolveFtnCandidate(
       hasDirectUrl: best.hasDirectUrl,
       exact,
       isSearchFallback: outbound.isSearchFallback,
+      urlQuality: outbound.urlQuality,
       chosenEventId: chosenEventId || null,
       ticketCount: tickets.length,
       topTicket: tickets[0] ? summarizeTicket(tickets[0]) : null,
@@ -1158,9 +1193,11 @@ export async function resolveFtnCandidate(
     provider: "footballticketnet",
     exact,
     score: finalScore,
+    rawScore: best.score,
     url: affiliateUrl,
     title: `Tickets: ${homeName} vs ${awayName}`,
     priceText,
     reason,
+    urlQuality: outbound.urlQuality,
   };
-      }
+  }
