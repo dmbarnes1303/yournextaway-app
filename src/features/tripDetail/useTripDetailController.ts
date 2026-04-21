@@ -811,7 +811,8 @@ export default function useTripDetailController({
 
   async function handleResolvedTickets(
     context: TicketContext,
-    resolved: TicketResolutionResult | null
+    resolved: TicketResolutionResult | null,
+    existingSavedItem?: SavedItem | null
   ) {
     const normalizedOptions = normalizeTicketOptions(resolved);
     const { strong, weak } = splitTicketOptions(normalizedOptions);
@@ -823,6 +824,11 @@ export default function useTripDetailController({
     const officialTicketUrl = buildOfficialTicketUrl(context.homeName);
 
     if (!hasStrongOptions && totalOptionCount === 0) {
+      if (existingSavedItem?.type === "tickets" && existingSavedItem.partnerUrl) {
+        await openSavedItem(existingSavedItem);
+        return;
+      }
+
       if (officialTicketUrl) {
         await openOfficialTicketFallback({
           ...context,
@@ -924,13 +930,8 @@ export default function useTripDetailController({
     }
 
     const existing = ticketsByMatchId[mid];
-
-    if (existing && existing.type === "tickets" && existing.partnerUrl) {
-      await openSavedItem(existing);
-      return;
-    }
-
     const context = getTicketContext(mid);
+
     if (!context) {
       Alert.alert("Tickets not available", "Missing team names or kickoff time for this match.");
       return;
@@ -948,8 +949,13 @@ export default function useTripDetailController({
         leagueId: context.leagueId,
       });
 
-      await handleResolvedTickets(context, resolved);
+      await handleResolvedTickets(context, resolved, existing ?? null);
     } catch {
+      if (existing && existing.type === "tickets" && existing.partnerUrl) {
+        await openSavedItem(existing);
+        return;
+      }
+
       const officialTicketUrl = buildOfficialTicketUrl(context.homeName);
 
       if (officialTicketUrl) {
@@ -1145,4 +1151,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-}
+        }
