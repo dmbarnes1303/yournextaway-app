@@ -4,16 +4,20 @@ const TEAM_ALIASES: AliasMap = {
   arsenal: ["arsenal", "arsenal fc"],
   chelsea: ["chelsea", "chelsea fc"],
   liverpool: ["liverpool", "liverpool fc"],
-  "man utd": ["man utd", "manchester united", "man united", "manchester utd"],
-  "man city": ["man city", "manchester city", "manchester city fc"],
-  tottenham: ["tottenham", "tottenham hotspur", "spurs"],
-  newcastle: ["newcastle", "newcastle united", "newcastle utd"],
+  manchesterunited: ["manchester united", "man utd", "man united", "manchester utd"],
+  manchestercity: ["manchester city", "man city", "manchester city fc"],
+  tottenhamhotspur: ["tottenham hotspur", "tottenham", "spurs"],
+  newcastleunited: ["newcastle united", "newcastle", "newcastle utd"],
   astonvilla: ["aston villa", "aston villa fc"],
-  westham: ["west ham", "west ham united"],
-  wolves: ["wolves", "wolverhampton", "wolverhampton wanderers"],
-  brighton: ["brighton", "brighton and hove albion", "brighton & hove albion"],
-  leicester: ["leicester", "leicester city"],
-  leeds: ["leeds", "leeds united"],
+  westhamunited: ["west ham united", "west ham"],
+  wolverhamptonwanderers: ["wolverhampton wanderers", "wolves", "wolverhampton"],
+  brightonandhovealbion: [
+    "brighton and hove albion",
+    "brighton & hove albion",
+    "brighton",
+  ],
+  leicestercity: ["leicester city", "leicester"],
+  leedsunited: ["leeds united", "leeds"],
   everton: ["everton", "everton fc"],
   southampton: ["southampton", "southampton fc"],
   brentford: ["brentford", "brentford fc"],
@@ -21,54 +25,60 @@ const TEAM_ALIASES: AliasMap = {
   crystalpalace: ["crystal palace", "palace", "crystal palace fc"],
   nottinghamforest: ["nottingham forest", "forest", "nottm forest"],
 
-  inter: ["inter", "inter milan", "internazionale", "fc internazionale milano"],
-  milan: ["milan", "ac milan", "associazione calcio milan"],
+  internazionale: ["inter", "inter milan", "internazionale", "fc internazionale milano"],
+  acmilan: ["ac milan", "milan", "associazione calcio milan"],
   juventus: ["juventus", "juve", "juventus fc"],
-  roma: ["roma", "as roma", "a.s. roma"],
-  lazio: ["lazio", "ss lazio", "s.s. lazio"],
-  napoli: ["napoli", "ssc napoli", "s.s.c. napoli"],
+  roma: ["roma", "as roma", "a s roma"],
+  lazio: ["lazio", "ss lazio", "s s lazio"],
+  napoli: ["napoli", "ssc napoli", "s s c napoli"],
   atalanta: ["atalanta", "atalanta bc"],
   fiorentina: ["fiorentina", "acf fiorentina"],
   bologna: ["bologna", "bologna fc"],
   torino: ["torino", "torino fc"],
+  parma: ["parma", "parma calcio", "parma calcio 1913"],
 
   barcelona: ["barcelona", "fc barcelona", "barca", "barça"],
   realmadrid: ["real madrid", "real madrid cf"],
-  atletico: ["atletico", "atletico madrid", "atlético madrid", "club atletico de madrid"],
+  atleticodemadrid: ["atletico madrid", "atlético madrid", "atletico", "club atletico de madrid"],
   sevilla: ["sevilla", "sevilla fc"],
   valencia: ["valencia", "valencia cf"],
   villarreal: ["villarreal", "villarreal cf"],
-  betis: ["betis", "real betis", "real betis balompie", "real betis balompié"],
-  sociedad: ["real sociedad", "sociedad", "real sociedad de futbol", "real sociedad de fútbol"],
-  bilbao: ["athletic club", "athletic bilbao", "bilbao"],
+  realbetis: ["real betis", "betis", "real betis balompie", "real betis balompié"],
+  realsociedad: ["real sociedad", "sociedad", "real sociedad de futbol", "real sociedad de fútbol"],
+  athleticclub: ["athletic club", "athletic bilbao", "bilbao"],
   girona: ["girona", "girona fc"],
 
-  psg: ["psg", "paris sg", "paris saint-germain", "paris saint germain"],
+  parissaintgermain: ["paris saint germain", "paris saint-germain", "paris sg", "psg"],
   marseille: ["marseille", "olympique de marseille"],
   lyon: ["lyon", "olympique lyonnais"],
   monaco: ["monaco", "as monaco"],
   lille: ["lille", "losc", "lille osc"],
   nice: ["nice", "ogc nice"],
 
-  bayern: ["bayern", "bayern munich", "fc bayern", "fc bayern munich", "bayern münchen"],
-  dortmund: ["dortmund", "borussia dortmund", "bvb"],
-  leverkusen: ["leverkusen", "bayer leverkusen", "bayer 04 leverkusen"],
-  leipzig: ["leipzig", "rb leipzig", "rasenballsport leipzig"],
-  frankfurt: ["frankfurt", "eintracht frankfurt"],
-  gladbach: ["gladbach", "borussia monchengladbach", "borussia mönchengladbach", "monchengladbach"],
-  stuttgart: ["stuttgart", "vfb stuttgart", "vfb"],
-  wolfsburg: ["wolfsburg", "vfl wolfsburg"],
-  hoffenheim: ["hoffenheim", "tsg hoffenheim", "1899 hoffenheim"],
+  bayernmunich: ["bayern munich", "bayern", "fc bayern", "fc bayern munich", "bayern münchen"],
+  borussiadortmund: ["borussia dortmund", "dortmund", "bvb"],
+  bayerleverkusen: ["bayer leverkusen", "leverkusen", "bayer 04 leverkusen"],
+  rbleipzig: ["rb leipzig", "leipzig", "rasenballsport leipzig"],
+  eintrachtfrankfurt: ["eintracht frankfurt", "frankfurt"],
+  borussiamonchengladbach: [
+    "borussia monchengladbach",
+    "borussia mönchengladbach",
+    "monchengladbach",
+    "gladbach",
+  ],
+  vfbstuttgart: ["vfb stuttgart", "stuttgart"],
+  vflwolfsburg: ["vfl wolfsburg", "wolfsburg"],
+  tsghoffenheim: ["tsg hoffenheim", "hoffenheim", "1899 hoffenheim"],
 
   ajax: ["ajax", "afc ajax"],
   psv: ["psv", "psv eindhoven"],
   feyenoord: ["feyenoord", "feyenoord rotterdam"],
-  twente: ["twente", "fc twente"],
-  az: ["az", "az alkmaar"],
+  fctwente: ["fc twente", "twente"],
+  azalkmaar: ["az alkmaar", "az"],
 
   benfica: ["benfica", "sl benfica", "sport lisboa e benfica"],
-  sporting: ["sporting", "sporting cp", "sporting lisbon", "sporting clube de portugal"],
-  porto: ["porto", "fc porto", "f.c. porto"],
+  sportingcp: ["sporting cp", "sporting", "sporting lisbon", "sporting clube de portugal"],
+  porto: ["porto", "fc porto", "f c porto"],
 
   celtic: ["celtic", "celtic fc"],
   rangers: ["rangers", "rangers fc"],
@@ -78,25 +88,35 @@ const TEAM_ALIASES: AliasMap = {
   besiktas: ["besiktas", "beşiktaş", "besiktas jk", "beşiktaş jk"],
 };
 
-function clean(v: unknown): string {
-  return String(v ?? "")
+const REMOVABLE_WORDS = new Set([
+  "fc",
+  "cf",
+  "afc",
+  "sc",
+  "sk",
+  "jk",
+  "club",
+  "de",
+  "the",
+]);
+
+function clean(value: unknown): string {
+  return String(value ?? "")
     .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\bfc\b/g, " ")
-    .replace(/\bcf\b/g, " ")
-    .replace(/\bafc\b/g, " ")
-    .replace(/\bsc\b/g, " ")
-    .replace(/\bsk\b/g, " ")
-    .replace(/\bjk\b/g, " ")
-    .replace(/\bclub\b/g, " ")
-    .replace(/\bde\b/g, " ")
-    .replace(/\bthe\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function tokenize(value: string): string[] {
+  return clean(value)
+    .split(" ")
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 function unique(values: string[]): string[] {
@@ -111,6 +131,14 @@ function titleCaseFromClean(value: string): string {
     .join(" ");
 }
 
+function canonicalKey(value: string): string {
+  return clean(value).replace(/\s+/g, "");
+}
+
+function stripRemovableWords(tokens: string[]): string[] {
+  return tokens.filter((token) => !REMOVABLE_WORDS.has(token));
+}
+
 function generateLooseVariants(name: string): string[] {
   const base = clean(name);
   if (!base) return [];
@@ -118,7 +146,14 @@ function generateLooseVariants(name: string): string[] {
   const variants = new Set<string>();
   variants.add(base);
 
-  const stripped = base
+  const tokens = tokenize(base);
+  const strippedTokens = stripRemovableWords(tokens);
+
+  if (strippedTokens.length) {
+    variants.add(strippedTokens.join(" "));
+  }
+
+  const softStripped = base
     .replace(/\bunited\b/g, "")
     .replace(/\bcity\b/g, "")
     .replace(/\bhotspur\b/g, "")
@@ -128,35 +163,45 @@ function generateLooseVariants(name: string): string[] {
     .replace(/\breal\b/g, "")
     .replace(/\bassociation\b/g, "")
     .replace(/\bcalcio\b/g, "")
-    .replace(/\bsporting\b/g, "sporting")
     .replace(/\s+/g, " ")
     .trim();
 
-  if (stripped && stripped !== base) {
-    variants.add(stripped);
+  if (softStripped && softStripped !== base) {
+    variants.add(softStripped);
   }
 
-  const parts = base.split(" ").filter(Boolean);
-  if (parts.length >= 2) {
-    variants.add(parts.slice(0, 2).join(" "));
-    variants.add(parts[0]);
+  if (tokens.length >= 2) {
+    variants.add(tokens.slice(0, 2).join(" "));
+    variants.add(tokens[0]);
   }
 
-  return Array.from(variants).filter(Boolean);
+  if (strippedTokens.length >= 2) {
+    variants.add(strippedTokens.slice(0, 2).join(" "));
+    variants.add(strippedTokens[0]);
+  }
+
+  return unique(Array.from(variants));
 }
 
 export function expandTeamAliases(name: string): string[] {
-  const key = clean(name);
-  if (!key) return [];
+  const normalized = clean(name);
+  if (!normalized) return [];
+
+  const inputKey = canonicalKey(normalized);
 
   for (const aliases of Object.values(TEAM_ALIASES)) {
-    const normalized = unique(aliases);
-    if (normalized.includes(key)) {
-      return unique([...normalized, ...normalized.flatMap(generateLooseVariants)]);
+    const normalizedAliases = unique(aliases);
+    const aliasKeys = new Set(normalizedAliases.map((alias) => canonicalKey(alias)));
+
+    if (aliasKeys.has(inputKey)) {
+      return unique([
+        ...normalizedAliases,
+        ...normalizedAliases.flatMap(generateLooseVariants),
+      ]);
     }
   }
 
-  return unique([key, ...generateLooseVariants(key)]);
+  return unique([normalized, ...generateLooseVariants(normalized)]);
 }
 
 export function getPreferredTeamName(name: string): string {
