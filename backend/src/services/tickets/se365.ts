@@ -152,7 +152,7 @@ const SE365_PARTICIPANT_LIST_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const SE365_TEAM_PARTICIPANT_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const SE365_EVENT_CACHE_TTL_MS = 1000 * 60 * 30;
 
-const SE365_PUBLIC_BASE_URL = "https://www.sportsevents365.com";
+const SE365_PUBLIC_BASE_URL = "https://sportsevents365.com";
 const FORCED_A_AID = "69834e80ec9d3";
 
 const GENERIC_CLUB_TOKENS = new Set([
@@ -543,7 +543,11 @@ function getSe365UrlQuality(urlValue: unknown): CandidateUrlQuality {
   }
 }
 
-async function fetchText(
+function buildPublicEventUrlFromId(eventIdValue: string): string {
+  return `${SE365_PUBLIC_BASE_URL}/event/${encodeURIComponent(eventIdValue)}`;
+}
+
+async function fetchJsonText(
   url: string
 ): Promise<{ ok: boolean; status: number; body: string }> {
   const controller = new AbortController();
@@ -905,7 +909,7 @@ async function fetchParticipantsPage(page: number): Promise<Se365Participant[] |
   url.searchParams.set("perPage", String(SE365_PARTICIPANTS_PER_PAGE));
   url.searchParams.set("page", String(page));
 
-  const res = await fetchText(url.toString());
+  const res = await fetchJsonText(url.toString());
 
   if (!res.ok) {
     console.log("[SE365] participants non-200 response", {
@@ -1082,7 +1086,7 @@ async function fetchParticipantEvents(
     url.searchParams.set("perPage", String(SE365_EVENTS_PER_PAGE));
     url.searchParams.set("page", String(page));
 
-    const res = await fetchText(url.toString());
+    const res = await fetchJsonText(url.toString());
 
     if (!res.ok) {
       if (page === 1) return [];
@@ -1132,7 +1136,7 @@ async function fetchTicketsForEvent(eventIdValue: string): Promise<Se365Ticket[]
   const url = new URL(`${base}/tickets/${encodeURIComponent(eventIdValue)}`);
   url.searchParams.set("apiKey", apiKey);
 
-  const res = await fetchText(url.toString());
+  const res = await fetchJsonText(url.toString());
 
   if (!res.ok) return [];
 
@@ -1299,18 +1303,14 @@ function buildEventOutbound(
   event: Se365Event,
   input: TicketResolveInput
 ): EventOutbound {
-  const directUrl = clean(eventUrl(event));
+  const matchedEventId = eventId(event);
 
-  if (directUrl) {
-    const urlQuality = getSe365UrlQuality(directUrl);
-
-    if (urlQuality === "event" || urlQuality === "listing") {
-      return {
-        url: directUrl,
-        urlQuality,
-        isSearchFallback: false,
-      };
-    }
+  if (matchedEventId) {
+    return {
+      url: buildPublicEventUrlFromId(matchedEventId),
+      urlQuality: "event",
+      isSearchFallback: false,
+    };
   }
 
   const fallback = buildTrackedSearchFallback(input);
@@ -1354,7 +1354,7 @@ export async function resolveSe365Candidate(
       const baseScored = eventMatchScore(cachedEvent, input);
       const exact =
         !outbound.isSearchFallback &&
-        (outbound.urlQuality === "event" || outbound.urlQuality === "listing") &&
+        outbound.urlQuality === "event" &&
         baseScored.exactTeams &&
         baseScored.sameDay;
 
@@ -1466,7 +1466,7 @@ export async function resolveSe365Candidate(
 
   const exact =
     !outbound.isSearchFallback &&
-    (outbound.urlQuality === "event" || outbound.urlQuality === "listing") &&
+    outbound.urlQuality === "event" &&
     best.exactTeams &&
     best.sameDay;
 
@@ -1478,6 +1478,7 @@ export async function resolveSe365Candidate(
     ticketCount: tickets.length,
     bestTicket: tickets[0] ? summarizeTicket(tickets[0]) : null,
     elapsedMs: Date.now() - startedAt,
+    resolvedUrl,
   });
 
   return {
