@@ -273,6 +273,7 @@ function normalizeReturnedTicketOptions(
   resolved: TicketResolutionResult | null
 ): TicketResolutionOption[] {
   const rawOptions = Array.isArray(resolved?.options) ? resolved.options : [];
+
   const valid = rawOptions.filter((option) => {
     return Boolean(clean(option?.provider) && clean(option?.url) && clean(option?.title));
   });
@@ -283,12 +284,33 @@ function normalizeReturnedTicketOptions(
     const key = `${clean(option.provider).toLowerCase()}|${clean(option.url)}`;
     if (!key) continue;
 
-    if (!deduped.has(key)) {
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, option);
+      continue;
+    }
+
+    const existingPrice = Number(clean(existing.priceText).match(/(\d+(?:\.\d+)?)/)?.[1] ?? NaN);
+    const nextPrice = Number(clean(option.priceText).match(/(\d+(?:\.\d+)?)/)?.[1] ?? NaN);
+
+    if (Number.isFinite(nextPrice) && (!Number.isFinite(existingPrice) || nextPrice < existingPrice)) {
       deduped.set(key, option);
     }
   }
 
-  return Array.from(deduped.values());
+  return Array.from(deduped.values()).sort((a, b) => {
+    const aPrice = Number(clean(a.priceText).match(/(\d+(?:\.\d+)?)/)?.[1] ?? NaN);
+    const bPrice = Number(clean(b.priceText).match(/(\d+(?:\.\d+)?)/)?.[1] ?? NaN);
+
+    const aHasPrice = Number.isFinite(aPrice);
+    const bHasPrice = Number.isFinite(bPrice);
+
+    if (aHasPrice && bHasPrice && aPrice !== bPrice) return aPrice - bPrice;
+    if (aHasPrice && !bHasPrice) return -1;
+    if (!aHasPrice && bHasPrice) return 1;
+
+    return clean(a.provider).localeCompare(clean(b.provider));
+  });
 }
 
 export default function useTripDetailController({
@@ -802,10 +824,33 @@ export default function useTripDetailController({
       return;
     }
 
-    if (options.length === 1) {
+    const strongOptions = options.filter((option) => {
+      const quality = clean(option.urlQuality).toLowerCase();
+      return quality === "event" || quality === "listing";
+    });
+
+    const weakOptions = options.filter((option) => {
+      const quality = clean(option.urlQuality).toLowerCase();
+      return quality !== "event" && quality !== "listing";
+    });
+
+    const totalOptionCount = strongOptions.length + weakOptions.length;
+
+    if (totalOptionCount <= 0) {
+      Alert.alert("Tickets not found", "No usable ticket options were returned for this match.");
+      return;
+    }
+
+    if (totalOptionCount === 1) {
+      const onlyOption = strongOptions[0] ?? weakOptions[0];
+      if (!onlyOption) {
+        Alert.alert("Tickets not found", "No usable ticket options were returned for this match.");
+        return;
+      }
+
       await openTicketOptionForMatch({
         ...context,
-        option: options[0],
+        option: onlyOption,
         checkedProviders: Array.isArray(resolved?.checkedProviders)
           ? resolved.checkedProviders
           : undefined,
@@ -816,13 +861,13 @@ export default function useTripDetailController({
 
     showTicketChoiceSheet({
       ...context,
-      strongOptions: options,
-      weakOptions: [],
+      strongOptions,
+      weakOptions,
       checkedProviders: Array.isArray(resolved?.checkedProviders)
         ? resolved.checkedProviders
         : undefined,
       officialTicketUrl: null,
-      hasStrongOptions: options.length > 0,
+      hasStrongOptions: strongOptions.length > 0,
     });
   }
 
@@ -1039,4 +1084,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-      }
+                          }
