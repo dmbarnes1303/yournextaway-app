@@ -469,11 +469,18 @@ function getFtnUrlQuality(url: string): CandidateUrlQuality {
 
     if (!path || path === "/") return "unknown";
 
+    if (path.includes("/checkout-aff-link")) {
+      return "listing";
+    }
+
+    if (path.startsWith("/search") && query.includes("event_id=")) {
+      return "listing";
+    }
+
     if (
       path.startsWith("/search") ||
       query.includes("text=") ||
-      query.includes("q=") ||
-      query.includes("event_id=")
+      query.includes("q=")
     ) {
       return "search";
     }
@@ -495,14 +502,6 @@ function getFtnUrlQuality(url: string): CandidateUrlQuality {
   } catch {
     return "unknown";
   }
-}
-
-function hasUsableEventUrl(ev: FtnEvent): boolean {
-  const normalized = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
-  if (!normalized) return false;
-
-  const quality = getFtnUrlQuality(normalized);
-  return quality === "event" || quality === "listing";
 }
 
 function buildStableSearchUrl(input: TicketResolveInput): string {
@@ -791,6 +790,13 @@ function extractNormalizedTickets(payload: FtnGetEventResponse): NormalizedFtnTi
   }
 
   return Array.from(deduped.values()).sort((a, b) => {
+    const aQuality = a.url ? getFtnUrlQuality(a.url) : "unknown";
+    const bQuality = b.url ? getFtnUrlQuality(b.url) : "unknown";
+
+    const aQualityRank = aQuality === "event" ? 3 : aQuality === "listing" ? 2 : aQuality === "search" ? 1 : 0;
+    const bQualityRank = bQuality === "event" ? 3 : bQuality === "listing" ? 2 : bQuality === "search" ? 1 : 0;
+    if (aQualityRank !== bQualityRank) return bQualityRank - aQualityRank;
+
     const aAmount = a.amount ?? Number.POSITIVE_INFINITY;
     const bAmount = b.amount ?? Number.POSITIVE_INFINITY;
     if (aAmount !== bAmount) return aAmount - bAmount;
@@ -807,6 +813,7 @@ function summarizeTicket(ticket: NormalizedFtnTicket) {
   return {
     id: ticket.id,
     url: ticket.url,
+    urlQuality: ticket.url ? getFtnUrlQuality(ticket.url) : "unknown",
     priceText: ticket.priceText,
     amount: ticket.amount,
     quantity: ticket.quantity,
@@ -817,8 +824,15 @@ function bestTicketPriceText(
   tickets: NormalizedFtnTicket[],
   eventLevelPrice: string | null
 ): string | null {
-  const withPrice = tickets.find((ticket) => clean(ticket.priceText));
-  return withPrice?.priceText ?? eventLevelPrice;
+  const withRealPrice = tickets.find((ticket) => {
+    const amount = ticket.amount;
+    return amount != null && amount > 0;
+  });
+
+  if (withRealPrice?.priceText) return withRealPrice.priceText;
+
+  const withAnyPrice = tickets.find((ticket) => clean(ticket.priceText));
+  return withAnyPrice?.priceText ?? eventLevelPrice;
 }
 
 function bestTicketOutbound(
@@ -855,8 +869,8 @@ function bestTicketOutbound(
   if (id) {
     return {
       url: buildEventIdUrl(id),
-      urlQuality: "search",
-      isSearchFallback: true,
+      urlQuality: "listing",
+      isSearchFallback: false,
     };
   }
 
@@ -1049,7 +1063,8 @@ export async function resolveFtnCandidate(
   const exact =
     best.exactTeams &&
     best.sameDay &&
-    outbound.urlQuality === "event";
+    (outbound.urlQuality === "event" || outbound.urlQuality === "listing") &&
+    !outbound.isSearchFallback;
 
   const reason: TicketCandidate["reason"] = outbound.isSearchFallback
     ? "search_fallback"
@@ -1079,4 +1094,4 @@ export async function resolveFtnCandidate(
     reason,
     urlQuality: outbound.urlQuality,
   };
-                                               }
+}
