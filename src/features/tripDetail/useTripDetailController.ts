@@ -269,6 +269,17 @@ function getTravelLaunchCandidate(
   return null;
 }
 
+function parsePriceAmount(priceText?: string | null): number | null {
+  const raw = clean(priceText);
+  if (!raw) return null;
+
+  const match = raw.match(/(\d{1,3}(?:[,\d]{0,})(?:\.\d{1,2})?)/);
+  if (!match) return null;
+
+  const value = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(value) ? value : null;
+}
+
 function normalizeReturnedTicketOptions(
   resolved: TicketResolutionResult | null
 ): TicketResolutionOption[] {
@@ -290,24 +301,33 @@ function normalizeReturnedTicketOptions(
       continue;
     }
 
-    const existingPrice = Number(clean(existing.priceText).match(/(\d+(?:\.\d+)?)/)?.[1] ?? NaN);
-    const nextPrice = Number(clean(option.priceText).match(/(\d+(?:\.\d+)?)/)?.[1] ?? NaN);
+    const existingPrice = parsePriceAmount(existing.priceText);
+    const nextPrice = parsePriceAmount(option.priceText);
 
-    if (Number.isFinite(nextPrice) && (!Number.isFinite(existingPrice) || nextPrice < existingPrice)) {
+    if (nextPrice != null && (existingPrice == null || nextPrice < existingPrice)) {
       deduped.set(key, option);
     }
   }
 
   return Array.from(deduped.values()).sort((a, b) => {
-    const aPrice = Number(clean(a.priceText).match(/(\d+(?:\.\d+)?)/)?.[1] ?? NaN);
-    const bPrice = Number(clean(b.priceText).match(/(\d+(?:\.\d+)?)/)?.[1] ?? NaN);
+    const aPrice = parsePriceAmount(a.priceText);
+    const bPrice = parsePriceAmount(b.priceText);
 
-    const aHasPrice = Number.isFinite(aPrice);
-    const bHasPrice = Number.isFinite(bPrice);
+    if (aPrice != null && bPrice != null && aPrice !== bPrice) return aPrice - bPrice;
+    if (aPrice != null && bPrice == null) return -1;
+    if (aPrice == null && bPrice != null) return 1;
 
-    if (aHasPrice && bHasPrice && aPrice !== bPrice) return aPrice - bPrice;
-    if (aHasPrice && !bHasPrice) return -1;
-    if (!aHasPrice && bHasPrice) return 1;
+    const aQuality = clean(a.urlQuality).toLowerCase();
+    const bQuality = clean(b.urlQuality).toLowerCase();
+
+    const rank = (q: string) => {
+      if (q === "event") return 3;
+      if (q === "listing") return 2;
+      if (q === "search") return 1;
+      return 0;
+    };
+
+    if (rank(aQuality) !== rank(bQuality)) return rank(bQuality) - rank(aQuality);
 
     return clean(a.provider).localeCompare(clean(b.provider));
   });
@@ -1084,4 +1104,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-                          }
+      }
