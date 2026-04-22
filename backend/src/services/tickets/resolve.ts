@@ -98,6 +98,19 @@ function deleteCache(key: string): void {
   CACHE.delete(key);
 }
 
+function shouldCacheResolution(value: TicketResolution): boolean {
+  if (!value.ok) return false;
+  if (!clean(value.url)) return false;
+
+  const urlQuality = normalize(value.urlQuality);
+  const reason = normalize(value.reason);
+
+  if (urlQuality === "search") return false;
+  if (reason === "search_fallback") return false;
+
+  return true;
+}
+
 function buildNotFound(
   checkedProviders: TicketResolution["checkedProviders"]
 ): TicketResolution {
@@ -450,7 +463,16 @@ export async function resolveTicket(
     deleteCache(cacheKey);
   } else {
     const cached = getCache(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      console.log("[tickets] cache hit", {
+        cacheKey,
+        provider: cached.provider,
+        reason: cached.reason,
+        url: cached.url,
+        urlQuality: cached.urlQuality ?? null,
+      });
+      return cached;
+    }
   }
 
   const checkedProviders: TicketResolution["checkedProviders"] = [
@@ -492,7 +514,25 @@ export async function resolveTicket(
   const result = buildResolution(candidates, checkedProviders);
 
   if (!debugNoCache) {
-    setCache(cacheKey, result);
+    if (shouldCacheResolution(result)) {
+      setCache(cacheKey, result);
+      console.log("[tickets] cache set", {
+        cacheKey,
+        provider: result.provider,
+        reason: result.reason,
+        url: result.url,
+        urlQuality: result.urlQuality ?? null,
+      });
+    } else {
+      deleteCache(cacheKey);
+      console.log("[tickets] cache skipped", {
+        cacheKey,
+        provider: result.provider,
+        reason: result.reason,
+        url: result.url,
+        urlQuality: result.urlQuality ?? null,
+      });
+    }
   }
 
   return result;
