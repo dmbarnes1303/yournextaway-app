@@ -136,6 +136,7 @@ function detectUrlQuality(
   candidate: Pick<TicketCandidate, "url" | "urlQuality">
 ): CandidateUrlQuality {
   const explicit = normalize(candidate.urlQuality);
+
   if (
     explicit === "event" ||
     explicit === "listing" ||
@@ -197,7 +198,6 @@ function normalizeCandidate(candidate: TicketCandidate): TicketCandidate {
   const urlQuality = detectUrlQuality(candidate);
 
   let reason: TicketCandidate["reason"] = candidate.reason;
-
   if (urlQuality === "search") {
     reason = "search_fallback";
   } else if (urlQuality === "unknown" && reason === "exact_event") {
@@ -219,6 +219,7 @@ function normalizeCandidate(candidate: TicketCandidate): TicketCandidate {
 
 function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
   const urlQuality = detectUrlQuality(candidate);
+
   const normalizedReason =
     urlQuality === "search"
       ? "search_fallback"
