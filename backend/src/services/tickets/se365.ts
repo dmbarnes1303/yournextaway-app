@@ -1509,4 +1509,4 @@ export async function resolveSe365Candidate(
         : "partial_match",
     urlQuality: outbound.urlQuality,
   };
-      }
+}
