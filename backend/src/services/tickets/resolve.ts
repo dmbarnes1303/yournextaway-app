@@ -151,6 +151,9 @@ function detectUrlQuality(candidate: Pick<TicketCandidate, "url" | "urlQuality">
     const path = parsed.pathname.toLowerCase();
     const query = parsed.search.toLowerCase();
 
+    if (path.includes("/checkout-aff-link")) return "listing";
+    if (path.startsWith("/search") && query.includes("event_id=")) return "listing";
+
     const looksSearch =
       path === "/search" ||
       path.startsWith("/search/") ||
@@ -192,6 +195,7 @@ function normalizeCandidate(candidate: TicketCandidate): TicketCandidate {
   const urlQuality = detectUrlQuality(candidate);
 
   let reason: TicketCandidate["reason"] = candidate.reason;
+
   if (urlQuality === "search") {
     reason = "search_fallback";
   } else if (urlQuality === "unknown" && reason === "exact_event") {
@@ -494,4 +498,4 @@ export async function resolveTicket(
   }
 
   return result;
-            }
+}
