@@ -543,10 +543,6 @@ function getSe365UrlQuality(urlValue: unknown): CandidateUrlQuality {
   }
 }
 
-function buildSe365EventUrl(eventIdValue: string): string {
-  return `${SE365_PUBLIC_BASE_URL}/event/${encodeURIComponent(eventIdValue)}`;
-}
-
 async function fetchText(
   url: string
 ): Promise<{ ok: boolean; status: number; body: string }> {
@@ -620,19 +616,7 @@ function appendAffiliate(url: string): string {
 
   try {
     const parsed = new URL(base);
-    const configuredAffiliate = clean(env.se365AffiliateId);
-    const affiliateId = configuredAffiliate || FORCED_A_AID;
-
-    if (!affiliateId) return parsed.toString();
-
-    if (affiliateId.includes("=")) {
-      const [k, v] = affiliateId.split("=");
-      if (!k || !v) return parsed.toString();
-      parsed.searchParams.set(k, v);
-      return parsed.toString();
-    }
-
-    parsed.searchParams.set("a_aid", affiliateId);
+    parsed.searchParams.set("a_aid", FORCED_A_AID);
     return parsed.toString();
   } catch {
     return "";
@@ -1126,6 +1110,19 @@ async function fetchParticipantEvents(
   return out;
 }
 
+async function fetchCombinedEvents(
+  homeParticipantIdValue: string,
+  awayParticipantIdValue: string,
+  deadlineAt: number
+): Promise<Se365Event[]> {
+  const [homeEvents, awayEvents] = await Promise.all([
+    fetchParticipantEvents(homeParticipantIdValue, deadlineAt),
+    fetchParticipantEvents(awayParticipantIdValue, deadlineAt),
+  ]);
+
+  return dedupeEvents([...homeEvents, ...awayEvents]);
+}
+
 async function fetchTicketsForEvent(eventIdValue: string): Promise<Se365Ticket[]> {
   if (!eventIdValue) return [];
 
@@ -1307,30 +1304,13 @@ function buildEventOutbound(
   if (directUrl) {
     const urlQuality = getSe365UrlQuality(directUrl);
 
-    if (urlQuality === "event") {
+    if (urlQuality === "event" || urlQuality === "listing") {
       return {
         url: directUrl,
-        urlQuality: "event",
+        urlQuality,
         isSearchFallback: false,
       };
     }
-
-    if (urlQuality === "listing") {
-      return {
-        url: directUrl,
-        urlQuality: "listing",
-        isSearchFallback: false,
-      };
-    }
-  }
-
-  const matchedEventId = eventId(event);
-  if (matchedEventId) {
-    return {
-      url: buildSe365EventUrl(matchedEventId),
-      urlQuality: "event",
-      isSearchFallback: false,
-    };
   }
 
   const fallback = buildTrackedSearchFallback(input);
@@ -1439,7 +1419,7 @@ export async function resolveSe365Candidate(
   const homeParticipantId = participantId(participantResolution.homeParticipant);
   const awayParticipantId = participantId(participantResolution.awayParticipant);
 
-  const events = await fetchParticipantEvents(homeParticipantId, deadlineAt);
+  const events = await fetchCombinedEvents(homeParticipantId, awayParticipantId, deadlineAt);
 
   if (!events.length) {
     const fallback = buildTrackedSearchFallback(input);
