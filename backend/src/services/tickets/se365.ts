@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+
 import { env, hasSe365Config } from "../../lib/env.js";
 import type {
   CandidateUrlQuality,
@@ -151,6 +153,7 @@ const SE365_TEAM_PARTICIPANT_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const SE365_EVENT_CACHE_TTL_MS = 1000 * 60 * 30;
 
 const SE365_PUBLIC_BASE_URL = "https://www.sportsevents365.com";
+const FORCED_A_AID = "69834e80ec9d3";
 
 const GENERIC_CLUB_TOKENS = new Set([
   "ac",
@@ -479,8 +482,7 @@ function buildBaseUrl(): string {
 }
 
 function buildBasicAuthHeader(): string | null {
-  const username =
-    clean(env.se365HttpUsername) || clean(env.se365HttpSource) || "";
+  const username = clean(env.se365HttpUsername) || clean(env.se365HttpSource) || "";
   const password = clean(env.se365ApiPassword);
 
   if (!username || !password) return null;
@@ -618,22 +620,19 @@ function appendAffiliate(url: string): string {
 
   try {
     const parsed = new URL(base);
-    const affiliateId = clean(env.se365AffiliateId);
+    const configuredAffiliate = clean(env.se365AffiliateId);
+    const affiliateId = configuredAffiliate || FORCED_A_AID;
 
     if (!affiliateId) return parsed.toString();
 
     if (affiliateId.includes("=")) {
       const [k, v] = affiliateId.split("=");
-      if (k && v && !parsed.searchParams.get(k)) {
-        parsed.searchParams.set(k, v);
-      }
+      if (!k || !v) return parsed.toString();
+      parsed.searchParams.set(k, v);
       return parsed.toString();
     }
 
-    if (!parsed.searchParams.get("a_aid")) {
-      parsed.searchParams.set("a_aid", affiliateId);
-    }
-
+    parsed.searchParams.set("a_aid", affiliateId);
     return parsed.toString();
   } catch {
     return "";
@@ -650,16 +649,7 @@ function buildTrackedSearchFallback(input: TicketResolveInput): string | null {
 
   const url = new URL(`${SE365_PUBLIC_BASE_URL}/events/search`);
   url.searchParams.set("q", q);
-
-  const affiliateId = clean(env.se365AffiliateId);
-  if (affiliateId) {
-    if (affiliateId.includes("=")) {
-      const [k, v] = affiliateId.split("=");
-      if (k && v) url.searchParams.set(k, v);
-    } else {
-      url.searchParams.set("a_aid", affiliateId);
-    }
-  }
+  url.searchParams.set("a_aid", FORCED_A_AID);
 
   return url.toString();
 }
@@ -921,9 +911,7 @@ function findBestParticipantMatchDetailed(
   return best;
 }
 
-async function fetchParticipantsPage(
-  page: number
-): Promise<Se365Participant[] | null> {
+async function fetchParticipantsPage(page: number): Promise<Se365Participant[] | null> {
   const base = buildBaseUrl();
   const apiKey = clean(env.se365ApiKey);
 
@@ -1105,9 +1093,7 @@ async function fetchParticipantEvents(
   for (let page = 1; page <= SE365_MAX_EVENT_PAGES; page += 1) {
     if (!hasBudget(deadlineAt, SE365_FETCH_TIMEOUT_MS + 200)) break;
 
-    const url = new URL(
-      `${base}/events/participant/${encodeURIComponent(participantIdValue)}`
-    );
+    const url = new URL(`${base}/events/participant/${encodeURIComponent(participantIdValue)}`);
     url.searchParams.set("apiKey", apiKey);
     url.searchParams.set("perPage", String(SE365_EVENTS_PER_PAGE));
     url.searchParams.set("page", String(page));
@@ -1151,9 +1137,7 @@ async function fetchTicketsForEvent(eventIdValue: string): Promise<Se365Ticket[]
 
   const res = await fetchText(url.toString());
 
-  if (!res.ok) {
-    return [];
-  }
+  if (!res.ok) return [];
 
   let parsed: Se365TicketsResponse = null;
   try {
@@ -1322,10 +1306,19 @@ function buildEventOutbound(
 
   if (directUrl) {
     const urlQuality = getSe365UrlQuality(directUrl);
-    if (urlQuality === "event" || urlQuality === "listing") {
+
+    if (urlQuality === "event") {
       return {
         url: directUrl,
-        urlQuality,
+        urlQuality: "event",
+        isSearchFallback: false,
+      };
+    }
+
+    if (urlQuality === "listing") {
+      return {
+        url: directUrl,
+        urlQuality: "listing",
         isSearchFallback: false,
       };
     }
@@ -1489,9 +1482,7 @@ export async function resolveSe365Candidate(
   const outbound = buildEventOutbound(best.ev, input);
   const resolvedUrl = appendAffiliate(outbound.url);
 
-  if (!resolvedUrl) {
-    return null;
-  }
+  if (!resolvedUrl) return null;
 
   const exact =
     !outbound.isSearchFallback &&
@@ -1524,4 +1515,4 @@ export async function resolveSe365Candidate(
         : "partial_match",
     urlQuality: outbound.urlQuality,
   };
-    }
+}
