@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,212 @@ function initials(name: string) {
   const parts = clean.split(/\s+/g).filter(Boolean);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function includesAny(text: string, terms: readonly string[]) {
+  return terms.some((term) => text.includes(term));
+}
+
+function hasRivalryBoost(home: string, away: string) {
+  const pairs: Array<readonly [string, string]> = [
+    ["arsenal", "tottenham"],
+    ["barcelona", "real madrid"],
+    ["bayern", "dortmund"],
+    ["celtic", "rangers"],
+    ["chelsea", "arsenal"],
+    ["chelsea", "tottenham"],
+    ["everton", "liverpool"],
+    ["inter", "milan"],
+    ["lazio", "roma"],
+    ["manchester city", "manchester united"],
+    ["real madrid", "atletico"],
+    ["roma", "napoli"],
+    ["tottenham", "west ham"],
+  ];
+
+  const h = home.toLowerCase();
+  const a = away.toLowerCase();
+
+  return pairs.some(([x, y]) => {
+    return (h.includes(x) && a.includes(y)) || (h.includes(y) && a.includes(x));
+  });
+}
+
+function leagueBaseScore(leagueId?: number | null) {
+  if (leagueId === 39) return 130;
+  if (leagueId === 140) return 116;
+  if (leagueId === 135) return 112;
+  if (leagueId === 78) return 104;
+  if (leagueId === 61) return 98;
+  if (leagueId === 88) return 92;
+  if (leagueId === 94) return 90;
+  return 68;
+}
+
+function kickoffTimingScore(dt: Date) {
+  const day = dt.getDay();
+  const hr = dt.getHours();
+
+  let s = 0;
+
+  if (day === 6) s += 22;
+  else if (day === 0) s += 18;
+  else if (day === 5) s += 14;
+  else if (day === 3 || day === 2) s += 6;
+  else if (day === 1 || day === 4) s += 2;
+
+  if (day === 6 && hr >= 14 && hr <= 20) s += 12;
+  else if (day === 0 && hr >= 13 && hr <= 19) s += 9;
+  else if (day === 5 && hr >= 18 && hr <= 21) s += 8;
+  else if (hr >= 17 && hr <= 21) s += 7;
+  else if (hr >= 12 && hr <= 16) s += 3;
+
+  return s;
+}
+
+const MARQUEE_TEAM_TERMS = [
+  "arsenal",
+  "aston villa",
+  "atletico",
+  "atlético",
+  "ajax",
+  "bayern",
+  "benfica",
+  "borussia dortmund",
+  "barcelona",
+  "celtic",
+  "chelsea",
+  "dortmund",
+  "fenerbahce",
+  "fenerbahçe",
+  "galatasaray",
+  "inter",
+  "juventus",
+  "lazio",
+  "liverpool",
+  "manchester city",
+  "manchester united",
+  "milan",
+  "napoli",
+  "newcastle",
+  "olympiacos",
+  "porto",
+  "psg",
+  "paris saint-germain",
+  "real madrid",
+  "roma",
+  "rangers",
+  "sl benfica",
+  "sporting",
+  "tottenham",
+  "tottenham hotspur",
+  "west ham",
+] as const;
+
+const DESTINATION_CITY_TERMS = [
+  "amsterdam",
+  "barcelona",
+  "berlin",
+  "bilbao",
+  "dortmund",
+  "florence",
+  "glasgow",
+  "istanbul",
+  "lisbon",
+  "liverpool",
+  "london",
+  "madrid",
+  "manchester",
+  "milan",
+  "munich",
+  "naples",
+  "napoli",
+  "porto",
+  "prague",
+  "rome",
+  "san sebastian",
+  "seville",
+  "turin",
+  "valencia",
+  "vienna",
+] as const;
+
+const ICONIC_VENUE_TERMS = [
+  "allianz arena",
+  "anfield",
+  "bernabeu",
+  "camp nou",
+  "celtic park",
+  "emirates",
+  "estadio da luz",
+  "ibrox",
+  "johan cruijff arena",
+  "mestalla",
+  "old trafford",
+  "olympico",
+  "san siro",
+  "signal iduna park",
+  "stamford bridge",
+  "tottenham hotspur stadium",
+  "wanda metropolitano",
+  "wembley",
+] as const;
+
+type ConfidenceTier = "top" | "strong" | "good";
+
+function scoreFixture(row: FixtureListRow): number {
+  let s = 0;
+
+  const leagueId = row?.league?.id;
+  const home = clean(row?.teams?.home?.name);
+  const away = clean(row?.teams?.away?.name);
+  const venue = clean(row?.fixture?.venue?.name);
+  const city = clean(row?.fixture?.venue?.city);
+
+  const teamsText = `${home} ${away}`.toLowerCase();
+  const locationText = `${venue} ${city}`.toLowerCase();
+
+  s += leagueBaseScore(leagueId);
+
+  if (venue) s += 10;
+  if (city) s += 8;
+  if (includesAny(teamsText, MARQUEE_TEAM_TERMS)) s += 18;
+  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 16;
+  if (includesAny(locationText, ICONIC_VENUE_TERMS)) s += 14;
+  if (hasRivalryBoost(home, away)) s += 26;
+
+  const dt = row?.fixture?.date ? new Date(row.fixture.date) : null;
+  if (dt && !Number.isNaN(dt.getTime())) {
+    s += kickoffTimingScore(dt);
+  }
+
+  if (home && away) {
+    const longNames = (home.length >= 8 ? 1 : 0) + (away.length >= 8 ? 1 : 0);
+    if (longNames === 2) s += 4;
+  }
+
+  return s;
+}
+
+function getConfidenceTier(row: FixtureListRow): ConfidenceTier {
+  const score = scoreFixture(row);
+  if (score >= 150) return "top";
+  if (score >= 110) return "strong";
+  return "good";
+}
+
+function getConfidenceCopy(tier: ConfidenceTier) {
+  if (tier === "top") {
+    return { label: "Top Pick" };
+  }
+  if (tier === "strong") {
+    return { label: "Strong Pick" };
+  }
+  return { label: "Good Option" };
 }
 
 function CrestSquare({ row }: { row: FixtureListRow }) {
@@ -127,6 +333,16 @@ export default function UpcomingMatches(props: Props) {
     goMatch,
   } = props;
 
+  const featuredTier = useMemo(
+    () => (featured ? getConfidenceTier(featured) : null),
+    [featured]
+  );
+
+  const featuredConfidence = useMemo(
+    () => (featuredTier ? getConfidenceCopy(featuredTier) : null),
+    [featuredTier]
+  );
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -213,9 +429,32 @@ export default function UpcomingMatches(props: Props) {
                         {String(featured?.league?.name ?? "Featured").trim()}
                       </Text>
                     </View>
-                    <View style={styles.featuredPillSecondary}>
-                      <Text style={styles.featuredPillSecondaryText}>Trip-ready</Text>
-                    </View>
+
+                    {featuredConfidence ? (
+                      <View
+                        style={[
+                          styles.featuredPillSecondary,
+                          featuredTier === "top"
+                            ? styles.confidencePillTop
+                            : featuredTier === "strong"
+                              ? styles.confidencePillStrong
+                              : styles.confidencePillGood,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.featuredPillSecondaryText,
+                            featuredTier === "top"
+                              ? styles.confidencePillTextTop
+                              : featuredTier === "strong"
+                                ? styles.confidencePillTextStrong
+                                : styles.confidencePillTextGood,
+                          ]}
+                        >
+                          {featuredConfidence.label}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
 
@@ -248,6 +487,8 @@ export default function UpcomingMatches(props: Props) {
                     const line = fixtureLine(r);
                     const homeLogo = r?.teams?.home?.logo;
                     const awayLogo = r?.teams?.away?.logo;
+                    const tier = getConfidenceTier(r);
+                    const confidence = getConfidenceCopy(tier);
 
                     return (
                       <Pressable
@@ -287,9 +528,35 @@ export default function UpcomingMatches(props: Props) {
                           <Text style={styles.rowChevron}>›</Text>
                         </View>
 
-                        <Text style={styles.listMeta} numberOfLines={1} ellipsizeMode="tail">
-                          {line.meta}
-                        </Text>
+                        <View style={styles.listMetaRow}>
+                          <Text style={styles.listMeta} numberOfLines={1} ellipsizeMode="tail">
+                            {line.meta}
+                          </Text>
+
+                          <View
+                            style={[
+                              styles.inlineConfidencePill,
+                              tier === "top"
+                                ? styles.confidencePillTop
+                                : tier === "strong"
+                                  ? styles.confidencePillStrong
+                                  : styles.confidencePillGood,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.inlineConfidencePillText,
+                                tier === "top"
+                                  ? styles.confidencePillTextTop
+                                  : tier === "strong"
+                                    ? styles.confidencePillTextStrong
+                                    : styles.confidencePillTextGood,
+                              ]}
+                            >
+                              {confidence.label}
+                            </Text>
+                          </View>
+                        </View>
                       </Pressable>
                     );
                   })}
@@ -522,15 +789,39 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.20)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
   },
 
   featuredPillSecondaryText: {
-    color: "rgba(255,255,255,0.90)",
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
+  },
+
+  confidencePillTop: {
+    backgroundColor: "rgba(245,204,87,0.10)",
+    borderColor: "rgba(245,204,87,0.18)",
+  },
+
+  confidencePillStrong: {
+    backgroundColor: "rgba(34,197,94,0.10)",
+    borderColor: "rgba(104,241,138,0.18)",
+  },
+
+  confidencePillGood: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  confidencePillTextTop: {
+    color: "#F5CC57",
+  },
+
+  confidencePillTextStrong: {
+    color: "#8EF2A5",
+  },
+
+  confidencePillTextGood: {
+    color: "rgba(255,255,255,0.88)",
   },
 
   featuredTextWrap: {
@@ -673,11 +964,31 @@ const styles = StyleSheet.create({
     marginTop: -1,
   },
 
+  listMetaRow: {
+    marginTop: 7,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
   listMeta: {
-    marginTop: 5,
+    flex: 1,
     color: theme.colors.textSecondary,
     fontSize: 12,
     fontWeight: theme.fontWeight.bold,
+  },
+
+  inlineConfidencePill: {
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+
+  inlineConfidencePillText: {
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
   },
 
   pressedRow: {
