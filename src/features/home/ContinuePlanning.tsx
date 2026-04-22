@@ -27,6 +27,10 @@ type Props = {
   onOpenTrip: (tripId: string) => void;
 };
 
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function getTripSignal(nextTrip: Trip | null) {
   if (!nextTrip) return "Ready when you are";
 
@@ -37,6 +41,19 @@ function getTripSignal(nextTrip: Trip | null) {
   if (savedCount > 1) return `${savedCount} matches saved`;
   if (savedCount === 1) return "1 match saved";
   return "Workspace live";
+}
+
+function getTripStatus(nextTrip: Trip | null) {
+  if (!nextTrip) return "No active trip";
+
+  const hasDates = clean(nextTrip.startDate) && clean(nextTrip.endDate);
+  const matchCount = Array.isArray((nextTrip as any)?.matchIds)
+    ? (nextTrip as any).matchIds.length
+    : 0;
+
+  if (hasDates && matchCount > 0) return "In progress";
+  if (matchCount > 0) return "Started";
+  return "Draft";
 }
 
 export default function ContinuePlanning(props: Props) {
@@ -56,6 +73,7 @@ export default function ContinuePlanning(props: Props) {
   } = props;
 
   const signal = getTripSignal(nextTrip);
+  const status = getTripStatus(nextTrip);
 
   return (
     <View style={styles.section}>
@@ -73,6 +91,9 @@ export default function ContinuePlanning(props: Props) {
 
       {!loadedTrips ? (
         <View style={styles.loadingCard}>
+          <View style={styles.loadingBadge}>
+            <Text style={styles.loadingBadgeText}>Workspace</Text>
+          </View>
           <ActivityIndicator color={theme.colors.textSecondary} />
           <Text style={styles.loadingText}>Loading trips…</Text>
         </View>
@@ -93,10 +114,10 @@ export default function ContinuePlanning(props: Props) {
             <Text style={styles.emptyTag}>Trip workspace</Text>
             <Text style={styles.emptyTitle}>Start your first football trip</Text>
             <Text style={styles.emptyMeta}>
-              Pick a city, fixture or date window and build the whole weekend in one place.
+              Choose a city, fixture or date window and build the weekend around it without clutter.
             </Text>
 
-            <View style={styles.emptyActions}>
+            <View style={styles.emptyActionRow}>
               <Pressable
                 onPress={goDiscover}
                 style={({ pressed }) => [styles.primaryAction, pressed && styles.pressedRow]}
@@ -141,7 +162,7 @@ export default function ContinuePlanning(props: Props) {
               </View>
 
               <View style={styles.tripStatusPill}>
-                <Text style={styles.tripStatusPillText}>In progress</Text>
+                <Text style={styles.tripStatusPillText}>{status}</Text>
               </View>
             </View>
           </View>
@@ -170,7 +191,7 @@ export default function ContinuePlanning(props: Props) {
             <Text style={styles.tripMeta}>{tripSummaryLine(nextTrip)}</Text>
 
             <Text style={styles.tripHint}>
-              Matches, travel links, bookings and notes all kept together.
+              Matches, booking routes, notes and trip decisions kept in one clean workspace.
             </Text>
 
             <View style={styles.tripFooter}>
@@ -218,7 +239,7 @@ const styles = StyleSheet.create({
   },
 
   loadingCard: {
-    minHeight: 168,
+    minHeight: 176,
     borderRadius: 26,
     backgroundColor:
       Platform.OS === "android" ? "rgba(9,12,14,0.52)" : "rgba(255,255,255,0.04)",
@@ -227,6 +248,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+
+  loadingBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(245,204,87,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(245,204,87,0.16)",
+  },
+
+  loadingBadgeText: {
+    color: "#F5CC57",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
 
   loadingText: {
@@ -236,7 +276,7 @@ const styles = StyleSheet.create({
   },
 
   emptyCard: {
-    minHeight: 214,
+    minHeight: 226,
     borderRadius: 28,
     overflow: "hidden",
     backgroundColor: "#0A0F12",
@@ -300,7 +340,7 @@ const styles = StyleSheet.create({
     maxWidth: "92%",
   },
 
-  emptyActions: {
+  emptyActionRow: {
     marginTop: 8,
     flexDirection: "row",
     gap: 10,
@@ -341,7 +381,7 @@ const styles = StyleSheet.create({
   },
 
   tripCard: {
-    minHeight: 224,
+    minHeight: 232,
     borderRadius: 28,
     overflow: "hidden",
     position: "relative",
