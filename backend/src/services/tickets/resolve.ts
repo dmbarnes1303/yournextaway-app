@@ -132,7 +132,9 @@ function hasPriceText(candidate: TicketCandidate): boolean {
   return parsePriceAmount(candidate.priceText) != null || Boolean(clean(candidate.priceText));
 }
 
-function detectUrlQuality(candidate: Pick<TicketCandidate, "url" | "urlQuality">): CandidateUrlQuality {
+function detectUrlQuality(
+  candidate: Pick<TicketCandidate, "url" | "urlQuality">
+): CandidateUrlQuality {
   const explicit = normalize(candidate.urlQuality);
   if (
     explicit === "event" ||
@@ -329,8 +331,23 @@ function compareCandidates(a: TicketCandidate, b: TicketCandidate): number {
   const aa = assessCandidate(a);
   const bb = assessCandidate(b);
 
+  const aPrice = parsePriceAmount(a.priceText);
+  const bPrice = parsePriceAmount(b.priceText);
+
+  if (aa.usableTier === "direct" && bb.usableTier !== "direct") return -1;
+  if (aa.usableTier !== "direct" && bb.usableTier === "direct") return 1;
+
   if (aa.exact && !bb.exact) return -1;
   if (!aa.exact && bb.exact) return 1;
+
+  if (aPrice != null && bPrice != null && aPrice !== bPrice) {
+    return aPrice - bPrice;
+  }
+
+  const aHasPrice = hasPriceText(a);
+  const bHasPrice = hasPriceText(b);
+  if (aHasPrice && !bHasPrice) return -1;
+  if (!aHasPrice && bHasPrice) return 1;
 
   const aReasonRank = reasonRank(aa.normalizedReason);
   const bReasonRank = reasonRank(bb.normalizedReason);
@@ -339,15 +356,6 @@ function compareCandidates(a: TicketCandidate, b: TicketCandidate): number {
   const aQualityRank = urlQualityRank(aa.urlQuality);
   const bQualityRank = urlQualityRank(bb.urlQuality);
   if (aQualityRank !== bQualityRank) return bQualityRank - aQualityRank;
-
-  const aHasPrice = hasPriceText(a);
-  const bHasPrice = hasPriceText(b);
-  if (aHasPrice && !bHasPrice) return -1;
-  if (!aHasPrice && bHasPrice) return 1;
-
-  const aPrice = parsePriceAmount(a.priceText);
-  const bPrice = parsePriceAmount(b.priceText);
-  if (aPrice != null && bPrice != null && aPrice !== bPrice) return aPrice - bPrice;
 
   if (a.score !== b.score) return b.score - a.score;
 
@@ -366,7 +374,6 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
     const key = [
       normalize(normalizedCandidate.provider),
       normalize(normalizedCandidate.url),
-      normalize(normalizedCandidate.reason),
     ].join("|");
 
     const existing = map.get(key);
@@ -407,23 +414,13 @@ function buildResolution(
   candidates: TicketCandidate[],
   checkedProviders: TicketResolution["checkedProviders"]
 ): TicketResolution {
-  const deduped = dedupeCandidates(candidates);
+  const deduped = dedupeCandidates(candidates).sort(compareCandidates);
 
-  const directCandidates = deduped
-    .filter((candidate) => assessCandidate(candidate).usableTier === "direct")
-    .sort(compareCandidates);
-
-  const fallbackCandidates = deduped
-    .filter((candidate) => assessCandidate(candidate).usableTier === "fallback")
-    .sort(compareCandidates);
-
-  const chosenPool = directCandidates.length > 0 ? directCandidates : fallbackCandidates;
-
-  if (chosenPool.length === 0) {
+  if (deduped.length === 0) {
     return buildNotFound(checkedProviders);
   }
 
-  const primary = pickPrimary(chosenPool);
+  const primary = pickPrimary(deduped);
   const primaryAssessment = assessCandidate(primary);
 
   return {
@@ -437,7 +434,7 @@ function buildResolution(
     priceText: primary.priceText ?? null,
     reason: primaryAssessment.normalizedReason,
     checkedProviders,
-    options: chosenPool.map(toOption),
+    options: deduped.map(toOption),
     urlQuality: primaryAssessment.urlQuality,
   };
 }
