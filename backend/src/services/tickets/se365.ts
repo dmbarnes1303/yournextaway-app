@@ -150,6 +150,8 @@ const SE365_PARTICIPANT_LIST_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const SE365_TEAM_PARTICIPANT_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const SE365_EVENT_CACHE_TTL_MS = 1000 * 60 * 30;
 
+const SE365_PUBLIC_BASE_URL = "https://www.sportsevents365.com";
+
 const GENERIC_CLUB_TOKENS = new Set([
   "ac",
   "afc",
@@ -539,6 +541,10 @@ function getSe365UrlQuality(urlValue: unknown): CandidateUrlQuality {
   }
 }
 
+function buildSe365EventUrl(eventIdValue: string): string {
+  return `${SE365_PUBLIC_BASE_URL}/event/${encodeURIComponent(eventIdValue)}`;
+}
+
 async function fetchText(
   url: string
 ): Promise<{ ok: boolean; status: number; body: string }> {
@@ -642,7 +648,7 @@ function buildTrackedSearchFallback(input: TicketResolveInput): string | null {
   const q = league ? `${home} vs ${away} ${league}` : `${home} vs ${away}`;
   if (!q) return null;
 
-  const url = new URL("https://www.sportsevents365.com/events/search");
+  const url = new URL(`${SE365_PUBLIC_BASE_URL}/events/search`);
   url.searchParams.set("q", q);
 
   const affiliateId = clean(env.se365AffiliateId);
@@ -1325,6 +1331,15 @@ function buildEventOutbound(
     }
   }
 
+  const matchedEventId = eventId(event);
+  if (matchedEventId) {
+    return {
+      url: buildSe365EventUrl(matchedEventId),
+      urlQuality: "event",
+      isSearchFallback: false,
+    };
+  }
+
   const fallback = buildTrackedSearchFallback(input);
   return {
     url: fallback ?? "",
@@ -1366,7 +1381,7 @@ export async function resolveSe365Candidate(
       const baseScored = eventMatchScore(cachedEvent, input);
       const exact =
         !outbound.isSearchFallback &&
-        outbound.urlQuality === "event" &&
+        (outbound.urlQuality === "event" || outbound.urlQuality === "listing") &&
         baseScored.exactTeams &&
         baseScored.sameDay;
 
@@ -1480,7 +1495,7 @@ export async function resolveSe365Candidate(
 
   const exact =
     !outbound.isSearchFallback &&
-    outbound.urlQuality === "event" &&
+    (outbound.urlQuality === "event" || outbound.urlQuality === "listing") &&
     best.exactTeams &&
     best.sameDay;
 
@@ -1509,4 +1524,4 @@ export async function resolveSe365Candidate(
         : "partial_match",
     urlQuality: outbound.urlQuality,
   };
-}
+    }
