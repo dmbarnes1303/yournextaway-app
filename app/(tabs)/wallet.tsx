@@ -116,6 +116,14 @@ const TRIP_CITY_META: Record<
   },
 };
 
+type DerivedCounts = {
+  total: number;
+  booked: number;
+  pending: number;
+  saved: number;
+  missingProof: number;
+};
+
 function cleanString(v: unknown) {
   return typeof v === "string" ? v.trim() : String(v ?? "").trim();
 }
@@ -313,14 +321,6 @@ function latestAttachment(itemId: string): WalletAttachment | null {
   return attachments[0] ?? null;
 }
 
-type DerivedCounts = {
-  total: number;
-  booked: number;
-  pending: number;
-  saved: number;
-  missingProof: number;
-};
-
 export default function WalletScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -341,6 +341,7 @@ export default function WalletScreen() {
   const loadWallet = useCallback(async () => {
     try {
       setLoading(true);
+
       await Promise.all([savedItemsStore.load(), tripsStore.loadTrips()]);
 
       const [nextSummary, nextGroups] = await Promise.all([
@@ -352,7 +353,7 @@ export default function WalletScreen() {
       setGroups(nextGroups);
       setTrips(tripsStore.getState().trips);
     } catch (e: any) {
-      Alert.alert("Wallet", e?.message || "Failed to load bookings.");
+      Alert.alert("Wallet", e?.message || "Failed to load wallet data.");
       setSummary(null);
       setGroups([]);
       setTrips([]);
@@ -371,12 +372,12 @@ export default function WalletScreen() {
   }, [loadWallet]);
 
   useEffect(() => {
-    loadWallet().catch(() => null);
+    void loadWallet();
   }, [loadWallet]);
 
   useFocusEffect(
     useCallback(() => {
-      refreshAll().catch(() => null);
+      void refreshAll();
     }, [refreshAll])
   );
 
@@ -417,7 +418,7 @@ export default function WalletScreen() {
           pendingCount: items.filter((x) => x.status === "pending").length,
           savedCount: items.filter((x) => x.status === "saved").length,
           proofCount: items.filter((x) => x.hasProof).length,
-          updatedAt: Number(items[0]?.updatedAt ?? 0),
+          updatedAt: Number(items[0]?.updatedAt ?? group.updatedAt ?? 0),
         } as WalletTripGroup;
       })
       .filter(Boolean) as WalletTripGroup[];
@@ -642,6 +643,24 @@ export default function WalletScreen() {
                 />
               </View>
 
+              <View style={styles.metricsRow}>
+                <Metric
+                  label="Saved"
+                  value={String(summary?.saved ?? 0)}
+                  icon="bookmark-outline"
+                />
+                <Metric
+                  label="Archived"
+                  value={String(summary?.archived ?? 0)}
+                  icon="archive-outline"
+                />
+                <Metric
+                  label="Missing proof"
+                  value={String(summary?.withoutProof ?? 0)}
+                  icon="alert-circle-outline"
+                />
+              </View>
+
               <View style={styles.searchWrap}>
                 <Ionicons name="search-outline" size={18} color={theme.colors.textTertiary} />
                 <TextInput
@@ -676,6 +695,24 @@ export default function WalletScreen() {
               <FilterChip key={c.id} id={c.id} label={c.label} />
             ))}
           </View>
+
+          {!loading && filteredGroups.length > 0 ? (
+            <GlassCard style={styles.summaryStrip} strength="default">
+              <View style={styles.summaryStripRow}>
+                <Text style={styles.summaryStripText}>
+                  {derivedCounts.total} visible item{derivedCounts.total === 1 ? "" : "s"}
+                </Text>
+                <Text style={styles.summaryStripMeta}>
+                  {derivedCounts.booked} booked • {derivedCounts.pending} pending • {derivedCounts.saved} saved
+                </Text>
+              </View>
+              <Text style={styles.summaryStripSub}>
+                {derivedCounts.missingProof > 0
+                  ? `${derivedCounts.missingProof} booked item${derivedCounts.missingProof === 1 ? "" : "s"} still missing proof.`
+                  : "All visible booked items currently have proof attached."}
+              </Text>
+            </GlassCard>
+          ) : null}
 
           {!loading && spotlightGroup ? (
             <View style={styles.section}>
@@ -1197,6 +1234,37 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  summaryStrip: {
+    borderRadius: 20,
+  },
+
+  summaryStripRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+
+  summaryStripText: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  summaryStripMeta: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  summaryStripSub: {
+    marginTop: 8,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
 
