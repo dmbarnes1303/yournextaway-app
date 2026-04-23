@@ -51,7 +51,7 @@ export type PartnerClickHealth = {
   lastTrackingOperation: string | null;
 };
 
-const STORAGE_KEY = "yna_last_partner_click_v4";
+const STORAGE_KEY = "yna_last_partner_click_v5";
 const CLICK_RETENTION_MS = 1000 * 60 * 60 * 6;
 const RETURN_DEDUPE_MS = 1500;
 const DEBUG_PREFIX = "[partnerClicks]";
@@ -122,7 +122,9 @@ function isRecent(click: LastPartnerClick): boolean {
 function normalizeUrl(url: string): string {
   const raw = cleanString(url);
   if (!raw) return "";
+
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
   try {
     const parsed = new URL(withProto);
     const protocol = (parsed.protocol || "https:").toLowerCase();
@@ -138,7 +140,9 @@ function normalizeUrl(url: string): string {
 function normalizeUrlLoose(url: string): string {
   const raw = cleanString(url);
   if (!raw) return "";
+
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
   try {
     const parsed = new URL(withProto);
     const protocol = (parsed.protocol || "https:").toLowerCase();
@@ -150,12 +154,13 @@ function normalizeUrlLoose(url: string): string {
   }
 }
 
-function isDeterministicallyReusable(item: SavedItem): boolean {
-  return item.status === "pending" || item.status === "saved" || item.status === "booked";
+function isReusableStatus(status?: SavedItemStatus): boolean {
+  return status === "saved" || status === "pending";
 }
 
 async function persistLastClick(next: LastPartnerClick | null): Promise<void> {
   lastClick = next;
+
   try {
     await writeJson(STORAGE_KEY, next);
   } catch (error) {
@@ -257,17 +262,9 @@ async function transitionIfCurrent(
 
   try {
     await savedItemsStore.transitionStatus(id, toStatus);
-    logInfo("transitionIfCurrent success", {
-      itemId: id,
-      fromStatus,
-      toStatus,
-    });
+    logInfo("transitionIfCurrent success", { itemId: id, fromStatus, toStatus });
   } catch (error) {
-    logError("transitionIfCurrent failed", error, {
-      itemId: id,
-      fromStatus,
-      toStatus,
-    });
+    logError("transitionIfCurrent failed", error, { itemId: id, fromStatus, toStatus });
   }
 }
 
@@ -339,7 +336,7 @@ function findReusableItem(args: {
     if (cleanString(item.tripId) !== tripId) return false;
     if (cleanString(item.partnerId) !== args.partnerId) return false;
     if (String(item.type) !== String(args.type)) return false;
-    if (!isDeterministicallyReusable(item)) return false;
+    if (!isReusableStatus(item.status)) return false;
 
     const itemStrict = normalizeUrl(cleanString(item.partnerUrl));
     const itemLoose = normalizeUrlLoose(cleanString(item.partnerUrl));
@@ -349,12 +346,9 @@ function findReusableItem(args: {
 
   if (!matches.length) return null;
 
-  return (
-    matches.find((item) => item.status === "pending") ??
+  return matches.find((item) => item.status === "pending") ??
     matches.find((item) => item.status === "saved") ??
-    matches.find((item) => item.status === "booked") ??
-    null
-  );
+    null;
 }
 
 async function triggerReturnIfPresent(): Promise<void> {
@@ -444,11 +438,13 @@ export function ensurePartnerReturnWatcher(
 
   return () => {
     onReturnHandler = null;
+
     try {
       appStateSub?.remove?.();
     } catch (error) {
       logError("ensurePartnerReturnWatcher cleanup failed", error);
     }
+
     appStateSub = null;
     watcherSubscribed = false;
   };
@@ -628,9 +624,7 @@ export async function beginPartnerClick(args: {
         logError(
           "Failed to remove newly created pending item after browser open failure",
           removeError,
-          {
-            itemId: itemForOpen.id,
-          }
+          { itemId: itemForOpen.id }
         );
       }
     } else if (promotedFromSaved) {
@@ -653,6 +647,7 @@ export async function beginPartnerClick(args: {
     }
 
     await clearLastClickState();
+
     logError("beginPartnerClick browser open failed", error, {
       tripId,
       itemId: itemForOpen.id,
@@ -741,6 +736,7 @@ export async function markNotBooked(itemId: string): Promise<void> {
 
   await transitionIfCurrent(id, "pending", "saved");
   const current = getItemById(id);
+
   const trackedClickId =
     current?.partnerClickId && isTrackedPartnerClickId(current.partnerClickId)
       ? current.partnerClickId
@@ -816,4 +812,4 @@ export function __unsafeResetPartnerClickStateForDevOnly(): void {
   lastClickLoaded = false;
 
   void clearLastClickState();
-  }
+      }
