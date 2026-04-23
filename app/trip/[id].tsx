@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -349,8 +350,8 @@ export default function TripDetailScreen() {
   useEffect(() => {
     const cleanup = ensurePartnerReturnWatcher(async (click) => {
       if (!click?.itemId) return;
-
       if (returnPromptBusyRef.current === click.itemId) return;
+
       returnPromptBusyRef.current = click.itemId;
 
       try {
@@ -438,10 +439,10 @@ export default function TripDetailScreen() {
 
   const decisionBody = useMemo(() => {
     if (!vm.hasTickets) {
-      return "Lock tickets first — that is what properly anchors the trip. Until then, everything else is softer planning.";
+      return "Lock tickets first. That is what actually anchors the trip. Until then, everything else is softer planning.";
     }
 
-    return dominantAction?.body || "Move the trip forward by completing the next core booking step.";
+    return dominantAction?.body || "Move the trip forward by finishing the next real booking step.";
   }, [vm.hasTickets, dominantAction]);
 
   const pressureText = useMemo(() => {
@@ -466,18 +467,18 @@ export default function TripDetailScreen() {
 
   const tripStageBody = useMemo(() => {
     if ((vm.tripCompletionPct ?? 0) >= 90) {
-      return "Core bookings are largely covered. Final job is to store proof, clean up the trip, and stop second-guessing finished decisions.";
+      return "Core bookings are largely covered. Final job is proof, confirmations and cleanup.";
     }
 
     if ((vm.tripCompletionPct ?? 0) >= 65) {
-      return "The core trip is taking real shape now, but anything not actually marked booked still needs finishing.";
+      return "The trip is taking shape now, but anything not actually marked booked still needs finishing.";
     }
 
     if ((vm.tripCompletionPct ?? 0) >= 35) {
-      return "Some parts of the trip are underway, but started does not mean covered. Keep working in order.";
+      return "Some parts are underway, but started does not mean covered. Keep working in order.";
     }
 
-    return "This trip is not properly anchored yet. Keep working in order: tickets, travel, stay, then extras.";
+    return "This trip is not properly anchored yet. Work in order: tickets, travel, stay, then extras.";
   }, [vm.tripCompletionPct]);
 
   const plannerCards = useMemo<PlannerCardViewModel[]>(() => {
@@ -551,7 +552,7 @@ export default function TripDetailScreen() {
   const renderBody = () => {
     if (vm.loading) {
       return (
-        <GlassCard>
+        <GlassCard style={styles.stateCard}>
           <EmptyState
             title="Loading trip"
             message="Pulling together matches, bookings and trip details."
@@ -562,7 +563,7 @@ export default function TripDetailScreen() {
 
     if (isMissingTrip) {
       return (
-        <GlassCard>
+        <GlassCard style={styles.stateCard}>
           <EmptyState title="Trip not found" message="No trip available." />
         </GlassCard>
       );
@@ -570,7 +571,7 @@ export default function TripDetailScreen() {
 
     if (!trip) {
       return (
-        <GlassCard>
+        <GlassCard style={styles.stateCard}>
           <EmptyState title="Loading" message="Trip details are still loading." />
         </GlassCard>
       );
@@ -578,15 +579,18 @@ export default function TripDetailScreen() {
 
     return (
       <>
-        <GlassCard>
-          <View style={styles.headerTopRow}>
-            <View style={styles.headerTitleWrap}>
+        <GlassCard style={styles.heroCard}>
+          <View style={styles.heroGlow} pointerEvents="none" />
+
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroTitleWrap}>
+              <Text style={styles.heroEyebrow}>Trip workspace</Text>
               <Text style={styles.city}>{data.cityName}</Text>
               <Text style={styles.meta}>{summaryLine(trip)}</Text>
             </View>
 
-            <Pressable onPress={controller.onViewWallet} hitSlop={8}>
-              <Text style={styles.walletLink}>Wallet</Text>
+            <Pressable onPress={controller.onViewWallet} hitSlop={8} style={styles.walletPill}>
+              <Text style={styles.walletPillText}>Wallet</Text>
             </Pressable>
           </View>
 
@@ -626,11 +630,44 @@ export default function TripDetailScreen() {
             </View>
 
             <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
-
             <Text style={styles.tripWindowHint}>
-              This is the real trip window. Flights and stays should follow these saved dates.
+              These are the real trip dates. Flights and stays should follow this saved window.
             </Text>
           </View>
+        </GlassCard>
+
+        <GlassCard style={styles.priorityCard}>
+          <Text style={styles.priorityEyebrow}>Do this next</Text>
+          <Text style={styles.priorityTitle}>{decisionTitle}</Text>
+          <Text style={styles.priorityBody}>{decisionBody}</Text>
+
+          <View style={styles.priorityMetaWrap}>
+            <Text style={styles.priorityMetaText}>
+              {vm.bookingFunnelLabel || `Next: ${nextStepLabel(vm.nextIncompleteStep?.key)}`}
+            </Text>
+          </View>
+
+          <Text style={styles.pressureText}>{pressureText}</Text>
+
+          <Pressable
+            style={styles.primaryActionBtn}
+            onPress={
+              dominantAction?.onPress
+                ? () => dominantAction.onPress()
+                : controller.onEditTrip
+            }
+          >
+            <Text style={styles.primaryActionBtnText}>{decisionCta}</Text>
+          </Pressable>
+
+          {ticketLoading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" />
+              <Text style={styles.loadingText}>Checking ticket availability…</Text>
+            </View>
+          ) : null}
+
+          {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
         </GlassCard>
 
         <GlassCard>
@@ -667,40 +704,6 @@ export default function TripDetailScreen() {
               </Text>
             </View>
           </View>
-        </GlassCard>
-
-        <GlassCard>
-          <Text style={styles.decisionEyebrow}>Do this next</Text>
-          <Text style={styles.decisionTitle}>{decisionTitle}</Text>
-          <Text style={styles.decisionBody}>{decisionBody}</Text>
-
-          <View style={styles.decisionMetaRow}>
-            <Text style={styles.decisionMetaText}>
-              {vm.bookingFunnelLabel || `Next: ${nextStepLabel(vm.nextIncompleteStep?.key)}`}
-            </Text>
-          </View>
-
-          <Text style={styles.pressureText}>{pressureText}</Text>
-
-          <Pressable
-            style={styles.primaryActionBtn}
-            onPress={
-              dominantAction?.onPress
-                ? () => dominantAction.onPress()
-                : controller.onEditTrip
-            }
-          >
-            <Text style={styles.primaryActionBtnText}>{decisionCta}</Text>
-          </Pressable>
-
-          {ticketLoading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" />
-              <Text style={styles.loadingText}>Checking ticket availability…</Text>
-            </View>
-          ) : null}
-
-          {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
         </GlassCard>
 
         <GlassCard>
@@ -753,8 +756,7 @@ export default function TripDetailScreen() {
           </View>
 
           <Text style={styles.plannerFootnote}>
-            Tickets and flights are stronger booking steps. Stay, transport and extras may still be
-            link-based or in progress until actually marked booked.
+            Tickets and travel matter most. Stay and extras should follow the real trip window, not guesses.
           </Text>
         </GlassCard>
 
@@ -779,7 +781,7 @@ export default function TripDetailScreen() {
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>What this trip still needs</Text>
             <Text style={styles.sectionSubtitle}>
-              Don’t leave the page with no clear next move.
+              Leave this screen knowing the next real move.
             </Text>
           </View>
 
@@ -793,20 +795,16 @@ export default function TripDetailScreen() {
             ) : null}
 
             {!vm.hasHotel ? (
-              <Text style={styles.guidanceText}>
-                • Stay location still needs deciding and booking.
-              </Text>
+              <Text style={styles.guidanceText}>• Stay location still needs deciding and booking.</Text>
             ) : null}
 
             {!vm.hasTransport ? (
-              <Text style={styles.guidanceText}>
-                • Local transport is still weak or unfinished.
-              </Text>
+              <Text style={styles.guidanceText}>• Local transport is still weak or unfinished.</Text>
             ) : null}
 
             {vm.hasTickets && vm.hasFlight && vm.hasHotel && vm.hasTransport ? (
               <Text style={styles.guidanceText}>
-                • Core trip is covered. Final step is proof, confirmations and cleanup in Wallet.
+                • Core trip is covered. Final job is proof, confirmations and cleanup in Wallet.
               </Text>
             ) : null}
           </View>
@@ -867,18 +865,48 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
   },
 
-  headerTopRow: {
+  stateCard: {
+    minHeight: 180,
+    justifyContent: "center",
+  },
+
+  heroCard: {
+    borderRadius: 28,
+    overflow: "hidden",
+    position: "relative",
+  },
+
+  heroGlow: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: -12,
+    height: 74,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,210,106,0.08)",
+  },
+
+  heroTopRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: theme.spacing.md,
   },
 
-  headerTitleWrap: {
+  heroTitleWrap: {
     flex: 1,
   },
 
+  heroEyebrow: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#8EF2A5",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+
   city: {
+    marginTop: 6,
     fontSize: 30,
     fontWeight: "800",
     color: theme.colors.text,
@@ -892,11 +920,19 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  walletLink: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: theme.colors.accent,
-    paddingTop: 8,
+  walletPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+
+  walletPillText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: theme.colors.text,
   },
 
   badgeRow: {
@@ -966,9 +1002,10 @@ const styles = StyleSheet.create({
 
   tripWindowCard: {
     marginTop: theme.spacing.md,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: theme.spacing.md,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
   },
@@ -1009,10 +1046,94 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  stageEyebrow: {
-    fontSize: 12,
+  priorityCard: {
+    borderRadius: 26,
+  },
+
+  priorityEyebrow: {
+    fontSize: 11,
     fontWeight: "900",
-    color: theme.colors.accent,
+    color: "#F5CC57",
+    textTransform: "uppercase",
+    letterSpacing: 0.75,
+  },
+
+  priorityTitle: {
+    marginTop: 8,
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: "800",
+    color: theme.colors.text,
+    letterSpacing: -0.4,
+  },
+
+  priorityBody: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textSecondary,
+  },
+
+  priorityMetaWrap: {
+    marginTop: theme.spacing.sm,
+  },
+
+  priorityMetaText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textMuted,
+    fontWeight: "700",
+  },
+
+  pressureText: {
+    marginTop: 10,
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+  },
+
+  primaryActionBtn: {
+    marginTop: theme.spacing.md,
+    minHeight: 54,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.accent,
+    paddingHorizontal: 16,
+  },
+
+  primaryActionBtnText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0B1020",
+  },
+
+  loadingRow: {
+    marginTop: theme.spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  loadingText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: theme.colors.textSecondary,
+    fontWeight: "700",
+  },
+
+  capHint: {
+    marginTop: theme.spacing.sm,
+    fontSize: 12,
+    lineHeight: 18,
+    color: theme.colors.textMuted,
+  },
+
+  stageEyebrow: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#8EF2A5",
     textTransform: "uppercase",
     letterSpacing: 0.7,
   },
@@ -1050,7 +1171,7 @@ const styles = StyleSheet.create({
   },
 
   coreStatusLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
     color: theme.colors.textMuted,
     textTransform: "uppercase",
@@ -1063,91 +1184,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontWeight: "800",
     color: theme.colors.text,
-  },
-
-  decisionEyebrow: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: theme.colors.accent,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-
-  decisionTitle: {
-    marginTop: 8,
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: "800",
-    color: theme.colors.text,
-    letterSpacing: -0.4,
-  },
-
-  decisionBody: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    color: theme.colors.textSecondary,
-  },
-
-  decisionMetaRow: {
-    marginTop: theme.spacing.sm,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: theme.spacing.md,
-  },
-
-  decisionMetaText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textMuted,
-    fontWeight: "700",
-  },
-
-  pressureText: {
-    marginTop: 10,
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-  },
-
-  primaryActionBtn: {
-    marginTop: theme.spacing.md,
-    minHeight: 52,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.accent,
-    paddingHorizontal: 16,
-  },
-
-  primaryActionBtnText: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#0B1020",
-  },
-
-  loadingRow: {
-    marginTop: theme.spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  loadingText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-  },
-
-  capHint: {
-    marginTop: theme.spacing.sm,
-    fontSize: 12,
-    lineHeight: 18,
-    color: theme.colors.textMuted,
   },
 
   sectionHeaderRow: {
@@ -1177,7 +1213,7 @@ const styles = StyleSheet.create({
   plannerCard: {
     width: "48%",
     minHeight: 132,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: theme.spacing.md,
     borderWidth: 1,
     justifyContent: "space-between",
