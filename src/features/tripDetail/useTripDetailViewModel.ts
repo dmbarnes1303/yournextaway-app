@@ -140,6 +140,10 @@ function isComplete(state: ProgressState): boolean {
   return state === "booked";
 }
 
+function isNotBooked(state: ProgressState): boolean {
+  return state !== "booked";
+}
+
 function stepPriorityScore(step: BookingStepKey): number {
   const index = BOOKING_FLOW.findIndex((entry) => entry.key === step);
   return index === -1 ? 999 : index + 1;
@@ -236,6 +240,13 @@ function getCompletionSummary(args: {
   if (tripCompletionPct >= 65) return "Trip materially covered";
   if (tripCompletionPct >= 35) return "Trip partly covered";
   return "Trip still early";
+}
+
+function getHonestStateLine(state: ProgressState, noun: string): string {
+  if (state === "booked") return `${noun} booked`;
+  if (state === "pending") return `${noun} opened but not confirmed`;
+  if (state === "saved") return `${noun} saved, not booked`;
+  return `${noun} not started`;
 }
 
 export default function useTripDetailViewModel({
@@ -440,7 +451,7 @@ export default function useTripDetailViewModel({
   const openTickets = useCallback(
     async (_sourceSurface: SourceSurface = "unknown") => {
       if (!hasMatch || !primaryMatchId) {
-        Alert.alert("Add a match first", "Add a match to unlock tickets and proper trip planning.");
+        Alert.alert("Add a match first", "Add a match to unlock ticket comparison and real trip planning.");
         return;
       }
 
@@ -454,7 +465,7 @@ export default function useTripDetailViewModel({
     await setWorkspaceSection("transfers");
     Alert.alert(
       "Manual transport only",
-      "There is no live transport booking partner in this build yet. Use this section to track airport, hotel and stadium movement manually."
+      "There is no live transport booking partner in this build yet. Use this section to track local movement manually."
     );
   }, [setWorkspaceSection]);
 
@@ -462,7 +473,7 @@ export default function useTripDetailViewModel({
     await setWorkspaceSection("things");
     Alert.alert(
       "Extras are manual",
-      "There is no live extras partner in this build. Use this section only for optional notes or saved ideas."
+      "There is no live extras partner in this build. Use this section only for optional ideas or notes."
     );
   }, [setWorkspaceSection]);
 
@@ -578,7 +589,7 @@ export default function useTripDetailViewModel({
     if (!hasMatch) {
       return {
         title: "Start by choosing a match",
-        body: "No primary match means no real trip flow. Pick the match first, then the rest becomes specific instead of vague.",
+        body: "No primary match means no real trip flow. Pick the match first, then build around something concrete instead of guessing.",
         cta: "Add a match",
         onPress: () => {
           Alert.alert(
@@ -590,13 +601,13 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (ticketState !== "booked") {
+    if (isNotBooked(ticketState)) {
       return {
         title: ticketState === "empty" ? "Book tickets first" : "Finish ticket booking first",
         body:
           ticketState === "empty"
-            ? "Tickets are the anchor. Until that is actually booked, flights and hotels are still softer planning."
-            : "A saved or pending ticket is not a locked ticket. Finish this before pretending the trip is anchored.",
+            ? "Tickets are the anchor. Until tickets are actually booked, flights and hotels are still softer planning."
+            : "A saved or pending ticket is not a locked ticket. Finish this before treating the trip as anchored.",
         cta: "Compare tickets",
         onPress: () => {
           void openTickets("next_best_action");
@@ -608,7 +619,7 @@ export default function useTripDetailViewModel({
     if (kickoffTbc && flightState === "empty") {
       return {
         title: "Kickoff not confirmed — keep travel flexible",
-        body: "Tickets are sorted, but the kickoff still looks unstable. If you move into flights now, keep flexibility in mind instead of acting like the schedule is locked.",
+        body: "Tickets are sorted, but the kickoff still looks unstable. If you move into flights now, avoid acting like the schedule is fully locked.",
         cta: "View flights",
         onPress: () => {
           void openFlights("next_best_action");
@@ -622,13 +633,13 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (flightState !== "booked") {
+    if (isNotBooked(flightState)) {
       return {
         title: flightState === "empty" ? "Add flights next" : "Finish sorting flights",
         body:
           flightState === "empty"
             ? "The trip is not properly covered until your main travel in and out is actually booked."
-            : "Travel has been started, not finished. A saved link or tentative plan is not a locked journey.",
+            : "Travel has been started, not finished. A saved link or tentative plan is not a booked journey.",
         cta: "View flights",
         onPress: () => {
           void openFlights("next_best_action");
@@ -636,12 +647,12 @@ export default function useTripDetailViewModel({
       };
     }
 
-    if (hotelState !== "booked") {
+    if (isNotBooked(hotelState)) {
       return {
         title: hotelState === "empty" ? "Lock the hotel" : "Finish the stay choice",
         body:
           hotelState === "empty"
-            ? "At the moment hotel search opens Expedia only. Use guidance, then make the stay decision properly."
+            ? "Hotel search is available, but no stay is actually covered until a hotel is marked booked."
             : "A saved hotel option is not a finished stay decision. Lock the stay properly before moving on.",
         cta: "Search hotels",
         onPress: () => {
@@ -660,7 +671,7 @@ export default function useTripDetailViewModel({
 
     return {
       title: "Core trip booking flow complete",
-      body: "Tickets, flights and hotel are covered. Next, clean up proof in Wallet and use notes for any manual transport or extras planning.",
+      body: "Tickets, flights and hotel are booked. Next job is proof, confirmations and any manual cleanup in Wallet.",
       cta: "Open wallet",
       onPress: controller.onViewWallet,
       badge: "Ready",
@@ -714,11 +725,7 @@ export default function useTripDetailViewModel({
         categoryActionSubtitle({
           state: flightState,
           emptyFallback: genericActionFallback("flights"),
-          startedLabel: stepCoverageLabel(flightState, {
-            empty: "Check flight options",
-            started: "Flight option saved",
-            booked: "Flight booked",
-          }),
+          startedLabel: getHonestStateLine(flightState, "Flight option"),
           bookedLabel: "Flight booked",
         }),
         () => {
@@ -735,11 +742,7 @@ export default function useTripDetailViewModel({
         categoryActionSubtitle({
           state: hotelState,
           emptyFallback: genericActionFallback("hotels"),
-          startedLabel: stepCoverageLabel(hotelState, {
-            empty: "Check hotel options",
-            started: "Hotel option saved",
-            booked: "Hotel booked",
-          }),
+          startedLabel: getHonestStateLine(hotelState, "Hotel option"),
           bookedLabel: "Hotel booked",
         }),
         () => {
