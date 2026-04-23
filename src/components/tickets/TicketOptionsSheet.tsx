@@ -28,10 +28,6 @@ type Props = {
   onOpenOfficial?: (() => void) | null;
 };
 
-type DisplayOption = {
-  option: TicketResolutionOption;
-};
-
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -46,82 +42,84 @@ function providerTone(provider?: string | null) {
 
   if (raw === "footballticketnet" || raw === "ftn") {
     return {
-      borderColor: "rgba(120,170,255,0.30)",
-      backgroundColor: "rgba(120,170,255,0.12)",
-      textColor: "rgba(210,226,255,1)",
+      borderColor: "rgba(120,170,255,0.35)",
+      bg: "rgba(120,170,255,0.14)",
+      text: "#DCE6FF",
     };
   }
 
   if (raw === "sportsevents365" || raw === "se365") {
     return {
-      borderColor: "rgba(87,162,56,0.30)",
-      backgroundColor: "rgba(87,162,56,0.12)",
-      textColor: "rgba(214,241,200,1)",
+      borderColor: "rgba(87,162,56,0.35)",
+      bg: "rgba(87,162,56,0.14)",
+      text: "#D9F2C8",
     };
   }
 
   return {
-    borderColor: "rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    textColor: theme.colors.text,
+    borderColor: "rgba(255,255,255,0.14)",
+    bg: "rgba(255,255,255,0.06)",
+    text: theme.colors.text,
   };
-}
-
-function compareOptions(a: DisplayOption, b: DisplayOption): number {
-  const aHasPrice = Boolean(clean(a.option.priceText));
-  const bHasPrice = Boolean(clean(b.option.priceText));
-
-  if (aHasPrice && !bHasPrice) return -1;
-  if (!aHasPrice && bHasPrice) return 1;
-
-  return clean(a.option.provider).localeCompare(clean(b.option.provider));
 }
 
 function OptionCard({
   option,
   onPress,
+  highlight,
 }: {
   option: TicketResolutionOption;
   onPress: () => void;
+  highlight?: boolean;
 }) {
   const provider = providerLabel(option.provider);
   const short = providerShort(option.provider);
-  const providerStyle = providerTone(option.provider);
+  const tone = providerTone(option.provider);
 
   return (
-    <Pressable style={styles.optionCard} onPress={onPress}>
-      <View style={styles.optionTopRow}>
-        <View style={styles.providerBlock}>
+    <Pressable
+      style={[
+        styles.optionCard,
+        highlight && styles.optionCardHighlight,
+      ]}
+      onPress={onPress}
+    >
+      {highlight && (
+        <View style={styles.bestTag}>
+          <Text style={styles.bestTagText}>Best option</Text>
+        </View>
+      )}
+
+      <View style={styles.topRow}>
+        <View style={styles.providerWrap}>
           <View
             style={[
               styles.providerPill,
               {
-                borderColor: providerStyle.borderColor,
-                backgroundColor: providerStyle.backgroundColor,
+                borderColor: tone.borderColor,
+                backgroundColor: tone.bg,
               },
             ]}
           >
-            <Text
-              style={[styles.providerPillText, { color: providerStyle.textColor }]}
-            >
+            <Text style={[styles.providerPillText, { color: tone.text }]}>
               {short}
             </Text>
           </View>
 
-          <View style={styles.providerTextWrap}>
+          <View style={styles.providerText}>
             <Text style={styles.provider}>{provider}</Text>
-            <Text style={styles.providerSub}>Affiliate partner</Text>
+            <Text style={styles.providerSub}>Secure via partner</Text>
           </View>
         </View>
 
         <Text style={styles.price}>{priceLabel(option)}</Text>
       </View>
 
-      <View style={styles.optionBottomRow}>
-        <Text style={styles.metaText}>
-          {clean(option.title) || "Tickets"}
-        </Text>
+      <Text style={styles.meta} numberOfLines={1}>
+        {clean(option.title) || "Match tickets"}
+      </Text>
 
+      <View style={styles.ctaRow}>
         <Text style={styles.cta}>View tickets →</Text>
       </View>
     </Pressable>
@@ -139,25 +137,34 @@ export default function TicketOptionsSheet({
   onCompareAll,
   onOpenOfficial,
 }: Props) {
-  const mergedOptions = useMemo(() => {
-    const combined = [
-      ...(Array.isArray(strongOptions) ? strongOptions : []),
-      ...(Array.isArray(weakOptions) ? weakOptions : []),
-    ];
+  const { primary, rest } = useMemo(() => {
+    const strong = Array.isArray(strongOptions) ? strongOptions : [];
+    const weak = Array.isArray(weakOptions) ? weakOptions : [];
+
+    const combined = [...strong, ...weak];
 
     const seen = new Set<string>();
-    const deduped = combined.filter((option) => {
-      const key = `${clean(option.provider)}|${clean(option.url)}`;
-      if (!key) return false;
-      if (seen.has(key)) return false;
+    const deduped = combined.filter((o) => {
+      const key = `${clean(o.provider)}|${clean(o.url)}`;
+      if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    return deduped
-      .map((option) => ({ option }))
-      .sort(compareOptions)
-      .slice(0, 8);
+    const sorted = deduped.sort((a, b) => {
+      const aPrice = clean(a.priceText);
+      const bPrice = clean(b.priceText);
+
+      if (aPrice && !bPrice) return -1;
+      if (!aPrice && bPrice) return 1;
+
+      return clean(a.provider).localeCompare(clean(b.provider));
+    });
+
+    return {
+      primary: sorted[0] || null,
+      rest: sorted.slice(1, 6),
+    };
   }, [strongOptions, weakOptions]);
 
   return (
@@ -168,41 +175,53 @@ export default function TicketOptionsSheet({
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
-          <Text style={styles.title} numberOfLines={2}>
-            {matchLabel}
-          </Text>
+          <Text style={styles.title}>{matchLabel}</Text>
 
           <Text style={styles.subtitle}>
-            {clean(subtitle) || "Choose a ticket partner"}
+            {clean(subtitle) || "Choose where to get tickets"}
           </Text>
 
           <ScrollView
-            style={styles.optionsWrap}
-            contentContainerStyle={styles.optionsContent}
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {mergedOptions.map(({ option }, index) => (
+            {primary && (
               <OptionCard
-                key={`${option.provider}-${option.url}-${index}`}
-                option={option}
-                onPress={() => onSelect(option)}
+                option={primary}
+                onPress={() => onSelect(primary)}
+                highlight
               />
-            ))}
+            )}
+
+            {rest.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>More options</Text>
+
+                {rest.map((option, i) => (
+                  <OptionCard
+                    key={`${option.provider}-${option.url}-${i}`}
+                    option={option}
+                    onPress={() => onSelect(option)}
+                  />
+                ))}
+              </>
+            )}
           </ScrollView>
 
-          <View style={styles.footerActions}>
-            <Pressable style={styles.secondaryBtn} onPress={onCompareAll}>
-              <Text style={styles.secondaryBtnText}>Open full match view</Text>
+          <View style={styles.footer}>
+            <Pressable style={styles.primaryBtn} onPress={onCompareAll}>
+              <Text style={styles.primaryBtnText}>Compare all ticket routes</Text>
             </Pressable>
 
-            {onOpenOfficial ? (
-              <Pressable style={styles.ghostBtn} onPress={onOpenOfficial}>
-                <Text style={styles.ghostBtnText}>Official club site</Text>
+            {onOpenOfficial && (
+              <Pressable style={styles.secondaryBtn} onPress={onOpenOfficial}>
+                <Text style={styles.secondaryBtnText}>Official club site</Text>
               </Pressable>
-            ) : null}
+            )}
 
-            <Pressable style={styles.closeBtn} onPress={onClose}>
-              <Text style={styles.closeBtnText}>Close</Text>
+            <Pressable onPress={onClose}>
+              <Text style={styles.closeText}>Close</Text>
             </Pressable>
           </View>
         </View>
@@ -215,7 +234,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.55)",
   },
 
   backdrop: {
@@ -223,17 +242,13 @@ const styles = StyleSheet.create({
   },
 
   sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     backgroundColor: "#0B1020",
     paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 20,
-    maxHeight: "80%",
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    maxHeight: "82%",
   },
 
   handle: {
@@ -254,22 +269,28 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 6,
     fontSize: 13,
-    lineHeight: 18,
     color: theme.colors.textSecondary,
   },
 
-  optionsWrap: {
+  scroll: {
     marginTop: 16,
-    maxHeight: 360,
   },
 
-  optionsContent: {
-    gap: 10,
+  scrollContent: {
+    gap: 12,
     paddingBottom: 6,
   },
 
+  sectionLabel: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: "900",
+    color: theme.colors.textMuted,
+    textTransform: "uppercase",
+  },
+
   optionCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 14,
     backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
@@ -277,28 +298,43 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  optionTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
+  optionCardHighlight: {
+    borderColor: "rgba(0,255,136,0.35)",
+    backgroundColor: "rgba(0,255,136,0.08)",
   },
 
-  providerBlock: {
+  bestTag: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,255,136,0.18)",
+    marginBottom: 4,
+  },
+
+  bestTagText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#9CFFB8",
+  },
+
+  topRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  providerWrap: {
+    flexDirection: "row",
     gap: 10,
     flex: 1,
   },
 
   providerPill: {
-    minWidth: 38,
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   providerPillText: {
@@ -306,7 +342,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  providerTextWrap: {
+  providerText: {
     flex: 1,
   },
 
@@ -317,30 +353,23 @@ const styles = StyleSheet.create({
   },
 
   providerSub: {
-    marginTop: 3,
     fontSize: 12,
     color: theme.colors.textMuted,
   },
 
   price: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "900",
     color: theme.colors.accent,
-    textAlign: "right",
   },
 
-  optionBottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  metaText: {
+  meta: {
     fontSize: 12,
     color: theme.colors.textSecondary,
-    fontWeight: "700",
-    flex: 1,
+  },
+
+  ctaRow: {
+    alignItems: "flex-end",
   },
 
   cta: {
@@ -349,52 +378,40 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 
-  footerActions: {
+  footer: {
     marginTop: 16,
     gap: 10,
   },
 
-  secondaryBtn: {
+  primaryBtn: {
     backgroundColor: theme.colors.accent,
     paddingVertical: 14,
-    paddingHorizontal: 16,
     borderRadius: 12,
     alignItems: "center",
-    justifyContent: "center",
+  },
+
+  primaryBtnText: {
+    fontWeight: "900",
+    color: "#000",
+  },
+
+  secondaryBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
   },
 
   secondaryBtnText: {
-    fontWeight: "900",
-    color: "#000",
-    fontSize: 14,
-  },
-
-  ghostBtn: {
-    minHeight: 46,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: 16,
-  },
-
-  ghostBtnText: {
     color: theme.colors.text,
-    fontSize: 13,
     fontWeight: "800",
   },
 
-  closeBtn: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 40,
-  },
-
-  closeBtnText: {
+  closeText: {
+    textAlign: "center",
     color: theme.colors.textMuted,
-    fontSize: 13,
     fontWeight: "800",
+    marginTop: 6,
   },
 });
