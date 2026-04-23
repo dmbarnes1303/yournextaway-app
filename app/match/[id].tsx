@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Text,
   View,
+  Platform,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -147,7 +149,7 @@ function Crest({ name, uri }: { name: string; uri?: string | null }) {
   return (
     <View style={styles.crest}>
       {uri ? (
-        <Image source={{ uri }} style={styles.crestImg} />
+        <Image source={{ uri }} style={styles.crestImg} resizeMode="contain" />
       ) : (
         <Text style={styles.crestFallback}>{name.slice(0, 2).toUpperCase()}</Text>
       )}
@@ -156,12 +158,14 @@ function Crest({ name, uri }: { name: string; uri?: string | null }) {
 }
 
 function GuideCard({
+  eyebrow,
   title,
   subtitle,
   buttonLabel,
   onPress,
   disabled,
 }: {
+  eyebrow: string;
   title: string;
   subtitle: string;
   buttonLabel: string;
@@ -171,6 +175,7 @@ function GuideCard({
   return (
     <View style={[styles.guideCard, disabled && styles.guideCardDisabled]}>
       <View style={styles.guideCardTextWrap}>
+        <Text style={styles.guideEyebrow}>{eyebrow}</Text>
         <Text style={styles.guideCardTitle}>{title}</Text>
         <Text style={styles.guideCardText}>{subtitle}</Text>
       </View>
@@ -223,9 +228,7 @@ function TicketCard({
       </View>
 
       <Button
-        label={
-          loading ? "Opening…" : locked ? "Start trip to book" : "Book with partner"
-        }
+        label={loading ? "Opening…" : locked ? "Start trip to book" : "Book with partner"}
         tone="primary"
         onPress={onPress}
         loading={loading}
@@ -352,10 +355,7 @@ export default function MatchScreen() {
     ]
   );
 
-  const ticketOptions = useMemo(
-    () => normalizeResolutionOptions(ticketResult),
-    [ticketResult]
-  );
+  const ticketOptions = useMemo(() => normalizeResolutionOptions(ticketResult), [ticketResult]);
 
   const ticketsLocked = !clean(tripId);
 
@@ -578,9 +578,10 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleWrap}>
-                <Text style={styles.sectionTitle}>Tickets</Text>
+                <Text style={styles.sectionEyebrow}>Tickets</Text>
+                <Text style={styles.sectionTitle}>Live ticket partners</Text>
                 <Text style={styles.sectionSub}>
-                  Available affiliate partners for this fixture. Tap a partner to book.
+                  Clean partner routes only. No backend scoring or junk shown to the user.
                 </Text>
               </View>
             </View>
@@ -601,7 +602,7 @@ export default function MatchScreen() {
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyTitle}>No ticket routes loaded yet</Text>
                 <Text style={styles.emptyText}>
-                  Tap “Compare tickets” to check live affiliate routes for this fixture.
+                  Tap “Compare tickets” to check the current partner options for this fixture.
                 </Text>
               </View>
             )}
@@ -610,14 +611,18 @@ export default function MatchScreen() {
           <GlassCard level="default" variant="matte" style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleWrap}>
-                <Text style={styles.sectionTitle}>About this trip</Text>
-                <Text style={styles.sectionSub}>Useful planning context before you commit.</Text>
+                <Text style={styles.sectionEyebrow}>Trip context</Text>
+                <Text style={styles.sectionTitle}>Plan the weekend properly</Text>
+                <Text style={styles.sectionSub}>
+                  Use the guides and local basics to decide whether this is worth building a trip around.
+                </Text>
               </View>
             </View>
 
             <View style={styles.guideList}>
               <GuideCard
-                title="Home team guide"
+                eyebrow="Home team"
+                title={home ? `${home} guide` : "Home team guide"}
                 subtitle={
                   home
                     ? `Matchday feel, stadium context and planning notes for ${home}.`
@@ -629,7 +634,8 @@ export default function MatchScreen() {
               />
 
               <GuideCard
-                title="City guide"
+                eyebrow="City"
+                title={venueCity ? `${venueCity} guide` : "City guide"}
                 subtitle={
                   venueCity
                     ? `Stay areas, transport basics and city-break context for ${venueCity}.`
@@ -644,38 +650,46 @@ export default function MatchScreen() {
             {stadium ? (
               <View style={styles.localInfoWrap}>
                 {!!stadium.airport ? (
-                  <Text style={styles.localInfoLine}>Airport: {stadium.airport}</Text>
+                  <View style={styles.localInfoCard}>
+                    <Text style={styles.localInfoLabel}>Nearest airport</Text>
+                    <Text style={styles.localInfoValue}>{stadium.airport}</Text>
+                  </View>
                 ) : null}
 
                 {Array.isArray(stadium.transit) && stadium.transit.length > 0 ? (
-                  <Text style={styles.localInfoLine}>
-                    Getting there: {stadium.transit[0].label}
-                    {typeof stadium.transit[0].minutes === "number"
-                      ? ` • ${stadium.transit[0].minutes} min`
-                      : ""}
-                  </Text>
+                  <View style={styles.localInfoCard}>
+                    <Text style={styles.localInfoLabel}>Best transport angle</Text>
+                    <Text style={styles.localInfoValue}>
+                      {stadium.transit[0].label}
+                      {typeof stadium.transit[0].minutes === "number"
+                        ? ` • ${stadium.transit[0].minutes} min`
+                        : ""}
+                    </Text>
+                  </View>
                 ) : null}
 
                 {Array.isArray(stadium.stayAreas) && stadium.stayAreas.length > 0 ? (
-                  <Text style={styles.localInfoLine}>
-                    Best area to stay: {stadium.stayAreas[0].area}
-                  </Text>
+                  <View style={styles.localInfoCard}>
+                    <Text style={styles.localInfoLabel}>Best area to stay</Text>
+                    <Text style={styles.localInfoValue}>{stadium.stayAreas[0].area}</Text>
+                  </View>
                 ) : null}
               </View>
             ) : (
               <View style={styles.emptyBox}>
                 <Text style={styles.emptyTitle}>Local basics not available yet</Text>
                 <Text style={styles.emptyText}>
-                  You can still compare tickets and build the trip from this match.
+                  You can still compare tickets and build a trip from this match.
                 </Text>
               </View>
             )}
           </GlassCard>
 
           {loading ? (
-            <View style={styles.loadingWrap}>
+            <GlassCard level="default" variant="matte" style={styles.loadingCard}>
+              <ActivityIndicator size="small" color={theme.colors.textSecondary} />
               <Text style={styles.loadingText}>Loading match details…</Text>
-            </View>
+            </GlassCard>
           ) : null}
         </ScrollView>
       </SafeAreaView>
@@ -702,7 +716,7 @@ const styles = StyleSheet.create({
   },
 
   heroCard: {
-    borderRadius: 28,
+    borderRadius: 30,
     overflow: "hidden",
     position: "relative",
   },
@@ -718,7 +732,7 @@ const styles = StyleSheet.create({
   },
 
   heroInner: {
-    padding: 16,
+    padding: 18,
     gap: 14,
   },
 
@@ -776,8 +790,8 @@ const styles = StyleSheet.create({
 
   heroTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 24,
-    lineHeight: 29,
+    fontSize: 25,
+    lineHeight: 30,
     fontWeight: theme.fontWeight.black,
     textAlign: "center",
   },
@@ -801,8 +815,8 @@ const styles = StyleSheet.create({
   },
 
   crest: {
-    width: 86,
-    height: 86,
+    width: 88,
+    height: 88,
     borderRadius: 24,
     backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
@@ -842,9 +856,17 @@ const styles = StyleSheet.create({
     gap: 4,
   },
 
+  sectionEyebrow: {
+    color: "#8EF2A5",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
+  },
+
   sectionTitle: {
     color: theme.colors.textPrimary,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.2,
   },
@@ -865,7 +887,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: Platform.OS === "android" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
     gap: 10,
   },
 
@@ -915,7 +937,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: Platform.OS === "android" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
     gap: 6,
   },
 
@@ -938,12 +960,12 @@ const styles = StyleSheet.create({
   },
 
   guideCard: {
-    padding: 12,
+    padding: 14,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
-    gap: 10,
+    backgroundColor: Platform.OS === "android" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
+    gap: 12,
   },
 
   guideCardDisabled: {
@@ -952,6 +974,14 @@ const styles = StyleSheet.create({
 
   guideCardTextWrap: {
     gap: 4,
+  },
+
+  guideEyebrow: {
+    color: "#F5CC57",
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
 
   guideCardTitle: {
@@ -992,20 +1022,39 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  localInfoLine: {
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.medium,
+  localInfoCard: {
     padding: 12,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: Platform.OS === "android" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
+    gap: 4,
   },
 
-  loadingWrap: {
-    paddingTop: 2,
+  localInfoLabel: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.45,
+  },
+
+  localInfoValue: {
+    color: theme.colors.textPrimary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.medium,
+  },
+
+  loadingCard: {
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
   },
 
   loadingText: {
@@ -1013,6 +1062,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: theme.fontWeight.semibold,
     textAlign: "center",
-    paddingTop: 8,
   },
 });
