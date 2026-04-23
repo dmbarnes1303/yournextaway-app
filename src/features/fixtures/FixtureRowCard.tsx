@@ -1,4 +1,5 @@
-import React, { memo, useMemo } from "react";
+// src/features/fixtures/FixtureRowCard.tsx
+import React, { memo } from "react";
 import { View, Text, StyleSheet, Image, Pressable, Platform } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
@@ -17,7 +18,7 @@ type Props = {
   onPressBuildTrip: (id: string, ctx?: FixtureRouteCtx) => void;
 };
 
-type ConfidenceTier = "top" | "strong" | "good";
+type RecommendationTone = "top" | "strong" | "good";
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -206,32 +207,38 @@ function scoreFixture(item: RankedFixtureRow): number {
   return s;
 }
 
-function getConfidenceTier(item: RankedFixtureRow): ConfidenceTier {
+function getRecommendationTone(item: RankedFixtureRow): RecommendationTone {
   const score = scoreFixture(item);
   if (score >= 150) return "top";
   if (score >= 110) return "strong";
   return "good";
 }
 
-function getConfidenceCopy(tier: ConfidenceTier) {
-  if (tier === "top") {
+function getRecommendationCopy(tone: RecommendationTone) {
+  if (tone === "top") {
     return {
       label: "Top Pick",
       sublabel: "Best travel angle",
     };
   }
 
-  if (tier === "strong") {
+  if (tone === "strong") {
     return {
       label: "Strong Pick",
-      sublabel: "Very solid weekend option",
+      sublabel: "Great weekend option",
     };
   }
 
   return {
     label: "Good Option",
-    sublabel: "Worth a look",
+    sublabel: "Worth a closer look",
   };
+}
+
+function getLocationLine(item: RankedFixtureRow) {
+  const city = clean(item?.fixture?.venue?.city);
+  const venue = clean(item?.fixture?.venue?.name);
+  return [city, venue].filter(Boolean).join(" • ");
 }
 
 function Row({
@@ -241,46 +248,46 @@ function Row({
   onPressMatch,
   onPressBuildTrip,
 }: Props) {
-  const fixtureId = String(item.fixture?.id ?? "");
+  const fixtureId = String(item?.fixture?.id ?? "");
 
-  const home = item.teams?.home?.name || "Home";
-  const away = item.teams?.away?.name || "Away";
+  const home = clean(item?.teams?.home?.name) || "Home";
+  const away = clean(item?.teams?.away?.name) || "Away";
 
-  const leagueName = item.league?.name || "";
-  const leagueLogo = (item.league as any)?.logo;
-  const countryCode = (item.league as any)?.countryCode;
+  const leagueName = clean(item?.league?.name);
+  const leagueLogo = (item?.league as any)?.logo;
+  const countryCode = (item?.league as any)?.countryCode;
 
   const kickoff = kickoffPresentation(item, new Set());
-
-  const city = item.fixture?.venue?.city || "";
-  const venue = item.fixture?.venue?.name || "";
+  const locationLine = getLocationLine(item);
 
   const routeCtx: FixtureRouteCtx = {
-    leagueId: item.league?.id ?? null,
-    season: (item as any)?.league?.season ?? null,
+    leagueId: item?.league?.id ?? null,
+    season: (item?.league as any)?.season ?? null,
   };
 
-  const tier = useMemo(() => getConfidenceTier(item), [item]);
-  const confidence = useMemo(() => getConfidenceCopy(tier), [tier]);
+  const tone = getRecommendationTone(item);
+  const recommendation = getRecommendationCopy(tone);
 
   return (
     <View style={styles.wrap}>
       <GlassCard style={styles.card}>
+        <View style={styles.glow} pointerEvents="none" />
+
         <View style={styles.topRow}>
           <View style={styles.leagueRow}>
-            {leagueLogo ? <Image source={{ uri: leagueLogo }} style={styles.logo} /> : null}
+            {leagueLogo ? <Image source={{ uri: leagueLogo }} style={styles.leagueLogo} /> : null}
             {countryCode ? <LeagueFlag code={countryCode} size="sm" /> : null}
             <Text style={styles.leagueText} numberOfLines={1}>
-              {leagueName}
+              {leagueName || "League"}
             </Text>
           </View>
 
           <View
             style={[
               styles.recommendationPill,
-              tier === "top"
+              tone === "top"
                 ? styles.recommendationPillTop
-                : tier === "strong"
+                : tone === "strong"
                   ? styles.recommendationPillStrong
                   : styles.recommendationPillGood,
             ]}
@@ -288,48 +295,50 @@ function Row({
             <Text
               style={[
                 styles.recommendationPillText,
-                tier === "top"
+                tone === "top"
                   ? styles.recommendationPillTextTop
-                  : tier === "strong"
+                  : tone === "strong"
                     ? styles.recommendationPillTextStrong
                     : styles.recommendationPillTextGood,
               ]}
             >
-              {confidence.label}
+              {recommendation.label}
             </Text>
           </View>
         </View>
 
-        <View style={styles.teamsRow}>
-          <View style={styles.team}>
-            <TeamCrest name={home} logo={item.teams?.home?.logo} />
-            <Text style={styles.teamName}>{home}</Text>
+        <View style={styles.mainRow}>
+          <View style={styles.teamCol}>
+            <TeamCrest name={home} logo={item?.teams?.home?.logo} />
+            <Text style={styles.teamName} numberOfLines={2}>
+              {home}
+            </Text>
           </View>
 
-          <View style={styles.center}>
-            <Text style={styles.kickoff}>{kickoff.primary}</Text>
-            <Text style={styles.sublabel}>{confidence.sublabel}</Text>
+          <View style={styles.centerCol}>
+            <View style={styles.kickoffPill}>
+              <Text style={styles.kickoffText}>{kickoff.primary}</Text>
+            </View>
+            <Text style={styles.sublabel}>{recommendation.sublabel}</Text>
           </View>
 
-          <View style={styles.team}>
-            <TeamCrest name={away} logo={item.teams?.away?.logo} />
-            <Text style={styles.teamName}>{away}</Text>
+          <View style={styles.teamCol}>
+            <TeamCrest name={away} logo={item?.teams?.away?.logo} />
+            <Text style={styles.teamName} numberOfLines={2}>
+              {away}
+            </Text>
           </View>
         </View>
 
-        {(city || venue) ? (
-          <Text style={styles.location}>
-            {[city, venue].filter(Boolean).join(" • ")}
-          </Text>
-        ) : null}
+        {locationLine ? <Text style={styles.location}>{locationLine}</Text> : null}
 
-        <View style={styles.ctaRow}>
+        <View style={styles.actionsRow}>
           <Button
             label="View match"
             onPress={() => onPressMatch(fixtureId, routeCtx)}
             tone="primary"
             size="sm"
-            style={styles.primary}
+            style={styles.primaryButton}
           />
 
           <Button
@@ -337,11 +346,13 @@ function Row({
             onPress={() => onPressBuildTrip(fixtureId, routeCtx)}
             tone="secondary"
             size="sm"
-            style={styles.secondary}
+            style={styles.secondaryButton}
           />
 
-          <Pressable onPress={onToggleFollow} style={styles.follow}>
-            <Text style={styles.followText}>{isFollowed ? "Following" : "Follow"}</Text>
+          <Pressable onPress={onToggleFollow} style={styles.followPill}>
+            <Text style={[styles.followText, isFollowed && styles.followTextActive]}>
+              {isFollowed ? "Following" : "Follow"}
+            </Text>
           </Pressable>
         </View>
       </GlassCard>
@@ -354,17 +365,30 @@ export default memo(Row);
 const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: theme.spacing.lg,
-    marginBottom: 10,
+    marginBottom: 12,
   },
 
   card: {
-    padding: 14,
-    borderRadius: 22,
+    position: "relative",
+    overflow: "hidden",
+    padding: 15,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor:
       Platform.OS === "android" ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.05)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(7,10,12,0.52)" : "rgba(255,255,255,0.035)",
+      Platform.OS === "android" ? "rgba(7,10,12,0.56)" : "rgba(255,255,255,0.035)",
+    gap: 14,
+  },
+
+  glow: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    bottom: -14,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,210,106,0.07)",
   },
 
   topRow: {
@@ -375,22 +399,23 @@ const styles = StyleSheet.create({
   },
 
   leagueRow: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    flex: 1,
+    minWidth: 0,
   },
 
-  logo: {
+  leagueLogo: {
     width: 20,
     height: 20,
   },
 
   leagueText: {
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.black,
     flexShrink: 1,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.black,
   },
 
   recommendationPill: {
@@ -432,74 +457,95 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.88)",
   },
 
-  teamsRow: {
+  mainRow: {
     flexDirection: "row",
-    marginTop: 12,
     alignItems: "center",
+    gap: 10,
   },
 
-  team: {
+  teamCol: {
     flex: 1,
     alignItems: "center",
+    gap: 6,
   },
 
   teamName: {
-    marginTop: 2,
-    fontSize: 13,
+    color: theme.colors.text,
+    fontSize: 14,
     fontWeight: theme.fontWeight.black,
     textAlign: "center",
-    color: theme.colors.text,
   },
 
-  center: {
-    width: 96,
+  centerCol: {
+    width: 104,
     alignItems: "center",
-    gap: 4,
+    gap: 5,
   },
 
-  kickoff: {
-    fontSize: 11,
+  kickoffPill: {
+    minHeight: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  kickoffText: {
     color: theme.colors.textSecondary,
+    fontSize: 11,
     fontWeight: theme.fontWeight.black,
     textAlign: "center",
   },
 
   sublabel: {
-    fontSize: 10,
     color: "rgba(255,255,255,0.68)",
+    fontSize: 10,
     fontWeight: theme.fontWeight.bold,
     textAlign: "center",
   },
 
   location: {
-    marginTop: 10,
-    textAlign: "center",
-    fontSize: 12,
     color: theme.colors.text,
+    fontSize: 12,
+    textAlign: "center",
   },
 
-  ctaRow: {
-    marginTop: 14,
+  actionsRow: {
     flexDirection: "row",
+    alignItems: "stretch",
     gap: 8,
   },
 
-  primary: {
-    flex: 1.2,
+  primaryButton: {
+    flex: 1.15,
   },
 
-  secondary: {
+  secondaryButton: {
     flex: 1,
   },
 
-  follow: {
+  followPill: {
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
   },
 
   followText: {
-    fontSize: 11,
     color: theme.colors.textSecondary,
+    fontSize: 11,
     fontWeight: theme.fontWeight.black,
+  },
+
+  followTextActive: {
+    color: "#8EF2A5",
   },
 });
