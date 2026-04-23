@@ -303,10 +303,6 @@ function buildWalletProgress(items: WalletBooking[]) {
   return booked / items.length;
 }
 
-function clamp2(n: number) {
-  return Math.max(0, Math.min(99, n));
-}
-
 function getItemAttachments(itemId: string): WalletAttachment[] {
   const item = savedItemsStore.getById(itemId);
   return Array.isArray(item?.attachments) ? item.attachments : [];
@@ -608,9 +604,9 @@ export default function WalletScreen() {
   return (
     <Background
       imageSource={getBackground("wallet")}
-      overlayOpacity={0.03}
-      topShadeOpacity={0.24}
-      bottomShadeOpacity={0.3}
+      overlayOpacity={0.04}
+      topShadeOpacity={0.22}
+      bottomShadeOpacity={0.28}
       centerShadeOpacity={0.02}
     >
       <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -622,21 +618,15 @@ export default function WalletScreen() {
         >
           <GlassCard style={styles.hero} strength="strong" noPadding>
             <View style={styles.heroInner}>
-              <View style={styles.heroTop}>
-                <View style={styles.heroText}>
-                  <Text style={styles.kicker}>WALLET</Text>
-                  <Text style={styles.h1}>Bookings & proofs</Text>
-                  <Text style={styles.h2}>
-                    This screen reflects trip-linked Wallet truth only: saved shortlist items,
-                    opened partner journeys, user-confirmed bookings, and proof attached to those
-                    bookings.
-                  </Text>
-                </View>
-              </View>
+              <Text style={styles.kicker}>WALLET</Text>
+              <Text style={styles.h1}>Your booked trip items</Text>
+              <Text style={styles.h2}>
+                Proofs, pending partner opens and trip-linked booking history.
+              </Text>
 
               <View style={styles.metricsRow}>
                 <Metric
-                  label="Booked by you"
+                  label="Booked"
                   value={String(summary?.booked ?? 0)}
                   icon="checkmark-done-outline"
                 />
@@ -652,30 +642,12 @@ export default function WalletScreen() {
                 />
               </View>
 
-              <View style={styles.metricsRow}>
-                <Metric
-                  label="Trips"
-                  value={String(filteredGroups.length)}
-                  icon="airplane-outline"
-                />
-                <Metric
-                  label="Saved"
-                  value={String(derivedCounts.saved)}
-                  icon="bookmark-outline"
-                />
-                <Metric
-                  label="Missing proof"
-                  value={String(derivedCounts.missingProof)}
-                  icon="alert-circle-outline"
-                />
-              </View>
-
               <View style={styles.searchWrap}>
                 <Ionicons name="search-outline" size={18} color={theme.colors.textTertiary} />
                 <TextInput
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="Search bookings, trips, teams, providers…"
+                  placeholder="Search trips, bookings, teams or providers"
                   placeholderTextColor={theme.colors.textSecondary}
                   style={styles.searchInput}
                   returnKeyType="search"
@@ -712,7 +684,7 @@ export default function WalletScreen() {
                 subtitle={
                   focusedTripIdParam
                     ? "Wallet view for the trip you opened"
-                    : "Most relevant trip workspace in Wallet right now"
+                    : "Most relevant trip in your wallet right now"
                 }
               />
               <WalletSpotlightCard
@@ -736,8 +708,8 @@ export default function WalletScreen() {
                 title="No wallet activity yet"
                 message={
                   focusedTrip
-                    ? "This trip has no wallet-linked activity yet. Bookings only appear here after you save items, open partners, or confirm a booking in that trip."
-                    : "This Wallet only shows trip-linked booking activity and proof attached to those items."
+                    ? "This trip has no wallet-linked activity yet."
+                    : "Your wallet only fills up once items are saved, opened or confirmed booked."
                 }
               />
               <View style={styles.emptyActions}>
@@ -772,7 +744,7 @@ export default function WalletScreen() {
             <View style={styles.section}>
               <SectionHeader
                 title="Trip-linked wallet"
-                subtitle={`${filteredGroups.length} workspace${filteredGroups.length === 1 ? "" : "s"} with wallet activity`}
+                subtitle={`${filteredGroups.length} workspace${filteredGroups.length === 1 ? "" : "s"} with activity`}
               />
 
               <View style={styles.groupList}>
@@ -844,8 +816,8 @@ function FocusedTripStrip({
 
             <Text style={styles.focusStripMuted}>
               {filteredOut
-                ? "Your current search or category filter is hiding this trip’s wallet items below."
-                : "You’re looking at Wallet through this specific trip workspace."}
+                ? "Your current filters are hiding this trip’s wallet items below."
+                : "You’re viewing Wallet through this trip workspace."}
             </Text>
           </View>
         </View>
@@ -902,10 +874,7 @@ function WalletSpotlightCard({
   const booked = group.items.filter((x) => x.status === "booked").length;
   const pending = group.items.filter((x) => x.status === "pending").length;
   const proofs = group.items.filter((x) => x.hasProof).length;
-  const latestKickoff = group.items
-    .map((x) => x.kickoffIso)
-    .filter(Boolean)
-    .sort()[0];
+  const latestKickoff = group.items.map((x) => x.kickoffIso).filter(Boolean).sort()[0];
   const kickoffText = formatPrettyDateFromIsoString(latestKickoff);
 
   return (
@@ -952,7 +921,7 @@ function WalletSpotlightCard({
               {proofs > 0
                 ? `${proofs} proof file${proofs === 1 ? "" : "s"} attached`
                 : booked > 0
-                  ? "User-confirmed booked items still need proof uploads"
+                  ? "Booked items still need proof uploads"
                   : "No confirmed proofs yet"}
             </Text>
 
@@ -1035,7 +1004,7 @@ function WalletGroupCard({
             </View>
 
             <Text style={styles.groupMeta}>
-              {`${booked} booked by you • ${pending} pending • ${saved} saved • ${proofs} with proof`}
+              {`${booked} booked • ${pending} pending • ${saved} saved • ${proofs} proofs`}
             </Text>
           </View>
 
@@ -1182,7 +1151,7 @@ function WalletBookingCard({
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.miniStat}>
-      <Text style={styles.miniStatValue}>{String(clamp2(value))}</Text>
+      <Text style={styles.miniStatValue}>{String(value)}</Text>
       <Text style={styles.miniStatLabel}>{label}</Text>
     </View>
   );
@@ -1200,23 +1169,12 @@ const styles = StyleSheet.create({
 
   hero: {
     borderRadius: 28,
-    borderColor: "rgba(87,162,56,0.12)",
+    borderColor: "rgba(87,162,56,0.14)",
   },
 
   heroInner: {
     padding: 16,
     gap: 14,
-  },
-
-  heroTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  heroText: {
-    flex: 1,
   },
 
   kicker: {
@@ -1227,7 +1185,7 @@ const styles = StyleSheet.create({
   },
 
   h1: {
-    marginTop: 6,
+    marginTop: 4,
     color: theme.colors.text,
     fontSize: 30,
     lineHeight: 34,
@@ -1235,7 +1193,7 @@ const styles = StyleSheet.create({
   },
 
   h2: {
-    marginTop: 8,
+    marginTop: 4,
     color: theme.colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
@@ -1336,7 +1294,7 @@ const styles = StyleSheet.create({
 
   metric: {
     flex: 1,
-    minHeight: 76,
+    minHeight: 78,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
