@@ -76,7 +76,6 @@ const PLANNER_ITEMS: PlannerCardItem[] = [
 
 function screenStatusLabel(status: string) {
   const value = String(status ?? "").toLowerCase();
-
   if (value === "completed") return "Completed";
   if (value === "in progress") return "In progress";
   return "Upcoming";
@@ -97,14 +96,14 @@ function urgencyLine(hasBookedTickets: boolean, kickoffTbc: boolean) {
   }
 
   if (!hasBookedTickets) {
-    return "Tickets come first. Flights and stays are softer planning until the match is actually locked in.";
+    return "Tickets come first. Flights and stays are still soft planning until tickets are actually booked.";
   }
 
   if (kickoffTbc) {
-    return "Kickoff is still TBC, so avoid locking inflexible travel too early.";
+    return "Tickets are booked, but kickoff is still TBC. Avoid locking inflexible travel too early.";
   }
 
-  return "Your saved trip dates now drive flights and stays. Edit the trip if you want a longer or shorter window.";
+  return "Use the saved trip window as truth. Flights and stays should match the real saved dates, not guesswork.";
 }
 
 function dateWindowLine(startDate?: string | null, endDate?: string | null) {
@@ -127,101 +126,101 @@ function plannerCardMeta(args: {
   count: number;
   hasBooked: boolean;
   hasStarted: boolean;
-}): Pick<PlannerCardViewModel, "subtitle" | "status" | "tone"> {
+}) {
   const { key, count, hasBooked, hasStarted } = args;
 
   if (key === "tickets") {
     if (hasBooked) {
       return {
-        subtitle: "Tickets marked booked",
-        status: "Marked booked",
-        tone: "strong",
+        subtitle: "Ticket booking confirmed by you",
+        status: "Booked",
+        tone: "strong" as PlannerCardTone,
       };
     }
 
     if (hasStarted) {
       return {
-        subtitle: count === 1 ? "Ticket option saved" : `${count} ticket items in progress`,
-        status: "In progress",
-        tone: "medium",
+        subtitle: count === 1 ? "Ticket route started" : `${count} ticket items not yet confirmed`,
+        status: "Started",
+        tone: "medium" as PlannerCardTone,
       };
     }
 
     return {
-      subtitle: "Compare ticket options",
+      subtitle: "No ticket booking confirmed yet",
       status: "Not booked",
-      tone: "weak",
+      tone: "weak" as PlannerCardTone,
     };
   }
 
   if (key === "travel") {
     if (hasBooked) {
       return {
-        subtitle: "Travel marked booked",
-        status: "Marked booked",
-        tone: "strong",
+        subtitle: "Main travel confirmed by you",
+        status: "Booked",
+        tone: "strong" as PlannerCardTone,
       };
     }
 
     if (hasStarted) {
       return {
-        subtitle: count === 1 ? "Travel option saved" : `${count} travel items in progress`,
-        status: "In progress",
-        tone: "medium",
+        subtitle: count === 1 ? "Travel route started" : `${count} travel items not yet confirmed`,
+        status: "Started",
+        tone: "medium" as PlannerCardTone,
       };
     }
 
     return {
-      subtitle: "Check flight or rail options",
+      subtitle: "Travel still not booked",
       status: "Not booked",
-      tone: "weak",
+      tone: "weak" as PlannerCardTone,
     };
   }
 
   if (key === "stay") {
     if (hasBooked) {
       return {
-        subtitle: "Stay marked booked",
-        status: "Marked booked",
-        tone: "strong",
+        subtitle: "Stay confirmed by you",
+        status: "Booked",
+        tone: "strong" as PlannerCardTone,
       };
     }
 
     if (hasStarted) {
       return {
-        subtitle: count === 1 ? "Stay option saved" : `${count} stay items in progress`,
-        status: "In progress",
-        tone: "medium",
+        subtitle: count === 1 ? "Stay option started" : `${count} stay items not yet confirmed`,
+        status: "Started",
+        tone: "medium" as PlannerCardTone,
       };
     }
 
     return {
-      subtitle: "Check hotel options",
+      subtitle: "Stay still not booked",
       status: "Not booked",
-      tone: "weak",
+      tone: "weak" as PlannerCardTone,
     };
   }
 
   if (hasBooked) {
     return {
-      subtitle: "Extras marked booked",
-      status: "Marked booked",
-      tone: "optional",
+      subtitle: "Optional extras confirmed",
+      status: "Booked",
+      tone: "optional" as PlannerCardTone,
     };
   }
 
   if (hasStarted) {
     return {
-      subtitle: count === 1 ? "Extra saved" : `${count} extras in progress`,
+      subtitle: count === 1 ? "Extra saved or started" : `${count} extras saved or started`,
       status: "Optional",
-      tone: "optional",
+      tone: "optional" as PlannerCardTone,
     };
   }
 
   return {
-    subtitle: "Optional once the core trip is covered",
+    subtitle: "Optional after the core trip is actually covered",
     status: "Optional",
-    tone: "optional",
+    tone: "optional" as PlannerCardTone,
   };
 }
 
@@ -372,7 +371,7 @@ export default function TripDetailScreen() {
 
         Alert.alert(
           "Did you complete this booking?",
-          `"${item.title}" was opened. Mark it as booked only if you actually completed the booking.`,
+          `"${item.title}" was opened. Only mark it booked if you actually completed the booking.`,
           [
             {
               text: "Not now",
@@ -408,7 +407,7 @@ export default function TripDetailScreen() {
                   .catch(() => {
                     Alert.alert(
                       "Couldn’t update booking",
-                      "The booking was opened, but the app could not mark it as booked."
+                      "The partner page opened, but the app could not mark this item as booked."
                     );
                   })
                   .finally(() => {
@@ -439,7 +438,7 @@ export default function TripDetailScreen() {
 
   const decisionBody = useMemo(() => {
     if (!vm.hasTickets) {
-      return "Lock tickets first. That is what actually anchors the trip. Until then, everything else is softer planning.";
+      return "Lock tickets first. That is what actually anchors the trip. Until tickets are confirmed booked, the rest is still softer planning.";
     }
 
     return dominantAction?.body || "Move the trip forward by finishing the next real booking step.";
@@ -467,15 +466,15 @@ export default function TripDetailScreen() {
 
   const tripStageBody = useMemo(() => {
     if ((vm.tripCompletionPct ?? 0) >= 90) {
-      return "Core bookings are largely covered. Final job is proof, confirmations and cleanup.";
+      return "Core bookings are largely covered. Final job is proof, confirmations and Wallet cleanup.";
     }
 
     if ((vm.tripCompletionPct ?? 0) >= 65) {
-      return "The trip is taking shape now, but anything not actually marked booked still needs finishing.";
+      return "The trip is taking shape, but anything not actually marked booked is still unfinished.";
     }
 
     if ((vm.tripCompletionPct ?? 0) >= 35) {
-      return "Some parts are underway, but started does not mean covered. Keep working in order.";
+      return "Some parts are underway, but started does not mean covered. Saved and pending items are not finished bookings.";
     }
 
     return "This trip is not properly anchored yet. Work in order: tickets, travel, stay, then extras.";
@@ -595,8 +594,8 @@ export default function TripDetailScreen() {
           </View>
 
           <View style={styles.badgeRow}>
-            <View style={styles.statusPill}>
-              <Text style={styles.statusPillText}>{screenStatusLabel(status)}</Text>
+            <View style={styles.statusChip}>
+              <Text style={styles.statusChipText}>{screenStatusLabel(status)}</Text>
             </View>
 
             {data.kickoffMeta.tbc ? (
@@ -631,7 +630,7 @@ export default function TripDetailScreen() {
 
             <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
             <Text style={styles.tripWindowHint}>
-              These are the real trip dates. Flights and stays should follow this saved window.
+              These are the real saved dates. Flights and stays should follow this window.
             </Text>
           </View>
         </GlassCard>
@@ -679,28 +678,28 @@ export default function TripDetailScreen() {
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Tickets</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasTickets ? "Marked booked" : ticketCount > 0 ? "In progress" : "Not booked"}
+                {vm.hasTickets ? "Booked" : ticketCount > 0 ? "Started / not confirmed" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Travel</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasFlight ? "Marked booked" : travelCount > 0 ? "In progress" : "Not booked"}
+                {vm.hasFlight ? "Booked" : travelCount > 0 ? "Started / not confirmed" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Stay</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasHotel ? "Marked booked" : stayCount > 0 ? "In progress" : "Not booked"}
+                {vm.hasHotel ? "Booked" : stayCount > 0 ? "Started / not confirmed" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Extras</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasThings ? "Marked booked" : thingsCount > 0 ? "Optional / started" : "Optional"}
+                {vm.hasThings ? "Booked" : thingsCount > 0 ? "Optional / started" : "Optional"}
               </Text>
             </View>
           </View>
@@ -756,7 +755,7 @@ export default function TripDetailScreen() {
           </View>
 
           <Text style={styles.plannerFootnote}>
-            Tickets and travel matter most. Stay and extras should follow the real trip window, not guesses.
+            Saved and pending items are not the same as booked. The trip is only truly covered when the core steps are confirmed.
           </Text>
         </GlassCard>
 
@@ -791,11 +790,11 @@ export default function TripDetailScreen() {
             ) : null}
 
             {!vm.hasFlight ? (
-              <Text style={styles.guidanceText}>• Travel is not actually marked booked yet.</Text>
+              <Text style={styles.guidanceText}>• Main travel is still not actually marked booked.</Text>
             ) : null}
 
             {!vm.hasHotel ? (
-              <Text style={styles.guidanceText}>• Stay location still needs deciding and booking.</Text>
+              <Text style={styles.guidanceText}>• Stay still needs deciding and booking.</Text>
             ) : null}
 
             {!vm.hasTransport ? (
@@ -804,7 +803,7 @@ export default function TripDetailScreen() {
 
             {vm.hasTickets && vm.hasFlight && vm.hasHotel && vm.hasTransport ? (
               <Text style={styles.guidanceText}>
-                • Core trip is covered. Final job is proof, confirmations and cleanup in Wallet.
+                • Core trip is covered. Final job is proof, confirmations and Wallet cleanup.
               </Text>
             ) : null}
           </View>
@@ -942,7 +941,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
 
-  statusPill: {
+  statusChip: {
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
@@ -951,7 +950,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.14)",
   },
 
-  statusPillText: {
+  statusChipText: {
     color: theme.colors.text,
     fontSize: 12,
     fontWeight: "800",
@@ -1004,8 +1003,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     borderRadius: 18,
     padding: theme.spacing.md,
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.05)",
+    backgroundColor: "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
   },
