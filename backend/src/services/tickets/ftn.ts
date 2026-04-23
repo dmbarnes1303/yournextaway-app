@@ -1,316 +1,956 @@
+import crypto from "node:crypto";
 import { env, hasFtnConfig } from "../../lib/env.js";
-import { getPreferredTeamName } from "./teamAliases.js";
+import type { TicketCandidate, TicketResolveInput } from "./types.js";
+import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
 
-/**
- * FTN strategy for now:
- * - Use FTN API only to find the correct event page slug/path
- * - Monetisation is done with the affiliate query param ?aff=yournextaway
- * - Do NOT guess event ids for public URLs
- * - Do NOT use marketplace/search fallback when we can build the exact match page
- */
+type FtnEvent = {
+  event_id?: string | number;
+  id?: string | number;
+  event_name?: string;
+  name?: string;
+  event_date?: string;
+  date?: string;
+  url?: string;
+  event_url?: string;
+  min_price?: string | number | Record<string, unknown>;
+  lowest_price?: string | number | Record<string, unknown>;
+  home_team_name?: string;
+  away_team_name?: string;
+  league_name?: string;
+  competition?: string;
+};
 
-const FTN_FETCH_TIMEOUT_MS = 7000;
-const FTN_BASE_PUBLIC_URL = "https://www.footballticketnet.com";
-const FTN_AFFILIATE_PARAM = "aff";
-const FTN_AFFILIATE_VALUE = "yournextaway";
+type FtnListResponse = {
+  events?: FtnEvent[];
+  data?: FtnEvent[];
+  success?: boolean | string | number;
+  error?: string;
+  message?: string;
+};
 
-function clean(value) {
-  return String(value ?? "").trim();
+type FtnGetEventResponse =
+  | {
+      success?: boolean | string | number;
+      error?: string;
+      message?: string;
+      event?: Record<string, unknown>;
+      data?: unknown;
+      tickets?: unknown;
+      listings?: unknown;
+      items?: unknown;
+      response?: unknown;
+    }
+  | null;
+
+type NormalizedFtnTicket = {
+  id: string | null;
+  url: string | null;
+  priceText: string | null;
+  amount: number | null;
+  quantity: number | null;
+  hasBlockLikeInfo: boolean;
+};
+
+type ScoredEvent = {
+  ev: FtnEvent;
+  score: number;
+  exactTeams: boolean;
+  sameDay: boolean;
+  hasDirectUrl: boolean;
+  penalty: number;
+  leagueScore: number;
+  homeScore: number;
+  awayScore: number;
+  titleHomeScore: number;
+  titleAwayScore: number;
+};
+
+const FTN_FETCH_TIMEOUT_MS = 6500;
+const FTN_CANONICAL_HOST = "www.footballticketnet.com";
+
+const FTN_MIN_STRONG_SCORE = 60;
+const FTN_MIN_EXACT_SCORE = 92;
+const FTN_SEARCH_FALLBACK_PENALTY = 45;
+const FTN_WEAK_DIRECT_URL_PENALTY = 10;
+const FTN_TICKET_FETCH_BONUS_CAP = 12;
+
+const GENERIC_CLUB_TOKENS = new Set([
+  "ac",
+  "afc",
+  "athletic",
+  "atletico",
+  "bsc",
+  "ca",
+  "calcio",
+  "cf",
+  "city",
+  "club",
+  "de",
+  "deportivo",
+  "dynamo",
+  "fc",
+  "fk",
+  "if",
+  "jk",
+  "lokomotiv",
+  "olympique",
+  "racing",
+  "real",
+  "sc",
+  "sk",
+  "sporting",
+  "sv",
+  "the",
+  "town",
+  "ud",
+  "united",
+]);
+
+function clean(v: unknown): string {
+  return String(v ?? "").trim();
 }
 
-function stripAccents(value) {
-  return clean(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-function normalizeName(value) {
-  return stripAccents(value)
+function norm(v: unknown): string {
+  return clean(v)
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/&/g, " and ")
-    .replace(/[^a-z0-9\s-]/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\bfc\b/g, " ")
     .replace(/\bcf\b/g, " ")
-    .replace(/\bac\b/g, " ")
     .replace(/\bafc\b/g, " ")
     .replace(/\bsc\b/g, " ")
     .replace(/\bsk\b/g, " ")
+    .replace(/\bjk\b/g, " ")
     .replace(/\bclub\b/g, " ")
+    .replace(/\bde\b/g, " ")
     .replace(/\bthe\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function slugify(value) {
-  return stripAccents(value)
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\s/g, "-");
+function uniq(values: string[]): string[] {
+  return Array.from(new Set(values.map((v) => norm(v)).filter(Boolean)));
 }
 
-function safeDate(value) {
+function splitTokens(value: unknown): string[] {
+  return norm(value)
+    .split(" ")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function strongTokens(value: unknown): string[] {
+  const raw = splitTokens(value).filter((token) => token.length >= 3);
+  const reduced = raw.filter((token) => !GENERIC_CLUB_TOKENS.has(token));
+
+  if (raw.length >= 2) {
+    if (reduced.length >= 2) return reduced;
+    return raw;
+  }
+
+  return reduced.length ? reduced : raw;
+}
+
+function hasWholeWord(haystack: unknown, needle: unknown): boolean {
+  const value = ` ${norm(haystack)} `;
+  const target = ` ${norm(needle)} `;
+  return Boolean(target.trim()) && value.includes(target);
+}
+
+function safeDate(v?: string): Date | null {
+  const s = clean(v);
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function absDays(a: Date, b: Date): number {
+  return Math.floor(Math.abs(a.getTime() - b.getTime()) / 86400000);
+}
+
+function sha256(input: string): string {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function eventId(ev: FtnEvent): string {
+  return clean(ev.event_id) || clean(ev.id);
+}
+
+function eventTitle(ev: FtnEvent): string {
+  return clean(ev.event_name) || clean(ev.name);
+}
+
+function eventDate(ev: FtnEvent): string {
+  return clean(ev.event_date) || clean(ev.date);
+}
+
+function eventHome(ev: FtnEvent): string {
+  return clean(ev.home_team_name);
+}
+
+function eventAway(ev: FtnEvent): string {
+  return clean(ev.away_team_name);
+}
+
+function eventLeague(ev: FtnEvent): string {
+  return clean(ev.league_name) || clean(ev.competition);
+}
+
+function normalizePriceValue(raw: unknown): string | null {
+  if (raw == null) return null;
+
+  if (typeof raw === "string" || typeof raw === "number") {
+    const value = clean(raw);
+    return value || null;
+  }
+
+  if (typeof raw !== "object") return null;
+
+  const obj = raw as Record<string, unknown>;
+
+  const amount =
+    obj.amount ??
+    obj.value ??
+    obj.price ??
+    obj.min_price ??
+    obj.lowest_price ??
+    obj.total_price ??
+    obj.price_total;
+
+  const currency =
+    obj.currency ??
+    obj.currency_code ??
+    obj.curr ??
+    obj.symbol ??
+    "";
+
+  const amountText = clean(amount);
+  const currencyText = clean(currency);
+
+  if (amountText && currencyText) return `${amountText} ${currencyText}`.trim();
+  if (amountText) return amountText;
+
+  return null;
+}
+
+function numberFromUnknown(value: unknown): number | null {
   const raw = clean(value);
   if (!raw) return null;
 
-  const d = new Date(raw);
-  return Number.isFinite(d.getTime()) ? d : null;
+  const match = raw.match(/(\d+(?:[.,]\d{1,2})?)/);
+  if (!match) return null;
+
+  const parsed = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-function toUtcDayStart(date) {
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+function eventPrice(ev: FtnEvent): string | null {
+  return normalizePriceValue(ev.lowest_price) || normalizePriceValue(ev.min_price);
 }
 
-function absDays(a, b) {
-  return Math.floor(Math.abs(toUtcDayStart(a) - toUtcDayStart(b)) / 86400000);
+function textContainsVariant(text: string, variant: string): boolean {
+  const value = ` ${norm(text)} `;
+  const needle = ` ${norm(variant)} `;
+  return value.includes(needle);
 }
 
-function buildFtnHash({ username, action, timestamp, secret, eventId = "" }) {
-  const payload = eventId
-    ? `${username}-${action}-${eventId}-${timestamp}-${secret}`
-    : `${username}-${action}-${timestamp}-${secret}`;
-
-  return crypto.subtle
-    ? null
-    : null;
+function isBadStandaloneToken(text: string, token: string): boolean {
+  const value = ` ${norm(text)} `;
+  const needle = ` ${norm(token)} `;
+  return value.includes(needle);
 }
 
-/**
- * Node has crypto built in. Keep it local here so this file stays self-contained.
- */
-import crypto from "node:crypto";
-
-function sha256(value) {
-  return crypto.createHash("sha256").update(value).digest("hex");
+function teamAliases(teamName: string): string[] {
+  return uniq(expandTeamAliases(teamName));
 }
 
-function buildListEventsUrl(input) {
-  const username = clean(env.ftnUsername);
-  const secret = clean(env.ftnAffiliateSecret);
-  const action = "list_events";
-  const timestamp = Math.floor(Date.now() / 1000);
+function scoreNameAgainstTeam(candidateName: string, teamName: string): number {
+  const candidate = norm(candidateName);
+  if (!candidate) return 0;
 
-  const hash = sha256(`${username}-${action}-${timestamp}-${secret}`);
+  const aliases = teamAliases(teamName);
+  if (!aliases.length) return 0;
 
-  const url = new URL(clean(env.ftnBaseUrl) || `${FTN_BASE_PUBLIC_URL}/api`);
-  url.searchParams.set("action", action);
-  url.searchParams.set("u", username);
-  url.searchParams.set("s", hash);
-  url.searchParams.set("ts", String(timestamp));
+  if (aliases.includes(candidate)) return 100;
 
-  const kickoff = safeDate(input.kickoffIso);
-  if (kickoff) {
-    const from = new Date(kickoff);
-    from.setUTCDate(from.getUTCDate() - 2);
+  let best = 0;
 
-    const to = new Date(kickoff);
-    to.setUTCDate(to.getUTCDate() + 2);
+  for (const alias of aliases) {
+    if (!alias) continue;
 
-    url.searchParams.set("from_date", formatDdMmYyyy(from));
-    url.searchParams.set("to_date", formatDdMmYyyy(to));
+    if (hasWholeWord(candidate, alias)) {
+      const aliasTokenCount = splitTokens(alias).length;
+      best = Math.max(best, aliasTokenCount >= 2 ? 94 : 82);
+    }
+
+    const aliasStrong = strongTokens(alias);
+    const candidateStrong = strongTokens(candidate);
+
+    if (aliasStrong.length >= 2) {
+      const allPresent = aliasStrong.every((token) => candidateStrong.includes(token));
+      if (allPresent) {
+        best = Math.max(best, aliasStrong.length >= 3 ? 92 : 88);
+      }
+    } else if (aliasStrong.length === 1) {
+      const token = aliasStrong[0];
+      if (token.length >= 6 && candidateStrong.includes(token)) {
+        best = Math.max(best, 78);
+      }
+    }
   }
 
-  const homeName = clean(getPreferredTeamName(input.homeName));
-  const awayName = clean(getPreferredTeamName(input.awayName));
-
-  if (homeName) url.searchParams.set("home_team_name", homeName);
-  if (awayName) url.searchParams.set("away_team_name", awayName);
-
-  return url.toString();
+  return best;
 }
 
-function formatDdMmYyyy(date) {
-  const dd = String(date.getUTCDate()).padStart(2, "0");
-  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const yyyy = String(date.getUTCFullYear());
-  return `${dd}-${mm}-${yyyy}`;
+function scoreTitleAgainstTeam(title: string, teamName: string): number {
+  const normalizedTitle = norm(title);
+  if (!normalizedTitle) return 0;
+
+  const aliases = teamAliases(teamName);
+  if (!aliases.length) return 0;
+
+  let best = 0;
+
+  for (const alias of aliases) {
+    if (!alias) continue;
+
+    if (hasWholeWord(normalizedTitle, alias)) {
+      const aliasTokenCount = splitTokens(alias).length;
+      best = Math.max(best, aliasTokenCount >= 2 ? 86 : 72);
+    }
+
+    const aliasStrong = strongTokens(alias);
+    const titleStrong = strongTokens(normalizedTitle);
+
+    if (aliasStrong.length >= 2) {
+      const allPresent = aliasStrong.every((token) => titleStrong.includes(token));
+      if (allPresent) {
+        best = Math.max(best, 80);
+      }
+    } else if (aliasStrong.length === 1) {
+      const token = aliasStrong[0];
+      if (token.length >= 6 && titleStrong.includes(token)) {
+        best = Math.max(best, 68);
+      }
+    }
+  }
+
+  return best;
 }
 
-async function fetchText(url) {
+function exactTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
+  const homeScore = scoreNameAgainstTeam(eventHome(ev), input.homeName);
+  const awayScore = scoreNameAgainstTeam(eventAway(ev), input.awayName);
+  return homeScore >= 95 && awayScore >= 95;
+}
+
+function reversedTeamsMatch(ev: FtnEvent, input: TicketResolveInput): boolean {
+  const homeScore = scoreNameAgainstTeam(eventHome(ev), input.awayName);
+  const awayScore = scoreNameAgainstTeam(eventAway(ev), input.homeName);
+  return homeScore >= 95 && awayScore >= 95;
+}
+
+function variantPenalty(ev: FtnEvent, input: TicketResolveInput): number {
+  const haystack = [eventTitle(ev), eventHome(ev), eventAway(ev)].join(" ").toLowerCase();
+  const inputText = [input.homeName, input.awayName, input.leagueName ?? ""].join(" ").toLowerCase();
+
+  const variants = [
+    "women",
+    "women's",
+    "(women)",
+    "ladies",
+    "feminino",
+    "femenino",
+    "female",
+    "u17",
+    "u18",
+    "u19",
+    "u20",
+    "u21",
+    "u23",
+    "youth",
+    "juvenil",
+    "b team",
+    "ii",
+    "reserves",
+    "reserve",
+    "academy",
+    "legends",
+  ];
+
+  let penalty = 0;
+
+  for (const variant of variants) {
+    const eventHas = textContainsVariant(haystack, variant);
+    const inputHas = textContainsVariant(inputText, variant);
+
+    if (eventHas && !inputHas) {
+      penalty += 35;
+    }
+  }
+
+  const eventHasStandaloneB = isBadStandaloneToken(haystack, "b");
+  const inputHasStandaloneB = isBadStandaloneToken(inputText, "b");
+  if (eventHasStandaloneB && !inputHasStandaloneB) {
+    penalty += 35;
+  }
+
+  return penalty;
+}
+
+function formatFtnDate(date: Date): string {
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const y = date.getUTCFullYear();
+  return `${d}-${m}-${y}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const copy = new Date(date.getTime());
+  copy.setUTCDate(copy.getUTCDate() + days);
+  return copy;
+}
+
+function buildDateWindow(kickoffIso: string): { fromDate?: string; toDate?: string } {
+  const kickoff = safeDate(kickoffIso);
+  if (!kickoff) return {};
+
+  const from = addDays(kickoff, -2);
+  const to = addDays(kickoff, 2);
+
+  return {
+    fromDate: formatFtnDate(from),
+    toDate: formatFtnDate(to),
+  };
+}
+
+function summarizeEvent(ev: FtnEvent) {
+  return {
+    eventId: eventId(ev) || null,
+    title: eventTitle(ev) || null,
+    home: eventHome(ev) || null,
+    away: eventAway(ev) || null,
+    date: eventDate(ev) || null,
+    league: eventLeague(ev) || null,
+    rawUrl: clean(ev.event_url) || clean(ev.url) || null,
+    price: eventPrice(ev) || null,
+  };
+}
+
+function normalizeFtnUrl(raw: unknown): string {
+  const value = clean(raw);
+  if (!value) return "";
+
+  try {
+    if (value.startsWith("/")) {
+      const parsed = new URL(value, `https://${FTN_CANONICAL_HOST}`);
+      parsed.protocol = "https:";
+      parsed.hostname = FTN_CANONICAL_HOST;
+      return parsed.toString();
+    }
+
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+
+    const allowed = [
+      "footballticketnet.com",
+      "www.footballticketnet.com",
+      "footballticketsnet.com",
+      "www.footballticketsnet.com",
+    ];
+
+    if (!allowed.some((root) => host === root || host.endsWith(`.${root}`))) {
+      return "";
+    }
+
+    parsed.protocol = "https:";
+    parsed.hostname = FTN_CANONICAL_HOST;
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function hasUsableEventUrl(ev: FtnEvent): boolean {
+  const normalized = normalizeFtnUrl(clean(ev.event_url) || clean(ev.url));
+  if (!normalized) return false;
+
+  try {
+    const parsed = new URL(normalized);
+    const path = parsed.pathname.toLowerCase();
+    const query = parsed.search.toLowerCase();
+
+    if (!path || path === "/") return false;
+    if (path.startsWith("/search")) return false;
+    if (path.includes("404")) return false;
+    if (query.includes("text=") || query.includes("q=")) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildStableSearchUrl(input: TicketResolveInput): string {
+  const query = `${clean(input.homeName)} vs ${clean(input.awayName)}`.trim();
+  const encoded = encodeURIComponent(query);
+  return `https://${FTN_CANONICAL_HOST}/search?text=${encoded}`;
+}
+
+function buildEventIdUrl(eventIdValue: string): string {
+  return `https://${FTN_CANONICAL_HOST}/search?event_id=${encodeURIComponent(eventIdValue)}`;
+}
+
+function appendAffiliate(url: string): string {
+  const base = clean(url);
+  if (!base) return "";
+
+  try {
+    const parsed = new URL(base);
+    const aid = clean(env.ftnAffiliateId);
+
+    if (aid && !parsed.searchParams.get("aid")) {
+      parsed.searchParams.set("aid", aid);
+    }
+
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+async function fetchWithTimeout(
+  url: string
+): Promise<{ ok: boolean; status: number; body: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FTN_FETCH_TIMEOUT_MS);
 
   try {
     const res = await fetch(url, {
-      method: "GET",
       signal: controller.signal,
-      headers: {
-        Accept: "application/json,text/plain,*/*",
-      },
     });
 
-    const body = await res.text().catch(() => "");
+    let body = "";
+    try {
+      body = await res.text();
+    } catch {
+      body = "";
+    }
 
     return {
       ok: res.ok,
       status: res.status,
       body,
     };
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      return {
-        ok: false,
-        status: 408,
-        body: "",
-      };
-    }
-    throw error;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function parseJsonSafe(body) {
-  try {
-    return JSON.parse(body);
-  } catch {
-    return null;
+function leagueMatchScore(ev: FtnEvent, input: TicketResolveInput): number {
+  const eventLeagueText = norm(eventLeague(ev));
+  const inputLeagueText = norm(input.leagueName);
+
+  if (!eventLeagueText || !inputLeagueText) return 0;
+  if (eventLeagueText === inputLeagueText) return 8;
+  if (eventLeagueText.includes(inputLeagueText) || inputLeagueText.includes(eventLeagueText)) {
+    return 5;
   }
+
+  return 0;
 }
 
-function extractEvents(payload) {
-  if (!payload) return [];
+function scoreEvent(ev: FtnEvent, input: TicketResolveInput): ScoredEvent {
+  let score = 0;
 
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload.events)) return payload.events;
-  if (Array.isArray(payload.data)) return payload.data;
-  if (Array.isArray(payload.items)) return payload.items;
+  const title = eventTitle(ev);
+
+  const homeScore = scoreNameAgainstTeam(eventHome(ev), input.homeName);
+  const awayScore = scoreNameAgainstTeam(eventAway(ev), input.awayName);
+  const reversedHomeScore = scoreNameAgainstTeam(eventHome(ev), input.awayName);
+  const reversedAwayScore = scoreNameAgainstTeam(eventAway(ev), input.homeName);
+
+  const titleHomeScore = scoreTitleAgainstTeam(title, input.homeName);
+  const titleAwayScore = scoreTitleAgainstTeam(title, input.awayName);
+
+  const exactTeams = homeScore >= 95 && awayScore >= 95;
+  const reversedTeams = reversedHomeScore >= 95 && reversedAwayScore >= 95;
+  const looseTeams =
+    Math.max(homeScore, titleHomeScore) >= 70 &&
+    Math.max(awayScore, titleAwayScore) >= 70;
+
+  if (exactTeams) {
+    score += 82;
+  } else if (reversedTeams) {
+    score += 8;
+  } else if (looseTeams) {
+    score += 42;
+  } else {
+    score -= 1000;
+  }
+
+  if (homeScore >= 70 && awayScore >= 70) score += 10;
+  if (titleHomeScore >= 70 && titleAwayScore >= 70) score += 4;
+
+  const kickoff = safeDate(input.kickoffIso);
+  const evDt = safeDate(eventDate(ev));
+  let sameDay = false;
+
+  if (kickoff && evDt) {
+    const diff = absDays(kickoff, evDt);
+
+    if (diff === 0) {
+      score += 24;
+      sameDay = true;
+    } else if (diff === 1) {
+      score += 10;
+    } else if (diff === 2) {
+      score += 3;
+    } else {
+      score -= 1000;
+    }
+  } else {
+    score -= 20;
+  }
+
+  if (eventPrice(ev)) score += 3;
+
+  const leagueScore = leagueMatchScore(ev, input);
+  score += leagueScore;
+
+  const penalty = variantPenalty(ev, input);
+  score -= penalty;
+
+  const hasDirectUrl = hasUsableEventUrl(ev);
+  if (hasDirectUrl) score += 8;
+
+  return {
+    ev,
+    score,
+    exactTeams,
+    sameDay,
+    hasDirectUrl,
+    penalty,
+    leagueScore,
+    homeScore,
+    awayScore,
+    titleHomeScore,
+    titleAwayScore,
+  };
+}
+
+function dedupeEvents(events: FtnEvent[]): FtnEvent[] {
+  const map = new Map<string, FtnEvent>();
+
+  for (const ev of events) {
+    const key = [
+      eventId(ev),
+      eventTitle(ev),
+      eventDate(ev),
+      eventHome(ev),
+      eventAway(ev),
+    ]
+      .join("|")
+      .toLowerCase();
+
+    if (!key.replace(/\|/g, "")) continue;
+    if (!map.has(key)) {
+      map.set(key, ev);
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+function pickBestEvent(events: FtnEvent[], input: TicketResolveInput): ScoredEvent | null {
+  const scored = dedupeEvents(events)
+    .map((ev) => scoreEvent(ev, input))
+    .filter((x) => x.score >= FTN_MIN_STRONG_SCORE)
+    .sort((a, b) => {
+      if (a.exactTeams !== b.exactTeams) return a.exactTeams ? -1 : 1;
+      if (a.sameDay !== b.sameDay) return a.sameDay ? -1 : 1;
+      if (a.hasDirectUrl !== b.hasDirectUrl) return a.hasDirectUrl ? -1 : 1;
+      return b.score - a.score;
+    });
+
+  if (!scored.length) return null;
+  return scored[0];
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function extractArrayCandidates(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+
+  const obj = asRecord(value);
+  if (!obj) return [];
+
+  const keys = ["tickets", "listings", "items", "data", "response"];
+  for (const key of keys) {
+    if (Array.isArray(obj[key])) return obj[key] as unknown[];
+  }
 
   return [];
 }
 
-function eventId(ev) {
-  return clean(ev?.event_id ?? ev?.id);
+function normalizeTicketLike(raw: unknown): NormalizedFtnTicket | null {
+  const obj = asRecord(raw);
+  if (!obj) return null;
+
+  const priceText =
+    normalizePriceValue(obj.price) ||
+    normalizePriceValue(obj.min_price) ||
+    normalizePriceValue(obj.lowest_price) ||
+    normalizePriceValue(obj.total_price) ||
+    normalizePriceValue(obj.price_total);
+
+  const amount =
+    numberFromUnknown(obj.price) ??
+    numberFromUnknown(obj.min_price) ??
+    numberFromUnknown(obj.lowest_price) ??
+    numberFromUnknown(obj.total_price) ??
+    numberFromUnknown(obj.price_total) ??
+    null;
+
+  const quantity =
+    numberFromUnknown(obj.quantity) ??
+    numberFromUnknown(obj.qty) ??
+    null;
+
+  const url =
+    normalizeFtnUrl(obj.ticket_url) ||
+    normalizeFtnUrl(obj.event_url) ||
+    normalizeFtnUrl(obj.url) ||
+    normalizeFtnUrl(obj.link) ||
+    null;
+
+  const hasBlockLikeInfo = Boolean(clean(obj.block) || clean(obj.section) || clean(obj.category));
+
+  return {
+    id: clean(obj.id) || clean(obj.ticket_id) || clean(obj.listing_id) || null,
+    url,
+    priceText,
+    amount,
+    quantity,
+    hasBlockLikeInfo,
+  };
 }
 
-function eventName(ev) {
-  return clean(ev?.event_name ?? ev?.name ?? ev?.title);
+function extractNormalizedTickets(payload: FtnGetEventResponse): NormalizedFtnTicket[] {
+  if (!payload) return [];
+
+  const buckets: unknown[] = [];
+
+  const root = asRecord(payload);
+  if (root) {
+    buckets.push(root.tickets, root.listings, root.items, root.data, root.response, root.event);
+
+    const eventObj = asRecord(root.event);
+    if (eventObj) {
+      buckets.push(
+        eventObj.tickets,
+        eventObj.listings,
+        eventObj.items,
+        eventObj.data,
+        eventObj.response
+      );
+    }
+
+    const dataObj = asRecord(root.data);
+    if (dataObj) {
+      buckets.push(
+        dataObj.tickets,
+        dataObj.listings,
+        dataObj.items,
+        dataObj.data,
+        dataObj.response
+      );
+    }
+  }
+
+  const normalized: NormalizedFtnTicket[] = [];
+
+  for (const bucket of buckets) {
+    const rows = extractArrayCandidates(bucket);
+    for (const row of rows) {
+      const ticket = normalizeTicketLike(row);
+      if (ticket) normalized.push(ticket);
+    }
+  }
+
+  const deduped = new Map<string, NormalizedFtnTicket>();
+
+  for (const ticket of normalized) {
+    const key = [
+      ticket.id ?? "",
+      ticket.url ?? "",
+      ticket.priceText ?? "",
+      String(ticket.quantity ?? ""),
+    ].join("|");
+
+    if (!key.replace(/\|/g, "")) continue;
+
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, ticket);
+      continue;
+    }
+
+    const currentScore =
+      (ticket.amount != null ? 3 : 0) +
+      (ticket.quantity != null ? 2 : 0) +
+      (ticket.hasBlockLikeInfo ? 2 : 0) +
+      (ticket.url ? 2 : 0);
+
+    const existingScore =
+      (existing.amount != null ? 3 : 0) +
+      (existing.quantity != null ? 2 : 0) +
+      (existing.hasBlockLikeInfo ? 2 : 0) +
+      (existing.url ? 2 : 0);
+
+    if (currentScore > existingScore) {
+      deduped.set(key, ticket);
+    }
+  }
+
+  return Array.from(deduped.values()).sort((a, b) => {
+    const aAmount = a.amount ?? Number.POSITIVE_INFINITY;
+    const bAmount = b.amount ?? Number.POSITIVE_INFINITY;
+    if (aAmount !== bAmount) return aAmount - bAmount;
+
+    const aQty = a.quantity ?? 0;
+    const bQty = b.quantity ?? 0;
+    if (aQty !== bQty) return bQty - aQty;
+
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
 }
 
-function eventDate(ev) {
-  return clean(ev?.event_date ?? ev?.date ?? ev?.dateOfEvent ?? ev?.startDate);
+function summarizeTicket(ticket: NormalizedFtnTicket) {
+  return {
+    id: ticket.id,
+    url: ticket.url,
+    priceText: ticket.priceText,
+    amount: ticket.amount,
+    quantity: ticket.quantity,
+    hasBlockLikeInfo: ticket.hasBlockLikeInfo,
+  };
 }
 
-function eventHomeName(ev) {
-  return clean(ev?.home_team_name ?? ev?.homeTeamName ?? ev?.home_team ?? ev?.home);
+function ticketDataBonus(tickets: NormalizedFtnTicket[]): number {
+  if (!tickets.length) return 0;
+
+  let bonus = 0;
+
+  if (tickets.some((ticket) => ticket.amount != null)) bonus += 5;
+  if (tickets.some((ticket) => (ticket.quantity ?? 0) >= 2)) bonus += 3;
+  if (tickets.some((ticket) => ticket.hasBlockLikeInfo)) bonus += 2;
+  if (tickets.some((ticket) => ticket.url)) bonus += 2;
+
+  return Math.min(FTN_TICKET_FETCH_BONUS_CAP, bonus);
 }
 
-function eventAwayName(ev) {
-  return clean(ev?.away_team_name ?? ev?.awayTeamName ?? ev?.away_team ?? ev?.away);
+function bestTicketPriceText(
+  tickets: NormalizedFtnTicket[],
+  eventLevelPrice: string | null
+): string | null {
+  const withPrice = tickets.find((ticket) => clean(ticket.priceText));
+  return withPrice?.priceText ?? eventLevelPrice;
 }
 
-function eventLeagueName(ev) {
-  return clean(ev?.league_name ?? ev?.league ?? ev?.competition ?? ev?.category_name);
+function bestTicketUrl(
+  tickets: NormalizedFtnTicket[],
+  event: FtnEvent,
+  input: TicketResolveInput
+): { url: string; isSearchFallback: boolean } {
+  const ticketLevelUrl = tickets.find((ticket) => clean(ticket.url))?.url;
+  if (ticketLevelUrl) {
+    return {
+      url: ticketLevelUrl,
+      isSearchFallback: false,
+    };
+  }
+
+  const directEventUrl = normalizeFtnUrl(clean(event.event_url) || clean(event.url));
+  if (directEventUrl && hasUsableEventUrl(event)) {
+    return {
+      url: directEventUrl,
+      isSearchFallback: false,
+    };
+  }
+
+  const id = eventId(event);
+  if (id) {
+    return {
+      url: buildEventIdUrl(id),
+      isSearchFallback: false,
+    };
+  }
+
+  return {
+    url: buildStableSearchUrl(input),
+    isSearchFallback: true,
+  };
 }
 
-function eventUrl(ev) {
-  return clean(ev?.event_url ?? ev?.url ?? ev?.link);
-}
+async function fetchEventTickets(eventIdValue: string): Promise<FtnGetEventResponse> {
+  const ts = String(Date.now());
+  const sig = sha256(
+    `${env.ftnUsername}-get_event-${eventIdValue}-${ts}-${env.ftnAffiliateSecret}`
+  );
 
-function appendAffiliate(urlValue) {
-  const raw = clean(urlValue);
-  if (!raw) return "";
+  const qs = new URLSearchParams({
+    action: "get_event",
+    u: env.ftnUsername,
+    s: sig,
+    ts,
+    event_id: eventIdValue,
+  });
+
+  const url = `${env.ftnBaseUrl}?${qs.toString()}`;
+
+  console.log("[FTN] get_event request start", {
+    eventId: eventIdValue,
+    url,
+  });
+
+  const response = await fetchWithTimeout(url);
+
+  if (!response.ok) {
+    console.log("[FTN] get_event non-200 response", {
+      eventId: eventIdValue,
+      status: response.status,
+      body: response.body.slice(0, 500),
+    });
+    return null;
+  }
 
   try {
-    const url = new URL(raw.startsWith("http") ? raw : `${FTN_BASE_PUBLIC_URL}${raw}`);
-    url.searchParams.set(FTN_AFFILIATE_PARAM, FTN_AFFILIATE_VALUE);
-    return url.toString();
+    return response.body ? (JSON.parse(response.body) as FtnGetEventResponse) : null;
   } catch {
-    return "";
+    console.log("[FTN] get_event invalid JSON", {
+      eventId: eventIdValue,
+      body: response.body.slice(0, 500),
+    });
+    return null;
   }
 }
 
-function buildPublicEventUrlFromSlugParts(input) {
-  const leagueSlug = slugify(input.leagueName || "football-tickets");
-  const homeSlug = slugify(getPreferredTeamName(input.homeName));
-  const awaySlug = slugify(getPreferredTeamName(input.awayName));
-
-  if (!homeSlug || !awaySlug) return "";
-
-  return `${FTN_BASE_PUBLIC_URL}/${leagueSlug}/${homeSlug}-vs-${awaySlug}`;
-}
-
-function scoreNameMatch(candidate, target) {
-  const c = normalizeName(candidate);
-  const t = normalizeName(target);
-
-  if (!c || !t) return 0;
-  if (c === t) return 100;
-  if (c.includes(t) || t.includes(c)) return 80;
-
-  const cTokens = new Set(c.split(" ").filter(Boolean));
-  const tTokens = t.split(" ").filter(Boolean);
-
-  if (!tTokens.length) return 0;
-
-  let matched = 0;
-  for (const token of tTokens) {
-    if (cTokens.has(token)) matched += 1;
-  }
-
-  return Math.round((matched / tTokens.length) * 70);
-}
-
-function scoreEvent(ev, input) {
-  let score = 0;
-
-  const homeScore = scoreNameMatch(eventHomeName(ev) || eventName(ev), input.homeName);
-  const awayScore = scoreNameMatch(eventAwayName(ev) || eventName(ev), input.awayName);
-  const titleHomeScore = scoreNameMatch(eventName(ev), input.homeName);
-  const titleAwayScore = scoreNameMatch(eventName(ev), input.awayName);
-
-  const bestHome = Math.max(homeScore, titleHomeScore);
-  const bestAway = Math.max(awayScore, titleAwayScore);
-
-  if (bestHome < 70 || bestAway < 70) return -1000;
-
-  score += bestHome + bestAway;
-
-  const kickoff = safeDate(input.kickoffIso);
-  const evDt = safeDate(eventDate(ev));
-
-  if (kickoff && evDt) {
-    const diff = absDays(kickoff, evDt);
-    if (diff === 0) score += 40;
-    else if (diff === 1) score += 20;
-    else if (diff === 2) score += 5;
-    else return -1000;
-  }
-
-  const league = normalizeName(input.leagueName);
-  const evLeague = normalizeName(eventLeagueName(ev));
-  if (league && evLeague && (league.includes(evLeague) || evLeague.includes(league))) {
-    score += 15;
-  }
-
-  if (eventUrl(ev)) score += 10;
-  if (eventId(ev)) score += 5;
-
-  return score;
-}
-
-function pickBestEvent(events, input) {
-  const scored = events
-    .map((ev) => ({
-      ev,
-      score: scoreEvent(ev, input),
-    }))
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  return scored[0] ?? null;
-}
-
-export async function resolveFtnCandidate(input) {
+export async function resolveFtnCandidate(
+  input: TicketResolveInput
+): Promise<TicketCandidate | null> {
   if (!hasFtnConfig()) {
     console.log("[FTN] skipped: missing config");
     return null;
   }
 
-  const homeName = clean(getPreferredTeamName(input.homeName));
-  const awayName = clean(getPreferredTeamName(input.awayName));
+  const homeName = getPreferredTeamName(input.homeName);
+  const awayName = getPreferredTeamName(input.awayName);
   const kickoffIso = clean(input.kickoffIso);
 
   if (!homeName || !awayName || !kickoffIso) {
@@ -322,115 +962,205 @@ export async function resolveFtnCandidate(input) {
     return null;
   }
 
-  const apiUrl = buildListEventsUrl({
+  const ts = String(Date.now());
+  const sig = sha256(`${env.ftnUsername}-list_events-${ts}-${env.ftnAffiliateSecret}`);
+
+  const qs = new URLSearchParams({
+    action: "list_events",
+    u: env.ftnUsername,
+    s: sig,
+    ts,
+    home_team_name: homeName,
+    away_team_name: awayName,
+  });
+
+  const dateWindow = buildDateWindow(kickoffIso);
+  if (dateWindow.fromDate) qs.set("from_date", dateWindow.fromDate);
+  if (dateWindow.toDate) qs.set("to_date", dateWindow.toDate);
+
+  const url = `${env.ftnBaseUrl}?${qs.toString()}`;
+
+  console.log("[FTN] list_events request start", {
     homeName,
     awayName,
     kickoffIso,
-    leagueName: clean(input.leagueName),
+    fromDate: dateWindow.fromDate ?? null,
+    toDate: dateWindow.toDate ?? null,
   });
 
-  const res = await fetchText(apiUrl);
-
-  if (!res.ok) {
-    console.log("[FTN] list_events failed", {
-      status: res.status,
-      url: apiUrl,
-      body: res.body.slice(0, 500),
+  let response: { ok: boolean; status: number; body: string };
+  try {
+    response = await fetchWithTimeout(url);
+  } catch (error) {
+    console.log("[FTN] network/timeout error", {
+      message: error instanceof Error ? error.message : String(error),
     });
-
-    const fallbackUrl = appendAffiliate(
-      buildPublicEventUrlFromSlugParts({
-        homeName,
-        awayName,
-        leagueName: clean(input.leagueName) || "italian-serie-a",
-      })
-    );
-
-    if (!fallbackUrl) return null;
-
-    return {
-      provider: "footballticketnet",
-      exact: false,
-      score: 20,
-      rawScore: 20,
-      url: fallbackUrl,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "search_fallback",
-      urlQuality: "listing",
-    };
+    return null;
   }
 
-  const parsed = parseJsonSafe(res.body);
-  const events = extractEvents(parsed);
+  if (!response.ok) {
+    console.log("[FTN] non-200 response", {
+      status: response.status,
+      body: response.body.slice(0, 500),
+    });
+    return null;
+  }
 
-  const best = pickBestEvent(events, {
-    homeName,
-    awayName,
-    kickoffIso,
-    leagueName: clean(input.leagueName),
-  });
+  let json: FtnListResponse | null = null;
+  try {
+    json = response.body ? (JSON.parse(response.body) as FtnListResponse) : null;
+  } catch {
+    console.log("[FTN] invalid JSON response", {
+      body: response.body.slice(0, 500),
+    });
+    return null;
+  }
 
-  if (!best) {
-    const fallbackUrl = appendAffiliate(
-      buildPublicEventUrlFromSlugParts({
-        homeName,
-        awayName,
-        leagueName: clean(input.leagueName) || "italian-serie-a",
-      })
-    );
+  const events = Array.isArray(json?.events)
+    ? json.events
+    : Array.isArray(json?.data)
+      ? json.data
+      : [];
 
-    if (!fallbackUrl) return null;
-
-    console.log("[FTN] no strong API match, using slug fallback", {
-      fallbackUrl,
+  if (!events.length) {
+    console.log("[FTN] no events returned", {
       homeName,
       awayName,
-      leagueName: clean(input.leagueName),
+      kickoffIso,
+      fromDate: dateWindow.fromDate ?? null,
+      toDate: dateWindow.toDate ?? null,
+      success: json?.success ?? null,
+      error: json?.error ?? null,
+      message: json?.message ?? null,
     });
-
-    return {
-      provider: "footballticketnet",
-      exact: false,
-      score: 24,
-      rawScore: 24,
-      url: fallbackUrl,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "partial_match",
-      urlQuality: "listing",
-    };
+    return null;
   }
 
-  const directEventUrl =
-    appendAffiliate(eventUrl(best.ev)) ||
-    appendAffiliate(
-      buildPublicEventUrlFromSlugParts({
-        homeName,
-        awayName,
-        leagueName: clean(input.leagueName) || "italian-serie-a",
-      })
-    );
+  console.log("[FTN] raw events returned", {
+    count: events.length,
+    sample: events.slice(0, 5).map(summarizeEvent),
+  });
 
-  if (!directEventUrl) return null;
+  const best = pickBestEvent(events, input);
+
+  if (!best) {
+    console.log("[FTN] events returned but no strong match", {
+      count: events.length,
+      sample: events.slice(0, 8).map((ev) => {
+        const scored = scoreEvent(ev, input);
+        return {
+          ...summarizeEvent(ev),
+          score: scored.score,
+          exactTeams: scored.exactTeams,
+          sameDay: scored.sameDay,
+          hasDirectUrl: scored.hasDirectUrl,
+          penalty: scored.penalty,
+          leagueScore: scored.leagueScore,
+          homeScore: scored.homeScore,
+          awayScore: scored.awayScore,
+          titleHomeScore: scored.titleHomeScore,
+          titleAwayScore: scored.titleAwayScore,
+        };
+      }),
+    });
+    return null;
+  }
+
+  const chosenEventId = eventId(best.ev);
+  let tickets: NormalizedFtnTicket[] = [];
+
+  if (chosenEventId) {
+    const ticketPayload = await fetchEventTickets(chosenEventId);
+    tickets = extractNormalizedTickets(ticketPayload);
+
+    console.log("[FTN] get_event parsed tickets", {
+      eventId: chosenEventId,
+      count: tickets.length,
+      sample: tickets.slice(0, 5).map(summarizeTicket),
+    });
+  } else {
+    console.log("[FTN] best event missing event_id", {
+      best: {
+        ...summarizeEvent(best.ev),
+        score: best.score,
+        exactTeams: best.exactTeams,
+        sameDay: best.sameDay,
+        penalty: best.penalty,
+        homeScore: best.homeScore,
+        awayScore: best.awayScore,
+        titleHomeScore: best.titleHomeScore,
+        titleAwayScore: best.titleAwayScore,
+      },
+    });
+  }
+
+  const priceText = bestTicketPriceText(tickets, eventPrice(best.ev));
+  const outbound = bestTicketUrl(tickets, best.ev, input);
+  const affiliateUrl = appendAffiliate(outbound.url);
+
+  if (!affiliateUrl) {
+    console.log("[FTN] failed to build outbound URL", {
+      best: {
+        ...summarizeEvent(best.ev),
+        score: best.score,
+        exactTeams: best.exactTeams,
+        sameDay: best.sameDay,
+        penalty: best.penalty,
+      },
+      ticketCount: tickets.length,
+    });
+    return null;
+  }
+
+  let finalScore = best.score + ticketDataBonus(tickets);
+
+  if (outbound.isSearchFallback) {
+    finalScore = Math.max(0, finalScore - FTN_SEARCH_FALLBACK_PENALTY);
+  } else if (!best.hasDirectUrl && !tickets.some((ticket) => ticket.url)) {
+    finalScore = Math.max(0, finalScore - FTN_WEAK_DIRECT_URL_PENALTY);
+  }
+
+  const exact =
+    best.exactTeams &&
+    best.sameDay &&
+    !outbound.isSearchFallback &&
+    finalScore >= FTN_MIN_EXACT_SCORE;
+
+  const reason: TicketCandidate["reason"] = outbound.isSearchFallback
+    ? "search_fallback"
+    : exact
+      ? "exact_event"
+      : "partial_match";
 
   console.log("[FTN] matched event", {
-    id: eventId(best.ev) || null,
-    name: eventName(best.ev) || null,
-    date: eventDate(best.ev) || null,
-    url: directEventUrl,
-    score: best.score,
+    best: {
+      ...summarizeEvent(best.ev),
+      score: best.score,
+      finalScore,
+      exactTeams: best.exactTeams,
+      sameDay: best.sameDay,
+      penalty: best.penalty,
+      hasDirectUrl: best.hasDirectUrl,
+      exact,
+      isSearchFallback: outbound.isSearchFallback,
+      chosenEventId: chosenEventId || null,
+      ticketCount: tickets.length,
+      topTicket: tickets[0] ? summarizeTicket(tickets[0]) : null,
+      affiliateUrl,
+      homeScore: best.homeScore,
+      awayScore: best.awayScore,
+      titleHomeScore: best.titleHomeScore,
+      titleAwayScore: best.titleAwayScore,
+    },
   });
 
   return {
     provider: "footballticketnet",
-    exact: best.score >= 180,
-    score: best.score,
-    rawScore: best.score,
-    url: directEventUrl,
+    exact,
+    score: finalScore,
+    url: affiliateUrl,
     title: `Tickets: ${homeName} vs ${awayName}`,
-    priceText: null,
-    reason: best.score >= 180 ? "exact_event" : "partial_match",
-    urlQuality: "listing",
+    priceText,
+    reason,
   };
-}
+      }
