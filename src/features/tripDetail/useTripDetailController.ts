@@ -421,7 +421,7 @@ export default function useTripDetailController({
   function onUpgradePress() {
     Alert.alert(
       "Go Pro",
-      "Pro removes caps and adds automation later. This is the placeholder entry point.",
+      "Pro removes caps and adds automation later. This is only a placeholder entry point for now.",
       [{ text: "OK" }]
     );
   }
@@ -466,7 +466,7 @@ export default function useTripDetailController({
     if (!tripId) {
       Alert.alert(
         "Save trip first",
-        "Save this trip before booking so we can store it in Wallet."
+        "Save this trip before opening booking partners so the app can track the result honestly."
       );
       return;
     }
@@ -619,7 +619,7 @@ export default function useTripDetailController({
   function confirmMarkBooked(item: SavedItem) {
     Alert.alert(
       "Mark as booked?",
-      "Only do this if you completed the booking and want it in Wallet.",
+      "Only do this if you actually completed the booking. Saved or pending is not the same as booked.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Mark booked", onPress: () => void markBookedSmart(item) },
@@ -628,10 +628,14 @@ export default function useTripDetailController({
   }
 
   function confirmMoveToPending(item: SavedItem) {
-    Alert.alert("Move to Pending?", "Use Pending when you’re not sure if you booked it yet.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Move", onPress: () => void moveToPending(item) },
-    ]);
+    Alert.alert(
+      "Move to Pending?",
+      "Use Pending when you opened the partner or started the flow but have not confirmed a completed booking.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Move", onPress: () => void moveToPending(item) },
+      ]
+    );
   }
 
   async function addNote() {
@@ -840,7 +844,7 @@ export default function useTripDetailController({
         return;
       }
 
-      Alert.alert("Tickets not found", "No ticket partners were returned for this match right now.");
+      Alert.alert("Tickets not found", "No usable ticket partners were returned for this match.");
       return;
     }
 
@@ -898,7 +902,7 @@ export default function useTripDetailController({
     if (!activeTripId) {
       Alert.alert(
         "Save trip first",
-        "Save this trip before booking so we can store it in Wallet."
+        "Save this trip before opening ticket partners so the app can track the outcome honestly."
       );
       return;
     }
@@ -932,7 +936,7 @@ export default function useTripDetailController({
 
       Alert.alert(
         "Tickets unavailable",
-        "Ticket search failed before the partner click was created."
+        "Ticket search failed before the partner click could be created."
       );
     } finally {
       setTicketLoading(false);
@@ -994,7 +998,7 @@ export default function useTripDetailController({
         tripEndDate: trip?.endDate ?? null,
       },
       missingTitle: "Hotels not ready",
-      missingMessage: "No hotel search available yet.",
+      missingMessage: "No hotel search is available yet.",
     });
   }
 
@@ -1002,7 +1006,7 @@ export default function useTripDetailController({
     const candidate = getTravelLaunchCandidate(affiliateUrls, cityName, trip);
 
     if (!candidate) {
-      Alert.alert("Travel not ready", "No travel search available yet.");
+      Alert.alert("Travel not ready", "No travel search is available yet.");
       return;
     }
 
@@ -1015,21 +1019,21 @@ export default function useTripDetailController({
       sourceSection: candidate.sourceSection,
       metadata: candidate.metadata,
       missingTitle: "Travel not ready",
-      missingMessage: "No travel search available yet.",
+      missingMessage: "No travel search is available yet.",
     });
   }
 
   async function launchThings() {
     Alert.alert(
       "Experiences unavailable",
-      "This build only supports approved commercial partners. Activities are not wired into the monetised runtime."
+      "This build only supports approved commercial partners. Extras are not wired into the monetised runtime yet."
     );
   }
 
   async function launchTransfers() {
     Alert.alert(
       "Transfers unavailable",
-      "This build only supports approved commercial partners. Transfers are not wired into the monetised runtime."
+      "This build only supports approved commercial partners. Transfers are not wired into the monetised runtime yet."
     );
   }
 
@@ -1041,7 +1045,7 @@ export default function useTripDetailController({
 
     const tripId = getResolvedTripId();
     if (!tripId) {
-      Alert.alert("Save trip first", "Save this trip before booking.");
+      Alert.alert("Save trip first", "Save this trip before opening booking flows.");
       return;
     }
 
@@ -1104,4 +1108,4 @@ export default function useTripDetailController({
     onSelectTicketSheetOption,
     onOpenOfficialFromSheet,
   };
-      }
+}
