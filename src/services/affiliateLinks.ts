@@ -51,7 +51,6 @@ function clampInt(value: unknown, min: number, max: number, fallback: number): n
 
 function normalizeCabinClass(value: unknown): CabinClass {
   const raw = clean(value).toLowerCase();
-
   if (raw === "premium") return "premium";
   if (raw === "business") return "business";
   if (raw === "first") return "first";
@@ -98,9 +97,38 @@ function normalizeOriginIata(value: unknown): string {
   return /^[A-Z]{3}$/.test(raw) ? raw : "LON";
 }
 
+function tryResolveIata(candidate: string): string | null {
+  const code = clean(getIataCityCodeForCity(candidate)).toUpperCase();
+  return /^[A-Z]{3}$/.test(code) ? code : null;
+}
+
 function resolveDestinationIata(city: string): string | null {
-  const resolved = clean(getIataCityCodeForCity(city)).toUpperCase();
-  return /^[A-Z]{3}$/.test(resolved) ? resolved : null;
+  const raw = clean(city);
+  if (!raw) return null;
+
+  let code = tryResolveIata(raw);
+  if (code) return code;
+
+  const stripped = raw.split(/[-,(]/)[0].trim();
+  if (stripped && stripped !== raw) {
+    code = tryResolveIata(stripped);
+    if (code) return code;
+  }
+
+  const parts = raw.split(/\s+/).filter(Boolean);
+
+  for (const part of parts) {
+    code = tryResolveIata(part);
+    if (code) return code;
+  }
+
+  if (parts.length > 1) {
+    code = tryResolveIata(parts[parts.length - 1]);
+    if (code) return code;
+  }
+
+  console.warn("❌ Missing IATA mapping for city:", raw);
+  return null;
 }
 
 function mapCabinClassToTripClass(value: CabinClass): "0" | "1" | "2" {
@@ -153,9 +181,7 @@ function buildHotelsUrl(args: {
   if (!city) return null;
 
   const base = resolveTrackedUrl(AffiliateConfig.expediaTracked);
-  if (!base) {
-    return null;
-  }
+  if (!base) return null;
 
   return appendQuery(base, {
     destination: city,
@@ -190,9 +216,7 @@ function buildFootballTicketNetUrl(args: {
   endDate: string | null;
 }): string | null {
   const base = resolveTrackedUrl(AffiliateConfig.footballticketnetTracked);
-  if (!base) {
-    return null;
-  }
+  if (!base) return null;
 
   const city = clean(args.city);
 
