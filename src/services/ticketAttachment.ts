@@ -5,16 +5,13 @@ import type { SavedItem, WalletAttachment } from "@/src/core/savedItemTypes";
 import { pickAndStoreAttachmentForItem } from "@/src/services/walletAttachments";
 
 /**
- * Legacy compatibility wrapper.
- * Some older flows still call attachTicketProof(itemId).
+ * Compatibility wrapper used across existing screens.
  *
- * Behaviour:
- * - ensure saved items are loaded
- * - verify item exists
- * - verify item is booked
- * - pick/store attachment
- * - attach only if not already attached
- * - return boolean for simple call sites
+ * Important truth rules:
+ * - proof is only attachable to user-confirmed booked items
+ * - this is not ticket-only despite the legacy function name
+ * - duplicate attachments are blocked by id/uri match
+ * - returns boolean so older call sites stay simple
  */
 
 function cleanString(value: unknown): string {
@@ -27,7 +24,7 @@ async function ensureSavedItemsLoaded() {
   try {
     await savedItemsStore.load();
   } catch {
-    // ignore
+    // keep caller-facing handling simple
   }
 }
 
@@ -41,6 +38,15 @@ function showError(message: string) {
   });
 }
 
+function isDuplicateAttachment(
+  existing: WalletAttachment[],
+  incoming: WalletAttachment
+): boolean {
+  return existing.some(
+    (entry) => entry.id === incoming.id || cleanString(entry.uri) === cleanString(incoming.uri)
+  );
+}
+
 export async function attachTicketProof(itemId: string): Promise<boolean> {
   const id = cleanString(itemId);
   if (!id) return false;
@@ -48,13 +54,13 @@ export async function attachTicketProof(itemId: string): Promise<boolean> {
   try {
     await ensureSavedItemsLoaded();
 
-    const before = savedItemsStore.getById(id) ?? null;
-    if (!before) {
+    const current = savedItemsStore.getById(id) ?? null;
+    if (!current) {
       showError("This booking could not be found.");
       return false;
     }
 
-    if (before.status !== "booked") {
+    if (current.status !== "booked") {
       showError("Only booked items can store proof.");
       return false;
     }
@@ -64,17 +70,14 @@ export async function attachTicketProof(itemId: string): Promise<boolean> {
 
     await ensureSavedItemsLoaded();
 
-    const afterPick = savedItemsStore.getById(id) ?? null;
-    if (!afterPick) {
+    const refreshed = savedItemsStore.getById(id) ?? null;
+    if (!refreshed) {
       showError("This booking could not be found.");
       return false;
     }
 
-    const alreadyAttached = getAttachments(afterPick).some(
-      (existing) => existing.id === attachment.id || existing.uri === attachment.uri
-    );
-
-    if (!alreadyAttached) {
+    const existingAttachments = getAttachments(refreshed);
+    if (!isDuplicateAttachment(existingAttachments, attachment)) {
       await savedItemsStore.addAttachment(id, attachment);
     }
 
@@ -82,7 +85,9 @@ export async function attachTicketProof(itemId: string): Promise<boolean> {
   } catch (error: any) {
     const message = cleanString(error?.message);
 
-    if (message.toLowerCase() === "cancelled") return false;
+    if (message.toLowerCase() === "cancelled") {
+      return false;
+    }
 
     showError(message || "Try again.");
     return false;
