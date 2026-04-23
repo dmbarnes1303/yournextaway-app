@@ -140,8 +140,9 @@ function plannerCardMeta(args: {
 
     if (hasStarted) {
       return {
-        subtitle: count === 1 ? "Ticket route started" : `${count} ticket items not yet confirmed`,
-        status: "Started",
+        subtitle:
+          count === 1 ? "Ticket route started but not booked" : `${count} ticket items not yet confirmed`,
+        status: "Not booked",
         tone: "medium" as PlannerCardTone,
       };
     }
@@ -164,8 +165,9 @@ function plannerCardMeta(args: {
 
     if (hasStarted) {
       return {
-        subtitle: count === 1 ? "Travel route started" : `${count} travel items not yet confirmed`,
-        status: "Started",
+        subtitle:
+          count === 1 ? "Travel route started but not booked" : `${count} travel items not yet confirmed`,
+        status: "Not booked",
         tone: "medium" as PlannerCardTone,
       };
     }
@@ -188,8 +190,9 @@ function plannerCardMeta(args: {
 
     if (hasStarted) {
       return {
-        subtitle: count === 1 ? "Stay option started" : `${count} stay items not yet confirmed`,
-        status: "Started",
+        subtitle:
+          count === 1 ? "Stay option started but not booked" : `${count} stay items not yet confirmed`,
+        status: "Not booked",
         tone: "medium" as PlannerCardTone,
       };
     }
@@ -211,7 +214,7 @@ function plannerCardMeta(args: {
 
   if (hasStarted) {
     return {
-      subtitle: count === 1 ? "Extra saved or started" : `${count} extras saved or started`,
+      subtitle: count === 1 ? "Extra saved or started, not booked" : `${count} extras saved or started, not booked`,
       status: "Optional",
       tone: "optional" as PlannerCardTone,
     };
@@ -678,28 +681,28 @@ export default function TripDetailScreen() {
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Tickets</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasTickets ? "Booked" : ticketCount > 0 ? "Started / not confirmed" : "Not booked"}
+                {vm.hasTickets ? "Booked" : ticketCount > 0 ? "Not booked (started)" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Travel</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasFlight ? "Booked" : travelCount > 0 ? "Started / not confirmed" : "Not booked"}
+                {vm.hasFlight ? "Booked" : travelCount > 0 ? "Not booked (started)" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Stay</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasHotel ? "Booked" : stayCount > 0 ? "Started / not confirmed" : "Not booked"}
+                {vm.hasHotel ? "Booked" : stayCount > 0 ? "Not booked (started)" : "Not booked"}
               </Text>
             </View>
 
             <View style={styles.coreStatusCard}>
               <Text style={styles.coreStatusLabel}>Extras</Text>
               <Text style={styles.coreStatusValue}>
-                {vm.hasThings ? "Booked" : thingsCount > 0 ? "Optional / started" : "Optional"}
+                {vm.hasThings ? "Booked" : thingsCount > 0 ? "Optional (not booked)" : "Optional"}
               </Text>
             </View>
           </View>
