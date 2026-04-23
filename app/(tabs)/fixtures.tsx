@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { View, StyleSheet, FlatList, ActivityIndicator, Text } from "react-native";
+import { View, StyleSheet, FlatList, ActivityIndicator, Text, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -78,8 +78,16 @@ function buildCanonicalTripStartParams(args: {
 
   return {
     fixtureId: cleanString(args.fixtureId),
-    ...(cleanString(args.from) ? { from: cleanString(args.from) } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
-    ...(cleanString(args.to) ? { to: cleanString(args.to) } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
+    ...(cleanString(args.from)
+      ? { from: cleanString(args.from) }
+      : fallbackWindow.from
+        ? { from: fallbackWindow.from }
+        : {}),
+    ...(cleanString(args.to)
+      ? { to: cleanString(args.to) }
+      : fallbackWindow.to
+        ? { to: fallbackWindow.to }
+        : {}),
     ...(cleanString(args.leagueId) ? { leagueId: cleanString(args.leagueId) } : {}),
     ...(cleanString(args.season) ? { season: cleanString(args.season) } : {}),
     ...(cleanString(args.city) ? { city: cleanString(args.city) } : {}),
@@ -135,9 +143,6 @@ export default function FixturesScreen() {
     loading,
     error,
     filtered,
-    expandedKey,
-    setExpandedKey,
-    placeholderIds,
     onToggleFollowFromRow,
 
     calendarOpen,
@@ -260,30 +265,26 @@ export default function FixturesScreen() {
       <View style={styles.headerWrap}>
         <Surface tone={comboMode ? "gold" : "green"}>
           <FixturesHeader
-            titleText={derivedTitleText}
-            subtitleText={derivedSubtitleText}
-            headerDateLine={derivedHeaderDateLine}
             query={query}
             setQuery={setQuery}
             stripDays={stripDays}
             isRange={isRange}
             selectedDay={selectedDay}
             onTapStripDate={onTapStripDate}
-            selectedLeagueIds={selectedLeagueIds}
-            resetToFeatured={resetToFeatured}
-            selectSingleLeague={selectSingleLeague}
-            activeRegion={activeRegion}
-            setActiveRegion={setActiveRegion}
-            leaguesByRegion={leaguesByRegion}
-            toggleLeague={toggleLeague}
-            selectedLeagues={selectedLeagues}
-            helperLineText={derivedHelperLineText}
-            loading={loading}
-            error={showHardError ? error : null}
-            filteredCount={visibleRows.length}
             openCalendar={openCalendar}
+            selectedLeagueIds={selectedLeagueIds}
+            selectedLeagues={selectedLeagues}
+            toggleLeague={toggleLeague}
+            selectSingleLeague={selectSingleLeague}
+            resetToFeatured={resetToFeatured}
           />
         </Surface>
+
+        <View style={styles.contextWrap}>
+          <Text style={styles.pageTitle}>{derivedTitleText}</Text>
+          <Text style={styles.pageSubtitle}>{derivedSubtitleText}</Text>
+          <Text style={styles.pageMeta}>{derivedHeaderDateLine}</Text>
+        </View>
 
         {showInlineRefresh ? (
           <View style={styles.refreshRow}>
@@ -307,11 +308,7 @@ export default function FixturesScreen() {
               <Text style={styles.summaryTitle}>
                 {visibleRows.length} fixture{visibleRows.length === 1 ? "" : "s"} in view
               </Text>
-              <Text style={styles.summaryText}>
-                {comboMode
-                  ? "These are the selected matches for a stackable football trip."
-                  : "Filtered, ranked and ready to open into match or trip planning."}
-              </Text>
+              <Text style={styles.summaryText}>{derivedHelperLineText}</Text>
             </GlassCard>
           </View>
         ) : null}
@@ -319,31 +316,26 @@ export default function FixturesScreen() {
     );
   }, [
     comboMode,
-    derivedTitleText,
-    derivedSubtitleText,
-    derivedHeaderDateLine,
     query,
     setQuery,
     stripDays,
     isRange,
     selectedDay,
     onTapStripDate,
-    selectedLeagueIds,
-    resetToFeatured,
-    selectSingleLeague,
-    activeRegion,
-    setActiveRegion,
-    leaguesByRegion,
-    toggleLeague,
-    selectedLeagues,
-    derivedHelperLineText,
-    loading,
-    showHardError,
-    error,
-    visibleRows.length,
     openCalendar,
+    selectedLeagueIds,
+    selectedLeagues,
+    toggleLeague,
+    selectSingleLeague,
+    resetToFeatured,
+    derivedTitleText,
+    derivedSubtitleText,
+    derivedHeaderDateLine,
+    derivedHelperLineText,
     showInlineRefresh,
     showInitialLoading,
+    showHardError,
+    visibleRows.length,
   ]);
 
   const emptyComponent = useMemo(() => {
@@ -387,7 +379,7 @@ export default function FixturesScreen() {
               message={
                 comboMode
                   ? "This stacked trip no longer matches the current fixture view. Widen the date range or reopen it from Discover."
-                  : "Try another date, another region, or a different league selection."
+                  : "Try another date, another league, or a wider range."
               }
               iconName={comboMode ? "git-compare" : "search"}
             />
@@ -402,8 +394,6 @@ export default function FixturesScreen() {
   const renderRow = useCallback(
     ({ item, index }: { item: RankedFixtureRow; index: number }) => {
       const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
-      const rowKey = `${String(item?.league?.id ?? "L")}-${fixtureId || `row-${index}`}`;
-      const expanded = expandedKey === rowKey;
       const isFollowed = fixtureId ? followedIdSet.has(fixtureId) : false;
 
       const leagueId = item?.league?.id ?? null;
@@ -416,11 +406,10 @@ export default function FixturesScreen() {
 
       return (
         <FixtureRowCard
+          key={`${fixtureId || index}`}
           item={item}
-          expanded={expanded}
+          expanded={false}
           isFollowed={isFollowed}
-          placeholderIds={placeholderIds}
-          onToggleExpanded={() => setExpandedKey(expanded ? null : rowKey)}
           onToggleFollow={() => onToggleFollowFromRow(item)}
           onPressMatch={goMatch}
           onPressBuildTrip={(id: string) =>
@@ -434,15 +423,7 @@ export default function FixturesScreen() {
         />
       );
     },
-    [
-      expandedKey,
-      followedIdSet,
-      placeholderIds,
-      setExpandedKey,
-      onToggleFollowFromRow,
-      goMatch,
-      goTripOrBuild,
-    ]
+    [followedIdSet, onToggleFollowFromRow, goMatch, goTripOrBuild]
   );
 
   return (
@@ -540,6 +521,34 @@ const styles = StyleSheet.create({
   surfaceNeutral: {
     borderColor: theme.colors.borderSubtle,
     backgroundColor: "rgba(255,255,255,0.02)",
+  },
+
+  contextWrap: {
+    paddingHorizontal: theme.spacing.lg,
+    gap: 4,
+  },
+
+  pageTitle: {
+    color: theme.colors.text,
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  pageSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: theme.fontWeight.bold,
+  },
+
+  pageMeta: {
+    color: theme.colors.textTertiary,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: theme.fontWeight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.45,
   },
 
   summaryRow: {
