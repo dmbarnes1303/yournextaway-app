@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Image } from "react-native";
+import { View, Text, StyleSheet, Pressable, Image, Platform } from "react-native";
 
 import GlassCard from "@/src/components/GlassCard";
 import EmptyState from "@/src/components/EmptyState";
@@ -124,26 +124,20 @@ function ticketQualityLine(args: {
   }
 
   if (ticketItem.status === "booked") {
-    if (provider && score != null) {
-      return `${ticketConfidenceLabel(score)} • ${provider}`;
-    }
+    if (provider && score != null) return `${ticketConfidenceLabel(score)} • ${provider}`;
     if (provider) return `Booked provider: ${provider}`;
     if (score != null) return ticketConfidenceLabel(score);
     return "Booked route saved";
   }
 
   if (ticketItem.status === "pending") {
-    if (provider && score != null) {
-      return `${ticketConfidenceLabel(score)} • ${provider}`;
-    }
+    if (provider && score != null) return `${ticketConfidenceLabel(score)} • ${provider}`;
     if (provider) return `Pending with ${provider}`;
     if (score != null) return ticketConfidenceLabel(score);
     return "Pending ticket route";
   }
 
-  if (provider && score != null) {
-    return `${ticketConfidenceLabel(score)} • ${provider}`;
-  }
+  if (provider && score != null) return `${ticketConfidenceLabel(score)} • ${provider}`;
   if (provider) return `Saved from ${provider}`;
   if (score != null) return ticketConfidenceLabel(score);
 
@@ -158,12 +152,8 @@ function urgencyLine(args: {
   const { isPrimary, ticketItem, certaintyLine } = args;
 
   if (isPrimary && !ticketItem) return "Primary match not ticketed yet";
-  if (isPrimary && ticketItem?.status === "pending") {
-    return "Primary match still needs booking confirmation";
-  }
-  if (isPrimary && ticketItem?.status === "saved") {
-    return "Primary match has ticket routes saved";
-  }
+  if (isPrimary && ticketItem?.status === "pending") return "Primary match still needs booking confirmation";
+  if (isPrimary && ticketItem?.status === "saved") return "Primary match has ticket routes saved";
   if (isPrimary && ticketItem?.status === "booked") return "Primary match anchored";
 
   return certaintyLine;
@@ -258,6 +248,7 @@ export default function TripMatchesCard({
     <GlassCard style={styles.card}>
       <View style={styles.sectionTitleRow}>
         <View style={styles.sectionHeadingWrap}>
+          <Text style={styles.sectionEyebrow}>Trip structure</Text>
           <Text style={styles.sectionTitle}>Matches</Text>
           <Text style={styles.sectionSub}>
             The primary match should drive the trip. Everything else supports it.
@@ -282,9 +273,7 @@ export default function TripMatchesCard({
             const isPrimary = String(primaryMatchId ?? "") === String(matchId);
 
             const ticketProviderRaw = getTicketProviderFromItem(ticketItem);
-            const ticketProvider = ticketProviderRaw
-              ? providerLabel(ticketProviderRaw)
-              : null;
+            const ticketProvider = ticketProviderRaw ? providerLabel(ticketProviderRaw) : null;
 
             const ticketScore = getTicketScoreFromItem(ticketItem);
             const livePrice =
@@ -316,16 +305,10 @@ export default function TripMatchesCard({
                 <Pressable
                   onPress={() => onOpenTicketsForMatch(matchId)}
                   onLongPress={() => onOpenMatchActions(matchId)}
-                  style={[styles.matchRow, isPrimary && styles.matchRowPrimary]}
+                  style={[styles.matchCard, isPrimary && styles.matchCardPrimary]}
                 >
-                  <TeamCrest name={data.homeName} logo={data.homeLogo} />
-
-                  <View style={styles.matchContent}>
-                    <View style={styles.matchTitleRow}>
-                      <Text style={styles.matchTitle} numberOfLines={1}>
-                        {data.title}
-                      </Text>
-
+                  <View style={styles.matchTopRow}>
+                    <View style={styles.matchTopLeft}>
                       {isPrimary ? (
                         <View style={[styles.badge, styles.badgePrimary]}>
                           <Text style={styles.badgeText}>Primary</Text>
@@ -335,16 +318,40 @@ export default function TripMatchesCard({
                       {ticketItem ? <StatusBadge status={ticketItem.status} /> : null}
                     </View>
 
-                    <Text
-                      style={[styles.matchUrgency, isPrimary && styles.matchUrgencyPrimary]}
-                      numberOfLines={1}
-                    >
-                      {urgency}
-                    </Text>
-
                     <View style={styles.certaintyWrap}>
                       <FixtureCertaintyBadge state={data.certainty} />
                     </View>
+                  </View>
+
+                  <View style={styles.teamsRow}>
+                    <View style={styles.teamCol}>
+                      <TeamCrest name={data.homeName} logo={data.homeLogo} />
+                      <Text style={styles.teamName} numberOfLines={2}>
+                        {data.homeName}
+                      </Text>
+                    </View>
+
+                    <View style={styles.centerCol}>
+                      <Text
+                        style={[styles.matchUrgency, isPrimary && styles.matchUrgencyPrimary]}
+                        numberOfLines={2}
+                      >
+                        {urgency}
+                      </Text>
+                    </View>
+
+                    <View style={styles.teamCol}>
+                      <TeamCrest name={data.awayName} logo={data.awayLogo} />
+                      <Text style={styles.teamName} numberOfLines={2}>
+                        {data.awayName}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.matchInfoBlock}>
+                    <Text style={styles.matchTitle} numberOfLines={1}>
+                      {data.title}
+                    </Text>
 
                     {data.metaTop ? (
                       <Text style={styles.matchMeta} numberOfLines={1}>
@@ -363,13 +370,12 @@ export default function TripMatchesCard({
                         {data.logisticsLine}
                       </Text>
                     ) : null}
+                  </View>
 
-                    <View style={styles.ticketSignalRow}>
-                      <Text style={styles.matchHint} numberOfLines={1}>
-                        {ticketState}
-                      </Text>
-                    </View>
-
+                  <View style={styles.ticketPanel}>
+                    <Text style={styles.ticketState} numberOfLines={1}>
+                      {ticketState}
+                    </Text>
                     <Text
                       style={
                         ticketItem ? styles.ticketQualityMeta : styles.ticketQualityMetaMuted
@@ -380,8 +386,10 @@ export default function TripMatchesCard({
                     </Text>
                   </View>
 
-                  <TeamCrest name={data.awayName} logo={data.awayLogo} />
-                  <Text style={styles.chev}>›</Text>
+                  <View style={styles.tapHintRow}>
+                    <Text style={styles.tapHint}>Tap for ticket routes • hold for match actions</Text>
+                    <Text style={styles.chev}>›</Text>
+                  </View>
                 </Pressable>
 
                 <View style={styles.matchActionsRow}>
@@ -433,7 +441,7 @@ const styles = StyleSheet.create({
   },
 
   list: {
-    gap: 10,
+    gap: 14,
   },
 
   sectionTitleRow: {
@@ -441,16 +449,27 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 8,
+    marginBottom: 10,
   },
 
   sectionHeadingWrap: {
     flex: 1,
   },
 
+  sectionEyebrow: {
+    color: "#8EF2A5",
+    fontWeight: "900",
+    fontSize: 11,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+
   sectionTitle: {
     color: theme.colors.text,
     fontWeight: "900",
+    fontSize: 22,
+    lineHeight: 26,
     marginBottom: 4,
   },
 
@@ -488,97 +507,142 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  matchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+  matchCard: {
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.035)",
+    padding: 14,
+    gap: 12,
   },
 
-  matchRowPrimary: {
+  matchCardPrimary: {
     borderColor: "rgba(0,255,136,0.30)",
     backgroundColor: "rgba(0,255,136,0.06)",
   },
 
-  matchContent: {
-    flex: 1,
-    minWidth: 0,
+  matchTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
 
-  matchTitleRow: {
+  matchTopLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexWrap: "wrap",
+    flex: 1,
   },
 
-  matchTitle: {
+  certaintyWrap: {
+    alignItems: "flex-end",
+  },
+
+  teamsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  teamCol: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+  },
+
+  centerCol: {
+    width: 104,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  teamName: {
     color: theme.colors.text,
     fontWeight: "900",
-    flexShrink: 1,
+    fontSize: 13,
+    textAlign: "center",
   },
 
   matchUrgency: {
-    marginTop: 4,
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
+    textAlign: "center",
   },
 
   matchUrgencyPrimary: {
     color: theme.colors.primary,
   },
 
+  matchInfoBlock: {
+    gap: 4,
+  },
+
+  matchTitle: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 16,
+    lineHeight: 20,
+  },
+
   matchMeta: {
-    marginTop: 4,
     color: theme.colors.textSecondary,
     fontWeight: "800",
     fontSize: 12,
     lineHeight: 16,
   },
 
-  certaintyWrap: {
-    marginTop: 6,
-  },
-
   logisticsMeta: {
-    marginTop: 6,
+    marginTop: 2,
     color: theme.colors.textTertiary,
     fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
   },
 
-  ticketSignalRow: {
-    marginTop: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    minWidth: 0,
+  ticketPanel: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
   },
 
-  matchHint: {
-    color: theme.colors.textTertiary,
-    fontWeight: "900",
-    fontSize: 11,
-    flex: 1,
+  ticketState: {
+    color: theme.colors.text,
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
   },
 
   ticketQualityMeta: {
-    marginTop: 4,
     color: "rgba(160,195,255,1)",
     fontWeight: "900",
     fontSize: 11,
   },
 
   ticketQualityMetaMuted: {
-    marginTop: 4,
     color: theme.colors.textSecondary,
+    fontWeight: "800",
+    fontSize: 11,
+  },
+
+  tapHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  tapHint: {
+    flex: 1,
+    color: theme.colors.textTertiary,
     fontWeight: "800",
     fontSize: 11,
   },
@@ -589,17 +653,17 @@ const styles = StyleSheet.create({
   },
 
   crestWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 46,
+    height: 46,
+    borderRadius: 16,
     backgroundColor: "rgba(255,255,255,0.06)",
     alignItems: "center",
     justifyContent: "center",
   },
 
   crestImg: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
   },
 
   crestFallback: {
@@ -608,9 +672,9 @@ const styles = StyleSheet.create({
   },
 
   smallBtn: {
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
     backgroundColor: "rgba(0,0,0,0.15)",
@@ -684,7 +748,7 @@ const styles = StyleSheet.create({
 
   chev: {
     color: theme.colors.textSecondary,
-    fontSize: 22,
-    marginTop: -2,
+    fontSize: 20,
+    marginTop: -1,
   },
 });
