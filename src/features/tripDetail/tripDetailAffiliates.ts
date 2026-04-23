@@ -59,6 +59,25 @@ function hasUsableTrip(trip: Trip | null): trip is Trip {
   return Boolean(trip && clean(trip.id));
 }
 
+function resolveEffectiveTripCity(args: {
+  trip: Trip | null;
+  cityName: string;
+}): string {
+  const displayCity = clean(args.trip?.displayCity);
+  const cityId = clean(args.trip?.cityId);
+  const fallbackCity = safeCityName(args.cityName);
+
+  const candidates = [displayCity, cityId, fallbackCity].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (candidate && clean(getIataCityCodeForCity(candidate))) {
+      return candidate;
+    }
+  }
+
+  return candidates[0] ?? "";
+}
+
 export function getBookingWindow(args: {
   trip: Trip | null;
   primaryKickoffIso: string | null;
@@ -87,8 +106,16 @@ export function buildAffiliateUrls(args: {
 }): AffiliateUrls | null {
   const { trip, cityName, originIata, primaryKickoffIso } = args;
 
-  const safeCity = safeCityName(cityName);
-  if (!hasUsableTrip(trip) || !safeCity || safeCity === "Trip") {
+  if (!hasUsableTrip(trip)) {
+    return null;
+  }
+
+  const effectiveCity = resolveEffectiveTripCity({
+    trip,
+    cityName,
+  });
+
+  if (!effectiveCity || effectiveCity === "Trip") {
     return null;
   }
 
@@ -98,7 +125,7 @@ export function buildAffiliateUrls(args: {
   });
 
   const built = buildAffiliateLinks({
-    city: safeCity,
+    city: effectiveCity,
     startDate,
     endDate,
     originIata: cleanUpper3(originIata, "LON"),
