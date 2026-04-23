@@ -213,11 +213,11 @@ function iconForAttachmentKind(
 function statusLabel(status: WalletBooking["status"]) {
   switch (status) {
     case "booked":
-      return "Booked by you";
+      return "Booked";
     case "pending":
-      return "Opened / not confirmed";
+      return "Opened (not booked)";
     case "saved":
-      return "Saved shortlist";
+      return "Saved (not booked)";
     case "archived":
       return "Archived";
     default:
@@ -307,8 +307,20 @@ function statusChipTone(status: WalletBooking["status"]) {
 
 function buildWalletProgress(items: WalletBooking[]) {
   if (!items.length) return 0;
-  const booked = items.filter((x) => x.status === "booked").length;
-  return booked / items.length;
+
+  const hasTickets = items.some((x) => x.type === "tickets" && x.status === "booked");
+  const hasTravel = items.some(
+    (x) => (x.type === "flight" || x.type === "train") && x.status === "booked"
+  );
+  const hasStay = items.some((x) => x.type === "hotel" && x.status === "booked");
+
+  let score = 0;
+
+  if (hasTickets) score += 0.45;
+  if (hasTravel) score += 0.3;
+  if (hasStay) score += 0.2;
+
+  return Math.max(0, Math.min(1, score));
 }
 
 function getItemAttachments(itemId: string): WalletAttachment[] {
@@ -703,7 +715,7 @@ export default function WalletScreen() {
                   {derivedCounts.total} visible item{derivedCounts.total === 1 ? "" : "s"}
                 </Text>
                 <Text style={styles.summaryStripMeta}>
-                  {derivedCounts.booked} booked • {derivedCounts.pending} pending • {derivedCounts.saved} saved
+                  {derivedCounts.booked} booked • {derivedCounts.pending} opened • {derivedCounts.saved} saved
                 </Text>
               </View>
               <Text style={styles.summaryStripSub}>
@@ -930,7 +942,13 @@ function WalletSpotlightCard({
               </View>
 
               <StatusPill
-                text={booked > 0 ? "Booked by you" : pending > 0 ? "Pending live" : "Saved live"}
+                text={
+                  booked > 0
+                    ? "Booked"
+                    : pending > 0
+                      ? "Opened (not booked)"
+                      : "Saved (not booked)"
+                }
                 tone={booked > 0 ? "booked" : pending > 0 ? "pending" : "saved"}
               />
             </View>
@@ -963,12 +981,12 @@ function WalletSpotlightCard({
             </Text>
 
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.max(8, progress * 100)}%` }]} />
+              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
             </View>
 
             <View style={styles.spotlightStatsRow}>
               <MiniStat label="Booked" value={booked} />
-              <MiniStat label="Pending" value={pending} />
+              <MiniStat label="Opened" value={pending} />
               <MiniStat label="Proofs" value={proofs} />
             </View>
 
@@ -1041,7 +1059,7 @@ function WalletGroupCard({
             </View>
 
             <Text style={styles.groupMeta}>
-              {`${booked} booked • ${pending} pending • ${saved} saved • ${proofs} proofs`}
+              {`${booked} booked • ${pending} opened • ${saved} saved • ${proofs} proofs`}
             </Text>
           </View>
 
