@@ -38,7 +38,7 @@ import {
 } from "@/src/services/partnerClicks";
 import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
 
-import type { SavedItemType } from "@/src/core/savedItemTypes";
+import type { SavedItem, SavedItemType } from "@/src/core/savedItemTypes";
 
 import {
   type PlanValue,
@@ -52,58 +52,11 @@ import {
 
 const PLAN_STORAGE_KEY = "yna:plan";
 
-type PlannerCardItem = {
-  key: "tickets" | "stay" | "travel" | "things";
-  label: string;
-  eyebrow: string;
-};
-
-type PlannerCardTone = "strong" | "medium" | "weak" | "optional";
-
-type PlannerCardViewModel = PlannerCardItem & {
-  count: number;
-  subtitle: string;
-  status: string;
-  tone: PlannerCardTone;
-};
-
-const PLANNER_ITEMS: PlannerCardItem[] = [
-  { key: "tickets", label: "Tickets", eyebrow: "Anchor the trip" },
-  { key: "travel", label: "Travel", eyebrow: "Get there" },
-  { key: "stay", label: "Stay", eyebrow: "Choose location" },
-  { key: "things", label: "Extras", eyebrow: "Optional add-ons" },
-];
-
 function screenStatusLabel(status: string) {
   const value = String(status ?? "").toLowerCase();
   if (value === "completed") return "Completed";
   if (value === "in progress") return "In progress";
   return "Upcoming";
-}
-
-function nextStepLabel(stepKey?: string | null) {
-  if (stepKey === "tickets") return "Secure tickets";
-  if (stepKey === "flight") return "Sort travel";
-  if (stepKey === "hotel") return "Lock stay";
-  if (stepKey === "transfer") return "Sort local transport";
-  if (stepKey === "things") return "Add extras";
-  return "Continue planning";
-}
-
-function urgencyLine(hasBookedTickets: boolean, kickoffTbc: boolean) {
-  if (!hasBookedTickets && kickoffTbc) {
-    return "Kickoff can still move. Secure tickets first, then keep travel flexible.";
-  }
-
-  if (!hasBookedTickets) {
-    return "Tickets come first. Flights and stays are still soft planning until tickets are actually booked.";
-  }
-
-  if (kickoffTbc) {
-    return "Tickets are booked, but kickoff is still TBC. Avoid locking inflexible travel too early.";
-  }
-
-  return "Use the saved trip window as truth. Flights and stays should match the real saved dates, not guesswork.";
 }
 
 function dateWindowLine(startDate?: string | null, endDate?: string | null) {
@@ -119,112 +72,6 @@ function completionTone(pct?: number | null) {
   if (value >= 90) return "ready";
   if (value >= 65) return "progress";
   return "early";
-}
-
-function plannerCardMeta(args: {
-  key: PlannerCardItem["key"];
-  count: number;
-  hasBooked: boolean;
-  hasStarted: boolean;
-}) {
-  const { key, count, hasBooked, hasStarted } = args;
-
-  if (key === "tickets") {
-    if (hasBooked) {
-      return {
-        subtitle: "Ticket booking confirmed by you",
-        status: "Booked",
-        tone: "strong" as PlannerCardTone,
-      };
-    }
-
-    if (hasStarted) {
-      return {
-        subtitle:
-          count === 1 ? "Ticket route started but not booked" : `${count} ticket items not yet confirmed`,
-        status: "Not booked",
-        tone: "medium" as PlannerCardTone,
-      };
-    }
-
-    return {
-      subtitle: "No ticket booking confirmed yet",
-      status: "Not booked",
-      tone: "weak" as PlannerCardTone,
-    };
-  }
-
-  if (key === "travel") {
-    if (hasBooked) {
-      return {
-        subtitle: "Main travel confirmed by you",
-        status: "Booked",
-        tone: "strong" as PlannerCardTone,
-      };
-    }
-
-    if (hasStarted) {
-      return {
-        subtitle:
-          count === 1 ? "Travel route started but not booked" : `${count} travel items not yet confirmed`,
-        status: "Not booked",
-        tone: "medium" as PlannerCardTone,
-      };
-    }
-
-    return {
-      subtitle: "Travel still not booked",
-      status: "Not booked",
-      tone: "weak" as PlannerCardTone,
-    };
-  }
-
-  if (key === "stay") {
-    if (hasBooked) {
-      return {
-        subtitle: "Stay confirmed by you",
-        status: "Booked",
-        tone: "strong" as PlannerCardTone,
-      };
-    }
-
-    if (hasStarted) {
-      return {
-        subtitle:
-          count === 1 ? "Stay option started but not booked" : `${count} stay items not yet confirmed`,
-        status: "Not booked",
-        tone: "medium" as PlannerCardTone,
-      };
-    }
-
-    return {
-      subtitle: "Stay still not booked",
-      status: "Not booked",
-      tone: "weak" as PlannerCardTone,
-    };
-  }
-
-  if (hasBooked) {
-    return {
-      subtitle: "Optional extras confirmed",
-      status: "Booked",
-      tone: "optional" as PlannerCardTone,
-    };
-  }
-
-  if (hasStarted) {
-    return {
-      subtitle: count === 1 ? "Extra saved or started, not booked" : `${count} extras saved or started, not booked`,
-      status: "Optional",
-      tone: "optional" as PlannerCardTone,
-    };
-  }
-
-  return {
-    subtitle: "Optional after the core trip is actually covered",
-    status: "Optional",
-    tone: "optional" as PlannerCardTone,
-  };
 }
 
 function inferSourceSectionFromSavedItemType(type?: SavedItemType) {
@@ -252,6 +99,66 @@ function inferSourceSectionFromSavedItemType(type?: SavedItemType) {
   }
 }
 
+function getAttachments(item?: SavedItem | null) {
+  return Array.isArray(item?.attachments) ? item.attachments : [];
+}
+
+function progressStateLabel(state: string) {
+  if (state === "booked") return "Booked";
+  if (state === "pending") return "Pending";
+  if (state === "saved") return "Started";
+  return "Empty";
+}
+
+function progressTone(state: string) {
+  if (state === "booked") return "booked" as const;
+  if (state === "pending" || state === "saved") return "started" as const;
+  return "empty" as const;
+}
+
+function walletHeadline(args: { bookedCount: number; missingProofCount: number }) {
+  const { bookedCount, missingProofCount } = args;
+
+  if (bookedCount <= 0) {
+    return "No booked items yet";
+  }
+
+  if (missingProofCount > 0) {
+    return `${missingProofCount} proof ${missingProofCount === 1 ? "upload" : "uploads"} still missing`;
+  }
+
+  return "All booked items have proof attached";
+}
+
+function walletSubline(args: {
+  bookedCount: number;
+  pendingCount: number;
+  savedCount: number;
+}) {
+  const { bookedCount, pendingCount, savedCount } = args;
+  return `${bookedCount} booked • ${pendingCount} pending • ${savedCount} saved`;
+}
+
+function nextTasks(args: {
+  hasTickets: boolean;
+  hasFlight: boolean;
+  hasHotel: boolean;
+  hasTransport: boolean;
+  missingProofCount: number;
+  kickoffTbc: boolean;
+}) {
+  const rows: string[] = [];
+
+  if (!args.hasTickets) rows.push("Book tickets");
+  if (args.hasTickets && !args.hasFlight) rows.push("Add main travel");
+  if (args.hasFlight && !args.hasHotel) rows.push("Lock your stay");
+  if (!args.hasTransport) rows.push("Sort local transport");
+  if (args.missingProofCount > 0) rows.push("Upload booking proof");
+  if (args.kickoffTbc) rows.push("Check kickoff confirmation");
+
+  return rows.slice(0, 3);
+}
+
 export default function TripDetailScreen() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -272,7 +179,6 @@ export default function TripDetailScreen() {
   const pendingItems = workspace.pending;
   const savedOnlyItems = workspace.saved;
   const bookedItems = workspace.booked;
-  const groupedBySection = workspace.grouped;
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [ticketLoading, setTicketLoading] = useState(false);
@@ -438,94 +344,36 @@ export default function TripDetailScreen() {
   const dominantAction = vm.nextAction;
   const decisionTitle = dominantAction?.title || "Continue planning";
   const decisionCta = dominantAction?.cta || "Continue planning";
-
-  const decisionBody = useMemo(() => {
-    if (!vm.hasTickets) {
-      return "Lock tickets first. That is what actually anchors the trip. Until tickets are confirmed booked, the rest is still softer planning.";
-    }
-
-    return dominantAction?.body || "Move the trip forward by finishing the next real booking step.";
-  }, [vm.hasTickets, dominantAction]);
-
-  const pressureText = useMemo(() => {
-    return urgencyLine(vm.hasTickets, data.kickoffMeta.tbc);
-  }, [vm.hasTickets, data.kickoffMeta.tbc]);
+  const decisionBody = dominantAction?.body || "Move the trip forward with the next real booking step.";
 
   const tripDatesText = useMemo(() => {
     return dateWindowLine(trip?.startDate, trip?.endDate);
   }, [trip?.startDate, trip?.endDate]);
 
-  const ticketCount = groupedBySection.tickets?.length || 0;
-  const travelCount = groupedBySection.travel?.length || 0;
-  const stayCount = groupedBySection.stay?.length || 0;
-  const thingsCount = groupedBySection.things?.length || 0;
+  const missingProofCount = useMemo(() => {
+    return bookedItems.filter((item) => getAttachments(item).length === 0).length;
+  }, [bookedItems]);
 
-  const tripStageTitle = useMemo(() => {
-    if ((vm.tripCompletionPct ?? 0) >= 90) return "Trip nearly complete";
-    if ((vm.tripCompletionPct ?? 0) >= 65) return "Trip materially covered";
-    if ((vm.tripCompletionPct ?? 0) >= 35) return "Trip partly covered";
-    return "Trip still early";
-  }, [vm.tripCompletionPct]);
+  const proofCount = useMemo(() => {
+    return bookedItems.filter((item) => getAttachments(item).length > 0).length;
+  }, [bookedItems]);
 
-  const tripStageBody = useMemo(() => {
-    if ((vm.tripCompletionPct ?? 0) >= 90) {
-      return "Core bookings are largely covered. Final job is proof, confirmations and Wallet cleanup.";
-    }
-
-    if ((vm.tripCompletionPct ?? 0) >= 65) {
-      return "The trip is taking shape, but anything not actually marked booked is still unfinished.";
-    }
-
-    if ((vm.tripCompletionPct ?? 0) >= 35) {
-      return "Some parts are underway, but started does not mean covered. Saved and pending items are not finished bookings.";
-    }
-
-    return "This trip is not properly anchored yet. Work in order: tickets, travel, stay, then extras.";
-  }, [vm.tripCompletionPct]);
-
-  const plannerCards = useMemo<PlannerCardViewModel[]>(() => {
-    return PLANNER_ITEMS.map((item) => {
-      const count = groupedBySection[item.key]?.length || 0;
-
-      const meta = plannerCardMeta({
-        key: item.key,
-        count,
-        hasBooked:
-          item.key === "tickets"
-            ? vm.hasTickets
-            : item.key === "travel"
-              ? vm.hasFlight
-              : item.key === "stay"
-                ? vm.hasHotel
-                : vm.hasThings,
-        hasStarted:
-          item.key === "tickets"
-            ? ticketCount > 0
-            : item.key === "travel"
-              ? travelCount > 0
-              : item.key === "stay"
-                ? stayCount > 0
-                : thingsCount > 0,
-      });
-
-      return {
-        ...item,
-        count,
-        subtitle: meta.subtitle,
-        status: meta.status,
-        tone: meta.tone,
-      };
+  const taskRows = useMemo(() => {
+    return nextTasks({
+      hasTickets: vm.hasTickets,
+      hasFlight: vm.hasFlight,
+      hasHotel: vm.hasHotel,
+      hasTransport: vm.hasTransport,
+      missingProofCount,
+      kickoffTbc: data.kickoffMeta.tbc,
     });
   }, [
-    groupedBySection,
     vm.hasTickets,
     vm.hasFlight,
     vm.hasHotel,
-    vm.hasThings,
-    ticketCount,
-    travelCount,
-    stayCount,
-    thingsCount,
+    vm.hasTransport,
+    missingProofCount,
+    data.kickoffMeta.tbc,
   ]);
 
   const ticketSheetPayload = controller.ticketSheet.payload;
@@ -633,7 +481,7 @@ export default function TripDetailScreen() {
 
             <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
             <Text style={styles.tripWindowHint}>
-              These are the real saved dates. Flights and stays should follow this window.
+              These are the saved trip dates. Flights and stays should follow this exact window.
             </Text>
           </View>
         </GlassCard>
@@ -642,14 +490,6 @@ export default function TripDetailScreen() {
           <Text style={styles.priorityEyebrow}>Do this next</Text>
           <Text style={styles.priorityTitle}>{decisionTitle}</Text>
           <Text style={styles.priorityBody}>{decisionBody}</Text>
-
-          <View style={styles.priorityMetaWrap}>
-            <Text style={styles.priorityMetaText}>
-              {vm.bookingFunnelLabel || `Next: ${nextStepLabel(vm.nextIncompleteStep?.key)}`}
-            </Text>
-          </View>
-
-          <Text style={styles.pressureText}>{pressureText}</Text>
 
           <Pressable
             style={styles.primaryActionBtn}
@@ -673,93 +513,75 @@ export default function TripDetailScreen() {
         </GlassCard>
 
         <GlassCard>
-          <Text style={styles.stageEyebrow}>Trip status</Text>
-          <Text style={styles.stageTitle}>{tripStageTitle}</Text>
-          <Text style={styles.stageBody}>{tripStageBody}</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Booking progress</Text>
+            <Text style={styles.sectionSubtitle}>One row. One truth. No fake completion.</Text>
+          </View>
 
-          <View style={styles.coreStatusGrid}>
-            <View style={styles.coreStatusCard}>
-              <Text style={styles.coreStatusLabel}>Tickets</Text>
-              <Text style={styles.coreStatusValue}>
-                {vm.hasTickets ? "Booked" : ticketCount > 0 ? "Not booked (started)" : "Not booked"}
-              </Text>
-            </View>
+          <View style={styles.progressStrip}>
+            {vm.progressItems.map((item) => {
+              const tone = progressTone(item.state);
 
-            <View style={styles.coreStatusCard}>
-              <Text style={styles.coreStatusLabel}>Travel</Text>
-              <Text style={styles.coreStatusValue}>
-                {vm.hasFlight ? "Booked" : travelCount > 0 ? "Not booked (started)" : "Not booked"}
-              </Text>
-            </View>
-
-            <View style={styles.coreStatusCard}>
-              <Text style={styles.coreStatusLabel}>Stay</Text>
-              <Text style={styles.coreStatusValue}>
-                {vm.hasHotel ? "Booked" : stayCount > 0 ? "Not booked (started)" : "Not booked"}
-              </Text>
-            </View>
-
-            <View style={styles.coreStatusCard}>
-              <Text style={styles.coreStatusLabel}>Extras</Text>
-              <Text style={styles.coreStatusValue}>
-                {vm.hasThings ? "Booked" : thingsCount > 0 ? "Optional (not booked)" : "Optional"}
-              </Text>
-            </View>
+              return (
+                <Pressable
+                  key={item.key}
+                  style={[
+                    styles.progressChip,
+                    tone === "booked" && styles.progressChipBooked,
+                    tone === "started" && styles.progressChipStarted,
+                    tone === "empty" && styles.progressChipEmpty,
+                  ]}
+                  onPress={() => {
+                    void item.onPress?.();
+                  }}
+                >
+                  <Text style={styles.progressChipLabel}>{item.label}</Text>
+                  <Text style={styles.progressChipValue}>{progressStateLabel(item.state)}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         </GlassCard>
 
         <GlassCard>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Plan this trip</Text>
+            <Text style={styles.sectionTitle}>Wallet status</Text>
             <Text style={styles.sectionSubtitle}>
-              {vm.completionSummary || "Work through the trip in the right order."}
+              {walletSubline({
+                bookedCount: bookedItems.length,
+                pendingCount: pendingItems.length,
+                savedCount: savedOnlyItems.length,
+              })}
             </Text>
           </View>
 
-          <View style={styles.plannerGrid}>
-            {plannerCards.map((item) => (
-              <Pressable
-                key={item.key}
-                style={[
-                  styles.plannerCard,
-                  item.tone === "strong"
-                    ? styles.plannerCardStrong
-                    : item.tone === "medium"
-                      ? styles.plannerCardMedium
-                      : item.tone === "optional"
-                        ? styles.plannerCardOptional
-                        : styles.plannerCardWeak,
-                ]}
-                onPress={() => controller.onOpenSection(item.key)}
-              >
-                <View style={styles.plannerCardTop}>
-                  <Text style={styles.plannerCardEyebrow}>{item.eyebrow}</Text>
+          <View style={styles.walletPreviewRow}>
+            <View style={styles.walletMetricCard}>
+              <Text style={styles.walletMetricValue}>{bookedItems.length}</Text>
+              <Text style={styles.walletMetricLabel}>Booked</Text>
+            </View>
 
-                  <View
-                    style={[
-                      styles.plannerStatusPill,
-                      item.tone === "strong"
-                        ? styles.plannerStatusPillStrong
-                        : item.tone === "medium"
-                          ? styles.plannerStatusPillMedium
-                          : item.tone === "optional"
-                            ? styles.plannerStatusPillOptional
-                            : styles.plannerStatusPillWeak,
-                    ]}
-                  >
-                    <Text style={styles.plannerStatusPillText}>{item.status}</Text>
-                  </View>
-                </View>
+            <View style={styles.walletMetricCard}>
+              <Text style={styles.walletMetricValue}>{proofCount}</Text>
+              <Text style={styles.walletMetricLabel}>Proofs</Text>
+            </View>
 
-                <Text style={styles.plannerCardTitle}>{item.label}</Text>
-                <Text style={styles.plannerCardSub}>{item.subtitle}</Text>
-              </Pressable>
-            ))}
+            <View style={styles.walletMetricCard}>
+              <Text style={styles.walletMetricValue}>{missingProofCount}</Text>
+              <Text style={styles.walletMetricLabel}>Missing proof</Text>
+            </View>
           </View>
 
-          <Text style={styles.plannerFootnote}>
-            Saved and pending items are not the same as booked. The trip is only truly covered when the core steps are confirmed.
+          <Text style={styles.walletPreviewHeadline}>
+            {walletHeadline({
+              bookedCount: bookedItems.length,
+              missingProofCount,
+            })}
           </Text>
+
+          <Pressable style={styles.secondaryActionBtn} onPress={controller.onViewWallet}>
+            <Text style={styles.secondaryActionBtnText}>Open wallet</Text>
+          </Pressable>
         </GlassCard>
 
         <TripMatchesCard
@@ -779,38 +601,23 @@ export default function TripDetailScreen() {
           getLivePriceLine={livePriceLine}
         />
 
-        <GlassCard>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>What this trip still needs</Text>
-            <Text style={styles.sectionSubtitle}>
-              Leave this screen knowing the next real move.
-            </Text>
-          </View>
+        {taskRows.length > 0 ? (
+          <GlassCard>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Next tasks</Text>
+              <Text style={styles.sectionSubtitle}>Only the actions that still matter.</Text>
+            </View>
 
-          <View style={styles.guidanceList}>
-            {!vm.hasTickets ? (
-              <Text style={styles.guidanceText}>• Tickets still need locking in.</Text>
-            ) : null}
-
-            {!vm.hasFlight ? (
-              <Text style={styles.guidanceText}>• Main travel is still not actually marked booked.</Text>
-            ) : null}
-
-            {!vm.hasHotel ? (
-              <Text style={styles.guidanceText}>• Stay still needs deciding and booking.</Text>
-            ) : null}
-
-            {!vm.hasTransport ? (
-              <Text style={styles.guidanceText}>• Local transport is still weak or unfinished.</Text>
-            ) : null}
-
-            {vm.hasTickets && vm.hasFlight && vm.hasHotel && vm.hasTransport ? (
-              <Text style={styles.guidanceText}>
-                • Core trip is covered. Final job is proof, confirmations and Wallet cleanup.
-              </Text>
-            ) : null}
-          </View>
-        </GlassCard>
+            <View style={styles.taskList}>
+              {taskRows.map((task) => (
+                <View key={task} style={styles.taskRow}>
+                  <View style={styles.taskDot} />
+                  <Text style={styles.taskText}>{task}</Text>
+                </View>
+              ))}
+            </View>
+          </GlassCard>
+        ) : null}
       </>
     );
   };
@@ -1075,25 +882,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  priorityMetaWrap: {
-    marginTop: theme.spacing.sm,
-  },
-
-  priorityMetaText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textMuted,
-    fontWeight: "700",
-  },
-
-  pressureText: {
-    marginTop: 10,
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-  },
-
   primaryActionBtn: {
     marginTop: theme.spacing.md,
     minHeight: 54,
@@ -1131,62 +919,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
   },
 
-  stageEyebrow: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#8EF2A5",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-
-  stageTitle: {
-    marginTop: 8,
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: "800",
-    color: theme.colors.text,
-    letterSpacing: -0.3,
-  },
-
-  stageBody: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    color: theme.colors.textSecondary,
-  },
-
-  coreStatusGrid: {
-    marginTop: theme.spacing.md,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
-  },
-
-  coreStatusCard: {
-    width: "48%",
-    borderRadius: 16,
-    padding: theme.spacing.md,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-  },
-
-  coreStatusLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: theme.colors.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-
-  coreStatusValue: {
-    marginTop: 6,
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "800",
-    color: theme.colors.text,
-  },
-
   sectionHeaderRow: {
     marginBottom: theme.spacing.md,
     gap: 4,
@@ -1205,120 +937,137 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  plannerGrid: {
+  progressStrip: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: theme.spacing.sm,
+    gap: 10,
   },
 
-  plannerCard: {
-    width: "48%",
-    minHeight: 132,
-    borderRadius: 18,
-    padding: theme.spacing.md,
+  progressChip: {
+    width: "31%",
+    minHeight: 78,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     borderWidth: 1,
     justifyContent: "space-between",
   },
 
-  plannerCardWeak: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderColor: "rgba(255,255,255,0.10)",
-  },
-
-  plannerCardMedium: {
-    backgroundColor: "rgba(120,170,255,0.08)",
-    borderColor: "rgba(120,170,255,0.18)",
-  },
-
-  plannerCardStrong: {
-    backgroundColor: "rgba(87,162,56,0.10)",
-    borderColor: "rgba(87,162,56,0.22)",
-  },
-
-  plannerCardOptional: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderColor: "rgba(255,255,255,0.10)",
-  },
-
-  plannerCardTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-
-  plannerCardEyebrow: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: "900",
-    color: theme.colors.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-
-  plannerStatusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-
-  plannerStatusPillWeak: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-
-  plannerStatusPillMedium: {
-    backgroundColor: "rgba(120,170,255,0.12)",
-    borderColor: "rgba(120,170,255,0.22)",
-  },
-
-  plannerStatusPillStrong: {
+  progressChipBooked: {
     backgroundColor: "rgba(87,162,56,0.12)",
     borderColor: "rgba(87,162,56,0.24)",
   },
 
-  plannerStatusPillOptional: {
+  progressChipStarted: {
+    backgroundColor: "rgba(120,170,255,0.10)",
+    borderColor: "rgba(120,170,255,0.20)",
+  },
+
+  progressChipEmpty: {
     backgroundColor: "rgba(255,255,255,0.05)",
     borderColor: "rgba(255,255,255,0.10)",
   },
 
-  plannerStatusPillText: {
+  progressChipLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+
+  progressChipValue: {
+    marginTop: 10,
     color: theme.colors.text,
-    fontSize: 10,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+
+  walletPreviewRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  walletMetricCard: {
+    flex: 1,
+    minHeight: 78,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+
+  walletMetricValue: {
+    color: theme.colors.text,
+    fontSize: 20,
     fontWeight: "900",
   },
 
-  plannerCardTitle: {
-    marginTop: 8,
-    fontSize: 16,
-    fontWeight: "800",
-    color: theme.colors.text,
-  },
-
-  plannerCardSub: {
-    marginTop: 10,
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-  },
-
-  plannerFootnote: {
-    marginTop: theme.spacing.md,
-    fontSize: 12,
-    lineHeight: 18,
+  walletMetricLabel: {
+    marginTop: 4,
     color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: "800",
   },
 
-  guidanceList: {
-    gap: 8,
+  walletPreviewHeadline: {
+    marginTop: 14,
+    color: theme.colors.text,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "800",
   },
 
-  guidanceText: {
+  secondaryActionBtn: {
+    marginTop: 14,
+    minHeight: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    paddingHorizontal: 16,
+  },
+
+  secondaryActionBtnText: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  taskList: {
+    gap: 10,
+  },
+
+  taskRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 42,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  taskDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: theme.colors.accent,
+  },
+
+  taskText: {
+    flex: 1,
+    color: theme.colors.text,
     fontSize: 14,
     lineHeight: 20,
-    color: theme.colors.textSecondary,
     fontWeight: "700",
   },
 });
