@@ -7,7 +7,8 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
-  Platform,
+  Image,
+  ImageBackground,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -22,7 +23,6 @@ import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import storage from "@/src/services/storage";
-
 import savedItemsStore from "@/src/state/savedItems";
 
 import useTripDetailController from "@/src/features/tripDetail/useTripDetailController";
@@ -52,6 +52,13 @@ import {
 
 const PLAN_STORAGE_KEY = "yna:plan";
 
+const STADIUM_HERO_IMAGE_URL =
+  "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1400&q=90";
+
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 function screenStatusLabel(status: string) {
   const value = String(status ?? "").toLowerCase();
   if (value === "completed") return "Completed";
@@ -60,9 +67,8 @@ function screenStatusLabel(status: string) {
 }
 
 function dateWindowLine(startDate?: string | null, endDate?: string | null) {
-  const start = String(startDate ?? "").trim();
-  const end = String(endDate ?? "").trim();
-
+  const start = clean(startDate);
+  const end = clean(endDate);
   if (!start || !end) return "Trip dates not set";
   return `${start} → ${end}`;
 }
@@ -119,9 +125,7 @@ function progressTone(state: string) {
 function walletHeadline(args: { bookedCount: number; missingProofCount: number }) {
   const { bookedCount, missingProofCount } = args;
 
-  if (bookedCount <= 0) {
-    return "No booked items yet";
-  }
+  if (bookedCount <= 0) return "No booked items yet";
 
   if (missingProofCount > 0) {
     return `${missingProofCount} proof ${missingProofCount === 1 ? "upload" : "uploads"} still missing`;
@@ -157,6 +161,158 @@ function nextTasks(args: {
   if (args.kickoffTbc) rows.push("Check kickoff confirmation");
 
   return rows.slice(0, 3);
+}
+
+function initialsFromName(name?: string | null) {
+  const value = clean(name);
+  if (!value) return "?";
+
+  const parts = value
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .split(" ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 1) return parts[0].slice(0, 3).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+}
+
+function readNestedString(source: unknown, paths: string[][]): string | null {
+  if (!source || typeof source !== "object") return null;
+
+  for (const path of paths) {
+    let current: unknown = source;
+
+    for (const key of path) {
+      if (!current || typeof current !== "object" || !(key in current)) {
+        current = null;
+        break;
+      }
+
+      current = (current as Record<string, unknown>)[key];
+    }
+
+    const value = clean(current);
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function getFixtureTeamInfo(fixture: unknown) {
+  const homeName =
+    readNestedString(fixture, [
+      ["homeName"],
+      ["homeTeam"],
+      ["home", "name"],
+      ["teams", "home", "name"],
+    ]) || "Home";
+
+  const awayName =
+    readNestedString(fixture, [
+      ["awayName"],
+      ["awayTeam"],
+      ["away", "name"],
+      ["teams", "away", "name"],
+    ]) || "Away";
+
+  const homeLogo = readNestedString(fixture, [
+    ["homeLogo"],
+    ["homeBadge"],
+    ["home", "logo"],
+    ["home", "badge"],
+    ["teams", "home", "logo"],
+    ["teams", "home", "badge"],
+  ]);
+
+  const awayLogo = readNestedString(fixture, [
+    ["awayLogo"],
+    ["awayBadge"],
+    ["away", "logo"],
+    ["away", "badge"],
+    ["teams", "away", "logo"],
+    ["teams", "away", "badge"],
+  ]);
+
+  const leagueName =
+    readNestedString(fixture, [
+      ["leagueName"],
+      ["league", "name"],
+    ]) || "Matchday";
+
+  const venue =
+    readNestedString(fixture, [
+      ["venue"],
+      ["stadium"],
+      ["fixture", "venue", "name"],
+      ["venue", "name"],
+    ]) || "Stadium";
+
+  const kickoff =
+    readNestedString(fixture, [
+      ["kickoffIso"],
+      ["date"],
+      ["fixture", "date"],
+    ]) || null;
+
+  return {
+    homeName,
+    awayName,
+    homeLogo,
+    awayLogo,
+    leagueName,
+    venue,
+    kickoff,
+  };
+}
+
+function formatKickoffDate(value?: string | null) {
+  const raw = clean(value);
+  if (!raw) return "Date TBC";
+
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return raw.slice(0, 10);
+
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatKickoffTime(value?: string | null) {
+  const raw = clean(value);
+  if (!raw) return "TBC";
+
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return "TBC";
+
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function TeamBadge({
+  name,
+  logo,
+  side,
+}: {
+  name: string;
+  logo?: string | null;
+  side: "home" | "away";
+}) {
+  const initials = initialsFromName(name);
+
+  return (
+    <View style={[styles.teamBadgeShell, side === "home" ? styles.homeBadge : styles.awayBadge]}>
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.teamBadgeImage} resizeMode="contain" />
+      ) : (
+        <Text style={styles.teamBadgeInitials}>{initials}</Text>
+      )}
+    </View>
+  );
 }
 
 export default function TripDetailScreen() {
@@ -341,10 +497,20 @@ export default function TripDetailScreen() {
     return trip ? tripStatus(trip) : "Upcoming";
   }, [trip]);
 
+  const primaryFixture = useMemo(() => {
+    if (!data.primaryMatchId) return null;
+    return data.fixturesById?.[String(data.primaryMatchId)] ?? data.fixturesById?.[Number(data.primaryMatchId) as never] ?? null;
+  }, [data.fixturesById, data.primaryMatchId]);
+
+  const fixtureInfo = useMemo(() => {
+    return getFixtureTeamInfo(primaryFixture);
+  }, [primaryFixture]);
+
   const dominantAction = vm.nextAction;
   const decisionTitle = dominantAction?.title || "Continue planning";
   const decisionCta = dominantAction?.cta || "Continue planning";
-  const decisionBody = dominantAction?.body || "Move the trip forward with the next real booking step.";
+  const decisionBody =
+    dominantAction?.body || "Move the trip forward with the next real booking step.";
 
   const tripDatesText = useMemo(() => {
     return dateWindowLine(trip?.startDate, trip?.endDate);
@@ -429,19 +595,82 @@ export default function TripDetailScreen() {
 
     return (
       <>
-        <GlassCard style={styles.heroCard}>
-          <View style={styles.heroGlow} pointerEvents="none" />
+        <View style={styles.matchHero}>
+          <ImageBackground
+            source={{ uri: STADIUM_HERO_IMAGE_URL }}
+            style={styles.matchHeroImage}
+            imageStyle={styles.matchHeroImageInner}
+          >
+            <View style={styles.heroSmokeTop} pointerEvents="none" />
+            <View style={styles.heroSmokeBottom} pointerEvents="none" />
+            <View style={styles.pitchGlow} pointerEvents="none" />
 
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroTitleWrap}>
-              <Text style={styles.heroEyebrow}>Trip workspace</Text>
-              <Text style={styles.city}>{data.cityName}</Text>
-              <Text style={styles.meta}>{summaryLine(trip)}</Text>
+            <View style={styles.heroTopOverlay}>
+              <View style={styles.logoDisc}>
+                <Text style={styles.logoDiscText}>YNA</Text>
+              </View>
+
+              <Text style={styles.matchTitle}>
+                {fixtureInfo.homeName} vs {fixtureInfo.awayName}
+              </Text>
+
+              <Text style={styles.matchMeta}>
+                {fixtureInfo.leagueName} • {data.cityName}
+              </Text>
+
+              <View style={styles.fixtureChipRow}>
+                <View style={styles.fixtureChip}>
+                  <Text style={styles.fixtureChipText}>
+                    {formatKickoffDate(fixtureInfo.kickoff)}
+                  </Text>
+                </View>
+
+                <View style={styles.fixtureChip}>
+                  <Text style={styles.fixtureChipText}>
+                    {data.kickoffMeta.tbc ? "Kickoff TBC" : formatKickoffTime(fixtureInfo.kickoff)}
+                  </Text>
+                </View>
+
+                <View style={styles.fixtureChip}>
+                  <Text style={styles.fixtureChipText}>{fixtureInfo.venue}</Text>
+                </View>
+              </View>
             </View>
 
-            <Pressable onPress={controller.onViewWallet} hitSlop={8} style={styles.walletPill}>
-              <Text style={styles.walletPillText}>Wallet</Text>
+            <View style={styles.badgesOnPitch}>
+              <TeamBadge name={fixtureInfo.homeName} logo={fixtureInfo.homeLogo} side="home" />
+              <View style={styles.vsOrb}>
+                <Text style={styles.vsOrbText}>VS</Text>
+              </View>
+              <TeamBadge name={fixtureInfo.awayName} logo={fixtureInfo.awayLogo} side="away" />
+            </View>
+          </ImageBackground>
+        </View>
+
+        <GlassCard style={styles.tripPulseCard}>
+          <View style={styles.tripPulseHeader}>
+            <View style={styles.tripPulseCopy}>
+              <Text style={styles.tripPulseEyebrow}>Your trip to {data.cityName}</Text>
+              <Text style={styles.tripPulseTitle}>{tripDatesText}</Text>
+              <Text style={styles.tripPulseMeta}>
+                {screenStatusLabel(status)} • {vm.tripCompletionPct ?? 0}% booked
+              </Text>
+            </View>
+
+            <Pressable onPress={controller.onViewWallet} hitSlop={8} style={styles.walletOrb}>
+              <Text style={styles.walletOrbText}>Wallet</Text>
             </Pressable>
+          </View>
+
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${Math.max(0, Math.min(100, vm.tripCompletionPct ?? 0))}%`,
+                },
+              ]}
+            />
           </View>
 
           <View style={styles.badgeRow}>
@@ -470,20 +699,6 @@ export default function TripDetailScreen() {
               </View>
             ) : null}
           </View>
-
-          <View style={styles.tripWindowCard}>
-            <View style={styles.tripWindowHeader}>
-              <Text style={styles.tripWindowLabel}>Trip dates</Text>
-              <Pressable onPress={controller.onEditTrip} hitSlop={8}>
-                <Text style={styles.tripWindowEdit}>Edit</Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.tripWindowValue}>{tripDatesText}</Text>
-            <Text style={styles.tripWindowHint}>
-              These are the saved trip dates. Flights and stays should follow this exact window.
-            </Text>
-          </View>
         </GlassCard>
 
         <GlassCard style={styles.priorityCard}>
@@ -494,9 +709,7 @@ export default function TripDetailScreen() {
           <Pressable
             style={styles.primaryActionBtn}
             onPress={
-              dominantAction?.onPress
-                ? () => dominantAction.onPress()
-                : controller.onEditTrip
+              dominantAction?.onPress ? () => dominantAction.onPress() : controller.onEditTrip
             }
           >
             <Text style={styles.primaryActionBtnText}>{decisionCta}</Text>
@@ -514,11 +727,11 @@ export default function TripDetailScreen() {
 
         <GlassCard>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Booking progress</Text>
-            <Text style={styles.sectionSubtitle}>One row. One truth. No fake completion.</Text>
+            <Text style={styles.sectionTitle}>Your itinerary</Text>
+            <Text style={styles.sectionSubtitle}>Tickets, travel, stay and extras in one clean view.</Text>
           </View>
 
-          <View style={styles.progressStrip}>
+          <View style={styles.progressList}>
             {vm.progressItems.map((item) => {
               const tone = progressTone(item.state);
 
@@ -526,17 +739,42 @@ export default function TripDetailScreen() {
                 <Pressable
                   key={item.key}
                   style={[
-                    styles.progressChip,
-                    tone === "booked" && styles.progressChipBooked,
-                    tone === "started" && styles.progressChipStarted,
-                    tone === "empty" && styles.progressChipEmpty,
+                    styles.itineraryRow,
+                    tone === "booked" && styles.itineraryRowBooked,
+                    tone === "started" && styles.itineraryRowStarted,
                   ]}
                   onPress={() => {
                     void item.onPress?.();
                   }}
                 >
-                  <Text style={styles.progressChipLabel}>{item.label}</Text>
-                  <Text style={styles.progressChipValue}>{progressStateLabel(item.state)}</Text>
+                  <View style={styles.itineraryIcon}>
+                    <Text style={styles.itineraryIconText}>
+                      {item.key === "tickets"
+                        ? "🎟"
+                        : item.key === "flight" || item.key === "travel"
+                          ? "✈"
+                          : item.key === "hotel" || item.key === "stay"
+                            ? "🏨"
+                            : item.key === "things"
+                              ? "⭐"
+                              : "✓"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.itineraryCopy}>
+                    <Text style={styles.itineraryTitle}>{item.label}</Text>
+                    <Text style={styles.itinerarySubline}>{progressStateLabel(item.state)}</Text>
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.itineraryStatus,
+                      tone === "booked" && styles.itineraryStatusBooked,
+                      tone === "started" && styles.itineraryStatusStarted,
+                    ]}
+                  >
+                    {progressStateLabel(item.state)}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -568,7 +806,7 @@ export default function TripDetailScreen() {
 
             <View style={styles.walletMetricCard}>
               <Text style={styles.walletMetricValue}>{missingProofCount}</Text>
-              <Text style={styles.walletMetricLabel}>Missing proof</Text>
+              <Text style={styles.walletMetricLabel}>Missing</Text>
             </View>
           </View>
 
@@ -623,7 +861,7 @@ export default function TripDetailScreen() {
   };
 
   return (
-    <Background imageSource={getBackground("trips")} overlayOpacity={0.86}>
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.9}>
       <Stack.Screen options={{ headerShown: true, title: "Trip" }} />
 
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
@@ -669,7 +907,7 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    paddingTop: 100,
+    paddingTop: 84,
     paddingHorizontal: theme.spacing.lg,
     gap: theme.spacing.lg,
   },
@@ -679,69 +917,257 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  heroCard: {
-    borderRadius: 28,
+  matchHero: {
+    height: 430,
+    borderRadius: 34,
     overflow: "hidden",
-    position: "relative",
+    borderWidth: 1,
+    borderColor: "rgba(126,255,143,0.20)",
+    backgroundColor: "#04180D",
+    shadowColor: "#00FF66",
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
   },
 
-  heroGlow: {
+  matchHeroImage: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+
+  matchHeroImageInner: {
+    borderRadius: 34,
+  },
+
+  heroSmokeTop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.42)",
+  },
+
+  heroSmokeBottom: {
     position: "absolute",
-    left: 18,
-    right: 18,
-    bottom: -12,
-    height: 74,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,210,106,0.08)",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 260,
+    backgroundColor: "rgba(0,18,9,0.72)",
   },
 
-  heroTopRow: {
+  pitchGlow: {
+    position: "absolute",
+    left: 36,
+    right: 36,
+    bottom: 68,
+    height: 90,
+    borderRadius: 999,
+    backgroundColor: "rgba(67,255,99,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(130,255,150,0.18)",
+  },
+
+  heroTopOverlay: {
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    alignItems: "center",
+  },
+
+  logoDisc: {
+    width: 58,
+    height: 58,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.58)",
+    borderWidth: 1,
+    borderColor: "rgba(255,215,94,0.58)",
+    shadowColor: "#FFD85A",
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+  },
+
+  logoDiscText: {
+    color: "#E7FFE8",
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+  },
+
+  matchTitle: {
+    marginTop: 18,
+    color: "#FFFFFF",
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: "900",
+    textAlign: "center",
+    letterSpacing: -0.4,
+  },
+
+  matchMeta: {
+    marginTop: 6,
+    color: "rgba(234,255,235,0.76)",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+
+  fixtureChipRow: {
+    marginTop: 18,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  fixtureChip: {
+    minHeight: 36,
+    paddingHorizontal: 11,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,26,12,0.70)",
+    borderWidth: 1,
+    borderColor: "rgba(126,255,143,0.18)",
+  },
+
+  fixtureChipText: {
+    color: "rgba(245,255,245,0.88)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  badgesOnPitch: {
+    marginBottom: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  teamBadgeShell: {
+    width: 82,
+    height: 82,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.64)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.30)",
+    shadowColor: "#7EFF8F",
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+  },
+
+  homeBadge: {
+    transform: [{ rotate: "-4deg" }],
+  },
+
+  awayBadge: {
+    transform: [{ rotate: "4deg" }],
+  },
+
+  teamBadgeImage: {
+    width: 62,
+    height: 62,
+  },
+
+  teamBadgeInitials: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+
+  vsOrb: {
+    width: 48,
+    height: 48,
+    marginHorizontal: 12,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,214,78,0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.50)",
+  },
+
+  vsOrbText: {
+    color: "#07140B",
+    fontSize: 13,
+    fontWeight: "950",
+  },
+
+  tripPulseCard: {
+    borderRadius: 28,
+    backgroundColor: "rgba(0,62,29,0.55)",
+    borderColor: "rgba(95,255,119,0.22)",
+  },
+
+  tripPulseHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: theme.spacing.md,
   },
 
-  heroTitleWrap: {
+  tripPulseCopy: {
     flex: 1,
   },
 
-  heroEyebrow: {
-    fontSize: 11,
+  tripPulseEyebrow: {
+    fontSize: 13,
     fontWeight: "900",
-    color: "#8EF2A5",
+    color: "#9DFF9E",
     textTransform: "uppercase",
     letterSpacing: 0.7,
   },
 
-  city: {
-    marginTop: 6,
-    fontSize: 30,
-    fontWeight: "800",
+  tripPulseTitle: {
+    marginTop: 8,
     color: theme.colors.text,
-    letterSpacing: -0.5,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "900",
+    letterSpacing: -0.3,
   },
 
-  meta: {
+  tripPulseMeta: {
     marginTop: 6,
+    color: theme.colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
-    color: theme.colors.textSecondary,
+    fontWeight: "700",
   },
 
-  walletPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  walletOrb: {
+    minHeight: 42,
+    paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.09)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.14)",
   },
 
-  walletPillText: {
+  walletOrbText: {
+    color: theme.colors.text,
     fontSize: 12,
     fontWeight: "900",
-    color: theme.colors.text,
+  },
+
+  progressTrack: {
+    marginTop: 18,
+    height: 9,
+    borderRadius: 999,
+    overflow: "hidden",
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#7EFF58",
   },
 
   badgeRow: {
@@ -807,51 +1233,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 12,
     fontWeight: "800",
-  },
-
-  tripWindowCard: {
-    marginTop: theme.spacing.md,
-    borderRadius: 18,
-    padding: theme.spacing.md,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-  },
-
-  tripWindowHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing.sm,
-  },
-
-  tripWindowLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: theme.colors.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-
-  tripWindowEdit: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: theme.colors.accent,
-  },
-
-  tripWindowValue: {
-    marginTop: 6,
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: "800",
-    color: theme.colors.text,
-  },
-
-  tripWindowHint: {
-    marginTop: 8,
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
   },
 
   priorityCard: {
@@ -937,50 +1318,77 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
 
-  progressStrip: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  progressList: {
     gap: 10,
   },
 
-  progressChip: {
-    width: "31%",
-    minHeight: 78,
-    borderRadius: 16,
-    paddingHorizontal: 12,
+  itineraryRow: {
+    minHeight: 74,
+    borderRadius: 18,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    justifyContent: "space-between",
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.045)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
 
-  progressChipBooked: {
-    backgroundColor: "rgba(87,162,56,0.12)",
-    borderColor: "rgba(87,162,56,0.24)",
+  itineraryRowBooked: {
+    backgroundColor: "rgba(87,255,105,0.08)",
+    borderColor: "rgba(87,255,105,0.20)",
   },
 
-  progressChipStarted: {
-    backgroundColor: "rgba(120,170,255,0.10)",
-    borderColor: "rgba(120,170,255,0.20)",
+  itineraryRowStarted: {
+    backgroundColor: "rgba(255,210,80,0.07)",
+    borderColor: "rgba(255,210,80,0.16)",
   },
 
-  progressChipEmpty: {
-    backgroundColor: "rgba(255,255,255,0.05)",
+  itineraryIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.24)",
+    borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
   },
 
-  progressChipLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  itineraryIconText: {
+    fontSize: 20,
   },
 
-  progressChipValue: {
-    marginTop: 10,
+  itineraryCopy: {
+    flex: 1,
+  },
+
+  itineraryTitle: {
     color: theme.colors.text,
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "900",
+  },
+
+  itinerarySubline: {
+    marginTop: 3,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  itineraryStatus: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  itineraryStatusBooked: {
+    color: "#7EFF58",
+  },
+
+  itineraryStatusStarted: {
+    color: "#F5CC57",
   },
 
   walletPreviewRow: {
