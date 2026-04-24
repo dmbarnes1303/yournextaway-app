@@ -1,3 +1,5 @@
+// backend/src/services/tickets/se365.ts
+
 import { Buffer } from "node:buffer";
 
 import { env, hasSe365Config } from "../../lib/env.js";
@@ -8,23 +10,19 @@ import type {
 } from "./types.js";
 import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
 
+/**
+ * SportsEvents365 resolver.
+ *
+ * SE365 confirmed public deeplinks should use the API response eventUrl.
+ * Do not guess event URLs unless the API gives no usable URL.
+ */
+
 type Se365Participant = {
   id?: number | string;
   name?: string;
   eventTypeId?: number | string;
   logo?: string;
 };
-
-type Se365ParticipantsResponse =
-  | {
-      data?: Se365Participant[];
-      items?: Se365Participant[];
-      participants?: Se365Participant[];
-      response?: Se365Participant[];
-      results?: Se365Participant[];
-    }
-  | Se365Participant[]
-  | null;
 
 type Se365Event = {
   id?: number | string;
@@ -36,37 +34,14 @@ type Se365Event = {
   eventDate?: string;
   startDate?: string;
   timeOfEvent?: string;
-  homeTeam?: {
-    id?: number | string;
-    name?: string;
-  };
-  awayTeam?: {
-    id?: number | string;
-    name?: string;
-  };
-  participants?: Array<{
-    id?: number | string;
-    name?: string;
-  }>;
-  tournament?: {
-    id?: number | string;
-    name?: string;
-  };
+  homeTeam?: { id?: number | string; name?: string };
+  awayTeam?: { id?: number | string; name?: string };
+  participants?: Array<{ id?: number | string; name?: string }>;
+  tournament?: { id?: number | string; name?: string };
   url?: string;
   eventUrl?: string;
   event_url?: string;
 };
-
-type Se365EventsResponse =
-  | {
-      data?: Se365Event[];
-      items?: Se365Event[];
-      events?: Se365Event[];
-      response?: Se365Event[];
-      results?: Se365Event[];
-    }
-  | Se365Event[]
-  | null;
 
 type Se365Ticket = {
   id?: number | string;
@@ -82,7 +57,30 @@ type Se365Ticket = {
   qty?: number | string;
 };
 
+type Se365ParticipantsResponse =
+  | Se365Participant[]
+  | {
+      data?: Se365Participant[];
+      items?: Se365Participant[];
+      participants?: Se365Participant[];
+      response?: Se365Participant[];
+      results?: Se365Participant[];
+    }
+  | null;
+
+type Se365EventsResponse =
+  | Se365Event[]
+  | {
+      data?: Se365Event[];
+      items?: Se365Event[];
+      events?: Se365Event[];
+      response?: Se365Event[];
+      results?: Se365Event[];
+    }
+  | null;
+
 type Se365TicketsResponse =
+  | Se365Ticket[]
   | {
       data?: Se365Ticket[];
       items?: Se365Ticket[];
@@ -90,7 +88,6 @@ type Se365TicketsResponse =
       response?: Se365Ticket[];
       results?: Se365Ticket[];
     }
-  | Se365Ticket[]
   | null;
 
 type ScoredEvent = {
@@ -152,7 +149,8 @@ const SE365_PARTICIPANT_LIST_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const SE365_TEAM_PARTICIPANT_CACHE_TTL_MS = 1000 * 60 * 60 * 24;
 const SE365_EVENT_CACHE_TTL_MS = 1000 * 60 * 30;
 
-const SE365_PUBLIC_BASE_URL = "https://sportsevents365.com";
+const SE365_PUBLIC_BASE_URL = "https://www.sportsevents365.com";
+const SE365_DEFAULT_API_BASE_URL = "https://api-v2.sandbox365.com";
 const FORCED_A_AID = "69834e80ec9d3";
 
 const GENERIC_CLUB_TOKENS = new Set([
@@ -191,8 +189,8 @@ let PARTICIPANT_LIST_CACHE: ParticipantListCacheEntry | null = null;
 const TEAM_PARTICIPANT_CACHE = new Map<string, TeamParticipantCacheEntry>();
 const EVENT_CACHE = new Map<string, EventCacheEntry>();
 
-function clean(v: unknown): string {
-  return String(v ?? "").trim();
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
 function stripAccents(value: string): string {
@@ -241,8 +239,7 @@ function strongAliasTokens(value: string): string[] {
   const reduced = raw.filter((token) => !GENERIC_CLUB_TOKENS.has(token));
 
   if (raw.length >= 2) {
-    if (reduced.length >= 2) return reduced;
-    return raw;
+    return reduced.length >= 2 ? reduced : raw;
   }
 
   return reduced.length ? reduced : raw;
@@ -275,12 +272,10 @@ function scoreNameAgainstTeam(candidateName: string, teamName: string): number {
 
   const aliases = normalizedAliases(teamName);
   if (!aliases.length) return 0;
-
   if (aliases.includes(candidate)) return 100;
 
   const candidateTokens = splitTokens(candidate);
   const candidateStrong = strongAliasTokens(candidate);
-
   let best = 0;
 
   for (const alias of aliases) {
@@ -300,10 +295,12 @@ function scoreNameAgainstTeam(candidateName: string, teamName: string): number {
       continue;
     }
 
-    if (aliasStrong.length === 1 && isDistinctiveSingleToken(aliasStrong[0])) {
-      if (candidateStrong.includes(aliasStrong[0])) {
-        best = Math.max(best, 78);
-      }
+    if (
+      aliasStrong.length === 1 &&
+      isDistinctiveSingleToken(aliasStrong[0]) &&
+      candidateStrong.includes(aliasStrong[0])
+    ) {
+      best = Math.max(best, 78);
     }
   }
 
@@ -319,7 +316,6 @@ function scoreTitleAgainstTeam(title: string, teamName: string): number {
 
   const titleTokens = splitTokens(normalizedTitle);
   const titleStrong = strongAliasTokens(normalizedTitle);
-
   let best = 0;
 
   for (const alias of aliases) {
@@ -333,16 +329,16 @@ function scoreTitleAgainstTeam(title: string, teamName: string): number {
     const aliasStrong = strongAliasTokens(alias);
 
     if (aliasStrong.length >= 2) {
-      if (hasAllTokens(titleTokens, aliasStrong)) {
-        best = Math.max(best, 80);
-      }
+      if (hasAllTokens(titleTokens, aliasStrong)) best = Math.max(best, 80);
       continue;
     }
 
-    if (aliasStrong.length === 1 && isDistinctiveSingleToken(aliasStrong[0])) {
-      if (titleStrong.includes(aliasStrong[0])) {
-        best = Math.max(best, 68);
-      }
+    if (
+      aliasStrong.length === 1 &&
+      isDistinctiveSingleToken(aliasStrong[0]) &&
+      titleStrong.includes(aliasStrong[0])
+    ) {
+      best = Math.max(best, 68);
     }
   }
 
@@ -356,7 +352,6 @@ function parseDdMmYyyy(raw: string): Date | null {
   const dd = Number(match[1]);
   const mm = Number(match[2]);
   const yyyy = Number(match[3]);
-
   const d = new Date(Date.UTC(yyyy, mm - 1, dd));
 
   if (
@@ -370,81 +365,80 @@ function parseDdMmYyyy(raw: string): Date | null {
   return d;
 }
 
-function safeDate(v?: string): Date | null {
-  const raw = clean(v);
+function safeDate(value?: string): Date | null {
+  const raw = clean(value);
   if (!raw) return null;
 
   const ddmmyyyy = parseDdMmYyyy(raw);
   if (ddmmyyyy) return ddmmyyyy;
 
   const d = new Date(raw);
-  if (!Number.isFinite(d.getTime())) return null;
-
-  return d;
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
-function toUtcDayStart(d: Date): number {
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+function toUtcDayStart(date: Date): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function absDays(a: Date, b: Date): number {
   return Math.floor(Math.abs(toUtcDayStart(a) - toUtcDayStart(b)) / 86400000);
 }
 
-function numberFromUnknown(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
+function numberFromUnknown(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
 
-  const raw = clean(v);
+  const raw = clean(value);
   if (!raw) return null;
 
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-function participantId(p: Se365Participant): string {
-  return clean(p.id);
+function participantId(participant: Se365Participant): string {
+  return clean(participant.id);
 }
 
-function participantName(p: Se365Participant): string {
-  return clean(p.name);
+function participantName(participant: Se365Participant): string {
+  return clean(participant.name);
 }
 
-function eventId(ev: Se365Event): string {
-  return clean(ev.id);
+function eventId(event: Se365Event): string {
+  return clean(event.id);
 }
 
-function eventName(ev: Se365Event): string {
-  return clean(ev.name) || clean(ev.eventTitle) || clean(ev.title);
+function eventName(event: Se365Event): string {
+  return clean(event.name) || clean(event.eventTitle) || clean(event.title);
 }
 
-function eventDate(ev: Se365Event): string {
+function eventDate(event: Se365Event): string {
   return (
-    clean(ev.dateOfEvent) ||
-    clean(ev.eventDate) ||
-    clean(ev.startDate) ||
-    clean(ev.date)
+    clean(event.dateOfEvent) ||
+    clean(event.eventDate) ||
+    clean(event.startDate) ||
+    clean(event.date)
   );
 }
 
-function eventUrl(ev: Se365Event): string {
-  return clean(ev.url) || clean(ev.eventUrl) || clean(ev.event_url);
+function eventUrl(event: Se365Event): string {
+  return clean(event.eventUrl) || clean(event.event_url) || clean(event.url);
 }
 
-function eventHomeName(ev: Se365Event): string {
-  return clean(ev.homeTeam?.name);
+function eventHomeName(event: Se365Event): string {
+  return clean(event.homeTeam?.name);
 }
 
-function eventAwayName(ev: Se365Event): string {
-  return clean(ev.awayTeam?.name);
+function eventAwayName(event: Se365Event): string {
+  return clean(event.awayTeam?.name);
 }
 
-function eventParticipantNames(ev: Se365Event): string[] {
-  const arr = Array.isArray(ev.participants) ? ev.participants : [];
-  return arr.map((x) => clean(x.name)).filter(Boolean);
+function eventParticipantNames(event: Se365Event): string[] {
+  return Array.isArray(event.participants)
+    ? event.participants.map((x) => clean(x.name)).filter(Boolean)
+    : [];
 }
 
-function eventTournamentName(ev: Se365Event): string {
-  return clean(ev.tournament?.name);
+function eventTournamentName(event: Se365Event): string {
+  return clean(event.tournament?.name);
 }
 
 function ticketCurrency(ticket: Se365Ticket): string {
@@ -478,11 +472,11 @@ function ticketPriceText(ticket: Se365Ticket): string | null {
 
 function buildBaseUrl(): string {
   const raw = clean(env.se365BaseUrl);
-  return raw ? raw.replace(/\/+$/, "") : "https://api-v2.sandbox365.com";
+  return raw ? raw.replace(/\/+$/, "") : SE365_DEFAULT_API_BASE_URL;
 }
 
 function buildBasicAuthHeader(): string | null {
-  const username = clean(env.se365HttpUsername) || clean(env.se365HttpSource) || "";
+  const username = clean(env.se365HttpUsername) || clean(env.se365HttpSource);
   const password = clean(env.se365ApiPassword);
 
   if (!username || !password) return null;
@@ -498,10 +492,6 @@ function buildHeaders(): Record<string, string> {
   if (basic) headers.Authorization = basic;
 
   return headers;
-}
-
-function getStartedAt(): number {
-  return Date.now();
 }
 
 function getDeadline(startedAt: number): number {
@@ -554,27 +544,24 @@ async function fetchJsonText(
   const timeout = setTimeout(() => controller.abort(), SE365_FETCH_TIMEOUT_MS);
 
   try {
-    const res = await fetch(url, {
+    const response = await fetch(url, {
       method: "GET",
       headers: buildHeaders(),
       signal: controller.signal,
     });
 
-    const body = await res.text().catch(() => "");
+    const body = await response.text().catch(() => "");
 
     return {
-      ok: res.ok,
-      status: res.status,
+      ok: response.ok,
+      status: response.status,
       body,
     };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      return {
-        ok: false,
-        status: 408,
-        body: "",
-      };
+      return { ok: false, status: 408, body: "" };
     }
+
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -619,7 +606,7 @@ function appendAffiliate(url: string): string {
   if (!base) return "";
 
   try {
-    const parsed = new URL(base);
+    const parsed = new URL(base.startsWith("http") ? base : `${SE365_PUBLIC_BASE_URL}${base}`);
     parsed.searchParams.set("a_aid", FORCED_A_AID);
     return parsed.toString();
   } catch {
@@ -642,31 +629,31 @@ function buildTrackedSearchFallback(input: TicketResolveInput): string | null {
   return url.toString();
 }
 
-function summarizeParticipant(p: Se365Participant) {
+function summarizeParticipant(participant: Se365Participant) {
   return {
-    id: participantId(p) || null,
-    name: participantName(p) || null,
+    id: participantId(participant) || null,
+    name: participantName(participant) || null,
   };
 }
 
-function summarizeEvent(ev: Se365Event) {
+function summarizeEvent(event: Se365Event) {
   return {
-    id: eventId(ev) || null,
-    name: eventName(ev) || null,
-    date: eventDate(ev) || null,
-    home: eventHomeName(ev) || null,
-    away: eventAwayName(ev) || null,
-    participants: eventParticipantNames(ev),
-    tournament: eventTournamentName(ev) || null,
-    url: eventUrl(ev) || null,
+    id: eventId(event) || null,
+    name: eventName(event) || null,
+    date: eventDate(event) || null,
+    home: eventHomeName(event) || null,
+    away: eventAwayName(event) || null,
+    participants: eventParticipantNames(event),
+    tournament: eventTournamentName(event) || null,
+    url: eventUrl(event) || null,
   };
 }
 
-function summarizeTicket(t: Se365Ticket) {
+function summarizeTicket(ticket: Se365Ticket) {
   return {
-    id: clean(t.id) || clean(t.ticketId) || null,
-    priceText: ticketPriceText(t),
-    quantity: ticketQuantity(t),
+    id: clean(ticket.id) || clean(ticket.ticketId) || null,
+    priceText: ticketPriceText(ticket),
+    quantity: ticketQuantity(ticket),
   };
 }
 
@@ -700,12 +687,12 @@ function hasBadVariantText(value: string): boolean {
   return false;
 }
 
-function eventHasBadVariant(ev: Se365Event): boolean {
+function eventHasBadVariant(event: Se365Event): boolean {
   const value = [
-    eventName(ev),
-    eventHomeName(ev),
-    eventAwayName(ev),
-    ...eventParticipantNames(ev),
+    eventName(event),
+    eventHomeName(event),
+    eventAwayName(event),
+    ...eventParticipantNames(event),
   ]
     .join(" ")
     .trim();
@@ -713,7 +700,7 @@ function eventHasBadVariant(ev: Se365Event): boolean {
   return hasBadVariantText(value);
 }
 
-function cleanupParticipantCaches(): void {
+function cleanupCaches(): void {
   const now = Date.now();
 
   if (PARTICIPANT_LIST_CACHE && now > PARTICIPANT_LIST_CACHE.expires) {
@@ -746,26 +733,25 @@ function getFixtureCacheKey(input: TicketResolveInput): string {
 }
 
 function getCachedEvent(input: TicketResolveInput): Se365Event | null {
-  cleanupParticipantCaches();
+  cleanupCaches();
   const key = getFixtureCacheKey(input);
   return EVENT_CACHE.get(key)?.event ?? null;
 }
 
-function setCachedEvent(input: TicketResolveInput, ev: Se365Event): void {
+function setCachedEvent(input: TicketResolveInput, event: Se365Event): void {
   const key = getFixtureCacheKey(input);
-  if (!key || !eventId(ev)) return;
+  if (!key || !eventId(event)) return;
 
   EVENT_CACHE.set(key, {
     expires: Date.now() + SE365_EVENT_CACHE_TTL_MS,
-    event: ev,
+    event,
   });
 }
 
 function getCachedTeamParticipant(teamName: string): Se365Participant | null {
-  cleanupParticipantCaches();
+  cleanupCaches();
   const key = getTeamCacheKey(teamName);
-  const entry = TEAM_PARTICIPANT_CACHE.get(key);
-  return entry?.participant ?? null;
+  return TEAM_PARTICIPANT_CACHE.get(key)?.participant ?? null;
 }
 
 function setCachedTeamParticipant(teamName: string, participant: Se365Participant): void {
@@ -779,7 +765,7 @@ function setCachedTeamParticipant(teamName: string, participant: Se365Participan
 }
 
 function getCachedParticipantList(): Se365Participant[] | null {
-  cleanupParticipantCaches();
+  cleanupCaches();
   return PARTICIPANT_LIST_CACHE?.participants ?? null;
 }
 
@@ -812,15 +798,11 @@ function evaluateParticipantMatch(
   if (!aliases.length) return null;
 
   if (aliases.includes(normalizedParticipant)) {
-    return {
-      participant,
-      score: 100,
-    };
+    return { participant, score: 100 };
   }
 
   const participantTokens = splitTokens(name);
   const participantStrongTokens = strongAliasTokens(name);
-
   let best: ParticipantMatch | null = null;
 
   for (const alias of aliases) {
@@ -832,41 +814,30 @@ function evaluateParticipantMatch(
     if (aliasTokens.length >= 2) {
       if (aliasStrong.length >= 2 && hasAllTokens(participantTokens, aliasStrong)) {
         const score = aliasStrong.length >= 3 ? 96 : 92;
-        if (!best || score > best.score) {
-          best = { participant, score };
-        }
+        if (!best || score > best.score) best = { participant, score };
       }
       continue;
     }
 
-    if (aliasStrong.length === 1 && isDistinctiveSingleToken(aliasStrong[0])) {
-      if (hasWholeWord(name, aliasStrong[0])) {
-        const score = 84;
-        if (!best || score > best.score) {
-          best = { participant, score };
-        }
-      }
+    if (
+      aliasStrong.length === 1 &&
+      isDistinctiveSingleToken(aliasStrong[0]) &&
+      hasWholeWord(name, aliasStrong[0])
+    ) {
+      const score = 84;
+      if (!best || score > best.score) best = { participant, score };
     }
   }
 
   const preferredStrong = strongAliasTokens(preferred);
-  const matchedPreferredTokens = countMatchedTokens(
-    participantStrongTokens,
-    preferredStrong
-  );
+  const matchedPreferredTokens = countMatchedTokens(participantStrongTokens, preferredStrong);
 
   if (preferredStrong.length >= 2 && matchedPreferredTokens >= 2) {
     const score = 78 + Math.min(8, matchedPreferredTokens);
-    if (!best || score > best.score) {
-      best = { participant, score };
-    }
+    if (!best || score > best.score) best = { participant, score };
   }
 
-  if (best && best.score >= SE365_MIN_PARTICIPANT_SCORE) {
-    return best;
-  }
-
-  return null;
+  return best && best.score >= SE365_MIN_PARTICIPANT_SCORE ? best : null;
 }
 
 function findBestParticipantMatch(
@@ -909,39 +880,35 @@ async function fetchParticipantsPage(page: number): Promise<Se365Participant[] |
   url.searchParams.set("perPage", String(SE365_PARTICIPANTS_PER_PAGE));
   url.searchParams.set("page", String(page));
 
-  const res = await fetchJsonText(url.toString());
+  const response = await fetchJsonText(url.toString());
 
-  if (!res.ok) {
+  if (!response.ok) {
     console.log("[SE365] participants non-200 response", {
       page,
-      status: res.status,
-      url: url.toString(),
-      body: res.body.slice(0, 500),
+      status: response.status,
+      body: response.body.slice(0, 500),
     });
     return null;
   }
 
-  let parsed: Se365ParticipantsResponse = null;
   try {
-    parsed = res.body ? (JSON.parse(res.body) as Se365ParticipantsResponse) : null;
+    const parsed = response.body ? (JSON.parse(response.body) as Se365ParticipantsResponse) : null;
+    const pageItems = extractParticipants(parsed);
+
+    console.log("[SE365] participants page", {
+      page,
+      count: pageItems.length,
+      sample: pageItems.slice(0, 5).map(summarizeParticipant),
+    });
+
+    return pageItems;
   } catch {
     console.log("[SE365] participants invalid JSON", {
       page,
-      url: url.toString(),
-      body: res.body.slice(0, 500),
+      body: response.body.slice(0, 500),
     });
     return null;
   }
-
-  const pageItems = extractParticipants(parsed);
-
-  console.log("[SE365] participants page", {
-    page,
-    count: pageItems.length,
-    sample: pageItems.slice(0, 5).map(summarizeParticipant),
-  });
-
-  return pageItems;
 }
 
 async function resolveParticipantsForTeams(
@@ -982,7 +949,6 @@ async function resolveParticipantsForTeams(
   const aggregated: Se365Participant[] = [];
   let homeBest: ParticipantMatch | null = null;
   let awayBest: ParticipantMatch | null = null;
-
   let pagesScanned = 0;
   let completedFullScan = true;
 
@@ -1014,25 +980,24 @@ async function resolveParticipantsForTeams(
     );
 
     for (const batchResult of batchResults) {
-      const { page, items } = batchResult;
-      pagesScanned = Math.max(pagesScanned, page);
+      pagesScanned = Math.max(pagesScanned, batchResult.page);
 
-      if (items == null) {
+      if (batchResult.items == null) {
         completedFullScan = false;
         continue;
       }
 
-      if (!items.length) continue;
+      if (!batchResult.items.length) continue;
 
-      aggregated.push(...items);
+      aggregated.push(...batchResult.items);
 
       if (!homeBest) {
-        const pageHomeBest = findBestParticipantMatchDetailed(items, homeTeamName);
+        const pageHomeBest = findBestParticipantMatchDetailed(batchResult.items, homeTeamName);
         if (pageHomeBest) homeBest = pageHomeBest;
       }
 
       if (!awayBest) {
-        const pageAwayBest = findBestParticipantMatchDetailed(items, awayTeamName);
+        const pageAwayBest = findBestParticipantMatchDetailed(batchResult.items, awayTeamName);
         if (pageAwayBest) awayBest = pageAwayBest;
       }
     }
@@ -1086,27 +1051,24 @@ async function fetchParticipantEvents(
     url.searchParams.set("perPage", String(SE365_EVENTS_PER_PAGE));
     url.searchParams.set("page", String(page));
 
-    const res = await fetchJsonText(url.toString());
+    const response = await fetchJsonText(url.toString());
 
-    if (!res.ok) {
+    if (!response.ok) {
       if (page === 1) return [];
       break;
     }
 
-    let parsed: Se365EventsResponse = null;
     try {
-      parsed = res.body ? (JSON.parse(res.body) as Se365EventsResponse) : null;
+      const parsed = response.body ? (JSON.parse(response.body) as Se365EventsResponse) : null;
+      const pageItems = extractEvents(parsed);
+
+      if (!pageItems.length) break;
+
+      out.push(...pageItems);
+
+      if (pageItems.length < SE365_EVENTS_PER_PAGE) break;
     } catch {
       if (page === 1) return [];
-      break;
-    }
-
-    const pageItems = extractEvents(parsed);
-    if (!pageItems.length) break;
-
-    out.push(...pageItems);
-
-    if (pageItems.length < SE365_EVENTS_PER_PAGE) {
       break;
     }
   }
@@ -1136,53 +1098,48 @@ async function fetchTicketsForEvent(eventIdValue: string): Promise<Se365Ticket[]
   const url = new URL(`${base}/tickets/${encodeURIComponent(eventIdValue)}`);
   url.searchParams.set("apiKey", apiKey);
 
-  const res = await fetchJsonText(url.toString());
+  const response = await fetchJsonText(url.toString());
+  if (!response.ok) return [];
 
-  if (!res.ok) return [];
-
-  let parsed: Se365TicketsResponse = null;
   try {
-    parsed = res.body ? (JSON.parse(res.body) as Se365TicketsResponse) : null;
+    const parsed = response.body ? (JSON.parse(response.body) as Se365TicketsResponse) : null;
+    return extractTickets(parsed);
   } catch {
     return [];
   }
-
-  return extractTickets(parsed);
 }
 
 function dedupeEvents(events: Se365Event[]): Se365Event[] {
   return Array.from(
-    new Map(
-      events.map((ev) => [`${eventId(ev)}|${eventName(ev)}|${eventDate(ev)}`, ev])
-    ).values()
+    new Map(events.map((event) => [`${eventId(event)}|${eventName(event)}|${eventDate(event)}`, event])).values()
   );
 }
 
 function eventMatchScore(
-  ev: Se365Event,
+  event: Se365Event,
   input: TicketResolveInput,
   homeParticipantId?: string | null,
   awayParticipantId?: string | null
 ): ScoredEvent {
   let score = 0;
 
-  if (eventHasBadVariant(ev)) {
+  if (eventHasBadVariant(event)) {
     return {
-      ev,
+      ev: event,
       score: -1000,
       exactTeams: false,
       sameDay: false,
     };
   }
 
-  const homeNameText = eventHomeName(ev);
-  const awayNameText = eventAwayName(ev);
-  const titleText = eventName(ev);
-  const participants = eventParticipantNames(ev);
+  const homeNameText = eventHomeName(event);
+  const awayNameText = eventAwayName(event);
+  const titleText = eventName(event);
+  const participants = eventParticipantNames(event);
 
   const participantIds = new Set(
-    (Array.isArray(ev.participants) ? ev.participants : [])
-      .map((p) => clean(p.id))
+    (Array.isArray(event.participants) ? event.participants : [])
+      .map((participant) => clean(participant.id))
       .filter(Boolean)
   );
 
@@ -1190,19 +1147,14 @@ function eventMatchScore(
     (best, name) => Math.max(best, scoreNameAgainstTeam(name, input.homeName)),
     0
   );
+
   const participantAwayScore = participants.reduce(
     (best, name) => Math.max(best, scoreNameAgainstTeam(name, input.awayName)),
     0
   );
 
-  const homeScore = Math.max(
-    scoreNameAgainstTeam(homeNameText, input.homeName),
-    participantHomeScore
-  );
-  const awayScore = Math.max(
-    scoreNameAgainstTeam(awayNameText, input.awayName),
-    participantAwayScore
-  );
+  const homeScore = Math.max(scoreNameAgainstTeam(homeNameText, input.homeName), participantHomeScore);
+  const awayScore = Math.max(scoreNameAgainstTeam(awayNameText, input.awayName), participantAwayScore);
 
   const titleHomeScore = scoreTitleAgainstTeam(titleText, input.homeName);
   const titleAwayScore = scoreTitleAgainstTeam(titleText, input.awayName);
@@ -1215,23 +1167,19 @@ function eventMatchScore(
   if (homeParticipantId && participantIds.has(homeParticipantId)) score += 18;
   if (awayParticipantId && participantIds.has(awayParticipantId)) score += 18;
 
-  if (exactTeams) {
-    score += 48;
-  } else if (looseTeams) {
-    score += 24;
-  } else {
-    score -= 1000;
-  }
+  if (exactTeams) score += 48;
+  else if (looseTeams) score += 24;
+  else score -= 1000;
 
   if (homeScore >= 70 && awayScore >= 70) score += 10;
   if (titleHomeScore >= 70 && titleAwayScore >= 70) score += 4;
 
   const kickoff = safeDate(input.kickoffIso);
-  const evDt = safeDate(eventDate(ev));
+  const eventDt = safeDate(eventDate(event));
   let sameDay = false;
 
-  if (kickoff && evDt) {
-    const diff = absDays(kickoff, evDt);
+  if (kickoff && eventDt) {
+    const diff = absDays(kickoff, eventDt);
 
     if (diff === 0) {
       score += 24;
@@ -1247,18 +1195,19 @@ function eventMatchScore(
     score -= 15;
   }
 
-  if (clean(eventUrl(ev))) score += 8;
+  if (clean(eventUrl(event))) score += 8;
 
-  if (clean(eventTournamentName(ev)) && clean(input.leagueName)) {
-    const tournament = normalizeName(eventTournamentName(ev));
+  if (clean(eventTournamentName(event)) && clean(input.leagueName)) {
+    const tournament = normalizeName(eventTournamentName(event));
     const league = normalizeName(clean(input.leagueName));
+
     if (tournament.includes(league) || league.includes(tournament)) {
       score += 6;
     }
   }
 
   return {
-    ev,
+    ev: event,
     score,
     exactTeams,
     sameDay,
@@ -1271,16 +1220,16 @@ function pickBestEvent(
   homeParticipantId?: string | null,
   awayParticipantId?: string | null
 ): ScoredEvent | null {
-  const scored = dedupeEvents(events)
-    .map((ev) => eventMatchScore(ev, input, homeParticipantId, awayParticipantId))
-    .filter((x) => x.score >= SE365_MIN_EVENT_SCORE)
-    .sort((a, b) => {
-      if (a.exactTeams !== b.exactTeams) return a.exactTeams ? -1 : 1;
-      if (a.sameDay !== b.sameDay) return a.sameDay ? -1 : 1;
-      return b.score - a.score;
-    });
-
-  return scored[0] ?? null;
+  return (
+    dedupeEvents(events)
+      .map((event) => eventMatchScore(event, input, homeParticipantId, awayParticipantId))
+      .filter((x) => x.score >= SE365_MIN_EVENT_SCORE)
+      .sort((a, b) => {
+        if (a.exactTeams !== b.exactTeams) return a.exactTeams ? -1 : 1;
+        if (a.sameDay !== b.sameDay) return a.sameDay ? -1 : 1;
+        return b.score - a.score;
+      })[0] ?? null
+  );
 }
 
 function bestTicketPriceText(tickets: Se365Ticket[]): string | null {
@@ -1299,21 +1248,33 @@ function bestTicketPriceText(tickets: Se365Ticket[]): string | null {
   return priced[0]?.ticket ? ticketPriceText(priced[0].ticket) : null;
 }
 
-function buildEventOutbound(
-  event: Se365Event,
-  input: TicketResolveInput
-): EventOutbound {
-  const matchedEventId = eventId(event);
+function buildEventOutbound(event: Se365Event, input: TicketResolveInput): EventOutbound {
+  const apiEventUrl = eventUrl(event);
+  const trackedApiUrl = appendAffiliate(apiEventUrl);
 
-  if (matchedEventId) {
+  if (trackedApiUrl) {
     return {
-      url: buildPublicEventUrlFromId(matchedEventId),
-      urlQuality: "event",
+      url: trackedApiUrl,
+      urlQuality: getSe365UrlQuality(trackedApiUrl),
       isSearchFallback: false,
     };
   }
 
+  const matchedEventId = eventId(event);
+  if (matchedEventId) {
+    const guessed = appendAffiliate(buildPublicEventUrlFromId(matchedEventId));
+
+    if (guessed) {
+      return {
+        url: guessed,
+        urlQuality: "event",
+        isSearchFallback: false,
+      };
+    }
+  }
+
   const fallback = buildTrackedSearchFallback(input);
+
   return {
     url: fallback ?? "",
     urlQuality: "search",
@@ -1321,10 +1282,31 @@ function buildEventOutbound(
   };
 }
 
+function buildFallbackCandidate(
+  input: TicketResolveInput,
+  homeName: string,
+  awayName: string
+): TicketCandidate | null {
+  const fallback = buildTrackedSearchFallback(input);
+  if (!fallback) return null;
+
+  return {
+    provider: "sportsevents365",
+    exact: false,
+    score: 20,
+    rawScore: 20,
+    url: fallback,
+    title: `Tickets: ${homeName} vs ${awayName}`,
+    priceText: null,
+    reason: "search_fallback",
+    urlQuality: "search",
+  };
+}
+
 export async function resolveSe365Candidate(
   input: TicketResolveInput
 ): Promise<TicketCandidate | null> {
-  const startedAt = getStartedAt();
+  const startedAt = Date.now();
   const deadlineAt = getDeadline(startedAt);
 
   if (!hasSe365Config()) {
@@ -1345,12 +1327,12 @@ export async function resolveSe365Candidate(
   }
 
   const cachedEvent = getCachedEvent(input);
+
   if (cachedEvent) {
     const tickets = await fetchTicketsForEvent(eventId(cachedEvent));
     const outbound = buildEventOutbound(cachedEvent, input);
-    const resolvedUrl = appendAffiliate(outbound.url);
 
-    if (resolvedUrl) {
+    if (outbound.url) {
       const baseScored = eventMatchScore(cachedEvent, input);
       const exact =
         !outbound.isSearchFallback &&
@@ -1363,57 +1345,35 @@ export async function resolveSe365Candidate(
         exact,
         score: baseScored.score,
         rawScore: baseScored.score,
-        url: resolvedUrl,
+        url: outbound.url,
         title: `Tickets: ${homeName} vs ${awayName}`,
         priceText: bestTicketPriceText(tickets),
-        reason: outbound.isSearchFallback
-          ? "search_fallback"
-          : exact
-            ? "exact_event"
-            : "partial_match",
+        reason: outbound.isSearchFallback ? "search_fallback" : exact ? "exact_event" : "partial_match",
         urlQuality: outbound.urlQuality,
       };
     }
   }
 
-  const participantResolution = await resolveParticipantsForTeams(
-    homeName,
-    awayName,
-    deadlineAt
-  );
+  const participantResolution = await resolveParticipantsForTeams(homeName, awayName, deadlineAt);
+
+  console.log("[SE365] participant resolution", {
+    home: participantResolution.homeParticipant
+      ? summarizeParticipant(participantResolution.homeParticipant)
+      : null,
+    away: participantResolution.awayParticipant
+      ? summarizeParticipant(participantResolution.awayParticipant)
+      : null,
+    source: participantResolution.participantsSource,
+    pagesScanned: participantResolution.pagesScanned,
+    scannedCount: participantResolution.scannedCount,
+  });
 
   if (!participantResolution.homeParticipant || !participantResolution.awayParticipant) {
-    const fallback = buildTrackedSearchFallback(input);
-    if (!fallback) return null;
-
-    return {
-      provider: "sportsevents365",
-      exact: false,
-      score: 20,
-      rawScore: 20,
-      url: fallback,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "search_fallback",
-      urlQuality: "search",
-    };
+    return buildFallbackCandidate(input, homeName, awayName);
   }
 
   if (!hasBudget(deadlineAt, SE365_FETCH_TIMEOUT_MS + 250)) {
-    const fallback = buildTrackedSearchFallback(input);
-    if (!fallback) return null;
-
-    return {
-      provider: "sportsevents365",
-      exact: false,
-      score: 20,
-      rawScore: 20,
-      url: fallback,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "search_fallback",
-      urlQuality: "search",
-    };
+    return buildFallbackCandidate(input, homeName, awayName);
   }
 
   const homeParticipantId = participantId(participantResolution.homeParticipant);
@@ -1422,47 +1382,21 @@ export async function resolveSe365Candidate(
   const events = await fetchCombinedEvents(homeParticipantId, awayParticipantId, deadlineAt);
 
   if (!events.length) {
-    const fallback = buildTrackedSearchFallback(input);
-    if (!fallback) return null;
-
-    return {
-      provider: "sportsevents365",
-      exact: false,
-      score: 20,
-      rawScore: 20,
-      url: fallback,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "search_fallback",
-      urlQuality: "search",
-    };
+    return buildFallbackCandidate(input, homeName, awayName);
   }
 
   const best = pickBestEvent(events, input, homeParticipantId, awayParticipantId);
-  if (!best) {
-    const fallback = buildTrackedSearchFallback(input);
-    if (!fallback) return null;
 
-    return {
-      provider: "sportsevents365",
-      exact: false,
-      score: 20,
-      rawScore: 20,
-      url: fallback,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "search_fallback",
-      urlQuality: "search",
-    };
+  if (!best) {
+    return buildFallbackCandidate(input, homeName, awayName);
   }
 
   setCachedEvent(input, best.ev);
 
   const tickets = await fetchTicketsForEvent(eventId(best.ev));
   const outbound = buildEventOutbound(best.ev, input);
-  const resolvedUrl = appendAffiliate(outbound.url);
 
-  if (!resolvedUrl) return null;
+  if (!outbound.url) return null;
 
   const exact =
     !outbound.isSearchFallback &&
@@ -1478,7 +1412,7 @@ export async function resolveSe365Candidate(
     ticketCount: tickets.length,
     bestTicket: tickets[0] ? summarizeTicket(tickets[0]) : null,
     elapsedMs: Date.now() - startedAt,
-    resolvedUrl,
+    resolvedUrl: outbound.url,
   });
 
   return {
@@ -1486,14 +1420,10 @@ export async function resolveSe365Candidate(
     exact,
     score: best.score,
     rawScore: best.score,
-    url: resolvedUrl,
+    url: outbound.url,
     title: `Tickets: ${homeName} vs ${awayName}`,
     priceText: bestTicketPriceText(tickets),
-    reason: outbound.isSearchFallback
-      ? "search_fallback"
-      : exact
-        ? "exact_event"
-        : "partial_match",
+    reason: outbound.isSearchFallback ? "search_fallback" : exact ? "exact_event" : "partial_match",
     urlQuality: outbound.urlQuality,
   };
-  }
+      }
