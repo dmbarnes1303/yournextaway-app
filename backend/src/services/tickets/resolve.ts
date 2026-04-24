@@ -51,7 +51,12 @@ const PROVIDER_HOST_ALLOWLIST: Record<TicketProviderId, string[]> = {
     "footballticketsnet.com",
     "www.footballticketsnet.com",
   ],
-  sportsevents365: ["sportsevents365.com", "www.sportsevents365.com"],
+  sportsevents365: [
+    "sportsevents365.com",
+    "www.sportsevents365.com",
+    "tickets-partners.com",
+    "www.tickets-partners.com",
+  ],
 };
 
 function clean(value: unknown): string {
