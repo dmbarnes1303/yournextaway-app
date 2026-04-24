@@ -1,14 +1,15 @@
+// app/trip/[id].tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
   ActivityIndicator,
   Alert,
   Image,
   ImageBackground,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -45,7 +46,6 @@ import {
   coerceId,
   itemResolvedScore,
   livePriceLine,
-  summaryLine,
   ticketProviderFromItem,
   tripStatus,
 } from "@/src/features/tripDetail/helpers";
@@ -53,7 +53,7 @@ import {
 const PLAN_STORAGE_KEY = "yna:plan";
 
 const STADIUM_HERO_IMAGE_URL =
-  "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1400&q=90";
+  "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1600&q=90";
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -71,13 +71,6 @@ function dateWindowLine(startDate?: string | null, endDate?: string | null) {
   const end = clean(endDate);
   if (!start || !end) return "Trip dates not set";
   return `${start} → ${end}`;
-}
-
-function completionTone(pct?: number | null) {
-  const value = typeof pct === "number" ? pct : 0;
-  if (value >= 90) return "ready";
-  if (value >= 65) return "progress";
-  return "early";
 }
 
 function inferSourceSectionFromSavedItemType(type?: SavedItemType) {
@@ -110,9 +103,9 @@ function getAttachments(item?: SavedItem | null) {
 }
 
 function progressStateLabel(state: string) {
-  if (state === "booked") return "Booked";
+  if (state === "booked") return "Confirmed";
   if (state === "pending") return "Pending";
-  if (state === "saved") return "Started";
+  if (state === "saved") return "Saved";
   return "Empty";
 }
 
@@ -132,15 +125,6 @@ function walletHeadline(args: { bookedCount: number; missingProofCount: number }
   }
 
   return "All booked items have proof attached";
-}
-
-function walletSubline(args: {
-  bookedCount: number;
-  pendingCount: number;
-  savedCount: number;
-}) {
-  const { bookedCount, pendingCount, savedCount } = args;
-  return `${bookedCount} booked • ${pendingCount} pending • ${savedCount} saved`;
 }
 
 function nextTasks(args: {
@@ -296,21 +280,38 @@ function formatKickoffTime(value?: string | null) {
 function TeamBadge({
   name,
   logo,
-  side,
 }: {
   name: string;
   logo?: string | null;
-  side: "home" | "away";
 }) {
   const initials = initialsFromName(name);
 
   return (
-    <View style={[styles.teamBadgeShell, side === "home" ? styles.homeBadge : styles.awayBadge]}>
+    <View style={styles.teamBadgeShell}>
       {logo ? (
         <Image source={{ uri: logo }} style={styles.teamBadgeImage} resizeMode="contain" />
       ) : (
         <Text style={styles.teamBadgeInitials}>{initials}</Text>
       )}
+    </View>
+  );
+}
+
+function ItineraryIcon({ itemKey }: { itemKey: string }) {
+  const icon =
+    itemKey === "tickets"
+      ? "🎟"
+      : itemKey === "flight" || itemKey === "travel"
+        ? "✈"
+        : itemKey === "hotel" || itemKey === "stay"
+          ? "🛏"
+          : itemKey === "things"
+            ? "★"
+            : "✓";
+
+  return (
+    <View style={styles.itineraryIcon}>
+      <Text style={styles.itineraryIconText}>{icon}</Text>
     </View>
   );
 }
@@ -499,7 +500,7 @@ export default function TripDetailScreen() {
 
   const primaryFixture = useMemo(() => {
     if (!data.primaryMatchId) return null;
-    return data.fixturesById?.[String(data.primaryMatchId)] ?? data.fixturesById?.[Number(data.primaryMatchId) as never] ?? null;
+    return data.fixturesById?.[String(data.primaryMatchId)] ?? null;
   }, [data.fixturesById, data.primaryMatchId]);
 
   const fixtureInfo = useMemo(() => {
@@ -523,6 +524,8 @@ export default function TripDetailScreen() {
   const proofCount = useMemo(() => {
     return bookedItems.filter((item) => getAttachments(item).length > 0).length;
   }, [bookedItems]);
+
+  const completionPct = Math.max(0, Math.min(100, vm.tripCompletionPct ?? 0));
 
   const taskRows = useMemo(() => {
     return nextTasks({
@@ -595,82 +598,74 @@ export default function TripDetailScreen() {
 
     return (
       <>
-        <View style={styles.matchHero}>
+        <View style={styles.heroCard}>
           <ImageBackground
             source={{ uri: STADIUM_HERO_IMAGE_URL }}
-            style={styles.matchHeroImage}
-            imageStyle={styles.matchHeroImageInner}
+            style={styles.heroImage}
+            imageStyle={styles.heroImageInner}
           >
-            <View style={styles.heroSmokeTop} pointerEvents="none" />
-            <View style={styles.heroSmokeBottom} pointerEvents="none" />
-            <View style={styles.pitchGlow} pointerEvents="none" />
+            <View style={styles.heroDarkLayer} pointerEvents="none" />
+            <View style={styles.heroGreenLayer} pointerEvents="none" />
 
-            <View style={styles.heroTopOverlay}>
-              <View style={styles.logoDisc}>
-                <Text style={styles.logoDiscText}>YNA</Text>
+            <View style={styles.heroContent}>
+              <View style={styles.heroLogo}>
+                <Text style={styles.heroLogoText}>YNA</Text>
               </View>
 
-              <Text style={styles.matchTitle}>
+              <Text style={styles.heroTitle}>
                 {fixtureInfo.homeName} vs {fixtureInfo.awayName}
               </Text>
 
-              <Text style={styles.matchMeta}>
+              <Text style={styles.heroSub}>
                 {fixtureInfo.leagueName} • {data.cityName}
               </Text>
 
-              <View style={styles.fixtureChipRow}>
-                <View style={styles.fixtureChip}>
-                  <Text style={styles.fixtureChipText}>
-                    {formatKickoffDate(fixtureInfo.kickoff)}
-                  </Text>
+              <View style={styles.heroChipRow}>
+                <View style={styles.heroChip}>
+                  <Text style={styles.heroChipText}>{formatKickoffDate(fixtureInfo.kickoff)}</Text>
                 </View>
 
-                <View style={styles.fixtureChip}>
-                  <Text style={styles.fixtureChipText}>
+                <View style={styles.heroChip}>
+                  <Text style={styles.heroChipText}>
                     {data.kickoffMeta.tbc ? "Kickoff TBC" : formatKickoffTime(fixtureInfo.kickoff)}
                   </Text>
                 </View>
 
-                <View style={styles.fixtureChip}>
-                  <Text style={styles.fixtureChipText}>{fixtureInfo.venue}</Text>
+                <View style={styles.heroChip}>
+                  <Text style={styles.heroChipText} numberOfLines={1}>
+                    {fixtureInfo.venue}
+                  </Text>
                 </View>
               </View>
             </View>
 
-            <View style={styles.badgesOnPitch}>
-              <TeamBadge name={fixtureInfo.homeName} logo={fixtureInfo.homeLogo} side="home" />
-              <View style={styles.vsOrb}>
-                <Text style={styles.vsOrbText}>VS</Text>
+            <View style={styles.pitchBadgeStrip}>
+              <TeamBadge name={fixtureInfo.homeName} logo={fixtureInfo.homeLogo} />
+              <View style={styles.vsBadge}>
+                <Text style={styles.vsBadgeText}>VS</Text>
               </View>
-              <TeamBadge name={fixtureInfo.awayName} logo={fixtureInfo.awayLogo} side="away" />
+              <TeamBadge name={fixtureInfo.awayName} logo={fixtureInfo.awayLogo} />
             </View>
           </ImageBackground>
         </View>
 
-        <GlassCard style={styles.tripPulseCard}>
-          <View style={styles.tripPulseHeader}>
-            <View style={styles.tripPulseCopy}>
-              <Text style={styles.tripPulseEyebrow}>Your trip to {data.cityName}</Text>
-              <Text style={styles.tripPulseTitle}>{tripDatesText}</Text>
-              <Text style={styles.tripPulseMeta}>
-                {screenStatusLabel(status)} • {vm.tripCompletionPct ?? 0}% booked
+        <GlassCard style={styles.tripCard} variant="brand" level="strong">
+          <View style={styles.tripCardTop}>
+            <View style={styles.tripCardCopy}>
+              <Text style={styles.cardEyebrow}>Your trip to {data.cityName}</Text>
+              <Text style={styles.tripDate}>{tripDatesText}</Text>
+              <Text style={styles.tripMeta}>
+                {screenStatusLabel(status)} • {completionPct}% booked
               </Text>
             </View>
 
-            <Pressable onPress={controller.onViewWallet} hitSlop={8} style={styles.walletOrb}>
-              <Text style={styles.walletOrbText}>Wallet</Text>
+            <Pressable onPress={controller.onViewWallet} hitSlop={8} style={styles.walletPill}>
+              <Text style={styles.walletPillText}>Wallet</Text>
             </Pressable>
           </View>
 
           <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  width: `${Math.max(0, Math.min(100, vm.tripCompletionPct ?? 0))}%`,
-                },
-              ]}
-            />
+            <View style={[styles.progressFill, { width: `${completionPct}%` }]} />
           </View>
 
           <View style={styles.badgeRow}>
@@ -684,24 +679,13 @@ export default function TripDetailScreen() {
               </View>
             ) : null}
 
-            {vm.tripCompletionPct != null ? (
-              <View
-                style={[
-                  styles.completionPill,
-                  completionTone(vm.tripCompletionPct) === "ready"
-                    ? styles.completionPillReady
-                    : completionTone(vm.tripCompletionPct) === "progress"
-                      ? styles.completionPillProgress
-                      : styles.completionPillEarly,
-                ]}
-              >
-                <Text style={styles.completionPillText}>{vm.tripCompletionPct}% booked</Text>
-              </View>
-            ) : null}
+            <View style={styles.completionPill}>
+              <Text style={styles.completionPillText}>{completionPct}% booked</Text>
+            </View>
           </View>
         </GlassCard>
 
-        <GlassCard style={styles.priorityCard}>
+        <GlassCard style={styles.priorityCard} variant="gold">
           <Text style={styles.priorityEyebrow}>Do this next</Text>
           <Text style={styles.priorityTitle}>{decisionTitle}</Text>
           <Text style={styles.priorityBody}>{decisionBody}</Text>
@@ -725,7 +709,7 @@ export default function TripDetailScreen() {
           {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
         </GlassCard>
 
-        <GlassCard>
+        <GlassCard style={styles.cardBlock}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Your itinerary</Text>
             <Text style={styles.sectionSubtitle}>Tickets, travel, stay and extras in one clean view.</Text>
@@ -747,19 +731,7 @@ export default function TripDetailScreen() {
                     void item.onPress?.();
                   }}
                 >
-                  <View style={styles.itineraryIcon}>
-                    <Text style={styles.itineraryIconText}>
-                      {item.key === "tickets"
-                        ? "🎟"
-                        : item.key === "flight" || item.key === "travel"
-                          ? "✈"
-                          : item.key === "hotel" || item.key === "stay"
-                            ? "🏨"
-                            : item.key === "things"
-                              ? "⭐"
-                              : "✓"}
-                    </Text>
-                  </View>
+                  <ItineraryIcon itemKey={item.key} />
 
                   <View style={styles.itineraryCopy}>
                     <Text style={styles.itineraryTitle}>{item.label}</Text>
@@ -781,15 +753,11 @@ export default function TripDetailScreen() {
           </View>
         </GlassCard>
 
-        <GlassCard>
+        <GlassCard style={styles.cardBlock}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Wallet status</Text>
             <Text style={styles.sectionSubtitle}>
-              {walletSubline({
-                bookedCount: bookedItems.length,
-                pendingCount: pendingItems.length,
-                savedCount: savedOnlyItems.length,
-              })}
+              {bookedItems.length} booked • {pendingItems.length} pending • {savedOnlyItems.length} saved
             </Text>
           </View>
 
@@ -840,7 +808,7 @@ export default function TripDetailScreen() {
         />
 
         {taskRows.length > 0 ? (
-          <GlassCard>
+          <GlassCard style={styles.cardBlock}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Next tasks</Text>
               <Text style={styles.sectionSubtitle}>Only the actions that still matter.</Text>
@@ -861,8 +829,23 @@ export default function TripDetailScreen() {
   };
 
   return (
-    <Background imageSource={getBackground("trips")} overlayOpacity={0.9}>
-      <Stack.Screen options={{ headerShown: true, title: "Trip" }} />
+    <Background imageSource={getBackground("trips")} overlayOpacity={0.94}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: "Trip",
+          headerTransparent: true,
+          headerTintColor: "#F5F7F6",
+          headerShadowVisible: false,
+          headerStyle: {
+            backgroundColor: "transparent",
+          },
+          headerTitleStyle: {
+            color: "#F5F7F6",
+            fontWeight: "900",
+          },
+        }}
+      />
 
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <ScrollView
@@ -907,9 +890,9 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    paddingTop: 84,
-    paddingHorizontal: theme.spacing.lg,
-    gap: theme.spacing.lg,
+    paddingTop: 92,
+    paddingHorizontal: 18,
+    gap: 14,
   },
 
   stateCard: {
@@ -917,343 +900,308 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  matchHero: {
-    height: 430,
-    borderRadius: 34,
+  heroCard: {
+    height: 338,
+    borderRadius: 32,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(126,255,143,0.20)",
-    backgroundColor: "#04180D",
-    shadowColor: "#00FF66",
+    borderColor: "rgba(126,255,143,0.28)",
+    backgroundColor: "#031207",
+    shadowColor: "#22C55E",
     shadowOpacity: 0.22,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
     elevation: 8,
   },
 
-  matchHeroImage: {
+  heroImage: {
     flex: 1,
     justifyContent: "space-between",
   },
 
-  matchHeroImageInner: {
-    borderRadius: 34,
+  heroImageInner: {
+    borderRadius: 32,
   },
 
-  heroSmokeTop: {
+  heroDarkLayer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.42)",
+    backgroundColor: "rgba(0,0,0,0.48)",
   },
 
-  heroSmokeBottom: {
+  heroGreenLayer: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: 260,
-    backgroundColor: "rgba(0,18,9,0.72)",
+    height: 190,
+    backgroundColor: "rgba(0,32,14,0.74)",
   },
 
-  pitchGlow: {
-    position: "absolute",
-    left: 36,
-    right: 36,
-    bottom: 68,
-    height: 90,
-    borderRadius: 999,
-    backgroundColor: "rgba(67,255,99,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(130,255,150,0.18)",
-  },
-
-  heroTopOverlay: {
-    paddingHorizontal: 22,
-    paddingTop: 24,
+  heroContent: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
     alignItems: "center",
   },
 
-  logoDisc: {
-    width: 58,
-    height: 58,
+  heroLogo: {
+    width: 52,
+    height: 52,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.58)",
+    backgroundColor: "rgba(0,0,0,0.62)",
     borderWidth: 1,
-    borderColor: "rgba(255,215,94,0.58)",
-    shadowColor: "#FFD85A",
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
+    borderColor: "rgba(250,204,21,0.55)",
   },
 
-  logoDiscText: {
-    color: "#E7FFE8",
-    fontSize: 14,
+  heroLogoText: {
+    color: "#F5F7F6",
+    fontSize: 13,
     fontWeight: "900",
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
 
-  matchTitle: {
-    marginTop: 18,
+  heroTitle: {
+    marginTop: 14,
     color: "#FFFFFF",
     fontSize: 28,
-    lineHeight: 34,
+    lineHeight: 32,
     fontWeight: "900",
     textAlign: "center",
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
   },
 
-  matchMeta: {
-    marginTop: 6,
-    color: "rgba(234,255,235,0.76)",
+  heroSub: {
+    marginTop: 5,
+    color: "rgba(245,247,246,0.78)",
     fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "700",
+    lineHeight: 19,
+    fontWeight: "800",
     textAlign: "center",
   },
 
-  fixtureChipRow: {
-    marginTop: 18,
+  heroChipRow: {
+    marginTop: 15,
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "center",
     gap: 8,
   },
 
-  fixtureChip: {
-    minHeight: 36,
-    paddingHorizontal: 11,
+  heroChip: {
+    maxWidth: 126,
+    minHeight: 34,
+    paddingHorizontal: 10,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,26,12,0.70)",
+    backgroundColor: "rgba(3,30,13,0.84)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.18)",
+  },
+
+  heroChipText: {
+    color: "rgba(245,247,246,0.90)",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
+  pitchBadgeStrip: {
+    marginBottom: 26,
+    alignSelf: "center",
+    minWidth: 214,
+    minHeight: 92,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(3,44,18,0.74)",
     borderWidth: 1,
     borderColor: "rgba(126,255,143,0.18)",
   },
 
-  fixtureChipText: {
-    color: "rgba(245,255,245,0.88)",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
-  badgesOnPitch: {
-    marginBottom: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
   teamBadgeShell: {
-    width: 82,
-    height: 82,
-    borderRadius: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.64)",
+    backgroundColor: "rgba(0,0,0,0.66)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.30)",
-    shadowColor: "#7EFF8F",
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 },
-  },
-
-  homeBadge: {
-    transform: [{ rotate: "-4deg" }],
-  },
-
-  awayBadge: {
-    transform: [{ rotate: "4deg" }],
+    borderColor: "rgba(255,255,255,0.24)",
   },
 
   teamBadgeImage: {
-    width: 62,
-    height: 62,
+    width: 48,
+    height: 48,
   },
 
   teamBadgeInitials: {
     color: "#FFFFFF",
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "900",
   },
 
-  vsOrb: {
-    width: 48,
-    height: 48,
+  vsBadge: {
+    width: 40,
+    height: 40,
     marginHorizontal: 12,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,214,78,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.50)",
+    backgroundColor: "rgba(250,204,21,0.95)",
   },
 
-  vsOrbText: {
+  vsBadgeText: {
     color: "#07140B",
-    fontSize: 13,
-    fontWeight: "950",
+    fontSize: 12,
+    fontWeight: "900",
   },
 
-  tripPulseCard: {
+  tripCard: {
     borderRadius: 28,
-    backgroundColor: "rgba(0,62,29,0.55)",
-    borderColor: "rgba(95,255,119,0.22)",
+    padding: 18,
   },
 
-  tripPulseHeader: {
+  tripCardTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: theme.spacing.md,
+    gap: 14,
   },
 
-  tripPulseCopy: {
+  tripCardCopy: {
     flex: 1,
   },
 
-  tripPulseEyebrow: {
-    fontSize: 13,
+  cardEyebrow: {
+    fontSize: 11,
     fontWeight: "900",
     color: "#9DFF9E",
     textTransform: "uppercase",
     letterSpacing: 0.7,
   },
 
-  tripPulseTitle: {
+  tripDate: {
     marginTop: 8,
     color: theme.colors.text,
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 23,
+    lineHeight: 29,
     fontWeight: "900",
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
 
-  tripPulseMeta: {
-    marginTop: 6,
+  tripMeta: {
+    marginTop: 5,
     color: theme.colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "700",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
   },
 
-  walletOrb: {
-    minHeight: 42,
-    paddingHorizontal: 14,
+  walletPill: {
+    minHeight: 38,
+    paddingHorizontal: 13,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.09)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.14)",
   },
 
-  walletOrbText: {
+  walletPillText: {
     color: theme.colors.text,
     fontSize: 12,
     fontWeight: "900",
   },
 
   progressTrack: {
-    marginTop: 18,
-    height: 9,
+    marginTop: 16,
+    height: 8,
     borderRadius: 999,
     overflow: "hidden",
-    backgroundColor: "rgba(0,0,0,0.28)",
+    backgroundColor: "rgba(0,0,0,0.34)",
   },
 
   progressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#7EFF58",
+    backgroundColor: "#86EFAC",
   },
 
   badgeRow: {
-    marginTop: theme.spacing.md,
+    marginTop: 15,
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: theme.spacing.sm,
+    gap: 8,
   },
 
   statusChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
+    borderColor: "rgba(255,255,255,0.12)",
   },
 
   statusChipText: {
     color: theme.colors.text,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   warningPill: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(255,170,0,0.12)",
+    backgroundColor: "rgba(250,204,21,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(255,170,0,0.28)",
+    borderColor: "rgba(250,204,21,0.26)",
   },
 
   warningPillText: {
-    color: "rgba(255,200,90,1)",
+    color: "#FDE68A",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   completionPill: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: 999,
-    borderWidth: 1,
-  },
-
-  completionPillEarly: {
     backgroundColor: "rgba(255,255,255,0.08)",
-    borderColor: "rgba(255,255,255,0.14)",
-  },
-
-  completionPillProgress: {
-    backgroundColor: "rgba(87,162,56,0.10)",
-    borderColor: "rgba(87,162,56,0.26)",
-  },
-
-  completionPillReady: {
-    backgroundColor: "rgba(69,182,122,0.12)",
-    borderColor: "rgba(69,182,122,0.30)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
 
   completionPillText: {
     color: theme.colors.text,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   priorityCard: {
-    borderRadius: 26,
+    borderRadius: 24,
+    padding: 18,
   },
 
   priorityEyebrow: {
     fontSize: 11,
     fontWeight: "900",
-    color: "#F5CC57",
+    color: "#FDE68A",
     textTransform: "uppercase",
     letterSpacing: 0.75,
   },
 
   priorityTitle: {
     marginTop: 8,
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: "800",
+    fontSize: 25,
+    lineHeight: 31,
+    fontWeight: "900",
     color: theme.colors.text,
-    letterSpacing: -0.4,
+    letterSpacing: -0.45,
   },
 
   priorityBody: {
@@ -1261,11 +1209,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: theme.colors.textSecondary,
+    fontWeight: "700",
   },
 
   primaryActionBtn: {
-    marginTop: theme.spacing.md,
-    minHeight: 54,
+    marginTop: 16,
+    minHeight: 52,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
@@ -1280,7 +1229,7 @@ const styles = StyleSheet.create({
   },
 
   loadingRow: {
-    marginTop: theme.spacing.md,
+    marginTop: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -1290,32 +1239,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: theme.colors.textSecondary,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   capHint: {
-    marginTop: theme.spacing.sm,
+    marginTop: 10,
     fontSize: 12,
     lineHeight: 18,
     color: theme.colors.textMuted,
+    fontWeight: "700",
+  },
+
+  cardBlock: {
+    borderRadius: 24,
+    padding: 16,
   },
 
   sectionHeaderRow: {
-    marginBottom: theme.spacing.md,
+    marginBottom: 14,
     gap: 4,
   },
 
   sectionTitle: {
     fontSize: 22,
-    fontWeight: "800",
+    fontWeight: "900",
     color: theme.colors.text,
     letterSpacing: -0.3,
   },
 
   sectionSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 19,
     color: theme.colors.textSecondary,
+    fontWeight: "700",
   },
 
   progressList: {
@@ -1323,26 +1279,26 @@ const styles = StyleSheet.create({
   },
 
   itineraryRow: {
-    minHeight: 74,
+    minHeight: 70,
     borderRadius: 18,
-    paddingHorizontal: 14,
+    paddingHorizontal: 13,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(255,255,255,0.045)",
+    borderColor: "rgba(255,255,255,0.09)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
 
   itineraryRowBooked: {
-    backgroundColor: "rgba(87,255,105,0.08)",
-    borderColor: "rgba(87,255,105,0.20)",
+    backgroundColor: "rgba(34,197,94,0.08)",
+    borderColor: "rgba(34,197,94,0.20)",
   },
 
   itineraryRowStarted: {
-    backgroundColor: "rgba(255,210,80,0.07)",
-    borderColor: "rgba(255,210,80,0.16)",
+    backgroundColor: "rgba(250,204,21,0.07)",
+    borderColor: "rgba(250,204,21,0.16)",
   },
 
   itineraryIcon: {
@@ -1351,13 +1307,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.24)",
+    backgroundColor: "rgba(0,0,0,0.26)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
   },
 
   itineraryIconText: {
-    fontSize: 20,
+    fontSize: 19,
+    color: "#FDE68A",
+    fontWeight: "900",
   },
 
   itineraryCopy: {
@@ -1374,7 +1332,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
     color: theme.colors.textSecondary,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   itineraryStatus: {
@@ -1384,11 +1342,11 @@ const styles = StyleSheet.create({
   },
 
   itineraryStatusBooked: {
-    color: "#7EFF58",
+    color: "#86EFAC",
   },
 
   itineraryStatusStarted: {
-    color: "#F5CC57",
+    color: "#FDE68A",
   },
 
   walletPreviewRow: {
@@ -1398,19 +1356,19 @@ const styles = StyleSheet.create({
 
   walletMetricCard: {
     flex: 1,
-    minHeight: 78,
+    minHeight: 76,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(255,255,255,0.09)",
+    backgroundColor: "rgba(255,255,255,0.045)",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
 
   walletMetricValue: {
     color: theme.colors.text,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "900",
   },
 
@@ -1418,24 +1376,24 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: theme.colors.textMuted,
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   walletPreviewHeadline: {
     marginTop: 14,
     color: theme.colors.text,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 21,
     fontWeight: "800",
   },
 
   secondaryActionBtn: {
     marginTop: 14,
     minHeight: 48,
-    borderRadius: 14,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.055)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     paddingHorizontal: 16,
@@ -1476,6 +1434,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 });
