@@ -1,8 +1,10 @@
 function req(name: string): string {
   const value = String(process.env[name] ?? "").trim();
+
   if (!value) {
     throw new Error(`Missing required env var: ${name}`);
   }
+
   return value;
 }
 
@@ -32,10 +34,8 @@ export const env = {
   nodeEnv: opt("NODE_ENV", "development"),
   port: optNumber("PORT", 3000),
 
-  // CORS
   appCorsOrigins: optList("APP_CORS_ORIGINS"),
 
-  // API-Football
   apiFootballBaseUrl: opt(
     "API_FOOTBALL_BASE_URL",
     "https://v3.football.api-sports.io"
@@ -43,29 +43,21 @@ export const env = {
   apiFootballKey: opt("API_FOOTBALL_KEY", ""),
   apiFootballTimeoutMs: optNumber("API_FOOTBALL_TIMEOUT_MS", 10000),
 
-  // Wallet worker
   walletWorkerBaseUrl: opt("WALLET_WORKER_BASE_URL", ""),
   walletWorkerApiKey: opt("WALLET_WORKER_API_KEY", ""),
 
-  // FootballTicketNet
   ftnBaseUrl: opt("FTN_BASE_URL", "https://www.footballticketnet.com/api"),
   ftnUsername: opt("FTN_USERNAME", ""),
   ftnAffiliateSecret: opt("FTN_AFFILIATE_SECRET", ""),
   ftnAffiliateId: opt("FTN_AFFILIATE_ID", "yournextaway"),
 
-  // SportsEvents365
-  se365BaseUrl: opt("SE365_BASE_URL", "https://api.sportsevents365.com"),
+  se365BaseUrl: opt("SE365_BASE_URL", "https://api-v2.sandbox365.com"),
   se365ApiKey: opt("SE365_API_KEY", ""),
   se365ApiPassword: opt("SE365_API_PASSWORD", ""),
   se365HttpUsername: opt("SE365_HTTP_USERNAME", ""),
   se365HttpSource: opt("SE365_HTTP_SOURCE", ""),
-  se365AffiliateId: opt("SE365_AFFILIATE_ID", ""),
+  se365AffiliateId: opt("SE365_AFFILIATE_ID", "69834e80ec9d3"),
 
-  // Gigsberg
-  // Seller API docs you sent show:
-  // - POST /auth with apiKey + userId returns jwt + refreshToken
-  // - POST /auth/refresh with refreshToken returns jwt + refreshToken
-  // So the env now supports both simple API-key use and full JWT auth flow.
   gigsbergBaseUrl: opt("GIGSBERG_BASE_URL", "https://api.gigsberg.com/v1"),
   gigsbergApiKey: opt("GIGSBERG_API_KEY", ""),
   gigsbergAffiliateId: opt("GIGSBERG_AFFILIATE_ID", "yournextaway"),
@@ -73,7 +65,6 @@ export const env = {
   gigsbergJwt: opt("GIGSBERG_JWT", ""),
   gigsbergRefreshToken: opt("GIGSBERG_REFRESH_TOKEN", ""),
 
-  // Aviasales / Travelpayouts flights
   aviasalesBaseUrl: opt(
     "AVIASALES_BASE_URL",
     "https://api.travelpayouts.com"
@@ -112,19 +103,12 @@ export function hasFtnConfig(): boolean {
 export function hasSe365Config(): boolean {
   return Boolean(
     env.se365BaseUrl &&
-      (
-        env.se365ApiKey ||
-        env.se365ApiPassword ||
-        env.se365HttpUsername ||
-        env.se365HttpSource
-      )
+      env.se365ApiKey &&
+      env.se365ApiPassword &&
+      (env.se365HttpUsername || env.se365HttpSource)
   );
 }
 
-/**
- * Minimal Gigsberg readiness:
- * enough to hit public/seller search endpoints the way current code does.
- */
 export function hasGigsbergConfig(): boolean {
   return Boolean(
     env.gigsbergBaseUrl &&
@@ -133,10 +117,6 @@ export function hasGigsbergConfig(): boolean {
   );
 }
 
-/**
- * Full documented auth flow readiness:
- * needed if you move resolver/service logic to proper JWT seller auth.
- */
 export function hasGigsbergJwtAuthConfig(): boolean {
   return Boolean(
     env.gigsbergBaseUrl &&
@@ -145,16 +125,10 @@ export function hasGigsbergJwtAuthConfig(): boolean {
   );
 }
 
-/**
- * True when you already have a usable bearer token stored.
- */
 export function hasGigsbergStoredJwt(): boolean {
   return Boolean(env.gigsbergJwt);
 }
 
-/**
- * True when you can refresh without re-authing from scratch.
- */
 export function hasGigsbergRefreshToken(): boolean {
   return Boolean(env.gigsbergRefreshToken);
 }
