@@ -2,14 +2,12 @@ import { Buffer } from "node:buffer";
 
 import { env, hasSe365Config } from "../../lib/env.js";
 import type {
-  CandidateUrlQuality,
   TicketCandidate,
   TicketResolveInput,
 } from "./types.js";
 
-const SE365_API_BASE = "https://api-v2.sandbox365.com";
-const SE365_PUBLIC_BASE = "https://www.sportsevents365.com";
-const A_AID = "69834e80ec9d3";
+const API_BASE = env.se365BaseUrl; // sandbox or prod
+const PUBLIC_BASE = "https://www.sportsevents365.com";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -19,18 +17,22 @@ function buildHeaders() {
   const username = clean(env.se365HttpUsername);
   const password = clean(env.se365ApiPassword);
 
-  if (!username || !password) return { Accept: "application/json" };
+  if (!username || !password) {
+    return { Accept: "application/json" };
+  }
 
   return {
     Accept: "application/json",
-    Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`,
+    Authorization: `Basic ${Buffer.from(
+      `${username}:${password}`
+    ).toString("base64")}`,
   };
 }
 
 async function fetchJson(url: string) {
-  const res = await fetch(url, { headers: buildHeaders() });
-  if (!res.ok) return null;
   try {
+    const res = await fetch(url, { headers: buildHeaders() });
+    if (!res.ok) return null;
     return await res.json();
   } catch {
     return null;
@@ -39,36 +41,33 @@ async function fetchJson(url: string) {
 
 function extractEvents(json: any): any[] {
   if (!json) return [];
-  return (
-    json.data ||
-    json.events ||
-    json.items ||
-    json.response ||
-    json.results ||
-    (Array.isArray(json) ? json : [])
-  );
+  return json.data || json.events || json.results || [];
 }
 
 function extractTickets(json: any): any[] {
   if (!json) return [];
-  return (
-    json.data ||
-    json.tickets ||
-    json.items ||
-    json.response ||
-    json.results ||
-    (Array.isArray(json) ? json : [])
-  );
+  return json.data || json.tickets || json.results || [];
 }
 
-function appendAid(url: string): string {
-  try {
-    const u = new URL(url.startsWith("http") ? url : `${SE365_PUBLIC_BASE}${url}`);
-    u.searchParams.set("a_aid", A_AID);
-    return u.toString();
-  } catch {
-    return "";
-  }
+function buildAffiliateUrl(eventId: string): string {
+  return `${PUBLIC_BASE}/event/${eventId}?a_aid=${env.se365AffiliateId}`;
+}
+
+function getDateRange(kickoffIso: string) {
+  const d = new Date(kickoffIso);
+
+  const from = new Date(d);
+  from.setDate(from.getDate() - 1);
+
+  const to = new Date(d);
+  to.setDate(to.getDate() + 1);
+
+  const fmt = (x: Date) => x.toISOString().split("T")[0];
+
+  return {
+    from: fmt(from),
+    to: fmt(to),
+  };
 }
 
 function bestPrice(tickets: any[]): string | null {
@@ -79,6 +78,15 @@ function bestPrice(tickets: any[]): string | null {
 
   if (!prices.length) return null;
   return `£${prices[0]}`;
+}
+
+function matchEvent(ev: any, home: string, away: string): boolean {
+  const name = clean(ev.name || ev.title || "").toLowerCase();
+
+  return (
+    name.includes(home.toLowerCase()) &&
+    name.includes(away.toLowerCase())
+  );
 }
 
 export async function resolveSe365Candidate(
@@ -92,82 +100,49 @@ export async function resolveSe365Candidate(
 
   if (!home || !away || !kickoff) return null;
 
-  // -------------------------------------------------
-  // STEP 1: SEARCH EVENTS (broad match)
-  // -------------------------------------------------
+  const { from, to } = getDateRange(kickoff);
 
-  const searchUrl = new URL(`${SE365_API_BASE}/events`);
-  searchUrl.searchParams.set("apiKey", clean(env.se365ApiKey));
-  searchUrl.searchParams.set("search", `${home} ${away}`);
+  // ---------------------------
+  // STEP 1: FETCH EVENTS BY DATE
+  // ---------------------------
+  const eventsUrl = new URL(`${API_BASE}/events`);
+  eventsUrl.searchParams.set("apiKey", env.se365ApiKey);
+  eventsUrl.searchParams.set("dateFrom", from);
+  eventsUrl.searchParams.set("dateTo", to);
 
-  const searchJson = await fetchJson(searchUrl.toString());
-  const events = extractEvents(searchJson);
+  const eventsJson = await fetchJson(eventsUrl.toString());
+  const events = extractEvents(eventsJson);
 
   if (!events.length) return null;
 
-  // -------------------------------------------------
-  // STEP 2: FIND BEST MATCH (simple but effective)
-  // -------------------------------------------------
-
-  const match = events.find((ev) => {
-    const name = clean(ev.name || ev.eventTitle || ev.title).toLowerCase();
-    return name.includes(home.toLowerCase()) && name.includes(away.toLowerCase());
-  });
+  // ---------------------------
+  // STEP 2: FIND MATCH
+  // ---------------------------
+  const match = events.find((ev) => matchEvent(ev, home, away));
 
   if (!match) return null;
 
-  const eventId = clean(match.id);
+  const eventId = clean(match.id || match.eventId);
   if (!eventId) return null;
 
-  // -------------------------------------------------
-  // STEP 3: CRITICAL FIX — FETCH FULL EVENT
-  // -------------------------------------------------
-
-  const eventUrlApi = new URL(`${SE365_API_BASE}/events/${eventId}`);
-  eventUrlApi.searchParams.set("apiKey", clean(env.se365ApiKey));
-
-  const fullEvent = await fetchJson(eventUrlApi.toString());
-
-  const realUrl =
-    clean(fullEvent?.eventUrl) ||
-    clean(fullEvent?.event_url) ||
-    clean(fullEvent?.url);
-
-  if (!realUrl) {
-    // ONLY fallback if API fails (rare)
-    return {
-      provider: "sportsevents365",
-      exact: false,
-      score: 30,
-      rawScore: 30,
-      url: appendAid(`${SE365_PUBLIC_BASE}/events/search?q=${home}+${away}`),
-      title: `Tickets: ${home} vs ${away}`,
-      priceText: null,
-      reason: "search_fallback",
-      urlQuality: "search",
-    };
-  }
-
-  // -------------------------------------------------
-  // STEP 4: FETCH TICKETS
-  // -------------------------------------------------
-
-  const ticketsJson = await fetchJson(
-    `${SE365_API_BASE}/tickets/${eventId}?apiKey=${clean(env.se365ApiKey)}`
-  );
-
+  // ---------------------------
+  // STEP 3: FETCH TICKETS
+  // ---------------------------
+  const ticketsUrl = `${API_BASE}/tickets/${eventId}?apiKey=${env.se365ApiKey}`;
+  const ticketsJson = await fetchJson(ticketsUrl);
   const tickets = extractTickets(ticketsJson);
 
-  // -------------------------------------------------
-  // FINAL OUTPUT
-  // -------------------------------------------------
+  // ---------------------------
+  // STEP 4: BUILD FINAL URL (IMPORTANT)
+  // ---------------------------
+  const url = buildAffiliateUrl(eventId);
 
   return {
     provider: "sportsevents365",
     exact: true,
-    score: 90,
-    rawScore: 90,
-    url: appendAid(realUrl),
+    score: 95,
+    rawScore: 95,
+    url,
     title: `Tickets: ${home} vs ${away}`,
     priceText: bestPrice(tickets),
     reason: "exact_event",
