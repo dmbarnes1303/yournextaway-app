@@ -25,6 +25,8 @@ type CandidateAssessment = {
   exact: boolean;
 };
 
+const RESOLVER_VERSION = "resolve_v4_se365_partner_host";
+
 const PROVIDERS = [
   { id: "footballticketnet", fn: resolveFtnCandidate },
   { id: "sportsevents365", fn: resolveSe365Candidate },
@@ -36,7 +38,7 @@ const CACHE_TTL_MS = 1000 * 60 * 10;
 
 const PROVIDER_TIMEOUTS_MS: Record<TicketProviderId, number> = {
   footballticketnet: 9000,
-  sportsevents365: 14000,
+  sportsevents365: 16000,
 };
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
@@ -69,6 +71,7 @@ function normalize(value: unknown): string {
 
 function buildCacheKey(input: TicketResolveInput): string {
   return [
+    RESOLVER_VERSION,
     clean(input.fixtureId),
     clean(input.homeName),
     clean(input.awayName),
@@ -150,6 +153,19 @@ function hasPriceText(candidate: TicketCandidate): boolean {
   return parsePriceAmount(candidate.priceText) != null || Boolean(clean(candidate.priceText));
 }
 
+function getUrlHost(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isTicketsPartnersUrl(url: string): boolean {
+  const host = getUrlHost(url);
+  return host === "tickets-partners.com" || host === "www.tickets-partners.com";
+}
+
 function detectUrlQuality(
   candidate: Pick<TicketCandidate, "url" | "urlQuality">
 ): CandidateUrlQuality {
@@ -171,6 +187,12 @@ function detectUrlQuality(
     const parsed = new URL(raw);
     const path = parsed.pathname.toLowerCase();
     const query = parsed.search.toLowerCase();
+
+    if (isTicketsPartnersUrl(raw)) {
+      if (path.includes("/event")) return "event";
+      if (query.includes("q=eq")) return "event";
+      return "listing";
+    }
 
     if (path.includes("/checkout-aff-link")) return "listing";
     if (path.startsWith("/search") && query.includes("event_id=")) return "listing";
@@ -216,6 +238,7 @@ function normalizeCandidate(candidate: TicketCandidate): TicketCandidate {
   const urlQuality = detectUrlQuality(candidate);
 
   let reason: TicketCandidate["reason"] = candidate.reason;
+
   if (urlQuality === "search") {
     reason = "search_fallback";
   } else if (urlQuality === "unknown" && reason === "exact_event") {
@@ -266,6 +289,15 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
     };
   }
 
+  if (candidate.provider === "sportsevents365" && isTicketsPartnersUrl(candidate.url)) {
+    return {
+      urlQuality: "listing",
+      usableTier: "direct",
+      normalizedReason,
+      exact: false,
+    };
+  }
+
   return {
     urlQuality,
     usableTier: "reject",
@@ -276,13 +308,39 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
 
 function sanitizeCandidate(candidate: TicketCandidate | null): TicketCandidate | null {
   if (!candidate) return null;
-  if (!clean(candidate.url) || !clean(candidate.title)) return null;
-  if (!isAllowedProviderUrl(candidate.provider, candidate.url)) return null;
+
+  if (!clean(candidate.url) || !clean(candidate.title)) {
+    console.log("[tickets] candidate rejected: missing url/title", {
+      provider: candidate.provider,
+      hasUrl: Boolean(clean(candidate.url)),
+      hasTitle: Boolean(clean(candidate.title)),
+    });
+    return null;
+  }
+
+  if (!isAllowedProviderUrl(candidate.provider, candidate.url)) {
+    console.log("[tickets] candidate rejected: host not allowlisted", {
+      provider: candidate.provider,
+      url: candidate.url,
+      host: getUrlHost(candidate.url),
+      allowlist: PROVIDER_HOST_ALLOWLIST[candidate.provider],
+    });
+    return null;
+  }
 
   const normalizedCandidate = normalizeCandidate(candidate);
   const assessment = assessCandidate(normalizedCandidate);
 
-  if (assessment.usableTier === "reject") return null;
+  if (assessment.usableTier === "reject") {
+    console.log("[tickets] candidate rejected: unusable url quality", {
+      provider: normalizedCandidate.provider,
+      url: normalizedCandidate.url,
+      urlQuality: assessment.urlQuality,
+      reason: normalizedCandidate.reason,
+    });
+    return null;
+  }
+
   return normalizedCandidate;
 }
 
@@ -329,8 +387,27 @@ async function runProvider(
   fn: () => Promise<TicketCandidate | null>
 ): Promise<TicketCandidate | null> {
   const { value, timedOut } = await withTimeout(provider, fn);
-  if (timedOut) return null;
-  return sanitizeCandidate(value);
+
+  if (timedOut) {
+    console.log("[tickets] provider returned null after timeout", { provider });
+    return null;
+  }
+
+  const sanitized = sanitizeCandidate(value);
+
+  console.log("[tickets] provider result", {
+    provider,
+    hadRawCandidate: Boolean(value),
+    accepted: Boolean(sanitized),
+    rawUrl: value?.url ?? null,
+    acceptedUrl: sanitized?.url ?? null,
+    rawReason: value?.reason ?? null,
+    acceptedReason: sanitized?.reason ?? null,
+    rawUrlQuality: value?.urlQuality ?? null,
+    acceptedUrlQuality: sanitized?.urlQuality ?? null,
+  });
+
+  return sanitized;
 }
 
 function reasonRank(reason: TicketCandidate["reason"]): number {
@@ -471,10 +548,12 @@ export async function resolveTicket(
     if (cached) {
       console.log("[tickets] cache hit", {
         cacheKey,
+        resolverVersion: RESOLVER_VERSION,
         provider: cached.provider,
         reason: cached.reason,
         url: cached.url,
         urlQuality: cached.urlQuality ?? null,
+        optionCount: cached.options.length,
       });
       return cached;
     }
@@ -509,6 +588,7 @@ export async function resolveTicket(
         score: candidate.score,
         rawScore: candidate.rawScore ?? null,
         url: candidate.url,
+        host: getUrlHost(candidate.url),
         urlQuality: assessment.urlQuality,
         usableTier: assessment.usableTier,
         priceText: candidate.priceText ?? null,
@@ -518,24 +598,44 @@ export async function resolveTicket(
 
   const result = buildResolution(candidates, checkedProviders);
 
+  console.log("[tickets] resolver result", {
+    ok: result.ok,
+    provider: result.provider,
+    reason: result.reason,
+    url: result.url,
+    urlQuality: result.urlQuality ?? null,
+    optionCount: result.options.length,
+    options: result.options.map((option) => ({
+      provider: option.provider,
+      reason: option.reason,
+      url: option.url,
+      urlQuality: option.urlQuality ?? null,
+      priceText: option.priceText ?? null,
+    })),
+  });
+
   if (!debugNoCache) {
     if (shouldCacheResolution(result)) {
       setCache(cacheKey, result);
       console.log("[tickets] cache set", {
         cacheKey,
+        resolverVersion: RESOLVER_VERSION,
         provider: result.provider,
         reason: result.reason,
         url: result.url,
         urlQuality: result.urlQuality ?? null,
+        optionCount: result.options.length,
       });
     } else {
       deleteCache(cacheKey);
       console.log("[tickets] cache skipped", {
         cacheKey,
+        resolverVersion: RESOLVER_VERSION,
         provider: result.provider,
         reason: result.reason,
         url: result.url,
         urlQuality: result.urlQuality ?? null,
+        optionCount: result.options.length,
       });
     }
   }
