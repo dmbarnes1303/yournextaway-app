@@ -6,7 +6,7 @@ import type {
   TicketResolveInput,
 } from "./types.js";
 
-const API_BASE = env.se365BaseUrl; // sandbox or prod
+const API_BASE = env.se365BaseUrl;
 const PUBLIC_BASE = "https://www.sportsevents365.com";
 
 function clean(v: unknown): string {
@@ -32,9 +32,22 @@ function buildHeaders() {
 async function fetchJson(url: string) {
   try {
     const res = await fetch(url, { headers: buildHeaders() });
+
+    console.log("[SE365] fetch", {
+      url,
+      status: res.status,
+      ok: res.ok,
+    });
+
     if (!res.ok) return null;
-    return await res.json();
-  } catch {
+
+    const json = await res.json();
+    return json;
+  } catch (err) {
+    console.log("[SE365] fetch error", {
+      url,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return null;
   }
 }
@@ -92,15 +105,33 @@ function matchEvent(ev: any, home: string, away: string): boolean {
 export async function resolveSe365Candidate(
   input: TicketResolveInput
 ): Promise<TicketCandidate | null> {
-  if (!hasSe365Config()) return null;
+  if (!hasSe365Config()) {
+    console.log("[SE365] skipped: missing config");
+    return null;
+  }
 
   const home = clean(input.homeName);
   const away = clean(input.awayName);
   const kickoff = clean(input.kickoffIso);
 
-  if (!home || !away || !kickoff) return null;
+  if (!home || !away || !kickoff) {
+    console.log("[SE365] skipped: missing input", {
+      home,
+      away,
+      kickoff,
+    });
+    return null;
+  }
 
   const { from, to } = getDateRange(kickoff);
+
+  console.log("[SE365] resolving", {
+    home,
+    away,
+    kickoff,
+    from,
+    to,
+  });
 
   // ---------------------------
   // STEP 1: FETCH EVENTS BY DATE
@@ -113,16 +144,32 @@ export async function resolveSe365Candidate(
   const eventsJson = await fetchJson(eventsUrl.toString());
   const events = extractEvents(eventsJson);
 
-  if (!events.length) return null;
+  console.log("[SE365] events result", {
+    count: events.length,
+    sample: events.slice(0, 3),
+  });
+
+  if (!events.length) {
+    console.log("[SE365] no events returned");
+    return null;
+  }
 
   // ---------------------------
   // STEP 2: FIND MATCH
   // ---------------------------
   const match = events.find((ev) => matchEvent(ev, home, away));
 
+  console.log("[SE365] match result", {
+    found: Boolean(match),
+    matchPreview: match ? (match.name || match.title || null) : null,
+  });
+
   if (!match) return null;
 
   const eventId = clean(match.id || match.eventId);
+
+  console.log("[SE365] matched eventId", { eventId });
+
   if (!eventId) return null;
 
   // ---------------------------
@@ -132,10 +179,19 @@ export async function resolveSe365Candidate(
   const ticketsJson = await fetchJson(ticketsUrl);
   const tickets = extractTickets(ticketsJson);
 
+  console.log("[SE365] tickets result", {
+    count: tickets.length,
+  });
+
   // ---------------------------
-  // STEP 4: BUILD FINAL URL (IMPORTANT)
+  // STEP 4: BUILD FINAL URL
   // ---------------------------
   const url = buildAffiliateUrl(eventId);
+
+  console.log("[SE365] SUCCESS", {
+    url,
+    eventId,
+  });
 
   return {
     provider: "sportsevents365",
