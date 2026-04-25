@@ -10,7 +10,6 @@ import {
   StyleSheet,
   Text,
   View,
-  type ImageSourcePropType,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -20,7 +19,6 @@ import GlassCard from "@/src/components/GlassCard";
 import TicketOptionsSheet from "@/src/components/tickets/TicketOptionsSheet";
 
 import { getBackground, getCityBackground } from "@/src/constants/backgrounds";
-import { theme } from "@/src/constants/theme";
 
 import useTripWorkspace from "@/src/features/tripDetail/useTripWorkspace";
 import useTripDetailData from "@/src/features/tripDetail/useTripDetailData";
@@ -29,7 +27,7 @@ import useTripDetailController from "@/src/features/tripDetail/useTripDetailCont
 import { coerceId } from "@/src/features/tripDetail/helpers";
 
 /* ================================
-   CORE FIX: NORMALIZE FIXTURE DATA
+   FIXTURE NORMALIZATION
 ================================ */
 
 function clean(v: any) {
@@ -139,7 +137,7 @@ function TeamBadge({ logo, name }: any) {
 }
 
 /* ================================
-   MAIN SCREEN
+   SCREEN
 ================================ */
 
 export default function TripScreen() {
@@ -176,6 +174,7 @@ export default function TripScreen() {
 
   const fx = useMemo(() => getFixtureUi(fixture, trip), [fixture, trip]);
 
+  const completion = Math.round(data.progress?.completionPct || 0);
   const cityImage = getCityBackground(data.cityName || "rome");
 
   if (!trip) {
@@ -209,7 +208,6 @@ export default function TripScreen() {
               imageStyle={{ borderRadius: 28 }}
             >
               <View style={styles.overlay} />
-
               <View style={styles.heroContent}>
                 <Text style={styles.title}>
                   {fx.homeName} vs {fx.awayName}
@@ -234,7 +232,21 @@ export default function TripScreen() {
             </ImageBackground>
           </View>
 
-          {/* MATCH CARD */}
+          {/* TRIP STRIP */}
+          <View style={styles.tripStrip}>
+            <View>
+              <Text style={styles.tripCity}>Trip to {data.cityName}</Text>
+              <Text style={styles.tripMeta}>
+                {trip.startDate} → {trip.endDate}
+              </Text>
+              <Text style={styles.tripSub}>
+                {nightsLine(trip.startDate, trip.endDate)} • {completion}% booked
+              </Text>
+            </View>
+            <Text style={styles.tripProgress}>{completion}%</Text>
+          </View>
+
+          {/* MATCH */}
           <GlassCard>
             <Text style={styles.sectionTitle}>Match & Tickets</Text>
 
@@ -260,6 +272,30 @@ export default function TripScreen() {
             </Pressable>
 
             {ticketLoading && <ActivityIndicator />}
+          </GlassCard>
+
+          {/* ITINERARY */}
+          <View>
+            <Text style={styles.sectionTitle}>Your itinerary</Text>
+
+            {["tickets", "stay", "travel", "things"].map((k) => (
+              <View key={k} style={styles.row}>
+                <Text style={styles.rowText}>{k.toUpperCase()}</Text>
+                <Text style={styles.rowStatus}>
+                  {data.progress?.[k] === "booked"
+                    ? "Confirmed"
+                    : "Not started"}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* WALLET */}
+          <GlassCard>
+            <Text style={styles.sectionTitle}>Wallet</Text>
+            <Text style={styles.walletText}>
+              {workspace.booked.length} booked • {workspace.pending.length} pending
+            </Text>
           </GlassCard>
         </ScrollView>
       </SafeAreaView>
@@ -322,6 +358,15 @@ const styles = StyleSheet.create({
 
   vs: { color: "#FACC15", fontWeight: "900" },
 
+  tripStrip: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  tripCity: { color: "#fff", fontWeight: "900" },
+  tripMeta: { color: "#888" },
+  tripSub: { color: "#666", marginTop: 2 },
+  tripProgress: { color: "#22C55E", fontWeight: "900" },
+
   sectionTitle: { color: "#fff", fontWeight: "900", fontSize: 18 },
   matchBig: { color: "#fff", fontSize: 20, fontWeight: "900", marginTop: 8 },
   matchMeta: { color: "#aaa", marginTop: 4 },
@@ -335,4 +380,16 @@ const styles = StyleSheet.create({
   },
 
   ctaText: { fontWeight: "900", color: "#000" },
+
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  rowText: { color: "#fff" },
+  rowStatus: { color: "#777" },
+
+  walletText: { color: "#aaa" },
 });
