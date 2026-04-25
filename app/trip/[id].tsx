@@ -52,113 +52,61 @@ import {
 
 const PLAN_STORAGE_KEY = "yna:plan";
 
-const STADIUM_HERO_IMAGE_URL =
-  "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1600&q=90";
+const CITY_HERO_IMAGE_URL =
+  "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1600&q=90";
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function screenStatusLabel(status: string) {
-  const value = String(status ?? "").toLowerCase();
-  if (value === "completed") return "Completed";
-  if (value === "in progress") return "In progress";
-  return "Upcoming";
+function dateLabel(value?: string | null) {
+  const raw = clean(value);
+  if (!raw) return "Date TBC";
+
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return raw.slice(0, 10);
+
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
-function dateWindowLine(startDate?: string | null, endDate?: string | null) {
-  const start = clean(startDate);
-  const end = clean(endDate);
-  if (!start || !end) return "Trip dates not set";
-  return `${start} → ${end}`;
+function timeLabel(value?: string | null) {
+  const raw = clean(value);
+  if (!raw) return "TBC";
+
+  const d = new Date(raw);
+  if (!Number.isFinite(d.getTime())) return "TBC";
+
+  return d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function inferSourceSectionFromSavedItemType(type?: SavedItemType) {
-  switch (type) {
-    case "tickets":
-      return "tickets";
-    case "hotel":
-      return "stay";
-    case "flight":
-    case "train":
-      return "travel";
-    case "transfer":
-      return "transfers";
-    case "things":
-      return "things";
-    case "insurance":
-      return "insurance";
-    case "claim":
-      return "claims";
-    case "note":
-    case "other":
-      return "notes";
-    default:
-      return "unknown";
-  }
+function tripDateLine(start?: string | null, end?: string | null) {
+  const s = clean(start);
+  const e = clean(end);
+  if (!s || !e) return "Trip dates not set";
+  return `${s}  →  ${e}`;
 }
 
-function getAttachments(item?: SavedItem | null) {
-  return Array.isArray(item?.attachments) ? item.attachments : [];
-}
+function nightsLine(start?: string | null, end?: string | null) {
+  const s = new Date(clean(start));
+  const e = new Date(clean(end));
 
-function progressStateLabel(state: string) {
-  if (state === "booked") return "Confirmed";
-  if (state === "pending") return "Pending";
-  if (state === "saved") return "Saved";
-  return "Empty";
-}
-
-function progressTone(state: string) {
-  if (state === "booked") return "booked" as const;
-  if (state === "pending" || state === "saved") return "started" as const;
-  return "empty" as const;
-}
-
-function walletHeadline(args: { bookedCount: number; missingProofCount: number }) {
-  const { bookedCount, missingProofCount } = args;
-
-  if (bookedCount <= 0) return "No booked items yet";
-
-  if (missingProofCount > 0) {
-    return `${missingProofCount} proof ${missingProofCount === 1 ? "upload" : "uploads"} still missing`;
+  if (!Number.isFinite(s.getTime()) || !Number.isFinite(e.getTime())) {
+    return "Nights not set";
   }
 
-  return "All booked items have proof attached";
-}
+  const nights = Math.max(
+    0,
+    Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24))
+  );
 
-function nextTasks(args: {
-  hasTickets: boolean;
-  hasFlight: boolean;
-  hasHotel: boolean;
-  hasTransport: boolean;
-  missingProofCount: number;
-  kickoffTbc: boolean;
-}) {
-  const rows: string[] = [];
-
-  if (!args.hasTickets) rows.push("Book tickets");
-  if (args.hasTickets && !args.hasFlight) rows.push("Add main travel");
-  if (args.hasFlight && !args.hasHotel) rows.push("Lock your stay");
-  if (!args.hasTransport) rows.push("Sort local transport");
-  if (args.missingProofCount > 0) rows.push("Upload booking proof");
-  if (args.kickoffTbc) rows.push("Check kickoff confirmation");
-
-  return rows.slice(0, 3);
-}
-
-function initialsFromName(name?: string | null) {
-  const value = clean(name);
-  if (!value) return "?";
-
-  const parts = value
-    .replace(/[^a-zA-Z0-9\s]/g, " ")
-    .split(" ")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length === 1) return parts[0].slice(0, 3).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+  return `${nights} ${nights === 1 ? "night" : "nights"}`;
 }
 
 function readNestedString(source: unknown, paths: string[][]): string | null {
@@ -183,7 +131,7 @@ function readNestedString(source: unknown, paths: string[][]): string | null {
   return null;
 }
 
-function getFixtureTeamInfo(fixture: unknown) {
+function getFixtureInfo(fixture: unknown) {
   const homeName =
     readNestedString(fixture, [
       ["homeName"],
@@ -204,25 +152,19 @@ function getFixtureTeamInfo(fixture: unknown) {
     ["homeLogo"],
     ["homeBadge"],
     ["home", "logo"],
-    ["home", "badge"],
     ["teams", "home", "logo"],
-    ["teams", "home", "badge"],
   ]);
 
   const awayLogo = readNestedString(fixture, [
     ["awayLogo"],
     ["awayBadge"],
     ["away", "logo"],
-    ["away", "badge"],
     ["teams", "away", "logo"],
-    ["teams", "away", "badge"],
   ]);
 
   const leagueName =
-    readNestedString(fixture, [
-      ["leagueName"],
-      ["league", "name"],
-    ]) || "Matchday";
+    readNestedString(fixture, [["leagueName"], ["league", "name"]]) ||
+    "Matchday";
 
   const venue =
     readNestedString(fixture, [
@@ -239,79 +181,76 @@ function getFixtureTeamInfo(fixture: unknown) {
       ["fixture", "date"],
     ]) || null;
 
-  return {
-    homeName,
-    awayName,
-    homeLogo,
-    awayLogo,
-    leagueName,
-    venue,
-    kickoff,
-  };
+  return { homeName, awayName, homeLogo, awayLogo, leagueName, venue, kickoff };
 }
 
-function formatKickoffDate(value?: string | null) {
-  const raw = clean(value);
-  if (!raw) return "Date TBC";
+function initials(name?: string | null) {
+  const value = clean(name);
+  if (!value) return "?";
 
-  const date = new Date(raw);
-  if (!Number.isFinite(date.getTime())) return raw.slice(0, 10);
+  const parts = value
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .split(" ")
+    .map((p) => p.trim())
+    .filter(Boolean);
 
-  return date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  if (parts.length <= 1) return value.slice(0, 3).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-function formatKickoffTime(value?: string | null) {
-  const raw = clean(value);
-  if (!raw) return "TBC";
-
-  const date = new Date(raw);
-  if (!Number.isFinite(date.getTime())) return "TBC";
-
-  return date.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function sourceSectionFromType(type?: SavedItemType) {
+  switch (type) {
+    case "tickets":
+      return "tickets";
+    case "hotel":
+      return "stay";
+    case "flight":
+    case "train":
+      return "travel";
+    case "transfer":
+      return "transfers";
+    case "things":
+      return "things";
+    case "insurance":
+      return "insurance";
+    case "claim":
+      return "claims";
+    case "note":
+    case "other":
+      return "notes";
+    default:
+      return "unknown";
+  }
 }
 
-function TeamBadge({
-  name,
-  logo,
-}: {
-  name: string;
-  logo?: string | null;
-}) {
-  const initials = initialsFromName(name);
+function attachments(item?: SavedItem | null) {
+  return Array.isArray(item?.attachments) ? item.attachments : [];
+}
 
+function stateLabel(state: string) {
+  if (state === "booked") return "Confirmed";
+  if (state === "pending") return "Pending";
+  if (state === "saved") return "Saved";
+  return "Empty";
+}
+
+function rowIcon(key: string) {
+  if (key === "tickets") return "🎟";
+  if (key === "flight" || key === "travel") return "✈";
+  if (key === "hotel" || key === "stay") return "🛏";
+  if (key === "transfer") return "🚕";
+  if (key === "things") return "★";
+  return "✓";
+}
+
+function TeamBadge({ name, logo }: { name: string; logo?: string | null }) {
   return (
-    <View style={styles.teamBadgeShell}>
+    <View style={styles.teamBadge}>
       {logo ? (
         <Image source={{ uri: logo }} style={styles.teamBadgeImage} resizeMode="contain" />
       ) : (
-        <Text style={styles.teamBadgeInitials}>{initials}</Text>
+        <Text style={styles.teamBadgeText}>{initials(name)}</Text>
       )}
-    </View>
-  );
-}
-
-function ItineraryIcon({ itemKey }: { itemKey: string }) {
-  const icon =
-    itemKey === "tickets"
-      ? "🎟"
-      : itemKey === "flight" || itemKey === "travel"
-        ? "✈"
-        : itemKey === "hotel" || itemKey === "stay"
-          ? "🛏"
-          : itemKey === "things"
-            ? "★"
-            : "✓";
-
-  return (
-    <View style={styles.itineraryIcon}>
-      <Text style={styles.itineraryIconText}>{icon}</Text>
     </View>
   );
 }
@@ -339,8 +278,6 @@ export default function TripDetailScreen() {
 
   const [plan, setPlan] = useState<PlanValue>("not_set");
   const [ticketLoading, setTicketLoading] = useState(false);
-
-  const isPro = plan === "premium";
   const returnPromptBusyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -350,15 +287,8 @@ export default function TripDetailScreen() {
       try {
         const value = await storage.getString(PLAN_STORAGE_KEY);
         if (cancelled) return;
-
-        if (value === "premium") {
-          setPlan("premium");
-          return;
-        }
-
-        if (value === "free") {
-          setPlan("free");
-        }
+        if (value === "premium") setPlan("premium");
+        if (value === "free") setPlan("free");
       } catch {
         // ignore
       }
@@ -405,7 +335,7 @@ export default function TripDetailScreen() {
     booked: bookedItems,
     primaryMatchId: data.primaryMatchId,
     primaryTicketItem: data.primaryTicketItem,
-    isPro,
+    isPro: plan === "premium",
     kickoffTbc: data.kickoffMeta.tbc,
     controller,
     setActiveWorkspaceSection: workspace.setActiveSection,
@@ -433,8 +363,6 @@ export default function TripDetailScreen() {
           return;
         }
 
-        const section = inferSourceSectionFromSavedItemType(item.type);
-
         Alert.alert(
           "Did you complete this booking?",
           `"${item.title}" was opened. Only mark it booked if you actually completed the booking.`,
@@ -450,11 +378,9 @@ export default function TripDetailScreen() {
             {
               text: "No",
               onPress: () => {
-                void markNotBooked(item.id)
-                  .catch(() => null)
-                  .finally(() => {
-                    returnPromptBusyRef.current = null;
-                  });
+                void markNotBooked(item.id).finally(() => {
+                  returnPromptBusyRef.current = null;
+                });
               },
             },
             {
@@ -462,7 +388,7 @@ export default function TripDetailScreen() {
               onPress: () => {
                 void markBooked(item.id, {
                   sourceSurface: "workspace_cta",
-                  sourceSection: section,
+                  sourceSection: sourceSectionFromType(item.type),
                   metadata: {
                     partnerId: item.partnerId ?? null,
                     partnerTier: item.partnerTier ?? null,
@@ -470,12 +396,6 @@ export default function TripDetailScreen() {
                   },
                 })
                   .then(() => confirmBookedAndOfferProof(item.id))
-                  .catch(() => {
-                    Alert.alert(
-                      "Couldn’t update booking",
-                      "The partner page opened, but the app could not mark this item as booked."
-                    );
-                  })
                   .finally(() => {
                     returnPromptBusyRef.current = null;
                   });
@@ -494,56 +414,16 @@ export default function TripDetailScreen() {
 
   const isMissingTrip = !trip && tripsLoaded;
 
-  const status = useMemo(() => {
-    return trip ? tripStatus(trip) : "Upcoming";
-  }, [trip]);
-
   const primaryFixture = useMemo(() => {
     if (!data.primaryMatchId) return null;
     return data.fixturesById?.[String(data.primaryMatchId)] ?? null;
   }, [data.fixturesById, data.primaryMatchId]);
 
-  const fixtureInfo = useMemo(() => {
-    return getFixtureTeamInfo(primaryFixture);
-  }, [primaryFixture]);
-
-  const dominantAction = vm.nextAction;
-  const decisionTitle = dominantAction?.title || "Continue planning";
-  const decisionCta = dominantAction?.cta || "Continue planning";
-  const decisionBody =
-    dominantAction?.body || "Move the trip forward with the next real booking step.";
-
-  const tripDatesText = useMemo(() => {
-    return dateWindowLine(trip?.startDate, trip?.endDate);
-  }, [trip?.startDate, trip?.endDate]);
-
-  const missingProofCount = useMemo(() => {
-    return bookedItems.filter((item) => getAttachments(item).length === 0).length;
-  }, [bookedItems]);
-
-  const proofCount = useMemo(() => {
-    return bookedItems.filter((item) => getAttachments(item).length > 0).length;
-  }, [bookedItems]);
+  const fixture = useMemo(() => getFixtureInfo(primaryFixture), [primaryFixture]);
 
   const completionPct = Math.max(0, Math.min(100, vm.tripCompletionPct ?? 0));
-
-  const taskRows = useMemo(() => {
-    return nextTasks({
-      hasTickets: vm.hasTickets,
-      hasFlight: vm.hasFlight,
-      hasHotel: vm.hasHotel,
-      hasTransport: vm.hasTransport,
-      missingProofCount,
-      kickoffTbc: data.kickoffMeta.tbc,
-    });
-  }, [
-    vm.hasTickets,
-    vm.hasFlight,
-    vm.hasHotel,
-    vm.hasTransport,
-    missingProofCount,
-    data.kickoffMeta.tbc,
-  ]);
+  const bookedProofs = bookedItems.filter((item) => attachments(item).length > 0).length;
+  const missingProofs = bookedItems.filter((item) => attachments(item).length === 0).length;
 
   const ticketSheetPayload = controller.ticketSheet.payload;
 
@@ -561,21 +441,18 @@ export default function TripDetailScreen() {
 
     if (ticketSheetPayload.strongOptions?.length) {
       return total > 1
-        ? "Best matches first, then weaker fallback routes"
+        ? "Best matches first, then fallback routes"
         : "Strong ticket route found";
     }
 
     return "Only fallback routes found";
   }, [ticketSheetPayload]);
 
-  const renderBody = () => {
+  function renderBody() {
     if (vm.loading) {
       return (
         <GlassCard style={styles.stateCard}>
-          <EmptyState
-            title="Loading trip"
-            message="Pulling together matches, bookings and trip details."
-          />
+          <EmptyState title="Loading trip" message="Pulling together your trip." />
         </GlassCard>
       );
     }
@@ -598,197 +475,122 @@ export default function TripDetailScreen() {
 
     return (
       <>
-        <View style={styles.heroCard}>
+        <View style={styles.hero}>
+          <View style={styles.heroHeader}>
+            <View style={styles.logoCircle}>
+              <Text style={styles.logoText}>YNA</Text>
+            </View>
+
+            <Text style={styles.heroTitle}>
+              {fixture.homeName} vs {fixture.awayName}
+            </Text>
+
+            <Text style={styles.heroMeta}>
+              {fixture.leagueName} • Matchday
+            </Text>
+
+            <View style={styles.heroChips}>
+              <View style={styles.heroChip}>
+                <Text style={styles.heroChipText}>{dateLabel(fixture.kickoff)}</Text>
+              </View>
+              <View style={styles.heroChip}>
+                <Text style={styles.heroChipText}>
+                  {data.kickoffMeta.tbc ? "TBC" : timeLabel(fixture.kickoff)}
+                </Text>
+              </View>
+              <View style={styles.heroChipWide}>
+                <Text style={styles.heroChipText} numberOfLines={1}>
+                  {fixture.venue}
+                </Text>
+              </View>
+            </View>
+          </View>
+
           <ImageBackground
-            source={{ uri: STADIUM_HERO_IMAGE_URL }}
-            style={styles.heroImage}
-            imageStyle={styles.heroImageInner}
+            source={{ uri: CITY_HERO_IMAGE_URL }}
+            style={styles.cityImage}
+            imageStyle={styles.cityImageInner}
           >
-            <View style={styles.heroDarkLayer} pointerEvents="none" />
-            <View style={styles.heroGreenLayer} pointerEvents="none" />
-
-            <View style={styles.heroContent}>
-              <View style={styles.heroLogo}>
-                <Text style={styles.heroLogoText}>YNA</Text>
-              </View>
-
-              <Text style={styles.heroTitle}>
-                {fixtureInfo.homeName} vs {fixtureInfo.awayName}
-              </Text>
-
-              <Text style={styles.heroSub}>
-                {fixtureInfo.leagueName} • {data.cityName}
-              </Text>
-
-              <View style={styles.heroChipRow}>
-                <View style={styles.heroChip}>
-                  <Text style={styles.heroChipText}>{formatKickoffDate(fixtureInfo.kickoff)}</Text>
-                </View>
-
-                <View style={styles.heroChip}>
-                  <Text style={styles.heroChipText}>
-                    {data.kickoffMeta.tbc ? "Kickoff TBC" : formatKickoffTime(fixtureInfo.kickoff)}
-                  </Text>
-                </View>
-
-                <View style={styles.heroChip}>
-                  <Text style={styles.heroChipText} numberOfLines={1}>
-                    {fixtureInfo.venue}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.pitchBadgeStrip}>
-              <TeamBadge name={fixtureInfo.homeName} logo={fixtureInfo.homeLogo} />
-              <View style={styles.vsBadge}>
-                <Text style={styles.vsBadgeText}>VS</Text>
-              </View>
-              <TeamBadge name={fixtureInfo.awayName} logo={fixtureInfo.awayLogo} />
-            </View>
+            <View style={styles.cityImageShade} />
           </ImageBackground>
+
+          <View style={styles.pitchStrip}>
+            <TeamBadge name={fixture.homeName} logo={fixture.homeLogo} />
+            <View style={styles.vsCircle}>
+              <Text style={styles.vsText}>VS</Text>
+            </View>
+            <TeamBadge name={fixture.awayName} logo={fixture.awayLogo} />
+          </View>
         </View>
 
-        <GlassCard style={styles.tripCard} variant="brand" level="strong">
-          <View style={styles.tripCardTop}>
-            <View style={styles.tripCardCopy}>
-              <Text style={styles.cardEyebrow}>Your trip to {data.cityName}</Text>
-              <Text style={styles.tripDate}>{tripDatesText}</Text>
+        <GlassCard variant="brand" level="strong" style={styles.tripCard}>
+          <View style={styles.tripTop}>
+            <View style={styles.tripCopy}>
+              <Text style={styles.tripEyebrow}>Your trip to {data.cityName}</Text>
+              <Text style={styles.tripDates}>{tripDateLine(trip.startDate, trip.endDate)}</Text>
               <Text style={styles.tripMeta}>
-                {screenStatusLabel(status)} • {completionPct}% booked
+                {nightsLine(trip.startDate, trip.endDate)} • {completionPct}% booked
               </Text>
             </View>
 
-            <Pressable onPress={controller.onViewWallet} hitSlop={8} style={styles.walletPill}>
-              <Text style={styles.walletPillText}>Wallet</Text>
-            </Pressable>
+            <Text style={styles.planeIcon}>✈</Text>
           </View>
 
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${completionPct}%` }]} />
           </View>
-
-          <View style={styles.badgeRow}>
-            <View style={styles.statusChip}>
-              <Text style={styles.statusChipText}>{screenStatusLabel(status)}</Text>
-            </View>
-
-            {data.kickoffMeta.tbc ? (
-              <View style={styles.warningPill}>
-                <Text style={styles.warningPillText}>Kickoff TBC</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.completionPill}>
-              <Text style={styles.completionPillText}>{completionPct}% booked</Text>
-            </View>
-          </View>
         </GlassCard>
 
-        <GlassCard style={styles.priorityCard} variant="gold">
-          <Text style={styles.priorityEyebrow}>Do this next</Text>
-          <Text style={styles.priorityTitle}>{decisionTitle}</Text>
-          <Text style={styles.priorityBody}>{decisionBody}</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your itinerary</Text>
 
-          <Pressable
-            style={styles.primaryActionBtn}
-            onPress={
-              dominantAction?.onPress ? () => dominantAction.onPress() : controller.onEditTrip
-            }
-          >
-            <Text style={styles.primaryActionBtnText}>{decisionCta}</Text>
-          </Pressable>
-
-          {ticketLoading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator size="small" />
-              <Text style={styles.loadingText}>Checking ticket availability…</Text>
-            </View>
-          ) : null}
-
-          {vm.capHint ? <Text style={styles.capHint}>{vm.capHint}</Text> : null}
-        </GlassCard>
-
-        <GlassCard style={styles.cardBlock}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Your itinerary</Text>
-            <Text style={styles.sectionSubtitle}>Tickets, travel, stay and extras in one clean view.</Text>
-          </View>
-
-          <View style={styles.progressList}>
+          <View style={styles.itineraryList}>
             {vm.progressItems.map((item) => {
-              const tone = progressTone(item.state);
+              const confirmed = item.state === "booked";
+              const started = item.state === "saved" || item.state === "pending";
 
               return (
                 <Pressable
                   key={item.key}
-                  style={[
-                    styles.itineraryRow,
-                    tone === "booked" && styles.itineraryRowBooked,
-                    tone === "started" && styles.itineraryRowStarted,
-                  ]}
-                  onPress={() => {
-                    void item.onPress?.();
-                  }}
+                  onPress={() => void item.onPress?.()}
+                  style={styles.itineraryRow}
                 >
-                  <ItineraryIcon itemKey={item.key} />
+                  <View style={styles.itineraryIcon}>
+                    <Text style={styles.itineraryIconText}>{rowIcon(item.key)}</Text>
+                  </View>
 
                   <View style={styles.itineraryCopy}>
                     <Text style={styles.itineraryTitle}>{item.label}</Text>
-                    <Text style={styles.itinerarySubline}>{progressStateLabel(item.state)}</Text>
+                    <Text style={styles.itinerarySub}>
+                      {item.key === "tickets" && !confirmed
+                        ? "Finding best options"
+                        : stateLabel(item.state)}
+                    </Text>
                   </View>
 
                   <Text
                     style={[
                       styles.itineraryStatus,
-                      tone === "booked" && styles.itineraryStatusBooked,
-                      tone === "started" && styles.itineraryStatusStarted,
+                      confirmed && styles.statusConfirmed,
+                      started && styles.statusStarted,
                     ]}
                   >
-                    {progressStateLabel(item.state)}
+                    {confirmed ? "Confirmed" : started ? "Pending" : "Empty"}
                   </Text>
+
+                  <Text style={styles.chevron}>›</Text>
                 </Pressable>
               );
             })}
           </View>
-        </GlassCard>
+        </View>
 
-        <GlassCard style={styles.cardBlock}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Wallet status</Text>
-            <Text style={styles.sectionSubtitle}>
-              {bookedItems.length} booked • {pendingItems.length} pending • {savedOnlyItems.length} saved
-            </Text>
-          </View>
-
-          <View style={styles.walletPreviewRow}>
-            <View style={styles.walletMetricCard}>
-              <Text style={styles.walletMetricValue}>{bookedItems.length}</Text>
-              <Text style={styles.walletMetricLabel}>Booked</Text>
-            </View>
-
-            <View style={styles.walletMetricCard}>
-              <Text style={styles.walletMetricValue}>{proofCount}</Text>
-              <Text style={styles.walletMetricLabel}>Proofs</Text>
-            </View>
-
-            <View style={styles.walletMetricCard}>
-              <Text style={styles.walletMetricValue}>{missingProofCount}</Text>
-              <Text style={styles.walletMetricLabel}>Missing</Text>
-            </View>
-          </View>
-
-          <Text style={styles.walletPreviewHeadline}>
-            {walletHeadline({
-              bookedCount: bookedItems.length,
-              missingProofCount,
-            })}
-          </Text>
-
-          <Pressable style={styles.secondaryActionBtn} onPress={controller.onViewWallet}>
-            <Text style={styles.secondaryActionBtnText}>Open wallet</Text>
-          </Pressable>
-        </GlassCard>
+        {ticketLoading ? (
+          <GlassCard style={styles.loadingCard}>
+            <ActivityIndicator />
+            <Text style={styles.loadingText}>Checking ticket availability…</Text>
+          </GlassCard>
+        ) : null}
 
         <TripMatchesCard
           trip={trip}
@@ -807,26 +609,34 @@ export default function TripDetailScreen() {
           getLivePriceLine={livePriceLine}
         />
 
-        {taskRows.length > 0 ? (
-          <GlassCard style={styles.cardBlock}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Next tasks</Text>
-              <Text style={styles.sectionSubtitle}>Only the actions that still matter.</Text>
-            </View>
+        <GlassCard style={styles.walletCard}>
+          <Text style={styles.walletTitle}>Wallet status</Text>
+          <Text style={styles.walletSub}>
+            {bookedItems.length} booked • {pendingItems.length} pending • {savedOnlyItems.length} saved
+          </Text>
 
-            <View style={styles.taskList}>
-              {taskRows.map((task) => (
-                <View key={task} style={styles.taskRow}>
-                  <View style={styles.taskDot} />
-                  <Text style={styles.taskText}>{task}</Text>
-                </View>
-              ))}
+          <View style={styles.walletStats}>
+            <View style={styles.walletMetric}>
+              <Text style={styles.walletNumber}>{bookedItems.length}</Text>
+              <Text style={styles.walletLabel}>Booked</Text>
             </View>
-          </GlassCard>
-        ) : null}
+            <View style={styles.walletMetric}>
+              <Text style={styles.walletNumber}>{bookedProofs}</Text>
+              <Text style={styles.walletLabel}>Proofs</Text>
+            </View>
+            <View style={styles.walletMetric}>
+              <Text style={styles.walletNumber}>{missingProofs}</Text>
+              <Text style={styles.walletLabel}>Missing</Text>
+            </View>
+          </View>
+
+          <Pressable style={styles.walletButton} onPress={controller.onViewWallet}>
+            <Text style={styles.walletButtonText}>Open wallet</Text>
+          </Pressable>
+        </GlassCard>
       </>
     );
-  };
+  }
 
   return (
     <Background imageSource={getBackground("trips")} overlayOpacity={0.94}>
@@ -835,11 +645,8 @@ export default function TripDetailScreen() {
           headerShown: true,
           title: "Trip",
           headerTransparent: true,
-          headerTintColor: "#F5F7F6",
           headerShadowVisible: false,
-          headerStyle: {
-            backgroundColor: "transparent",
-          },
+          headerTintColor: "#F5F7F6",
           headerTitleStyle: {
             color: "#F5F7F6",
             fontWeight: "900",
@@ -851,9 +658,7 @@ export default function TripDetailScreen() {
         <ScrollView
           contentContainerStyle={[
             styles.content,
-            {
-              paddingBottom: theme.spacing.xxl + insets.bottom,
-            },
+            { paddingBottom: theme.spacing.xxl + insets.bottom },
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -867,15 +672,11 @@ export default function TripDetailScreen() {
           strongOptions={ticketSheetPayload?.strongOptions || []}
           weakOptions={ticketSheetPayload?.weakOptions || []}
           onClose={controller.closeTicketSheet}
-          onSelect={(option) => {
-            void controller.onSelectTicketSheetOption(option);
-          }}
+          onSelect={(option) => void controller.onSelectTicketSheetOption(option)}
           onCompareAll={controller.onCompareAllTickets}
           onOpenOfficial={
             ticketSheetPayload?.officialTicketUrl
-              ? () => {
-                  void controller.onOpenOfficialFromSheet();
-                }
+              ? () => void controller.onOpenOfficialFromSheet()
               : null
           }
         />
@@ -885,14 +686,12 @@ export default function TripDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
 
   content: {
     paddingTop: 92,
-    paddingHorizontal: 18,
-    gap: 14,
+    paddingHorizontal: 20,
+    gap: 18,
   },
 
   stateCard: {
@@ -900,228 +699,208 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  heroCard: {
-    height: 338,
-    borderRadius: 32,
-    overflow: "hidden",
+  hero: {
+    borderRadius: 34,
+    padding: 20,
+    backgroundColor: "rgba(0,35,16,0.72)",
     borderWidth: 1,
-    borderColor: "rgba(126,255,143,0.28)",
-    backgroundColor: "#031207",
+    borderColor: "rgba(134,239,172,0.24)",
     shadowColor: "#22C55E",
     shadowOpacity: 0.22,
-    shadowRadius: 22,
+    shadowRadius: 24,
     shadowOffset: { width: 0, height: 10 },
     elevation: 8,
   },
 
-  heroImage: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-
-  heroImageInner: {
-    borderRadius: 32,
-  },
-
-  heroDarkLayer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.48)",
-  },
-
-  heroGreenLayer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 190,
-    backgroundColor: "rgba(0,32,14,0.74)",
-  },
-
-  heroContent: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
+  heroHeader: {
     alignItems: "center",
   },
 
-  heroLogo: {
-    width: 52,
-    height: 52,
+  logoCircle: {
+    width: 70,
+    height: 70,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.62)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     borderWidth: 1,
-    borderColor: "rgba(250,204,21,0.55)",
+    borderColor: "rgba(250,204,21,0.42)",
   },
 
-  heroLogoText: {
+  logoText: {
     color: "#F5F7F6",
-    fontSize: 13,
     fontWeight: "900",
     letterSpacing: 1,
   },
 
   heroTitle: {
-    marginTop: 14,
+    marginTop: 18,
     color: "#FFFFFF",
-    fontSize: 28,
-    lineHeight: 32,
+    fontSize: 30,
+    lineHeight: 36,
     fontWeight: "900",
     textAlign: "center",
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
   },
 
-  heroSub: {
-    marginTop: 5,
-    color: "rgba(245,247,246,0.78)",
-    fontSize: 14,
-    lineHeight: 19,
+  heroMeta: {
+    marginTop: 6,
+    color: "rgba(245,247,246,0.74)",
+    fontSize: 15,
     fontWeight: "800",
-    textAlign: "center",
   },
 
-  heroChipRow: {
-    marginTop: 15,
+  heroChips: {
+    marginTop: 18,
     flexDirection: "row",
-    justifyContent: "center",
     gap: 8,
   },
 
   heroChip: {
-    maxWidth: 126,
-    minHeight: 34,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    alignItems: "center",
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 13,
     justifyContent: "center",
-    backgroundColor: "rgba(3,30,13,0.84)",
+    backgroundColor: "rgba(0,22,10,0.66)",
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.18)",
+    borderColor: "rgba(134,239,172,0.12)",
+  },
+
+  heroChipWide: {
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    justifyContent: "center",
+    backgroundColor: "rgba(0,22,10,0.66)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.12)",
   },
 
   heroChipText: {
-    color: "rgba(245,247,246,0.90)",
-    fontSize: 11,
-    fontWeight: "900",
-  },
-
-  pitchBadgeStrip: {
-    marginBottom: 26,
-    alignSelf: "center",
-    minWidth: 214,
-    minHeight: 92,
-    borderRadius: 999,
-    paddingHorizontal: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(3,44,18,0.74)",
-    borderWidth: 1,
-    borderColor: "rgba(126,255,143,0.18)",
-  },
-
-  teamBadgeShell: {
-    width: 64,
-    height: 64,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.66)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.24)",
-  },
-
-  teamBadgeImage: {
-    width: 48,
-    height: 48,
-  },
-
-  teamBadgeInitials: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-
-  vsBadge: {
-    width: 40,
-    height: 40,
-    marginHorizontal: 12,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(250,204,21,0.95)",
-  },
-
-  vsBadgeText: {
-    color: "#07140B",
+    color: "#F5F7F6",
     fontSize: 12,
     fontWeight: "900",
   },
 
-  tripCard: {
-    borderRadius: 28,
-    padding: 18,
+  cityImage: {
+    height: 145,
+    marginTop: 22,
+    borderRadius: 24,
+    overflow: "hidden",
   },
 
-  tripCardTop: {
+  cityImageInner: {
+    borderRadius: 24,
+  },
+
+  cityImageShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.12)",
+  },
+
+  pitchStrip: {
+    marginTop: 18,
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,26,12,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.18)",
+  },
+
+  teamBadge: {
+    width: 66,
+    height: 66,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.48)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+
+  teamBadgeImage: {
+    width: 50,
+    height: 50,
+  },
+
+  teamBadgeText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 18,
+  },
+
+  vsCircle: {
+    width: 42,
+    height: 42,
+    marginHorizontal: 14,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FACC15",
+  },
+
+  vsText: {
+    color: "#07100A",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  tripCard: {
+    padding: 20,
+    borderRadius: 28,
+  },
+
+  tripTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 14,
   },
 
-  tripCardCopy: {
+  tripCopy: {
     flex: 1,
   },
 
-  cardEyebrow: {
-    fontSize: 11,
+  tripEyebrow: {
+    color: "#86EFAC",
+    fontSize: 12,
     fontWeight: "900",
-    color: "#9DFF9E",
     textTransform: "uppercase",
     letterSpacing: 0.7,
   },
 
-  tripDate: {
+  tripDates: {
     marginTop: 8,
-    color: theme.colors.text,
-    fontSize: 23,
-    lineHeight: 29,
+    color: "#FFFFFF",
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: "900",
     letterSpacing: -0.4,
   },
 
   tripMeta: {
-    marginTop: 5,
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
+    marginTop: 6,
+    color: "rgba(245,247,246,0.70)",
+    fontSize: 14,
     fontWeight: "800",
   },
 
-  walletPill: {
-    minHeight: 38,
-    paddingHorizontal: 13,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-  },
-
-  walletPillText: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: "900",
+  planeIcon: {
+    fontSize: 32,
+    color: "#FDE68A",
   },
 
   progressTrack: {
-    marginTop: 16,
-    height: 8,
+    marginTop: 18,
+    height: 9,
     borderRadius: 999,
     overflow: "hidden",
-    backgroundColor: "rgba(0,0,0,0.34)",
+    backgroundColor: "rgba(0,0,0,0.35)",
   },
 
   progressFill: {
@@ -1130,192 +909,45 @@ const styles = StyleSheet.create({
     backgroundColor: "#86EFAC",
   },
 
-  badgeRow: {
-    marginTop: 15,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-
-  statusChip: {
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-
-  statusChipText: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  warningPill: {
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(250,204,21,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(250,204,21,0.26)",
-  },
-
-  warningPillText: {
-    color: "#FDE68A",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  completionPill: {
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-
-  completionPillText: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  priorityCard: {
-    borderRadius: 24,
-    padding: 18,
-  },
-
-  priorityEyebrow: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#FDE68A",
-    textTransform: "uppercase",
-    letterSpacing: 0.75,
-  },
-
-  priorityTitle: {
-    marginTop: 8,
-    fontSize: 25,
-    lineHeight: 31,
-    fontWeight: "900",
-    color: theme.colors.text,
-    letterSpacing: -0.45,
-  },
-
-  priorityBody: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 20,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-  },
-
-  primaryActionBtn: {
-    marginTop: 16,
-    minHeight: 52,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.accent,
-    paddingHorizontal: 16,
-  },
-
-  primaryActionBtnText: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#0B1020",
-  },
-
-  loadingRow: {
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  loadingText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
-  },
-
-  capHint: {
-    marginTop: 10,
-    fontSize: 12,
-    lineHeight: 18,
-    color: theme.colors.textMuted,
-    fontWeight: "700",
-  },
-
-  cardBlock: {
-    borderRadius: 24,
-    padding: 16,
-  },
-
-  sectionHeaderRow: {
-    marginBottom: 14,
-    gap: 4,
+  section: {
+    gap: 14,
   },
 
   sectionTitle: {
-    fontSize: 22,
+    color: "#FFFFFF",
+    fontSize: 25,
     fontWeight: "900",
-    color: theme.colors.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
 
-  sectionSubtitle: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: theme.colors.textSecondary,
-    fontWeight: "700",
-  },
-
-  progressList: {
-    gap: 10,
-  },
-
-  itineraryRow: {
-    minHeight: 70,
-    borderRadius: 18,
-    paddingHorizontal: 13,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    flexDirection: "row",
-    alignItems: "center",
+  itineraryList: {
     gap: 12,
   },
 
-  itineraryRowBooked: {
-    backgroundColor: "rgba(34,197,94,0.08)",
-    borderColor: "rgba(34,197,94,0.20)",
-  },
-
-  itineraryRowStarted: {
-    backgroundColor: "rgba(250,204,21,0.07)",
-    borderColor: "rgba(250,204,21,0.16)",
+  itineraryRow: {
+    minHeight: 78,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: "rgba(0,28,13,0.66)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.12)",
   },
 
   itineraryIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.26)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.28)",
   },
 
   itineraryIconText: {
-    fontSize: 19,
-    color: "#FDE68A",
-    fontWeight: "900",
+    fontSize: 20,
   },
 
   itineraryCopy: {
@@ -1323,117 +955,112 @@ const styles = StyleSheet.create({
   },
 
   itineraryTitle: {
-    color: theme.colors.text,
-    fontSize: 16,
+    color: "#FFFFFF",
+    fontSize: 18,
     fontWeight: "900",
   },
 
-  itinerarySubline: {
+  itinerarySub: {
     marginTop: 3,
-    color: theme.colors.textSecondary,
+    color: "rgba(245,247,246,0.62)",
     fontSize: 13,
     fontWeight: "800",
   },
 
   itineraryStatus: {
-    color: theme.colors.textMuted,
+    color: "rgba(245,247,246,0.50)",
     fontSize: 12,
     fontWeight: "900",
   },
 
-  itineraryStatusBooked: {
+  statusConfirmed: {
     color: "#86EFAC",
   },
 
-  itineraryStatusStarted: {
+  statusStarted: {
     color: "#FDE68A",
   },
 
-  walletPreviewRow: {
+  chevron: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 26,
+    marginTop: -2,
+  },
+
+  loadingCard: {
+    padding: 16,
+    borderRadius: 20,
     flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
 
-  walletMetricCard: {
-    flex: 1,
-    minHeight: 76,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
-    backgroundColor: "rgba(255,255,255,0.045)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 8,
+  loadingText: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
   },
 
-  walletMetricValue: {
-    color: theme.colors.text,
+  walletCard: {
+    padding: 18,
+    borderRadius: 24,
+  },
+
+  walletTitle: {
+    color: "#FFFFFF",
     fontSize: 22,
     fontWeight: "900",
   },
 
-  walletMetricLabel: {
+  walletSub: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  walletStats: {
+    marginTop: 16,
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  walletMetric: {
+    flex: 1,
+    minHeight: 76,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  walletNumber: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+
+  walletLabel: {
     marginTop: 4,
     color: theme.colors.textMuted,
     fontSize: 11,
     fontWeight: "900",
   },
 
-  walletPreviewHeadline: {
-    marginTop: 14,
-    color: theme.colors.text,
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: "800",
-  },
-
-  secondaryActionBtn: {
-    marginTop: 14,
-    minHeight: 48,
-    borderRadius: 15,
+  walletButton: {
+    marginTop: 16,
+    minHeight: 50,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.055)",
+    backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    paddingHorizontal: 16,
   },
 
-  secondaryActionBtnText: {
-    color: theme.colors.text,
-    fontSize: 14,
+  walletButtonText: {
+    color: "#FFFFFF",
     fontWeight: "900",
-  },
-
-  taskList: {
-    gap: 10,
-  },
-
-  taskRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 42,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-
-  taskDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: theme.colors.accent,
-  },
-
-  taskText: {
-    flex: 1,
-    color: theme.colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "800",
   },
 });
