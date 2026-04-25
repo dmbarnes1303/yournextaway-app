@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ImageSourcePropType,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -19,6 +20,7 @@ import GlassCard from "@/src/components/GlassCard";
 import TicketOptionsSheet from "@/src/components/tickets/TicketOptionsSheet";
 
 import { getBackground, getCityBackground } from "@/src/constants/backgrounds";
+import { theme } from "@/src/constants/theme";
 
 import useTripWorkspace from "@/src/features/tripDetail/useTripWorkspace";
 import useTripDetailData from "@/src/features/tripDetail/useTripDetailData";
@@ -26,119 +28,227 @@ import useTripDetailController from "@/src/features/tripDetail/useTripDetailCont
 
 import { coerceId } from "@/src/features/tripDetail/helpers";
 
-/* ================================
-   FIXTURE NORMALIZATION
-================================ */
+const FALLBACK_CITY_IMAGE =
+  "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1600&q=90";
 
-function clean(v: any) {
-  return String(v ?? "").trim();
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function getFixtureUi(fixture: any, trip: any) {
+function asImageSource(value: string | ImageSourcePropType | null | undefined) {
+  if (!value) return { uri: FALLBACK_CITY_IMAGE };
+  if (typeof value === "string") return { uri: value };
+  return value;
+}
+
+function readNestedString(source: unknown, paths: string[][]): string | null {
+  if (!source || typeof source !== "object") return null;
+
+  for (const path of paths) {
+    let current: unknown = source;
+
+    for (const key of path) {
+      if (!current || typeof current !== "object" || !(key in current)) {
+        current = null;
+        break;
+      }
+
+      current = (current as Record<string, unknown>)[key];
+    }
+
+    const value = clean(current);
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function getFixtureInfo(fixture: unknown, trip: any) {
+  const hasFixture = Boolean(fixture);
+
   const homeName =
-    clean(fixture?.teams?.home?.name) ||
+    readNestedString(fixture, [
+      ["homeName"],
+      ["homeTeam"],
+      ["home", "name"],
+      ["teams", "home", "name"],
+    ]) ||
     clean(trip?.homeName) ||
     "Home";
 
   const awayName =
-    clean(fixture?.teams?.away?.name) ||
+    readNestedString(fixture, [
+      ["awayName"],
+      ["awayTeam"],
+      ["away", "name"],
+      ["teams", "away", "name"],
+    ]) ||
     clean(trip?.awayName) ||
     "Away";
 
+  const homeLogo =
+    readNestedString(fixture, [
+      ["homeLogo"],
+      ["homeBadge"],
+      ["home", "logo"],
+      ["teams", "home", "logo"],
+    ]) || null;
+
+  const awayLogo =
+    readNestedString(fixture, [
+      ["awayLogo"],
+      ["awayBadge"],
+      ["away", "logo"],
+      ["teams", "away", "logo"],
+    ]) || null;
+
   const leagueName =
-    clean(fixture?.league?.name) ||
+    readNestedString(fixture, [["leagueName"], ["league", "name"]]) ||
     clean(trip?.leagueName) ||
     "Matchday";
 
   const venue =
-    clean(fixture?.fixture?.venue?.name) ||
+    readNestedString(fixture, [
+      ["venue"],
+      ["stadium"],
+      ["fixture", "venue", "name"],
+      ["venue", "name"],
+    ]) ||
     clean(trip?.venueName) ||
     "Stadium";
 
-  const kickoffIso =
-    clean(fixture?.fixture?.date) ||
+  const kickoff =
+    readNestedString(fixture, [
+      ["kickoffIso"],
+      ["date"],
+      ["fixture", "date"],
+    ]) ||
     clean(trip?.kickoffIso) ||
     null;
 
-  const homeLogo = clean(fixture?.teams?.home?.logo) || null;
-  const awayLogo = clean(fixture?.teams?.away?.logo) || null;
+  const status = clean(
+    readNestedString(fixture, [["fixture", "status", "short"]])
+  ).toUpperCase();
 
-  const status = clean(fixture?.fixture?.status?.short).toUpperCase();
-
-  const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
-  const valid = kickoffDate && Number.isFinite(kickoffDate.getTime());
+  const kickoffDate = kickoff ? new Date(kickoff) : null;
+  const validKickoff = Boolean(kickoffDate && Number.isFinite(kickoffDate.getTime()));
 
   const tbc =
-    !valid ||
+    !validKickoff ||
     status === "TBD" ||
     status === "TBA" ||
     status === "PST" ||
-    Boolean(trip?.kickoffTbc);
+    (!hasFixture && Boolean(trip?.kickoffTbc));
 
   return {
     homeName,
     awayName,
-    leagueName,
-    venue,
-    kickoffIso,
     homeLogo,
     awayLogo,
+    leagueName,
+    venue,
+    kickoff,
     tbc,
   };
 }
 
-/* ================================
-   FORMATTERS
-================================ */
+function dateLabel(value?: string | null) {
+  const raw = clean(value);
+  if (!raw) return "Date TBC";
 
-function dateLabel(v?: string | null) {
-  if (!v) return "Date TBC";
-  const d = new Date(v);
-  if (!Number.isFinite(d.getTime())) return "Date TBC";
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return "Date TBC";
+
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
-function timeLabel(v?: string | null) {
-  if (!v) return "TBC";
-  const d = new Date(v);
-  if (!Number.isFinite(d.getTime())) return "TBC";
-  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+function timeLabel(value?: string | null) {
+  const raw = clean(value);
+  if (!raw) return "TBC";
+
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return "TBC";
+
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function nightsLine(start?: string, end?: string) {
-  const s = new Date(start || "");
-  const e = new Date(end || "");
-  if (!Number.isFinite(s.getTime()) || !Number.isFinite(e.getTime())) return "";
-  const nights = Math.round((e.getTime() - s.getTime()) / 86400000);
-  return `${nights} nights`;
+function initials(name?: string | null) {
+  const value = clean(name);
+  if (!value) return "?";
+
+  const parts = value
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .split(" ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length <= 1) return value.slice(0, 3).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-/* ================================
-   UI HELPERS
-================================ */
+function nightsLine(start?: string | null, end?: string | null) {
+  const startDate = new Date(clean(start));
+  const endDate = new Date(clean(end));
 
-function initials(name?: string) {
-  if (!name) return "?";
-  const parts = name.split(" ");
-  if (parts.length === 1) return parts[0].slice(0, 3).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
+    return "Dates not set";
+  }
+
+  const nights = Math.max(
+    0,
+    Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000)
+  );
+
+  return `${nights} ${nights === 1 ? "night" : "nights"}`;
 }
 
-function TeamBadge({ logo, name }: any) {
+function tripDateLine(start?: string | null, end?: string | null) {
+  const s = clean(start);
+  const e = clean(end);
+  if (!s || !e) return "Trip dates not set";
+  return `${s} → ${e}`;
+}
+
+function progressCompletion(progress: any) {
+  const tickets = progress?.tickets === "booked" ? 45 : 0;
+  const flight = progress?.flight === "booked" ? 30 : 0;
+  const hotel = progress?.hotel === "booked" ? 20 : 0;
+  const transfer = progress?.transfer === "booked" ? 3 : 0;
+  const things = progress?.things === "booked" ? 2 : 0;
+
+  return Math.max(0, Math.min(100, tickets + flight + hotel + transfer + things));
+}
+
+function progressStateLabel(state: string) {
+  if (state === "booked") return "Confirmed";
+  if (state === "pending") return "Pending";
+  if (state === "saved") return "Saved";
+  return "Not started";
+}
+
+function TeamBadge({
+  name,
+  logo,
+}: {
+  name: string;
+  logo?: string | null;
+}) {
   return (
-    <View style={styles.badgeWrap}>
+    <View style={styles.teamBadge}>
       {logo ? (
-        <Image source={{ uri: logo }} style={styles.badgeImg} />
+        <Image source={{ uri: logo }} style={styles.teamBadgeImage} resizeMode="contain" />
       ) : (
-        <Text style={styles.badgeFallback}>{initials(name)}</Text>
+        <Text style={styles.teamBadgeText}>{initials(name)}</Text>
       )}
     </View>
   );
 }
-
-/* ================================
-   SCREEN
-================================ */
 
 export default function TripScreen() {
   const params = useLocalSearchParams();
@@ -168,228 +278,665 @@ export default function TripScreen() {
     setActiveWorkspaceSection: workspace.setActiveSection,
   });
 
-  const fixture = data.primaryMatchId
-    ? data.fixturesById?.[String(data.primaryMatchId)]
-    : null;
+  const primaryFixture = useMemo(() => {
+    if (!data.primaryMatchId) return null;
+    return data.fixturesById?.[String(data.primaryMatchId)] ?? null;
+  }, [data.fixturesById, data.primaryMatchId]);
 
-  const fx = useMemo(() => getFixtureUi(fixture, trip), [fixture, trip]);
+  const fixture = useMemo(
+    () => getFixtureInfo(primaryFixture, trip),
+    [primaryFixture, trip]
+  );
 
-  const completion = Math.round(data.progress?.completionPct || 0);
-  const cityImage = getCityBackground(data.cityName || "rome");
+  const cityImage = useMemo(() => {
+    return asImageSource(getCityBackground(data.cityName || "rome"));
+  }, [data.cityName]);
+
+  const completion = progressCompletion(data.progress);
+
+  const itineraryRows = useMemo(
+    () => [
+      {
+        key: "tickets",
+        label: "Tickets",
+        detail:
+          fixture.homeName !== "Home"
+            ? `${fixture.homeName} vs ${fixture.awayName}`
+            : "Match ticket options",
+        state: data.progress?.tickets ?? "empty",
+        onPress: () => {
+          if (data.primaryMatchId) {
+            void controller.openTicketsForMatch(String(data.primaryMatchId));
+          } else {
+            controller.onAddMatch();
+          }
+        },
+      },
+      {
+        key: "stay",
+        label: "Stay",
+        detail: data.cityName ? `Hotels in ${data.cityName}` : "Find the right area",
+        state: data.progress?.hotel ?? "empty",
+        onPress: () => void controller.onOpenSection("stay"),
+      },
+      {
+        key: "travel",
+        label: "Travel",
+        detail: "Flights and main travel",
+        state: data.progress?.flight ?? "empty",
+        onPress: () => void controller.onOpenSection("travel"),
+      },
+      {
+        key: "things",
+        label: "Things",
+        detail: "City break extras",
+        state: data.progress?.things ?? "empty",
+        onPress: () => void controller.onOpenSection("things"),
+      },
+    ],
+    [
+      controller,
+      data.cityName,
+      data.primaryMatchId,
+      data.progress,
+      fixture.awayName,
+      fixture.homeName,
+    ]
+  );
+
+  const ticketSheetPayload = controller.ticketSheet.payload;
+
+  const ticketSheetMatchLabel = useMemo(() => {
+    if (!ticketSheetPayload) return "Match tickets";
+    return `${ticketSheetPayload.homeName} vs ${ticketSheetPayload.awayName}`;
+  }, [ticketSheetPayload]);
+
+  const ticketSheetSubtitle = useMemo(() => {
+    if (!ticketSheetPayload) return "Compare ticket providers";
+
+    const total =
+      (ticketSheetPayload.strongOptions?.length || 0) +
+      (ticketSheetPayload.weakOptions?.length || 0);
+
+    if (ticketSheetPayload.strongOptions?.length) {
+      return total > 1 ? "Best ticket routes first" : "Strong ticket route found";
+    }
+
+    return "Fallback ticket routes only";
+  }, [ticketSheetPayload]);
 
   if (!trip) {
     return (
-      <Background imageSource={getBackground("trip")}>
-        <SafeAreaView>
-          <Text style={{ color: "#fff" }}>Loading…</Text>
+      <Background imageSource={getBackground("trip")} overlayOpacity={0.94}>
+        <Stack.Screen
+          options={{
+            headerTransparent: true,
+            title: "",
+            headerTintColor: "#FFFFFF",
+          }}
+        />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingShell}>
+            <ActivityIndicator />
+            <Text style={styles.loadingText}>Loading trip…</Text>
+          </View>
         </SafeAreaView>
       </Background>
     );
   }
 
   return (
-    <Background imageSource={getBackground("trip")}>
-      <Stack.Screen options={{ headerTransparent: true, title: "" }} />
+    <Background imageSource={getBackground("trip")} overlayOpacity={0.94}>
+      <Stack.Screen
+        options={{
+          headerTransparent: true,
+          title: "",
+          headerTintColor: "#FFFFFF",
+          headerShadowVisible: false,
+        }}
+      />
 
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <ScrollView
-          contentContainerStyle={{
-            paddingTop: 90,
-            paddingHorizontal: 20,
-            paddingBottom: 40 + insets.bottom,
-            gap: 22,
-          }}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: 42 + insets.bottom },
+          ]}
+          showsVerticalScrollIndicator={false}
         >
-          {/* HERO */}
-          <View style={styles.hero}>
+          <View style={styles.heroCard}>
             <ImageBackground
-              source={{ uri: cityImage as string }}
-              style={styles.heroImg}
-              imageStyle={{ borderRadius: 28 }}
+              source={cityImage}
+              style={styles.heroImage}
+              imageStyle={styles.heroImageInner}
             >
-              <View style={styles.overlay} />
-              <View style={styles.heroContent}>
-                <Text style={styles.title}>
-                  {fx.homeName} vs {fx.awayName}
+              <View style={styles.heroShade} />
+              <View style={styles.heroBottomShade} />
+
+              <View style={styles.heroTop}>
+                <Text style={styles.heroTitle}>
+                  {fixture.homeName} vs {fixture.awayName}
                 </Text>
 
-                <Text style={styles.sub}>{fx.leagueName}</Text>
+                <Text style={styles.heroMeta}>{fixture.leagueName}</Text>
 
-                <View style={styles.chips}>
-                  <Text style={styles.chip}>{dateLabel(fx.kickoffIso)}</Text>
-                  <Text style={styles.chip}>
-                    {fx.tbc ? "Kickoff TBC" : timeLabel(fx.kickoffIso)}
-                  </Text>
-                  <Text style={styles.chip}>{fx.venue}</Text>
-                </View>
+                <View style={styles.heroChips}>
+                  <View style={styles.heroChip}>
+                    <Text style={styles.heroChipText}>{dateLabel(fixture.kickoff)}</Text>
+                  </View>
 
-                <View style={styles.badges}>
-                  <TeamBadge logo={fx.homeLogo} name={fx.homeName} />
-                  <Text style={styles.vs}>VS</Text>
-                  <TeamBadge logo={fx.awayLogo} name={fx.awayName} />
+                  <View style={styles.heroChip}>
+                    <Text style={styles.heroChipText}>
+                      {fixture.tbc ? "TBC" : timeLabel(fixture.kickoff)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.heroChipWide}>
+                    <Text style={styles.heroChipText} numberOfLines={1}>
+                      {fixture.venue}
+                    </Text>
+                  </View>
                 </View>
+              </View>
+
+              <View style={styles.badgeStrip}>
+                <TeamBadge name={fixture.homeName} logo={fixture.homeLogo} />
+                <View style={styles.vsDisc}>
+                  <Text style={styles.vsText}>VS</Text>
+                </View>
+                <TeamBadge name={fixture.awayName} logo={fixture.awayLogo} />
               </View>
             </ImageBackground>
           </View>
 
-          {/* TRIP STRIP */}
           <View style={styles.tripStrip}>
-            <View>
-              <Text style={styles.tripCity}>Trip to {data.cityName}</Text>
+            <View style={styles.tripStripCopy}>
+              <Text style={styles.tripTitle}>Trip to {data.cityName || "your city"}</Text>
+              <Text style={styles.tripDates}>{tripDateLine(trip.startDate, trip.endDate)}</Text>
               <Text style={styles.tripMeta}>
-                {trip.startDate} → {trip.endDate}
-              </Text>
-              <Text style={styles.tripSub}>
                 {nightsLine(trip.startDate, trip.endDate)} • {completion}% booked
               </Text>
             </View>
-            <Text style={styles.tripProgress}>{completion}%</Text>
+
+            <Text style={styles.tripPercent}>{completion}%</Text>
           </View>
 
-          {/* MATCH */}
-          <GlassCard>
-            <Text style={styles.sectionTitle}>Match & Tickets</Text>
+          <GlassCard variant="brand" level="strong" style={styles.ticketCard}>
+            <Text style={styles.eyebrow}>Match anchor</Text>
+            <Text style={styles.ticketTitle}>Match & Tickets</Text>
 
-            <Text style={styles.matchBig}>
-              {fx.homeName} vs {fx.awayName}
-            </Text>
-
-            <Text style={styles.matchMeta}>
-              {dateLabel(fx.kickoffIso)} • {fx.venue}
-            </Text>
+            <View style={styles.ticketTeams}>
+              <TeamBadge name={fixture.homeName} logo={fixture.homeLogo} />
+              <View style={styles.ticketCopy}>
+                <Text style={styles.ticketMatch}>
+                  {fixture.homeName} vs {fixture.awayName}
+                </Text>
+                <Text style={styles.ticketMeta}>
+                  {dateLabel(fixture.kickoff)} • {fixture.venue}
+                </Text>
+              </View>
+            </View>
 
             <Pressable
-              style={styles.cta}
+              style={styles.primaryCta}
               onPress={() => {
                 if (data.primaryMatchId) {
-                  controller.openTicketsForMatch(data.primaryMatchId);
+                  void controller.openTicketsForMatch(String(data.primaryMatchId));
                 } else {
                   controller.onAddMatch();
                 }
               }}
             >
-              <Text style={styles.ctaText}>Find ticket options</Text>
+              <Text style={styles.primaryCtaText}>
+                {data.primaryMatchId ? "Find ticket options" : "Add a match"}
+              </Text>
             </Pressable>
 
-            {ticketLoading && <ActivityIndicator />}
+            {ticketLoading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator size="small" />
+                <Text style={styles.loadingRowText}>Checking ticket routes…</Text>
+              </View>
+            ) : null}
           </GlassCard>
 
-          {/* ITINERARY */}
-          <View>
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Your itinerary</Text>
 
-            {["tickets", "stay", "travel", "things"].map((k) => (
-              <View key={k} style={styles.row}>
-                <Text style={styles.rowText}>{k.toUpperCase()}</Text>
-                <Text style={styles.rowStatus}>
-                  {data.progress?.[k] === "booked"
-                    ? "Confirmed"
-                    : "Not started"}
-                </Text>
-              </View>
-            ))}
+            <View style={styles.itineraryList}>
+              {itineraryRows.map((row) => {
+                const confirmed = row.state === "booked";
+                const started = row.state === "saved" || row.state === "pending";
+
+                return (
+                  <Pressable key={row.key} style={styles.itineraryRow} onPress={row.onPress}>
+                    <View style={styles.itineraryCopy}>
+                      <Text style={styles.itineraryTitle}>{row.label}</Text>
+                      <Text style={styles.itineraryDetail}>{row.detail}</Text>
+                    </View>
+
+                    <Text
+                      style={[
+                        styles.itineraryStatus,
+                        confirmed && styles.statusConfirmed,
+                        started && styles.statusStarted,
+                      ]}
+                    >
+                      {progressStateLabel(row.state)}
+                    </Text>
+
+                    <Text style={styles.chevron}>›</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
-          {/* WALLET */}
-          <GlassCard>
-            <Text style={styles.sectionTitle}>Wallet</Text>
-            <Text style={styles.walletText}>
+          <GlassCard level="subtle" style={styles.walletCard}>
+            <Text style={styles.walletTitle}>Wallet</Text>
+            <Text style={styles.walletSub}>
               {workspace.booked.length} booked • {workspace.pending.length} pending
             </Text>
+
+            <Pressable style={styles.walletButton} onPress={controller.onViewWallet}>
+              <Text style={styles.walletButtonText}>Open wallet</Text>
+            </Pressable>
           </GlassCard>
         </ScrollView>
-      </SafeAreaView>
 
-      <TicketOptionsSheet
-        visible={controller.ticketSheet.visible}
-        matchLabel={`${fx.homeName} vs ${fx.awayName}`}
-        subtitle="Compare ticket routes"
-        strongOptions={controller.ticketSheet.payload?.strongOptions || []}
-        weakOptions={controller.ticketSheet.payload?.weakOptions || []}
-        onClose={controller.closeTicketSheet}
-        onSelect={controller.onSelectTicketSheetOption}
-        onCompareAll={controller.onCompareAllTickets}
-      />
+        <TicketOptionsSheet
+          visible={controller.ticketSheet.visible}
+          matchLabel={ticketSheetMatchLabel}
+          subtitle={ticketSheetSubtitle}
+          strongOptions={ticketSheetPayload?.strongOptions || []}
+          weakOptions={ticketSheetPayload?.weakOptions || []}
+          onClose={controller.closeTicketSheet}
+          onSelect={(option) => {
+            void controller.onSelectTicketSheetOption(option);
+          }}
+          onCompareAll={controller.onCompareAllTickets}
+          onOpenOfficial={
+            ticketSheetPayload?.officialTicketUrl
+              ? () => {
+                  void controller.onOpenOfficialFromSheet();
+                }
+              : null
+          }
+        />
+      </SafeAreaView>
     </Background>
   );
 }
 
-/* ================================
-   STYLES
-================================ */
-
 const styles = StyleSheet.create({
-  hero: { borderRadius: 28, overflow: "hidden" },
-  heroImg: { height: 260, justifyContent: "flex-end" },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)" },
-  heroContent: { padding: 20 },
-
-  title: { color: "#fff", fontSize: 26, fontWeight: "900" },
-  sub: { color: "#ccc", marginTop: 4 },
-
-  chips: { flexDirection: "row", gap: 8, marginTop: 10, flexWrap: "wrap" },
-  chip: {
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 6,
-    borderRadius: 10,
-    color: "#fff",
-    fontSize: 12,
+  safeArea: {
+    flex: 1,
   },
 
-  badges: {
+  content: {
+    paddingTop: 92,
+    paddingHorizontal: 20,
+    gap: 22,
+  },
+
+  loadingShell: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+
+  loadingText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+  },
+
+  heroCard: {
+    height: 380,
+    borderRadius: 36,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.24)",
+    backgroundColor: "#031208",
+    shadowColor: "#22C55E",
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 9,
+  },
+
+  heroImage: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+
+  heroImageInner: {
+    borderRadius: 36,
+  },
+
+  heroShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.42)",
+  },
+
+  heroBottomShade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 185,
+    backgroundColor: "rgba(0,28,12,0.70)",
+  },
+
+  heroTop: {
+    paddingHorizontal: 22,
+    paddingTop: 88,
+  },
+
+  heroTitle: {
+    color: "#FFFFFF",
+    fontSize: 32,
+    lineHeight: 38,
+    fontWeight: "900",
+    letterSpacing: -0.7,
+  },
+
+  heroMeta: {
+    marginTop: 6,
+    color: "rgba(245,247,246,0.78)",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  heroChips: {
+    marginTop: 20,
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+  },
+
+  heroChip: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    justifyContent: "center",
+    backgroundColor: "rgba(0,20,9,0.68)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.13)",
+  },
+
+  heroChipWide: {
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    justifyContent: "center",
+    backgroundColor: "rgba(0,20,9,0.68)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.13)",
+  },
+
+  heroChipText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  badgeStrip: {
+    alignSelf: "center",
+    marginBottom: 30,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: 16,
-    gap: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,26,12,0.74)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.18)",
   },
 
-  badgeWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+  teamBadge: {
+    width: 70,
+    height: 70,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.50)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
   },
 
-  badgeImg: { width: 50, height: 50 },
-  badgeFallback: { color: "#fff", fontWeight: "900" },
+  teamBadgeImage: {
+    width: 52,
+    height: 52,
+  },
 
-  vs: { color: "#FACC15", fontWeight: "900" },
+  teamBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  vsDisc: {
+    width: 44,
+    height: 44,
+    marginHorizontal: 14,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.accentGold,
+  },
+
+  vsText: {
+    color: "#07100A",
+    fontSize: 12,
+    fontWeight: "900",
+  },
 
   tripStrip: {
     flexDirection: "row",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-  },
-  tripCity: { color: "#fff", fontWeight: "900" },
-  tripMeta: { color: "#888" },
-  tripSub: { color: "#666", marginTop: 2 },
-  tripProgress: { color: "#22C55E", fontWeight: "900" },
-
-  sectionTitle: { color: "#fff", fontWeight: "900", fontSize: 18 },
-  matchBig: { color: "#fff", fontSize: 20, fontWeight: "900", marginTop: 8 },
-  matchMeta: { color: "#aaa", marginTop: 4 },
-
-  cta: {
-    marginTop: 14,
-    backgroundColor: "#FACC15",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
+    gap: 14,
   },
 
-  ctaText: { fontWeight: "900", color: "#000" },
+  tripStripCopy: {
+    flex: 1,
+  },
 
-  row: {
+  tripTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  tripDates: {
+    marginTop: 5,
+    color: "rgba(245,247,246,0.74)",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  tripMeta: {
+    marginTop: 4,
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  tripPercent: {
+    color: theme.colors.accentGreen,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  ticketCard: {
+    padding: 20,
+    borderRadius: 28,
+  },
+
+  eyebrow: {
+    color: theme.colors.accentGoldSoft,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+
+  ticketTitle: {
+    marginTop: 6,
+    color: "#FFFFFF",
+    fontSize: 26,
+    lineHeight: 31,
+    fontWeight: "900",
+    letterSpacing: -0.45,
+  },
+
+  ticketTeams: {
+    marginTop: 18,
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    gap: 14,
   },
-  rowText: { color: "#fff" },
-  rowStatus: { color: "#777" },
 
-  walletText: { color: "#aaa" },
+  ticketCopy: {
+    flex: 1,
+  },
+
+  ticketMatch: {
+    color: "#FFFFFF",
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: "900",
+  },
+
+  ticketMeta: {
+    marginTop: 5,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  primaryCta: {
+    marginTop: 18,
+    minHeight: 56,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.accentGold,
+  },
+
+  primaryCtaText: {
+    color: "#07100A",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
+  loadingRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  loadingRowText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  section: {
+    gap: 14,
+  },
+
+  sectionTitle: {
+    color: "#FFFFFF",
+    fontSize: 25,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+  },
+
+  itineraryList: {
+    gap: 0,
+  },
+
+  itineraryRow: {
+    minHeight: 76,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.085)",
+  },
+
+  itineraryCopy: {
+    flex: 1,
+  },
+
+  itineraryTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  itineraryDetail: {
+    marginTop: 3,
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  itineraryStatus: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  statusConfirmed: {
+    color: theme.colors.accentGreenSoft,
+  },
+
+  statusStarted: {
+    color: theme.colors.accentGoldSoft,
+  },
+
+  chevron: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 26,
+    marginTop: -2,
+  },
+
+  walletCard: {
+    padding: 20,
+    borderRadius: 26,
+  },
+
+  walletTitle: {
+    color: "#FFFFFF",
+    fontSize: 23,
+    fontWeight: "900",
+  },
+
+  walletSub: {
+    marginTop: 8,
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  walletButton: {
+    marginTop: 18,
+    minHeight: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  walletButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+  },
 });
