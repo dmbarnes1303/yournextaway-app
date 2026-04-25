@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ImageSourcePropType,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -27,9 +28,70 @@ import useTripDetailController from "@/src/features/tripDetail/useTripDetailCont
 
 import { coerceId } from "@/src/features/tripDetail/helpers";
 
+/* ================================
+   CORE FIX: NORMALIZE FIXTURE DATA
+================================ */
+
 function clean(v: any) {
   return String(v ?? "").trim();
 }
+
+function getFixtureUi(fixture: any, trip: any) {
+  const homeName =
+    clean(fixture?.teams?.home?.name) ||
+    clean(trip?.homeName) ||
+    "Home";
+
+  const awayName =
+    clean(fixture?.teams?.away?.name) ||
+    clean(trip?.awayName) ||
+    "Away";
+
+  const leagueName =
+    clean(fixture?.league?.name) ||
+    clean(trip?.leagueName) ||
+    "Matchday";
+
+  const venue =
+    clean(fixture?.fixture?.venue?.name) ||
+    clean(trip?.venueName) ||
+    "Stadium";
+
+  const kickoffIso =
+    clean(fixture?.fixture?.date) ||
+    clean(trip?.kickoffIso) ||
+    null;
+
+  const homeLogo = clean(fixture?.teams?.home?.logo) || null;
+  const awayLogo = clean(fixture?.teams?.away?.logo) || null;
+
+  const status = clean(fixture?.fixture?.status?.short).toUpperCase();
+
+  const kickoffDate = kickoffIso ? new Date(kickoffIso) : null;
+  const valid = kickoffDate && Number.isFinite(kickoffDate.getTime());
+
+  const tbc =
+    !valid ||
+    status === "TBD" ||
+    status === "TBA" ||
+    status === "PST" ||
+    Boolean(trip?.kickoffTbc);
+
+  return {
+    homeName,
+    awayName,
+    leagueName,
+    venue,
+    kickoffIso,
+    homeLogo,
+    awayLogo,
+    tbc,
+  };
+}
+
+/* ================================
+   FORMATTERS
+================================ */
 
 function dateLabel(v?: string | null) {
   if (!v) return "Date TBC";
@@ -53,52 +115,32 @@ function nightsLine(start?: string, end?: string) {
   return `${nights} nights`;
 }
 
-function getInsight({ kickoff, home, away }: any) {
-  if (!kickoff) return "Kickoff not confirmed yet";
-  const hour = new Date(kickoff).getHours();
+/* ================================
+   UI HELPERS
+================================ */
 
-  if (home && away && home !== "Home" && away !== "Away") {
-    return "High demand fixture — tickets move fast";
-  }
-
-  if (hour >= 17) return "Evening kickoff — perfect for weekend trip";
-
-  return "Plan your trip around this fixture";
+function initials(name?: string) {
+  if (!name) return "?";
+  const parts = name.split(" ");
+  if (parts.length === 1) return parts[0].slice(0, 3).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-function getTicketInsight(hasMatch: boolean) {
-  if (!hasMatch) return "Add a match to unlock ticket routes";
-  return "Compare official & resale routes ranked by reliability";
-}
-
-function getItineraryDetail(key: string, state: string) {
-  if (state === "booked") return "Confirmed";
-
-  switch (key) {
-    case "tickets":
-      return "No ticket route saved";
-    case "stay":
-      return "No hotels saved";
-    case "travel":
-      return "No routes planned";
-    case "things":
-      return "No activities added";
-    default:
-      return "Not started";
-  }
-}
-
-function TeamBadge({ logo }: any) {
-  if (!logo) return null;
-
+function TeamBadge({ logo, name }: any) {
   return (
-    <Image
-      source={{ uri: logo }}
-      style={{ width: 64, height: 64 }}
-      resizeMode="contain"
-    />
+    <View style={styles.badgeWrap}>
+      {logo ? (
+        <Image source={{ uri: logo }} style={styles.badgeImg} />
+      ) : (
+        <Text style={styles.badgeFallback}>{initials(name)}</Text>
+      )}
+    </View>
   );
 }
+
+/* ================================
+   MAIN SCREEN
+================================ */
 
 export default function TripScreen() {
   const params = useLocalSearchParams();
@@ -108,7 +150,6 @@ export default function TripScreen() {
   const routeTripId = useMemo(() => coerceId((params as any)?.id), [params]);
 
   const workspace = useTripWorkspace({ routeTripId });
-
   const trip = workspace.trip;
 
   const data = useTripDetailData({
@@ -130,13 +171,10 @@ export default function TripScreen() {
   });
 
   const fixture = data.primaryMatchId
-    ? data.fixturesById?.[data.primaryMatchId]
+    ? data.fixturesById?.[String(data.primaryMatchId)]
     : null;
 
-  const home = fixture?.homeName || "Home";
-  const away = fixture?.awayName || "Away";
-
-  const completion = Math.round(data.progress?.completionPct || 0);
+  const fx = useMemo(() => getFixtureUi(fixture, trip), [fixture, trip]);
 
   const cityImage = getCityBackground(data.cityName || "rome");
 
@@ -174,67 +212,38 @@ export default function TripScreen() {
 
               <View style={styles.heroContent}>
                 <Text style={styles.title}>
-                  {home} vs {away}
+                  {fx.homeName} vs {fx.awayName}
                 </Text>
 
-                <Text style={styles.sub}>
-                  {fixture?.leagueName || "Matchday"}
-                </Text>
+                <Text style={styles.sub}>{fx.leagueName}</Text>
 
                 <View style={styles.chips}>
-                  <Text style={styles.chip}>{dateLabel(fixture?.kickoffIso)}</Text>
-                  <Text style={styles.chip}>{timeLabel(fixture?.kickoffIso)}</Text>
-                  <Text style={styles.chip}>{fixture?.venue || "Stadium"}</Text>
+                  <Text style={styles.chip}>{dateLabel(fx.kickoffIso)}</Text>
+                  <Text style={styles.chip}>
+                    {fx.tbc ? "Kickoff TBC" : timeLabel(fx.kickoffIso)}
+                  </Text>
+                  <Text style={styles.chip}>{fx.venue}</Text>
                 </View>
 
-                {/* 🔥 INSIGHT LINE */}
-                <Text style={styles.insight}>
-                  {getInsight({
-                    kickoff: fixture?.kickoffIso,
-                    home,
-                    away,
-                  })}
-                </Text>
-
                 <View style={styles.badges}>
-                  <TeamBadge logo={fixture?.homeLogo} />
+                  <TeamBadge logo={fx.homeLogo} name={fx.homeName} />
                   <Text style={styles.vs}>VS</Text>
-                  <TeamBadge logo={fixture?.awayLogo} />
+                  <TeamBadge logo={fx.awayLogo} name={fx.awayName} />
                 </View>
               </View>
             </ImageBackground>
           </View>
 
-          {/* TRIP */}
-          <View style={styles.tripStrip}>
-            <View>
-              <Text style={styles.tripCity}>Trip to {data.cityName}</Text>
-              <Text style={styles.tripMeta}>
-                {trip.startDate} → {trip.endDate}
-              </Text>
-              <Text style={styles.tripSub}>
-                {nightsLine(trip.startDate, trip.endDate)} • {completion}% booked
-              </Text>
-            </View>
-
-            <Text style={styles.tripProgress}>{completion}%</Text>
-          </View>
-
           {/* MATCH CARD */}
-          <GlassCard variant="brand" level="strong">
+          <GlassCard>
             <Text style={styles.sectionTitle}>Match & Tickets</Text>
 
             <Text style={styles.matchBig}>
-              {home} vs {away}
+              {fx.homeName} vs {fx.awayName}
             </Text>
 
             <Text style={styles.matchMeta}>
-              {dateLabel(fixture?.kickoffIso)} • {fixture?.venue}
-            </Text>
-
-            {/* 🔥 CONFIDENCE LINE */}
-            <Text style={styles.ticketInsight}>
-              {getTicketInsight(!!data.primaryMatchId)}
+              {dateLabel(fx.kickoffIso)} • {fx.venue}
             </Text>
 
             <Pressable
@@ -252,41 +261,12 @@ export default function TripScreen() {
 
             {ticketLoading && <ActivityIndicator />}
           </GlassCard>
-
-          {/* ITINERARY */}
-          <View>
-            <Text style={styles.sectionTitle}>Your itinerary</Text>
-
-            {["tickets", "stay", "travel", "things"].map((k) => (
-              <View key={k} style={styles.row}>
-                <View>
-                  <Text style={styles.rowText}>{k.toUpperCase()}</Text>
-                  <Text style={styles.rowSub}>
-                    {getItineraryDetail(k, data.progress?.[k])}
-                  </Text>
-                </View>
-                <Text style={styles.rowStatus}>
-                  {data.progress?.[k] === "booked"
-                    ? "Confirmed"
-                    : "Not started"}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {/* WALLET */}
-          <GlassCard>
-            <Text style={styles.sectionTitle}>Wallet</Text>
-            <Text style={styles.walletText}>
-              {workspace.booked.length} booked • {workspace.pending.length} pending
-            </Text>
-          </GlassCard>
         </ScrollView>
       </SafeAreaView>
 
       <TicketOptionsSheet
         visible={controller.ticketSheet.visible}
-        matchLabel={`${home} vs ${away}`}
+        matchLabel={`${fx.homeName} vs ${fx.awayName}`}
         subtitle="Compare ticket routes"
         strongOptions={controller.ticketSheet.payload?.strongOptions || []}
         weakOptions={controller.ticketSheet.payload?.weakOptions || []}
@@ -298,13 +278,14 @@ export default function TripScreen() {
   );
 }
 
+/* ================================
+   STYLES
+================================ */
+
 const styles = StyleSheet.create({
   hero: { borderRadius: 28, overflow: "hidden" },
   heroImg: { height: 260, justifyContent: "flex-end" },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)" },
   heroContent: { padding: 20 },
 
   title: { color: "#fff", fontSize: 26, fontWeight: "900" },
@@ -319,12 +300,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  insight: {
-    marginTop: 10,
-    color: "#86EFAC",
-    fontWeight: "800",
-  },
-
   badges: {
     flexDirection: "row",
     alignItems: "center",
@@ -333,32 +308,23 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
+  badgeWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+
+  badgeImg: { width: 50, height: 50 },
+  badgeFallback: { color: "#fff", fontWeight: "900" },
+
   vs: { color: "#FACC15", fontWeight: "900" },
 
-  tripStrip: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  tripCity: { color: "#fff", fontWeight: "900" },
-  tripMeta: { color: "#888" },
-  tripSub: { color: "#666", marginTop: 2 },
-  tripProgress: { color: "#22C55E", fontWeight: "900" },
-
-  sectionTitle: {
-    color: "#fff",
-    fontWeight: "900",
-    fontSize: 18,
-    marginBottom: 10,
-  },
-
-  matchBig: { color: "#fff", fontSize: 20, fontWeight: "900" },
+  sectionTitle: { color: "#fff", fontWeight: "900", fontSize: 18 },
+  matchBig: { color: "#fff", fontSize: 20, fontWeight: "900", marginTop: 8 },
   matchMeta: { color: "#aaa", marginTop: 4 },
-
-  ticketInsight: {
-    color: "#86EFAC",
-    marginTop: 6,
-    fontWeight: "800",
-  },
 
   cta: {
     marginTop: 14,
@@ -367,18 +333,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
+
   ctaText: { fontWeight: "900", color: "#000" },
-
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  rowText: { color: "#fff" },
-  rowSub: { color: "#777", fontSize: 12 },
-  rowStatus: { color: "#777" },
-
-  walletText: { color: "#aaa" },
 });
