@@ -41,13 +41,19 @@ type Props = {
   getLivePriceLine: (item: SavedItem) => string | null;
 };
 
-function TeamCrest({ name, logo }: { name: string; logo?: string | null }) {
+function TeamCrest({ name, logo, large }: { name: string; logo?: string | null; large?: boolean }) {
   return (
-    <View style={styles.crestWrap}>
+    <View style={[styles.crestWrap, large && styles.crestWrapLarge]}>
       {logo ? (
-        <Image source={{ uri: logo }} style={styles.crestImg} resizeMode="contain" />
+        <Image
+          source={{ uri: logo }}
+          style={[styles.crestImg, large && styles.crestImgLarge]}
+          resizeMode="contain"
+        />
       ) : (
-        <Text style={styles.crestFallback}>{initials(name)}</Text>
+        <Text style={[styles.crestFallback, large && styles.crestFallbackLarge]}>
+          {initials(name)}
+        </Text>
       )}
     </View>
   );
@@ -71,10 +77,7 @@ function StatusBadge({ status }: { status: SavedItem["status"] }) {
 }
 
 function ticketConfidenceLabel(score: number | null | undefined): string {
-  if (typeof score !== "number" || !Number.isFinite(score)) {
-    return "Route confidence unknown";
-  }
-
+  if (typeof score !== "number" || !Number.isFinite(score)) return "Confidence unknown";
   if (score >= 90) return "Very strong route";
   if (score >= 75) return "Strong route";
   if (score >= 60) return "Usable route";
@@ -96,13 +99,11 @@ function ticketStateLine(args: {
   }
 
   if (ticketItem.status === "pending") {
-    return provider
-      ? `Booking flow opened with ${provider}`
-      : "Booking flow opened — confirm if you completed it";
+    return provider ? `Opened with ${provider}` : "Booking flow opened";
   }
 
   if (ticketItem.status === "saved") {
-    return provider ? `Saved option from ${provider}` : "Ticket option saved";
+    return provider ? `Saved from ${provider}` : "Ticket option saved";
   }
 
   return "Archived ticket route";
@@ -115,55 +116,23 @@ function ticketQualityLine(args: {
 }) {
   const { ticketItem, provider, score } = args;
 
-  if (!ticketItem) {
-    return "Tap to compare live ticket options";
-  }
+  if (!ticketItem) return "Compare live ticket providers";
 
-  if (ticketItem.status === "archived") {
-    return "Archived route";
-  }
+  if (ticketItem.status === "archived") return "Archived route";
 
-  if (ticketItem.status === "booked") {
-    if (provider && score != null) return `${ticketConfidenceLabel(score)} • ${provider}`;
-    if (provider) return `Booked provider: ${provider}`;
-    if (score != null) return ticketConfidenceLabel(score);
-    return "Booked route saved";
-  }
+  const confidence = ticketConfidenceLabel(score);
+  if (provider && score != null) return `${confidence} • ${provider}`;
+  if (provider) return provider;
+  if (score != null) return confidence;
 
-  if (ticketItem.status === "pending") {
-    if (provider && score != null) return `${ticketConfidenceLabel(score)} • ${provider}`;
-    if (provider) return `Pending with ${provider}`;
-    if (score != null) return ticketConfidenceLabel(score);
-    return "Pending ticket route";
-  }
-
-  if (provider && score != null) return `${ticketConfidenceLabel(score)} • ${provider}`;
-  if (provider) return `Saved from ${provider}`;
-  if (score != null) return ticketConfidenceLabel(score);
-
-  return "Saved route";
-}
-
-function urgencyLine(args: {
-  isPrimary: boolean;
-  ticketItem: SavedItem | null;
-  certaintyLine: string;
-}) {
-  const { isPrimary, ticketItem, certaintyLine } = args;
-
-  if (isPrimary && !ticketItem) return "Primary match not ticketed yet";
-  if (isPrimary && ticketItem?.status === "pending") return "Primary match still needs booking confirmation";
-  if (isPrimary && ticketItem?.status === "saved") return "Primary match has ticket routes saved";
-  if (isPrimary && ticketItem?.status === "booked") return "Primary match anchored";
-
-  return certaintyLine;
+  return "Ticket route saved";
 }
 
 function primaryActionLabel(ticketItem: SavedItem | null) {
   if (!ticketItem) return "Find tickets";
-  if (ticketItem.status === "booked") return "Open booked ticket";
-  if (ticketItem.status === "pending") return "Resume ticket route";
-  if (ticketItem.status === "saved") return "View saved ticket";
+  if (ticketItem.status === "booked") return "Open ticket";
+  if (ticketItem.status === "pending") return "Resume";
+  if (ticketItem.status === "saved") return "View ticket";
   return "Find tickets";
 }
 
@@ -226,6 +195,173 @@ function sortMatchIds(matchIds: string[], primaryMatchId: string | null) {
   });
 }
 
+function MatchRouteCard({
+  trip,
+  matchId,
+  fixture,
+  ticketItem,
+  isPrimary,
+  onOpenTicketsForMatch,
+  onOpenMatchActions,
+  onSetPrimaryMatch,
+  onRemoveMatch,
+  getTicketProviderFromItem,
+  getTicketScoreFromItem,
+  getLivePriceLine,
+}: {
+  trip: Trip;
+  matchId: string;
+  fixture: FixtureListRow | undefined;
+  ticketItem: SavedItem | null;
+  isPrimary: boolean;
+  onOpenTicketsForMatch: (matchId: string) => void;
+  onOpenMatchActions: (matchId: string) => void;
+  onSetPrimaryMatch: (matchId: string) => void;
+  onRemoveMatch: (matchId: string) => void;
+  getTicketProviderFromItem: (item: SavedItem | null) => string | null;
+  getTicketScoreFromItem: (item: SavedItem | null) => number | null;
+  getLivePriceLine: (item: SavedItem) => string | null;
+}) {
+  const ticketProviderRaw = getTicketProviderFromItem(ticketItem);
+  const ticketProvider = ticketProviderRaw ? providerLabel(ticketProviderRaw) : null;
+  const ticketScore = getTicketScoreFromItem(ticketItem);
+
+  const livePrice =
+    ticketItem && ticketItem.status === "booked" ? getLivePriceLine(ticketItem) : null;
+
+  const data = buildMatchCardData(trip, matchId, fixture);
+
+  const ticketState = ticketStateLine({
+    ticketItem,
+    livePrice,
+    provider: ticketProvider,
+  });
+
+  const ticketQuality = ticketQualityLine({
+    ticketItem,
+    provider: ticketProvider,
+    score: ticketScore,
+  });
+
+  const cta = primaryActionLabel(ticketItem);
+
+  return (
+    <View style={styles.matchRowWrap}>
+      <Pressable
+        onPress={() => onOpenTicketsForMatch(matchId)}
+        onLongPress={() => onOpenMatchActions(matchId)}
+        style={[styles.matchCard, isPrimary && styles.matchCardPrimary]}
+      >
+        <View style={styles.matchTopRow}>
+          <View style={styles.matchTopLeft}>
+            {isPrimary ? (
+              <View style={[styles.badge, styles.badgePrimary]}>
+                <Text style={styles.badgeText}>Primary trip match</Text>
+              </View>
+            ) : (
+              <View style={[styles.badge, styles.badgeSecondary]}>
+                <Text style={styles.badgeText}>Extra match</Text>
+              </View>
+            )}
+
+            {ticketItem ? <StatusBadge status={ticketItem.status} /> : null}
+          </View>
+
+          <FixtureCertaintyBadge state={data.certainty} />
+        </View>
+
+        <View style={[styles.teamsRow, isPrimary && styles.teamsRowPrimary]}>
+          <View style={styles.teamCol}>
+            <TeamCrest name={data.homeName} logo={data.homeLogo} large={isPrimary} />
+            <Text style={[styles.teamName, isPrimary && styles.teamNamePrimary]} numberOfLines={2}>
+              {data.homeName}
+            </Text>
+          </View>
+
+          <View style={styles.centerCol}>
+            <Text style={[styles.vsText, isPrimary && styles.vsTextPrimary]}>VS</Text>
+            <Text style={styles.kickoffLine} numberOfLines={2}>
+              {data.kickoff.line}
+            </Text>
+          </View>
+
+          <View style={styles.teamCol}>
+            <TeamCrest name={data.awayName} logo={data.awayLogo} large={isPrimary} />
+            <Text style={[styles.teamName, isPrimary && styles.teamNamePrimary]} numberOfLines={2}>
+              {data.awayName}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.matchInfoBlock}>
+          <Text style={styles.matchTitle} numberOfLines={1}>
+            {data.title}
+          </Text>
+
+          {data.metaTop ? (
+            <Text style={styles.matchMeta} numberOfLines={1}>
+              {data.metaTop}
+            </Text>
+          ) : null}
+
+          {data.metaBottom ? (
+            <Text style={styles.matchMeta} numberOfLines={1}>
+              {data.metaBottom}
+            </Text>
+          ) : null}
+
+          {data.logisticsLine ? (
+            <Text style={styles.logisticsMeta} numberOfLines={1}>
+              {data.logisticsLine}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={[styles.ticketPanel, !ticketItem && styles.ticketPanelEmpty]}>
+          <View style={styles.ticketPanelCopy}>
+            <Text style={styles.ticketState} numberOfLines={1}>
+              {ticketState}
+            </Text>
+            <Text
+              style={ticketItem ? styles.ticketQualityMeta : styles.ticketQualityMetaMuted}
+              numberOfLines={1}
+            >
+              {ticketQuality}
+            </Text>
+          </View>
+
+          <Text style={styles.ticketArrow}>›</Text>
+        </View>
+      </Pressable>
+
+      <View style={styles.actionBar}>
+        <Pressable
+          onPress={() => onOpenTicketsForMatch(matchId)}
+          style={[styles.primaryBtn, isPrimary && styles.primaryBtnFeatured]}
+        >
+          <Text style={styles.primaryBtnText}>{cta}</Text>
+        </Pressable>
+
+        {!isPrimary ? (
+          <Pressable onPress={() => onSetPrimaryMatch(matchId)} style={styles.secondaryBtn}>
+            <Text style={styles.secondaryBtnText}>Set primary</Text>
+          </Pressable>
+        ) : null}
+
+        <Pressable onPress={() => onOpenMatchActions(matchId)} style={styles.moreBtn}>
+          <Text style={styles.moreBtnText}>More</Text>
+        </Pressable>
+
+        {!isPrimary ? (
+          <Pressable onPress={() => onRemoveMatch(matchId)} style={styles.removeBtn}>
+            <Text style={styles.removeBtnText}>Remove</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export default function TripMatchesCard({
   trip,
   numericMatchIds,
@@ -245,25 +381,25 @@ export default function TripMatchesCard({
   const orderedMatchIds = sortMatchIds(numericMatchIds, primaryMatchId);
 
   return (
-    <GlassCard style={styles.card}>
+    <GlassCard style={styles.card} variant="brand" level="strong">
       <View style={styles.sectionTitleRow}>
         <View style={styles.sectionHeadingWrap}>
-          <Text style={styles.sectionEyebrow}>Trip structure</Text>
-          <Text style={styles.sectionTitle}>Matches</Text>
+          <Text style={styles.sectionEyebrow}>Match anchor</Text>
+          <Text style={styles.sectionTitle}>Tickets & matches</Text>
           <Text style={styles.sectionSub}>
-            The primary match should drive the trip. Everything else supports it.
+            Pick the match that anchors the trip, then compare ticket routes.
           </Text>
         </View>
 
         <Pressable onPress={onAddMatch} style={styles.inlineLinkBtn}>
-          <Text style={styles.inlineLinkText}>Add match ›</Text>
+          <Text style={styles.inlineLinkText}>Add match</Text>
         </Pressable>
       </View>
 
       {numericMatchIds.length === 0 ? (
         <EmptyState
           title="No matches added"
-          message="Add a match to unlock ticket-first planning and make this trip actually usable."
+          message="Add a match first. Tickets, hotels and travel should all build around the fixture."
         />
       ) : (
         <View style={styles.list}>
@@ -272,159 +408,22 @@ export default function TripMatchesCard({
             const ticketItem = ticketsByMatchId[String(matchId)] ?? null;
             const isPrimary = String(primaryMatchId ?? "") === String(matchId);
 
-            const ticketProviderRaw = getTicketProviderFromItem(ticketItem);
-            const ticketProvider = ticketProviderRaw ? providerLabel(ticketProviderRaw) : null;
-
-            const ticketScore = getTicketScoreFromItem(ticketItem);
-            const livePrice =
-              ticketItem && ticketItem.status === "booked"
-                ? getLivePriceLine(ticketItem)
-                : null;
-
-            const data = buildMatchCardData(trip, matchId, fixture);
-            const urgency = urgencyLine({
-              isPrimary,
-              ticketItem,
-              certaintyLine: data.kickoff.line,
-            });
-
-            const ticketState = ticketStateLine({
-              ticketItem,
-              livePrice,
-              provider: ticketProvider,
-            });
-
-            const ticketQuality = ticketQualityLine({
-              ticketItem,
-              provider: ticketProvider,
-              score: ticketScore,
-            });
-
             return (
-              <View key={matchId} style={styles.matchRowWrap}>
-                <Pressable
-                  onPress={() => onOpenTicketsForMatch(matchId)}
-                  onLongPress={() => onOpenMatchActions(matchId)}
-                  style={[styles.matchCard, isPrimary && styles.matchCardPrimary]}
-                >
-                  <View style={styles.matchTopRow}>
-                    <View style={styles.matchTopLeft}>
-                      {isPrimary ? (
-                        <View style={[styles.badge, styles.badgePrimary]}>
-                          <Text style={styles.badgeText}>Primary</Text>
-                        </View>
-                      ) : null}
-
-                      {ticketItem ? <StatusBadge status={ticketItem.status} /> : null}
-                    </View>
-
-                    <View style={styles.certaintyWrap}>
-                      <FixtureCertaintyBadge state={data.certainty} />
-                    </View>
-                  </View>
-
-                  <View style={styles.teamsRow}>
-                    <View style={styles.teamCol}>
-                      <TeamCrest name={data.homeName} logo={data.homeLogo} />
-                      <Text style={styles.teamName} numberOfLines={2}>
-                        {data.homeName}
-                      </Text>
-                    </View>
-
-                    <View style={styles.centerCol}>
-                      <Text
-                        style={[styles.matchUrgency, isPrimary && styles.matchUrgencyPrimary]}
-                        numberOfLines={2}
-                      >
-                        {urgency}
-                      </Text>
-                    </View>
-
-                    <View style={styles.teamCol}>
-                      <TeamCrest name={data.awayName} logo={data.awayLogo} />
-                      <Text style={styles.teamName} numberOfLines={2}>
-                        {data.awayName}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.matchInfoBlock}>
-                    <Text style={styles.matchTitle} numberOfLines={1}>
-                      {data.title}
-                    </Text>
-
-                    {data.metaTop ? (
-                      <Text style={styles.matchMeta} numberOfLines={1}>
-                        {data.metaTop}
-                      </Text>
-                    ) : null}
-
-                    {data.metaBottom ? (
-                      <Text style={styles.matchMeta} numberOfLines={1}>
-                        {data.metaBottom}
-                      </Text>
-                    ) : null}
-
-                    {data.logisticsLine ? (
-                      <Text style={styles.logisticsMeta} numberOfLines={1}>
-                        {data.logisticsLine}
-                      </Text>
-                    ) : null}
-                  </View>
-
-                  <View style={styles.ticketPanel}>
-                    <Text style={styles.ticketState} numberOfLines={1}>
-                      {ticketState}
-                    </Text>
-                    <Text
-                      style={
-                        ticketItem ? styles.ticketQualityMeta : styles.ticketQualityMetaMuted
-                      }
-                      numberOfLines={1}
-                    >
-                      {ticketQuality}
-                    </Text>
-                  </View>
-
-                  <View style={styles.tapHintRow}>
-                    <Text style={styles.tapHint}>Tap for ticket routes • hold for match actions</Text>
-                    <Text style={styles.chev}>›</Text>
-                  </View>
-                </Pressable>
-
-                <View style={styles.matchActionsRow}>
-                  <Pressable
-                    onPress={() => onOpenTicketsForMatch(matchId)}
-                    style={[
-                      styles.smallBtn,
-                      styles.smallBtnWide,
-                      isPrimary && styles.smallBtnPrimaryStrong,
-                    ]}
-                  >
-                    <Text style={styles.smallBtnText}>{primaryActionLabel(ticketItem)}</Text>
-                  </Pressable>
-
-                  {!isPrimary ? (
-                    <Pressable
-                      onPress={() => onSetPrimaryMatch(matchId)}
-                      style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnPrimary]}
-                    >
-                      <Text style={styles.smallBtnText}>Set primary</Text>
-                    </Pressable>
-                  ) : (
-                    <View style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnDisabled]}>
-                      <Text style={styles.smallBtnText}>Trip anchor</Text>
-                    </View>
-                  )}
-
-                  <Pressable
-                    onPress={() => onRemoveMatch(matchId)}
-                    style={[styles.smallBtn, styles.smallBtnWide, styles.smallBtnDanger]}
-                  >
-                    <Text style={styles.smallBtnText}>Remove</Text>
-                  </Pressable>
-                </View>
-              </View>
+              <MatchRouteCard
+                key={matchId}
+                trip={trip}
+                matchId={matchId}
+                fixture={fixture}
+                ticketItem={ticketItem}
+                isPrimary={isPrimary}
+                onOpenTicketsForMatch={onOpenTicketsForMatch}
+                onOpenMatchActions={onOpenMatchActions}
+                onSetPrimaryMatch={onSetPrimaryMatch}
+                onRemoveMatch={onRemoveMatch}
+                getTicketProviderFromItem={getTicketProviderFromItem}
+                getTicketScoreFromItem={getTicketScoreFromItem}
+                getLivePriceLine={getLivePriceLine}
+              />
             );
           })}
         </View>
@@ -438,10 +437,11 @@ export default function TripMatchesCard({
 const styles = StyleSheet.create({
   card: {
     padding: theme.spacing.lg,
+    borderRadius: 28,
   },
 
   list: {
-    gap: 14,
+    gap: 18,
   },
 
   sectionTitleRow: {
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    marginBottom: 10,
+    marginBottom: 14,
   },
 
   sectionHeadingWrap: {
@@ -457,69 +457,76 @@ const styles = StyleSheet.create({
   },
 
   sectionEyebrow: {
-    color: "#8EF2A5",
+    color: theme.colors.accentGoldSoft,
     fontWeight: "900",
     fontSize: 11,
-    letterSpacing: 0.7,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
-    marginBottom: 4,
+    marginBottom: 5,
   },
 
   sectionTitle: {
     color: theme.colors.text,
     fontWeight: "900",
-    fontSize: 22,
-    lineHeight: 26,
-    marginBottom: 4,
+    fontSize: 24,
+    lineHeight: 29,
+    marginBottom: 5,
+    letterSpacing: -0.35,
   },
 
   sectionSub: {
     color: theme.colors.textSecondary,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
+    fontWeight: "750",
+    fontSize: 13,
+    lineHeight: 18,
   },
 
   inlineLinkBtn: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    borderColor: "rgba(250,204,21,0.28)",
+    backgroundColor: "rgba(250,204,21,0.10)",
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     marginTop: 2,
   },
 
   inlineLinkText: {
-    color: theme.colors.textSecondary,
+    color: theme.colors.accentGoldSoft,
     fontWeight: "900",
     fontSize: 12,
   },
 
   mutedInline: {
-    marginTop: 10,
+    marginTop: 12,
     color: theme.colors.textSecondary,
     textAlign: "center",
     fontWeight: "800",
   },
 
   matchRowWrap: {
-    gap: 8,
+    gap: 10,
   },
 
   matchCard: {
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(245,247,246,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.035)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.26)" : "rgba(255,255,255,0.045)",
     padding: 14,
-    gap: 12,
+    gap: 14,
+    overflow: "hidden",
   },
 
   matchCardPrimary: {
-    borderColor: "rgba(0,255,136,0.30)",
-    backgroundColor: "rgba(0,255,136,0.06)",
+    borderColor: "rgba(34,197,94,0.42)",
+    backgroundColor: "rgba(34,197,94,0.095)",
+    shadowColor: "#22C55E",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 7,
   },
 
   matchTopRow: {
@@ -537,45 +544,99 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  certaintyWrap: {
-    alignItems: "flex-end",
-  },
-
   teamsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
 
+  teamsRowPrimary: {
+    paddingVertical: 4,
+  },
+
   teamCol: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
+    gap: 7,
   },
 
   centerCol: {
-    width: 104,
+    width: 88,
     alignItems: "center",
     justifyContent: "center",
+    gap: 5,
+  },
+
+  crestWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 17,
+    backgroundColor: "rgba(0,0,0,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(245,247,246,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  crestWrapLarge: {
+    width: 60,
+    height: 60,
+    borderRadius: 21,
+    borderColor: "rgba(250,204,21,0.20)",
+    backgroundColor: "rgba(0,0,0,0.40)",
+  },
+
+  crestImg: {
+    width: 30,
+    height: 30,
+  },
+
+  crestImgLarge: {
+    width: 40,
+    height: 40,
+  },
+
+  crestFallback: {
+    color: theme.colors.textSecondary,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  crestFallbackLarge: {
+    color: theme.colors.text,
+    fontSize: 15,
   },
 
   teamName: {
     color: theme.colors.text,
     fontWeight: "900",
     fontSize: 13,
-    textAlign: "center",
-  },
-
-  matchUrgency: {
-    color: theme.colors.text,
-    fontWeight: "900",
-    fontSize: 12,
     lineHeight: 16,
     textAlign: "center",
   },
 
-  matchUrgencyPrimary: {
-    color: theme.colors.primary,
+  teamNamePrimary: {
+    fontSize: 14,
+    lineHeight: 17,
+  },
+
+  vsText: {
+    color: theme.colors.accentGoldSoft,
+    fontWeight: "950",
+    fontSize: 13,
+    letterSpacing: 1.1,
+  },
+
+  vsTextPrimary: {
+    fontSize: 15,
+  },
+
+  kickoffLine: {
+    color: theme.colors.textSecondary,
+    fontWeight: "850",
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: "center",
   },
 
   matchInfoBlock: {
@@ -598,112 +659,134 @@ const styles = StyleSheet.create({
 
   logisticsMeta: {
     marginTop: 2,
-    color: theme.colors.textTertiary,
+    color: theme.colors.textMuted,
     fontWeight: "900",
     fontSize: 12,
     lineHeight: 16,
   },
 
   ticketPanel: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 4,
+    borderColor: "rgba(34,197,94,0.22)",
+    backgroundColor: "rgba(34,197,94,0.08)",
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  ticketPanelEmpty: {
+    borderColor: "rgba(250,204,21,0.24)",
+    backgroundColor: "rgba(250,204,21,0.085)",
+  },
+
+  ticketPanelCopy: {
+    flex: 1,
+    gap: 3,
   },
 
   ticketState: {
     color: theme.colors.text,
-    fontWeight: "800",
-    fontSize: 12,
-    lineHeight: 16,
+    fontWeight: "900",
+    fontSize: 13,
+    lineHeight: 17,
   },
 
   ticketQualityMeta: {
-    color: "rgba(160,195,255,1)",
-    fontWeight: "900",
+    color: theme.colors.accentGreenSoft,
+    fontWeight: "850",
     fontSize: 11,
   },
 
   ticketQualityMetaMuted: {
-    color: theme.colors.textSecondary,
-    fontWeight: "800",
+    color: theme.colors.accentGoldSoft,
+    fontWeight: "850",
     fontSize: 11,
   },
 
-  tapHintRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  tapHint: {
-    flex: 1,
-    color: theme.colors.textTertiary,
+  ticketArrow: {
+    color: theme.colors.text,
+    fontSize: 24,
     fontWeight: "800",
-    fontSize: 11,
+    marginTop: -2,
   },
 
-  matchActionsRow: {
+  actionBar: {
     flexDirection: "row",
     gap: 8,
+    alignItems: "center",
   },
 
-  crestWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.06)",
+  primaryBtn: {
+    flex: 1.25,
+    minHeight: 44,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: theme.colors.accentGold,
+    paddingHorizontal: 12,
   },
 
-  crestImg: {
-    width: 28,
-    height: 28,
+  primaryBtnFeatured: {
+    backgroundColor: theme.colors.accentGreen,
   },
 
-  crestFallback: {
+  primaryBtnText: {
+    color: "#07100A",
+    fontWeight: "950",
+    fontSize: 13,
+  },
+
+  secondaryBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.35)",
+    backgroundColor: "rgba(34,197,94,0.08)",
+    paddingHorizontal: 10,
+  },
+
+  secondaryBtnText: {
+    color: theme.colors.accentGreenSoft,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  moreBtn: {
+    minHeight: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(245,247,246,0.12)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    paddingHorizontal: 13,
+  },
+
+  moreBtnText: {
     color: theme.colors.textSecondary,
     fontWeight: "900",
+    fontSize: 12,
   },
 
-  smallBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
-
-  smallBtnWide: {
-    flex: 1,
+  removeBtn: {
+    minHeight: 44,
+    borderRadius: 14,
     alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(224,82,82,0.30)",
+    backgroundColor: "rgba(224,82,82,0.08)",
+    paddingHorizontal: 12,
   },
 
-  smallBtnPrimary: {
-    borderColor: "rgba(0,255,136,0.35)",
-  },
-
-  smallBtnPrimaryStrong: {
-    borderColor: "rgba(0,255,136,0.48)",
-    backgroundColor: "rgba(0,255,136,0.08)",
-  },
-
-  smallBtnDisabled: {
-    opacity: 0.65,
-  },
-
-  smallBtnDanger: {
-    borderColor: "rgba(255,80,80,0.35)",
-  },
-
-  smallBtnText: {
-    color: theme.colors.text,
+  removeBtnText: {
+    color: "#FF9A9A",
     fontWeight: "900",
     fontSize: 12,
   },
@@ -712,7 +795,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
 
   badgeText: {
@@ -722,33 +805,32 @@ const styles = StyleSheet.create({
   },
 
   badgePrimary: {
-    borderColor: "rgba(0,255,136,0.45)",
-    backgroundColor: "rgba(0,255,136,0.10)",
+    borderColor: "rgba(34,197,94,0.45)",
+    backgroundColor: "rgba(34,197,94,0.13)",
+  },
+
+  badgeSecondary: {
+    borderColor: "rgba(245,247,246,0.14)",
+    backgroundColor: "rgba(255,255,255,0.055)",
   },
 
   badgePending: {
-    borderColor: "rgba(255,200,80,0.40)",
-    backgroundColor: "rgba(255,200,80,0.10)",
+    borderColor: "rgba(250,204,21,0.40)",
+    backgroundColor: "rgba(250,204,21,0.11)",
   },
 
   badgeSaved: {
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.08)",
+    borderColor: "rgba(34,197,94,0.35)",
+    backgroundColor: "rgba(34,197,94,0.09)",
   },
 
   badgeBooked: {
-    borderColor: "rgba(120,170,255,0.45)",
-    backgroundColor: "rgba(120,170,255,0.10)",
+    borderColor: "rgba(134,239,172,0.44)",
+    backgroundColor: "rgba(34,197,94,0.14)",
   },
 
   badgeArchived: {
     borderColor: "rgba(255,255,255,0.18)",
     backgroundColor: "rgba(255,255,255,0.06)",
-  },
-
-  chev: {
-    color: theme.colors.textSecondary,
-    fontSize: 20,
-    marginTop: -1,
   },
 });
