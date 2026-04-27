@@ -293,9 +293,8 @@ function normalizeReturnedTicketOptions(
 
   for (const option of valid) {
     const key = `${clean(option.provider).toLowerCase()}|${clean(option.url)}`;
-    if (!key) continue;
-
     const existing = deduped.get(key);
+
     if (!existing) {
       deduped.set(key, option);
       continue;
@@ -862,24 +861,6 @@ export default function useTripDetailController({
 
     if (totalOptionCount <= 0) {
       Alert.alert("Tickets not found", "No usable ticket options were returned for this match.");
-      return;
-    }
-
-    if (totalOptionCount === 1) {
-      const onlyOption = strongOptions[0] ?? weakOptions[0];
-      if (!onlyOption) {
-        Alert.alert("Tickets not found", "No usable ticket options were returned for this match.");
-        return;
-      }
-
-      await openTicketOptionForMatch({
-        ...context,
-        option: onlyOption,
-        checkedProviders: Array.isArray(resolved?.checkedProviders)
-          ? resolved.checkedProviders
-          : undefined,
-        optionCount: 1,
-      });
       return;
     }
 
