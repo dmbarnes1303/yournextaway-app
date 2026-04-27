@@ -14,7 +14,7 @@ function normalize(v: unknown): string {
   return clean(v).toLowerCase();
 }
 
-function buildHeaders() {
+function buildHeaders(): Record<string, string> {
   const username = clean(env.se365HttpUsername);
   const password = clean(env.se365ApiPassword);
 
@@ -30,14 +30,18 @@ function buildHeaders() {
   return headers;
 }
 
-function appendApiKey(url: URL) {
+function appendApiKey(url: URL): URL {
   url.searchParams.set("apiKey", clean(env.se365ApiKey));
   return url;
 }
 
-async function fetchJson(url: URL) {
+async function fetchJson(url: URL): Promise<any | null> {
   try {
-    const res = await fetch(url.toString(), { method: "GET", headers: buildHeaders() });
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: buildHeaders(),
+    });
+
     const text = await res.text();
 
     console.log("[SE365] fetch", {
@@ -85,6 +89,8 @@ function extractMinPrice(event: any): string | null {
   const price =
     event?.minTicketPrice?.price ??
     event?.minimumPrice?.price ??
+    event?.minPrice?.price ??
+    event?.price?.amount ??
     event?.price ??
     event?.minPrice ??
     null;
@@ -92,6 +98,8 @@ function extractMinPrice(event: any): string | null {
   const currency =
     clean(event?.minTicketPrice?.currency) ||
     clean(event?.minimumPrice?.currency) ||
+    clean(event?.minPrice?.currency) ||
+    clean(event?.price?.currency) ||
     "GBP";
 
   const n = Number(price);
@@ -107,7 +115,7 @@ function formatDateDdMmYyyy(date: Date): string {
   ).padStart(2, "0")}/${date.getFullYear()}`;
 }
 
-function getDateRange(kickoffIso: string) {
+function getDateRange(kickoffIso: string): { from: string; to: string } {
   const d = new Date(kickoffIso);
 
   const from = new Date(d);
@@ -134,6 +142,14 @@ function teamName(ev: any, side: "home" | "away"): string {
   return clean(ev?.awayTeam?.name || ev?.away?.name || ev?.awayName);
 }
 
+function participantNames(ev: any): string[] {
+  if (!Array.isArray(ev?.participants)) return [];
+
+  return ev.participants
+    .map((participant: any) => clean(participant?.name))
+    .filter(Boolean);
+}
+
 function matchEvent(ev: any, home: string, away: string): boolean {
   const targetHome = normalize(home);
   const targetAway = normalize(away);
@@ -141,39 +157,53 @@ function matchEvent(ev: any, home: string, away: string): boolean {
   const name = normalize(eventName(ev));
   const homeTeam = normalize(teamName(ev, "home"));
   const awayTeam = normalize(teamName(ev, "away"));
+  const participants = participantNames(ev).map(normalize);
 
   const directTeams =
-    homeTeam.includes(targetHome) &&
-    awayTeam.includes(targetAway);
+    homeTeam.includes(targetHome) && awayTeam.includes(targetAway);
 
   const reversedTeams =
-    homeTeam.includes(targetAway) &&
-    awayTeam.includes(targetHome);
+    homeTeam.includes(targetAway) && awayTeam.includes(targetHome);
 
-  const nameMatch =
-    name.includes(targetHome) &&
-    name.includes(targetAway);
+  const nameMatch = name.includes(targetHome) && name.includes(targetAway);
 
-  return directTeams || reversedTeams || nameMatch;
+  const participantMatch =
+    participants.some((participant) => participant.includes(targetHome)) &&
+    participants.some((participant) => participant.includes(targetAway));
+
+  return directTeams || reversedTeams || nameMatch || participantMatch;
 }
 
 function affiliateUrlFromEvent(event: any, eventId: string): string {
-  const apiUrl = clean(event?.eventUrl);
+  const affiliateId = clean(env.se365AffiliateId);
+
+  const apiUrl =
+    clean(event?.eventUrl) ||
+    clean(event?.url) ||
+    clean(event?.link) ||
+    clean(event?.affiliateUrl);
 
   if (apiUrl) {
     try {
       const parsed = new URL(apiUrl);
-      parsed.searchParams.set("a_aid", clean(env.se365AffiliateId));
+      if (affiliateId) parsed.searchParams.set("a_aid", affiliateId);
       return parsed.toString();
     } catch {
-      // fall through
+      // Fall through to public URL.
     }
   }
 
-  return `${PUBLIC_BASE}/event/${eventId}?a_aid=${clean(env.se365AffiliateId)}`;
+  const fallbackUrl = new URL(`${PUBLIC_BASE}/event/${eventId}`);
+  if (affiliateId) fallbackUrl.searchParams.set("a_aid", affiliateId);
+
+  return fallbackUrl.toString();
 }
 
-function candidateFromEvent(event: any, home: string, away: string): TicketCandidate | null {
+function candidateFromEvent(
+  event: any,
+  home: string,
+  away: string
+): TicketCandidate | null {
   const eventId = clean(event?.id || event?.eventId);
   if (!eventId) return null;
 
@@ -197,7 +227,13 @@ export async function resolveSe365Candidate(
   input: TicketResolveInput
 ): Promise<TicketCandidate | null> {
   if (!hasSe365Config()) {
-    console.log("[SE365] skipped: missing config");
+    console.log("[SE365] skipped: missing config", {
+      hasBaseUrl: Boolean(clean(env.se365BaseUrl)),
+      hasApiKey: Boolean(clean(env.se365ApiKey)),
+      hasUsername: Boolean(clean(env.se365HttpUsername)),
+      hasPassword: Boolean(clean(env.se365ApiPassword)),
+      hasAffiliateId: Boolean(clean(env.se365AffiliateId)),
+    });
     return null;
   }
 
@@ -221,6 +257,7 @@ export async function resolveSe365Candidate(
     hasApiKey: Boolean(clean(env.se365ApiKey)),
     hasUsername: Boolean(clean(env.se365HttpUsername)),
     hasPassword: Boolean(clean(env.se365ApiPassword)),
+    hasAffiliateId: Boolean(clean(env.se365AffiliateId)),
   });
 
   if (fixtureId) {
@@ -232,6 +269,7 @@ export async function resolveSe365Candidate(
 
     if (directEvent?.id && matchEvent(directEvent, home, away)) {
       const candidate = candidateFromEvent(directEvent, home, away);
+
       if (candidate) {
         console.log("[SE365] direct fixture match", {
           eventId: directEvent.id,
@@ -245,6 +283,7 @@ export async function resolveSe365Candidate(
       fixtureId,
       returnedId: directEvent?.id ?? null,
       returnedName: eventName(directEvent),
+      returnedParticipants: participantNames(directEvent),
     });
   }
 
@@ -267,6 +306,7 @@ export async function resolveSe365Candidate(
       name: eventName(event),
       home: teamName(event, "home"),
       away: teamName(event, "away"),
+      participants: participantNames(event),
       date: event?.dateOfEvent,
       time: event?.timeOfEvent,
     })),
@@ -287,6 +327,7 @@ export async function resolveSe365Candidate(
     title: candidate?.title ?? null,
     url: candidate?.url ?? null,
     priceText: candidate?.priceText ?? null,
+    participants: participantNames(match),
   });
 
   return candidate;
