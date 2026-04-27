@@ -54,7 +54,7 @@ export const env = {
   se365BaseUrl: opt("SE365_BASE_URL", "https://api-v2.sandbox365.com"),
   se365ApiKey: opt("SE365_API_KEY", ""),
   se365ApiPassword: opt("SE365_API_PASSWORD", ""),
-  se365HttpUsername: opt("SE365_HTTP_USERNAME", ""),
+  se365HttpUsername: opt("SE365_HTTP_USERNAME", "yournextaway"),
   se365HttpSource: opt("SE365_HTTP_SOURCE", ""),
   se365AffiliateId: opt("SE365_AFFILIATE_ID", "69834e80ec9d3"),
 
@@ -105,7 +105,8 @@ export function hasSe365Config(): boolean {
     env.se365BaseUrl &&
       env.se365ApiKey &&
       env.se365ApiPassword &&
-      (env.se365HttpUsername || env.se365HttpSource)
+      env.se365HttpUsername &&
+      env.se365AffiliateId
   );
 }
 
