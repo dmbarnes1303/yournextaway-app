@@ -35,7 +35,7 @@ function appendApiKey(url: URL): URL {
   return url;
 }
 
-async function fetchJson(url: URL): Promise<any | null> {
+async function fetchJson(url: URL): Promise<{ ok: boolean; status: number; json: any | null }> {
   try {
     const res = await fetch(url.toString(), {
       method: "GET",
@@ -51,19 +51,22 @@ async function fetchJson(url: URL): Promise<any | null> {
       bodyPreview: text.slice(0, 250),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return { ok: false, status: res.status, json: null };
+    }
 
     try {
-      return JSON.parse(text);
+      return { ok: true, status: res.status, json: JSON.parse(text) };
     } catch {
-      return null;
+      return { ok: true, status: res.status, json: null };
     }
   } catch (err) {
     console.log("[SE365] fetch error", {
       url: url.toString(),
       error: err instanceof Error ? err.message : String(err),
     });
-    return null;
+
+    return { ok: false, status: 0, json: null };
   }
 }
 
@@ -189,7 +192,7 @@ function affiliateUrlFromEvent(event: any, eventId: string): string {
       if (affiliateId) parsed.searchParams.set("a_aid", affiliateId);
       return parsed.toString();
     } catch {
-      // Fall through to public URL.
+      // fall through
     }
   }
 
@@ -197,6 +200,25 @@ function affiliateUrlFromEvent(event: any, eventId: string): string {
   if (affiliateId) fallbackUrl.searchParams.set("a_aid", affiliateId);
 
   return fallbackUrl.toString();
+}
+
+function buildPublicSearchUrl(home: string, away: string, kickoffIso: string): string {
+  const affiliateId = clean(env.se365AffiliateId);
+  const kickoffDate = clean(kickoffIso).slice(0, 10);
+  const query = `${home} ${away}`;
+
+  const url = new URL(`${PUBLIC_BASE}/search`);
+  url.searchParams.set("q", query);
+
+  if (kickoffDate) {
+    url.searchParams.set("date", kickoffDate);
+  }
+
+  if (affiliateId) {
+    url.searchParams.set("a_aid", affiliateId);
+  }
+
+  return url.toString();
 }
 
 function candidateFromEvent(
@@ -223,6 +245,148 @@ function candidateFromEvent(
   };
 }
 
+function fallbackSearchCandidate(
+  input: TicketResolveInput,
+  home: string,
+  away: string,
+  kickoffIso: string
+): TicketCandidate {
+  return {
+    provider: "sportsevents365",
+    exact: false,
+    score: 45,
+    rawScore: 45,
+    url: buildPublicSearchUrl(home, away, kickoffIso),
+    title: `SportsEvents365: ${home} vs ${away}`,
+    priceText: "View live price",
+    reason: "search_fallback",
+    urlQuality: "search",
+  };
+}
+
+async function tryDirectEventById(
+  fixtureId: string,
+  home: string,
+  away: string
+): Promise<TicketCandidate | null> {
+  const directUrl = appendApiKey(new URL(`${API_BASE}/events/${fixtureId}`));
+  directUrl.searchParams.set("perPage", "25");
+
+  const directResult = await fetchJson(directUrl);
+  const directEvent = unwrapData(directResult.json);
+
+  if (directEvent?.id && matchEvent(directEvent, home, away)) {
+    const candidate = candidateFromEvent(directEvent, home, away);
+
+    if (candidate) {
+      console.log("[SE365] direct fixture match", {
+        eventId: directEvent.id,
+        url: candidate.url,
+      });
+
+      return candidate;
+    }
+  }
+
+  console.log("[SE365] direct fixture id did not match SE365 event", {
+    fixtureId,
+    status: directResult.status,
+    returnedId: directEvent?.id ?? null,
+    returnedName: eventName(directEvent),
+    returnedParticipants: participantNames(directEvent),
+  });
+
+  return null;
+}
+
+async function tryKnownSearchRoutes(
+  home: string,
+  away: string,
+  kickoffIso: string
+): Promise<TicketCandidate | null> {
+  const { from, to } = getDateRange(kickoffIso);
+
+  const routes = [
+    {
+      label: "events_list",
+      url: new URL(`${API_BASE}/events`),
+      params: {
+        perPage: "100",
+        dateFrom: from,
+        dateTo: to,
+      },
+    },
+    {
+      label: "events_search",
+      url: new URL(`${API_BASE}/events/search`),
+      params: {
+        perPage: "100",
+        dateFrom: from,
+        dateTo: to,
+        q: `${home} ${away}`,
+      },
+    },
+    {
+      label: "search_events",
+      url: new URL(`${API_BASE}/search/events`),
+      params: {
+        perPage: "100",
+        dateFrom: from,
+        dateTo: to,
+        q: `${home} ${away}`,
+      },
+    },
+  ];
+
+  for (const route of routes) {
+    const url = appendApiKey(route.url);
+
+    for (const [key, value] of Object.entries(route.params)) {
+      url.searchParams.set(key, value);
+    }
+
+    const result = await fetchJson(url);
+    const events = extractEvents(result.json);
+
+    console.log("[SE365] search route result", {
+      route: route.label,
+      status: result.status,
+      count: events.length,
+      from,
+      to,
+      sample: events.slice(0, 5).map((event) => ({
+        id: event?.id,
+        name: eventName(event),
+        home: teamName(event, "home"),
+        away: teamName(event, "away"),
+        participants: participantNames(event),
+        date: event?.dateOfEvent,
+        time: event?.timeOfEvent,
+      })),
+    });
+
+    const match = events.find((event) => matchEvent(event, home, away));
+
+    if (!match) continue;
+
+    const candidate = candidateFromEvent(match, home, away);
+
+    if (candidate) {
+      console.log("[SE365] API search match", {
+        route: route.label,
+        eventId: match?.id ?? null,
+        title: candidate.title,
+        url: candidate.url,
+        priceText: candidate.priceText,
+      });
+
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 export async function resolveSe365Candidate(
   input: TicketResolveInput
 ): Promise<TicketCandidate | null> {
@@ -234,6 +398,7 @@ export async function resolveSe365Candidate(
       hasPassword: Boolean(clean(env.se365ApiPassword)),
       hasAffiliateId: Boolean(clean(env.se365AffiliateId)),
     });
+
     return null;
   }
 
@@ -261,74 +426,19 @@ export async function resolveSe365Candidate(
   });
 
   if (fixtureId) {
-    const directUrl = appendApiKey(new URL(`${API_BASE}/events/${fixtureId}`));
-    directUrl.searchParams.set("perPage", "25");
-
-    const directJson = await fetchJson(directUrl);
-    const directEvent = unwrapData(directJson);
-
-    if (directEvent?.id && matchEvent(directEvent, home, away)) {
-      const candidate = candidateFromEvent(directEvent, home, away);
-
-      if (candidate) {
-        console.log("[SE365] direct fixture match", {
-          eventId: directEvent.id,
-          url: candidate.url,
-        });
-        return candidate;
-      }
-    }
-
-    console.log("[SE365] direct fixture id did not match SE365 event", {
-      fixtureId,
-      returnedId: directEvent?.id ?? null,
-      returnedName: eventName(directEvent),
-      returnedParticipants: participantNames(directEvent),
-    });
+    const directCandidate = await tryDirectEventById(fixtureId, home, away);
+    if (directCandidate) return directCandidate;
   }
 
-  const { from, to } = getDateRange(kickoff);
+  const searchCandidate = await tryKnownSearchRoutes(home, away, kickoff);
+  if (searchCandidate) return searchCandidate;
 
-  const eventsUrl = appendApiKey(new URL(`${API_BASE}/events`));
-  eventsUrl.searchParams.set("perPage", "100");
-  eventsUrl.searchParams.set("dateFrom", from);
-  eventsUrl.searchParams.set("dateTo", to);
-
-  const eventsJson = await fetchJson(eventsUrl);
-  const events = extractEvents(eventsJson);
-
-  console.log("[SE365] events result", {
-    count: events.length,
-    from,
-    to,
-    sample: events.slice(0, 5).map((event) => ({
-      id: event?.id,
-      name: eventName(event),
-      home: teamName(event, "home"),
-      away: teamName(event, "away"),
-      participants: participantNames(event),
-      date: event?.dateOfEvent,
-      time: event?.timeOfEvent,
-    })),
+  console.log("[SE365] no exact API event found; returning public search fallback", {
+    home,
+    away,
+    kickoff,
+    url: buildPublicSearchUrl(home, away, kickoff),
   });
 
-  const match = events.find((event) => matchEvent(event, home, away));
-
-  if (!match) {
-    console.log("[SE365] no matching event found", { home, away, from, to });
-    return null;
-  }
-
-  const candidate = candidateFromEvent(match, home, away);
-
-  console.log("[SE365] result", {
-    found: Boolean(candidate),
-    eventId: match?.id ?? null,
-    title: candidate?.title ?? null,
-    url: candidate?.url ?? null,
-    priceText: candidate?.priceText ?? null,
-    participants: participantNames(match),
-  });
-
-  return candidate;
+  return fallbackSearchCandidate(input, home, away, kickoff);
 }
