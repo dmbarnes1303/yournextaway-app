@@ -6,7 +6,7 @@ import type { TicketCandidate, TicketResolveInput } from "./types.js";
 const API_BASE = env.se365BaseUrl;
 const PUBLIC_BASE = "https://www.sportsevents365.com";
 
-// From Eugene’s screenshot: Football/Soccer eventType.id = 1000.
+// From SE365 docs: Football/Soccer eventType.id = 1000.
 const FOOTBALL_EVENT_TYPE_ID = "1000";
 
 type FetchResult = {
@@ -221,7 +221,14 @@ function namesLooselyMatch(a: string, b: string): boolean {
 
   if (!aa || !bb || !ca || !cb) return false;
 
-  return aa === bb || aa.includes(bb) || bb.includes(aa) || ca === cb || ca.includes(cb) || cb.includes(ca);
+  return (
+    aa === bb ||
+    aa.includes(bb) ||
+    bb.includes(aa) ||
+    ca === cb ||
+    ca.includes(cb) ||
+    cb.includes(ca)
+  );
 }
 
 function matchEvent(ev: any, home: string, away: string): boolean {
@@ -274,25 +281,63 @@ function pickBestParticipant(participants: any[], team: string): ParticipantMatc
   };
 }
 
+function isBlockedPartnerUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+
+    return (
+      host === "tickets-partners.com" ||
+      host === "www.tickets-partners.com"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isUsablePublicEventUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    return (
+      (host === "sportsevents365.com" || host === "www.sportsevents365.com") &&
+      path.startsWith("/event/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function affiliateUrlFromEvent(event: any, id: string): string {
   const affiliateId = clean(env.se365AffiliateId);
 
-  const apiUrl =
-    clean(event?.eventUrl) ||
-    clean(event?.url) ||
-    clean(event?.link) ||
-    clean(event?.affiliateUrl) ||
-    clean(event?.pageUrl) ||
-    clean(event?.websiteUrl);
+  const possibleApiUrls = [
+    clean(event?.eventUrl),
+    clean(event?.pageUrl),
+    clean(event?.websiteUrl),
+    clean(event?.publicUrl),
+    clean(event?.url),
+    clean(event?.link),
+    clean(event?.affiliateUrl),
+  ].filter(Boolean);
 
-  if (apiUrl) {
-    try {
-      const parsed = new URL(apiUrl);
-      if (affiliateId) parsed.searchParams.set("a_aid", affiliateId);
-      return parsed.toString();
-    } catch {
-      // fall through
+  for (const rawUrl of possibleApiUrls) {
+    if (isBlockedPartnerUrl(rawUrl)) {
+      console.log("[SE365] ignored blocked partner URL", { rawUrl });
+      continue;
     }
+
+    if (!isUsablePublicEventUrl(rawUrl)) {
+      console.log("[SE365] ignored non-public event URL", { rawUrl });
+      continue;
+    }
+
+    const parsed = new URL(rawUrl);
+    if (affiliateId) parsed.searchParams.set("a_aid", affiliateId);
+
+    return parsed.toString();
   }
 
   const fallbackUrl = new URL(`${PUBLIC_BASE}/event/${id}`);
@@ -317,7 +362,12 @@ function priceFromTicket(ticket: any): number | null {
 }
 
 function currencyFromTicket(ticket: any): string {
-  return clean(ticket?.currency) || clean(ticket?.priceCurrency) || clean(ticket?.ticket?.currency) || "GBP";
+  return (
+    clean(ticket?.currency) ||
+    clean(ticket?.priceCurrency) ||
+    clean(ticket?.ticket?.currency) ||
+    "GBP"
+  );
 }
 
 function formatPrice(amount: number, currency: string): string {
