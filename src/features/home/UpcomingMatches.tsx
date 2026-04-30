@@ -1,3 +1,5 @@
+// src/features/home/UpcomingMatches.tsx
+
 import React, { useMemo } from "react";
 import {
   View,
@@ -8,12 +10,15 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  ImageSourcePropType,
 } from "react-native";
 
 import EmptyState from "@/src/components/EmptyState";
 import { theme } from "@/src/constants/theme";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import type { LeagueOption } from "@/src/constants/football";
+
+const YNA_LOGO = require("../../../assets/images/YNAlogo.png") as ImageSourcePropType;
 
 function initials(name: string) {
   const clean = String(name ?? "").trim();
@@ -57,14 +62,17 @@ function hasRivalryBoost(home: string, away: string) {
 }
 
 function leagueBaseScore(leagueId?: number | null) {
-  if (leagueId === 39) return 130;
-  if (leagueId === 140) return 116;
-  if (leagueId === 135) return 112;
-  if (leagueId === 78) return 104;
-  if (leagueId === 61) return 98;
-  if (leagueId === 88) return 92;
-  if (leagueId === 94) return 90;
-  return 68;
+  if (leagueId === 140) return 124;
+  if (leagueId === 135) return 120;
+  if (leagueId === 78) return 116;
+  if (leagueId === 2) return 118;
+  if (leagueId === 61) return 108;
+  if (leagueId === 3) return 104;
+  if (leagueId === 88) return 102;
+  if (leagueId === 94) return 100;
+  if (leagueId === 848) return 94;
+  if (leagueId === 39) return 96;
+  return 72;
 }
 
 function kickoffTimingScore(dt: Date) {
@@ -89,91 +97,26 @@ function kickoffTimingScore(dt: Date) {
 }
 
 const MARQUEE_TEAM_TERMS = [
-  "arsenal",
-  "aston villa",
-  "atletico",
-  "atlético",
-  "ajax",
-  "bayern",
-  "benfica",
-  "borussia dortmund",
-  "barcelona",
-  "celtic",
-  "chelsea",
-  "dortmund",
-  "fenerbahce",
-  "fenerbahçe",
-  "galatasaray",
-  "inter",
-  "juventus",
-  "lazio",
-  "liverpool",
-  "manchester city",
-  "manchester united",
-  "milan",
-  "napoli",
-  "newcastle",
-  "olympiacos",
-  "porto",
-  "psg",
-  "paris saint-germain",
-  "real madrid",
-  "roma",
-  "rangers",
-  "sl benfica",
-  "sporting",
-  "tottenham",
-  "tottenham hotspur",
-  "west ham",
+  "arsenal", "aston villa", "atletico", "atlético", "ajax", "bayern", "benfica",
+  "borussia dortmund", "barcelona", "celtic", "chelsea", "dortmund", "fenerbahce",
+  "fenerbahçe", "galatasaray", "inter", "juventus", "lazio", "liverpool",
+  "manchester city", "manchester united", "milan", "napoli", "newcastle",
+  "olympiacos", "porto", "psg", "paris saint-germain", "real madrid", "roma",
+  "rangers", "sl benfica", "sporting", "tottenham", "tottenham hotspur", "west ham",
 ] as const;
 
 const DESTINATION_CITY_TERMS = [
-  "amsterdam",
-  "barcelona",
-  "berlin",
-  "bilbao",
-  "dortmund",
-  "florence",
-  "glasgow",
-  "istanbul",
-  "lisbon",
-  "liverpool",
-  "london",
-  "madrid",
-  "manchester",
-  "milan",
-  "munich",
-  "naples",
-  "napoli",
-  "porto",
-  "prague",
-  "rome",
-  "san sebastian",
-  "seville",
-  "turin",
-  "valencia",
-  "vienna",
+  "amsterdam", "barcelona", "berlin", "bilbao", "dortmund", "florence", "glasgow",
+  "istanbul", "lisbon", "liverpool", "london", "madrid", "manchester", "milan",
+  "munich", "naples", "napoli", "porto", "prague", "rome", "san sebastian",
+  "seville", "turin", "valencia", "vienna",
 ] as const;
 
 const ICONIC_VENUE_TERMS = [
-  "allianz arena",
-  "anfield",
-  "bernabeu",
-  "camp nou",
-  "celtic park",
-  "emirates",
-  "estadio da luz",
-  "ibrox",
-  "johan cruijff arena",
-  "mestalla",
-  "old trafford",
-  "olympico",
-  "san siro",
-  "signal iduna park",
-  "stamford bridge",
-  "tottenham hotspur stadium",
-  "wanda metropolitano",
-  "wembley",
+  "allianz arena", "anfield", "bernabeu", "camp nou", "celtic park", "emirates",
+  "estadio da luz", "ibrox", "johan cruijff arena", "mestalla", "old trafford",
+  "olympico", "san siro", "signal iduna park", "stamford bridge",
+  "tottenham hotspur stadium", "wanda metropolitano", "wembley",
 ] as const;
 
 type ConfidenceTier = "top" | "strong" | "good";
@@ -193,16 +136,14 @@ function scoreFixture(row: FixtureListRow): number {
   s += leagueBaseScore(leagueId);
 
   if (venue) s += 10;
-  if (city) s += 8;
+  if (city) s += 10;
   if (includesAny(teamsText, MARQUEE_TEAM_TERMS)) s += 18;
-  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 16;
-  if (includesAny(locationText, ICONIC_VENUE_TERMS)) s += 14;
-  if (hasRivalryBoost(home, away)) s += 26;
+  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 22;
+  if (includesAny(locationText, ICONIC_VENUE_TERMS)) s += 16;
+  if (hasRivalryBoost(home, away)) s += 28;
 
   const dt = row?.fixture?.date ? new Date(row.fixture.date) : null;
-  if (dt && !Number.isNaN(dt.getTime())) {
-    s += kickoffTimingScore(dt);
-  }
+  if (dt && !Number.isNaN(dt.getTime())) s += kickoffTimingScore(dt);
 
   if (home && away) {
     const longNames = (home.length >= 8 ? 1 : 0) + (away.length >= 8 ? 1 : 0);
@@ -220,12 +161,8 @@ function getConfidenceTier(row: FixtureListRow): ConfidenceTier {
 }
 
 function getConfidenceCopy(tier: ConfidenceTier) {
-  if (tier === "top") {
-    return { label: "Top Pick" };
-  }
-  if (tier === "strong") {
-    return { label: "Strong Pick" };
-  }
+  if (tier === "top") return { label: "Top Pick" };
+  if (tier === "strong") return { label: "Strong Pick" };
   return { label: "Good Option" };
 }
 
@@ -247,10 +184,12 @@ function CrestSquare({ row }: { row: FixtureListRow }) {
 function LeagueStrip({
   leagues,
   activeLeagueId,
+  allCompetitionsLeagueId,
   onSelect,
 }: {
   leagues: LeagueOption[];
   activeLeagueId: number;
+  allCompetitionsLeagueId: number;
   onSelect: (league: LeagueOption) => void;
 }) {
   return (
@@ -261,15 +200,18 @@ function LeagueStrip({
     >
       {leagues.map((league) => {
         const active = league.leagueId === activeLeagueId;
-        const isLigue1 = String(league.name ?? "").toLowerCase().includes("ligue 1");
+        const isAll = league.leagueId === allCompetitionsLeagueId;
+        const label = String(league.label ?? "").toLowerCase();
+        const isLigue1 = label.includes("ligue 1");
 
         return (
           <Pressable
-            key={league.leagueId}
+            key={`${league.leagueId}-${league.slug}`}
             onPress={() => onSelect(league)}
             style={({ pressed }) => [
               styles.leagueStripItem,
               active && styles.leagueStripItemActive,
+              isAll && styles.leagueStripItemBrand,
               pressed && styles.pressedPill,
             ]}
             android_ripple={{ color: "rgba(255,255,255,0.08)" }}
@@ -279,14 +221,20 @@ function LeagueStrip({
                 styles.leagueLogoDisc,
                 active && styles.leagueLogoDiscActive,
                 isLigue1 && styles.leagueLogoDiscLight,
+                isAll && styles.brandLogoDisc,
               ]}
             >
-              <Image
-                source={{ uri: league.logo }}
-                style={styles.leagueStripLogo}
-                resizeMode="contain"
-              />
+              {isAll ? (
+                <Image source={YNA_LOGO} style={styles.brandLogo} resizeMode="contain" />
+              ) : (
+                <Image
+                  source={{ uri: league.logo }}
+                  style={styles.leagueStripLogo}
+                  resizeMode="contain"
+                />
+              )}
             </View>
+
             {active ? <View style={styles.leagueActiveGlow} pointerEvents="none" /> : null}
           </Pressable>
         );
@@ -301,6 +249,7 @@ type Props = {
   setLeague: (league: LeagueOption) => void;
   upcomingWindow: { from: string; to: string };
   fxLoading: boolean;
+  fxRefreshing?: boolean;
   fxError: string | null;
   featured: FixtureListRow | null;
   list: FixtureListRow[];
@@ -315,6 +264,7 @@ type Props = {
   }) => void;
   goFixturesHub: () => void;
   goMatch: (fixtureId: string) => void;
+  allCompetitionsLeagueId?: number;
 };
 
 export default function UpcomingMatches(props: Props) {
@@ -324,14 +274,19 @@ export default function UpcomingMatches(props: Props) {
     setLeague,
     upcomingWindow,
     fxLoading,
+    fxRefreshing = false,
     fxError,
     featured,
     list,
     featuredCityImage,
     fixtureLine,
     goFixtures,
+    goFixturesHub,
     goMatch,
+    allCompetitionsLeagueId = 0,
   } = props;
+
+  const isAllCompetitions = league.leagueId === allCompetitionsLeagueId;
 
   const featuredTier = useMemo(
     () => (featured ? getConfidenceTier(featured) : null),
@@ -346,16 +301,28 @@ export default function UpcomingMatches(props: Props) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Best Upcoming Matches</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitle}>Best Upcoming Matches</Text>
+          <Text style={styles.sectionSubtitle}>
+            {isAllCompetitions
+              ? "Across YourNextAway’s European coverage"
+              : `Best from ${league.label}`}
+          </Text>
+        </View>
 
         <Pressable
-          onPress={() =>
+          onPress={() => {
+            if (isAllCompetitions) {
+              goFixturesHub();
+              return;
+            }
+
             goFixtures({
               window: upcomingWindow,
               leagueId: league.leagueId,
               season: league.season,
-            })
-          }
+            });
+          }}
           style={({ pressed }) => [styles.headerAction, pressed && styles.pressedLite]}
           hitSlop={10}
         >
@@ -366,17 +333,33 @@ export default function UpcomingMatches(props: Props) {
       <LeagueStrip
         leagues={homeTopLeagues}
         activeLeagueId={league.leagueId}
+        allCompetitionsLeagueId={allCompetitionsLeagueId}
         onSelect={setLeague}
       />
+
+      {fxRefreshing ? (
+        <View style={styles.refreshingBadge}>
+          <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+          <Text style={styles.refreshingText}>
+            Adding more fixtures in the background…
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.panel}>
         {fxLoading ? (
           <View style={styles.stateCard}>
             <View style={styles.stateBadge}>
-              <Text style={styles.stateBadgeText}>Live scan</Text>
+              <Text style={styles.stateBadgeText}>
+                {isAllCompetitions ? "Fast scan" : "Live scan"}
+              </Text>
             </View>
             <ActivityIndicator color={theme.colors.textSecondary} />
-            <Text style={styles.stateText}>Checking the best upcoming fixtures…</Text>
+            <Text style={styles.stateText}>
+              {isAllCompetitions
+                ? "Finding the strongest matches across Europe…"
+                : "Checking the best upcoming fixtures…"}
+            </Text>
           </View>
         ) : null}
 
@@ -401,7 +384,9 @@ export default function UpcomingMatches(props: Props) {
         {!fxLoading && !fxError && featured ? (
           <>
             <View style={styles.panelTopRow}>
-              <Text style={styles.panelTag}>Top pick</Text>
+              <Text style={styles.panelTag}>
+                {isAllCompetitions ? "YourNextAway pick" : "Top pick"}
+              </Text>
               <Text style={styles.panelHint}>Best trip-worthy option</Text>
             </View>
 
@@ -426,7 +411,7 @@ export default function UpcomingMatches(props: Props) {
                   <View style={styles.featuredPills}>
                     <View style={styles.featuredPillPrimary}>
                       <Text style={styles.featuredPillPrimaryText}>
-                        {String(featured?.league?.name ?? "Featured").trim()}
+                        {clean(featured?.league?.name) || "Featured"}
                       </Text>
                     </View>
 
@@ -589,6 +574,13 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
+  sectionSubtitle: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
+  },
+
   headerAction: {
     paddingVertical: 6,
     paddingHorizontal: 2,
@@ -622,6 +614,11 @@ const styles = StyleSheet.create({
       Platform.OS === "android" ? "rgba(17,36,24,0.76)" : "rgba(18,103,49,0.10)",
   },
 
+  leagueStripItemBrand: {
+    borderWidth: 1,
+    borderColor: "rgba(163,230,53,0.18)",
+  },
+
   leagueLogoDisc: {
     width: 42,
     height: 42,
@@ -645,6 +642,18 @@ const styles = StyleSheet.create({
     opacity: 0.98,
   },
 
+  brandLogoDisc: {
+    width: 46,
+    height: 46,
+    backgroundColor: "#FFFFFF",
+  },
+
+  brandLogo: {
+    width: 43,
+    height: 43,
+    borderRadius: 999,
+  },
+
   leagueActiveGlow: {
     position: "absolute",
     left: 10,
@@ -653,6 +662,25 @@ const styles = StyleSheet.create({
     height: 26,
     borderRadius: 999,
     backgroundColor: "rgba(0,210,106,0.18)",
+  },
+
+  refreshingBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+
+  refreshingText: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.bold,
   },
 
   panel: {
@@ -713,6 +741,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontSize: 13,
     fontWeight: theme.fontWeight.bold,
+    textAlign: "center",
   },
 
   featuredCard: {
