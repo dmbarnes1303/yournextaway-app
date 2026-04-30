@@ -1,3 +1,5 @@
+// src/features/discover/discoverPrice.ts
+
 import { LEAGUES, getLeagueById } from "@/src/constants/football";
 import { getTicketDifficultyBadge } from "@/src/data/ticketGuides";
 import type { TicketDifficulty } from "@/src/data/ticketGuides/types";
@@ -48,73 +50,74 @@ type TicketDemandSignal = {
 };
 
 const DEFAULT_LEAGUE_PROFILE: LeaguePricingProfile = {
-  ticketBase: 28,
-  hotelBase: 68,
-  flightBase: 78,
+  ticketBase: 30,
+  hotelBase: 70,
+  flightBase: 80,
   prestige: 2,
   value: 3,
   cityPull: 2,
 };
 
 const EXPLICIT_LEAGUE_PRICING: Record<number, LeaguePricingProfile> = {
-  2: { ticketBase: 105, hotelBase: 92, flightBase: 84, prestige: 5, value: 1, cityPull: 5 },
-  3: { ticketBase: 72, hotelBase: 84, flightBase: 78, prestige: 4, value: 2, cityPull: 4 },
-  848: { ticketBase: 48, hotelBase: 76, flightBase: 72, prestige: 3, value: 4, cityPull: 3 },
+  2: { ticketBase: 115, hotelBase: 98, flightBase: 88, prestige: 5, value: 1, cityPull: 5 },
+  3: { ticketBase: 78, hotelBase: 86, flightBase: 80, prestige: 4, value: 2, cityPull: 4 },
+  848: { ticketBase: 52, hotelBase: 78, flightBase: 74, prestige: 3, value: 4, cityPull: 3 },
 
-  39: { ticketBase: 82, hotelBase: 96, flightBase: 58, prestige: 5, value: 1, cityPull: 5 },
-  140: { ticketBase: 66, hotelBase: 86, flightBase: 74, prestige: 5, value: 2, cityPull: 5 },
-  135: { ticketBase: 62, hotelBase: 88, flightBase: 76, prestige: 5, value: 2, cityPull: 5 },
-  78: { ticketBase: 54, hotelBase: 84, flightBase: 68, prestige: 4, value: 4, cityPull: 4 },
-  61: { ticketBase: 52, hotelBase: 86, flightBase: 70, prestige: 4, value: 2, cityPull: 4 },
+  39: { ticketBase: 90, hotelBase: 104, flightBase: 58, prestige: 5, value: 1, cityPull: 5 },
+  140: { ticketBase: 72, hotelBase: 90, flightBase: 76, prestige: 5, value: 2, cityPull: 5 },
+  135: { ticketBase: 68, hotelBase: 92, flightBase: 78, prestige: 5, value: 2, cityPull: 5 },
+  78: { ticketBase: 56, hotelBase: 86, flightBase: 70, prestige: 4, value: 4, cityPull: 4 },
+  61: { ticketBase: 56, hotelBase: 90, flightBase: 72, prestige: 4, value: 2, cityPull: 4 },
 
-  88: { ticketBase: 42, hotelBase: 82, flightBase: 62, prestige: 4, value: 3, cityPull: 4 },
-  94: { ticketBase: 38, hotelBase: 74, flightBase: 70, prestige: 4, value: 4, cityPull: 4 },
-  179: { ticketBase: 34, hotelBase: 82, flightBase: 52, prestige: 4, value: 3, cityPull: 4 },
-  203: { ticketBase: 40, hotelBase: 70, flightBase: 82, prestige: 4, value: 4, cityPull: 4 },
-  144: { ticketBase: 32, hotelBase: 78, flightBase: 58, prestige: 3, value: 4, cityPull: 3 },
-  218: { ticketBase: 28, hotelBase: 76, flightBase: 64, prestige: 3, value: 4, cityPull: 3 },
-  207: { ticketBase: 24, hotelBase: 82, flightBase: 68, prestige: 3, value: 3, cityPull: 3 },
-  197: { ticketBase: 30, hotelBase: 70, flightBase: 84, prestige: 3, value: 4, cityPull: 4 },
-  119: { ticketBase: 28, hotelBase: 78, flightBase: 64, prestige: 3, value: 4, cityPull: 3 },
-  345: { ticketBase: 26, hotelBase: 68, flightBase: 66, prestige: 3, value: 4, cityPull: 4 },
-  106: { ticketBase: 26, hotelBase: 64, flightBase: 68, prestige: 3, value: 4, cityPull: 3 },
-  210: { ticketBase: 25, hotelBase: 66, flightBase: 74, prestige: 3, value: 4, cityPull: 3 },
-  286: { ticketBase: 24, hotelBase: 62, flightBase: 78, prestige: 3, value: 4, cityPull: 4 },
+  88: { ticketBase: 44, hotelBase: 84, flightBase: 64, prestige: 4, value: 3, cityPull: 4 },
+  94: { ticketBase: 40, hotelBase: 76, flightBase: 72, prestige: 4, value: 4, cityPull: 4 },
+  179: { ticketBase: 36, hotelBase: 84, flightBase: 54, prestige: 4, value: 3, cityPull: 4 },
+  203: { ticketBase: 44, hotelBase: 72, flightBase: 86, prestige: 4, value: 4, cityPull: 4 },
 
-  271: { ticketBase: 22, hotelBase: 58, flightBase: 72, prestige: 2, value: 4, cityPull: 2 },
-  283: { ticketBase: 22, hotelBase: 56, flightBase: 76, prestige: 2, value: 4, cityPull: 2 },
-  332: { ticketBase: 21, hotelBase: 58, flightBase: 72, prestige: 2, value: 4, cityPull: 2 },
-  373: { ticketBase: 21, hotelBase: 60, flightBase: 72, prestige: 2, value: 4, cityPull: 2 },
-  172: { ticketBase: 20, hotelBase: 54, flightBase: 76, prestige: 2, value: 4, cityPull: 2 },
-  318: { ticketBase: 22, hotelBase: 62, flightBase: 88, prestige: 2, value: 4, cityPull: 3 },
-  315: { ticketBase: 20, hotelBase: 52, flightBase: 78, prestige: 2, value: 4, cityPull: 2 },
+  144: { ticketBase: 34, hotelBase: 80, flightBase: 60, prestige: 3, value: 4, cityPull: 3 },
+  218: { ticketBase: 30, hotelBase: 78, flightBase: 66, prestige: 3, value: 4, cityPull: 3 },
+  207: { ticketBase: 28, hotelBase: 84, flightBase: 70, prestige: 3, value: 3, cityPull: 3 },
+  197: { ticketBase: 34, hotelBase: 72, flightBase: 88, prestige: 3, value: 4, cityPull: 4 },
+  119: { ticketBase: 30, hotelBase: 82, flightBase: 66, prestige: 3, value: 4, cityPull: 3 },
+  345: { ticketBase: 28, hotelBase: 70, flightBase: 68, prestige: 3, value: 4, cityPull: 4 },
+  106: { ticketBase: 28, hotelBase: 66, flightBase: 70, prestige: 3, value: 4, cityPull: 3 },
+  210: { ticketBase: 28, hotelBase: 68, flightBase: 76, prestige: 3, value: 4, cityPull: 3 },
+  286: { ticketBase: 28, hotelBase: 64, flightBase: 82, prestige: 3, value: 4, cityPull: 4 },
 
-  357: { ticketBase: 22, hotelBase: 74, flightBase: 50, prestige: 2, value: 4, cityPull: 2 },
-  113: { ticketBase: 24, hotelBase: 82, flightBase: 72, prestige: 2, value: 4, cityPull: 3 },
-  103: { ticketBase: 24, hotelBase: 88, flightBase: 78, prestige: 2, value: 4, cityPull: 3 },
-  244: { ticketBase: 24, hotelBase: 84, flightBase: 82, prestige: 2, value: 4, cityPull: 2 },
-  164: { ticketBase: 24, hotelBase: 96, flightBase: 110, prestige: 2, value: 3, cityPull: 2 },
+  271: { ticketBase: 24, hotelBase: 60, flightBase: 74, prestige: 2, value: 4, cityPull: 2 },
+  283: { ticketBase: 24, hotelBase: 58, flightBase: 78, prestige: 2, value: 4, cityPull: 2 },
+  332: { ticketBase: 24, hotelBase: 60, flightBase: 74, prestige: 2, value: 4, cityPull: 2 },
+  373: { ticketBase: 24, hotelBase: 62, flightBase: 74, prestige: 2, value: 4, cityPull: 2 },
+  172: { ticketBase: 22, hotelBase: 56, flightBase: 78, prestige: 2, value: 4, cityPull: 2 },
+  318: { ticketBase: 26, hotelBase: 64, flightBase: 92, prestige: 2, value: 4, cityPull: 3 },
+  315: { ticketBase: 22, hotelBase: 54, flightBase: 80, prestige: 2, value: 4, cityPull: 2 },
+
+  357: { ticketBase: 24, hotelBase: 76, flightBase: 52, prestige: 2, value: 4, cityPull: 2 },
+  113: { ticketBase: 26, hotelBase: 84, flightBase: 74, prestige: 2, value: 4, cityPull: 3 },
+  103: { ticketBase: 28, hotelBase: 90, flightBase: 82, prestige: 2, value: 4, cityPull: 3 },
+  244: { ticketBase: 26, hotelBase: 86, flightBase: 86, prestige: 2, value: 4, cityPull: 2 },
+  164: { ticketBase: 28, hotelBase: 100, flightBase: 114, prestige: 2, value: 3, cityPull: 2 },
 };
 
 const CITY_COSTS: Record<string, CityCostProfile> = {
-  london: { hotelDelta: 30, flightDelta: -20, cityPullBoost: 2 },
-  manchester: { hotelDelta: 14, flightDelta: -18, cityPullBoost: 1 },
-  liverpool: { hotelDelta: 10, flightDelta: -18, cityPullBoost: 1 },
+  london: { hotelDelta: 34, flightDelta: -22, cityPullBoost: 2 },
+  manchester: { hotelDelta: 16, flightDelta: -18, cityPullBoost: 1 },
+  liverpool: { hotelDelta: 12, flightDelta: -18, cityPullBoost: 1 },
   glasgow: { hotelDelta: 12, flightDelta: -15, cityPullBoost: 1 },
 
-  paris: { hotelDelta: 28, flightDelta: -8, cityPullBoost: 2 },
-  amsterdam: { hotelDelta: 26, flightDelta: -8, cityPullBoost: 2 },
-  munich: { hotelDelta: 24, flightDelta: -4, cityPullBoost: 1 },
-  milan: { hotelDelta: 18, flightDelta: 0, cityPullBoost: 2 },
-  rome: { hotelDelta: 18, flightDelta: 2, cityPullBoost: 2 },
+  paris: { hotelDelta: 30, flightDelta: -8, cityPullBoost: 2 },
+  amsterdam: { hotelDelta: 28, flightDelta: -8, cityPullBoost: 2 },
+  munich: { hotelDelta: 26, flightDelta: -4, cityPullBoost: 1 },
+  milan: { hotelDelta: 20, flightDelta: 0, cityPullBoost: 2 },
+  rome: { hotelDelta: 20, flightDelta: 2, cityPullBoost: 2 },
 
-  madrid: { hotelDelta: 14, flightDelta: 4, cityPullBoost: 2 },
-  barcelona: { hotelDelta: 18, flightDelta: 6, cityPullBoost: 2 },
+  madrid: { hotelDelta: 16, flightDelta: 4, cityPullBoost: 2 },
+  barcelona: { hotelDelta: 20, flightDelta: 6, cityPullBoost: 2 },
   lisbon: { hotelDelta: 10, flightDelta: 6, cityPullBoost: 2 },
   porto: { hotelDelta: 4, flightDelta: 8, cityPullBoost: 1 },
 
-  istanbul: { hotelDelta: 8, flightDelta: 18, cityPullBoost: 2 },
-  athens: { hotelDelta: 4, flightDelta: 18, cityPullBoost: 1 },
+  istanbul: { hotelDelta: 8, flightDelta: 20, cityPullBoost: 2 },
+  athens: { hotelDelta: 4, flightDelta: 20, cityPullBoost: 1 },
   naples: { hotelDelta: 4, flightDelta: 10, cityPullBoost: 1 },
   seville: { hotelDelta: 2, flightDelta: 10, cityPullBoost: 1 },
   valencia: { hotelDelta: 0, flightDelta: 10, cityPullBoost: 1 },
@@ -124,8 +127,8 @@ const CITY_COSTS: Record<string, CityCostProfile> = {
   budapest: { hotelDelta: -8, flightDelta: 10, cityPullBoost: 1 },
   zagreb: { hotelDelta: -6, flightDelta: 12, cityPullBoost: 1 },
   split: { hotelDelta: 2, flightDelta: 18, cityPullBoost: 1 },
-  reykjavik: { hotelDelta: 28, flightDelta: 34, cityPullBoost: 1 },
-  nicosia: { hotelDelta: 8, flightDelta: 26, cityPullBoost: 1 },
+  reykjavik: { hotelDelta: 28, flightDelta: 36, cityPullBoost: 1 },
+  nicosia: { hotelDelta: 8, flightDelta: 28, cityPullBoost: 1 },
 };
 
 const COUNTRY_COSTS: Record<string, CountryCostProfile> = {
@@ -144,9 +147,9 @@ const COUNTRY_COSTS: Record<string, CountryCostProfile> = {
   portugal: { hotelDelta: -6, flightDelta: 6 },
   italy: { hotelDelta: -2, flightDelta: 6 },
   greece: { hotelDelta: -6, flightDelta: 18 },
-  turkey: { hotelDelta: -4, flightDelta: 18 },
+  turkey: { hotelDelta: -4, flightDelta: 20 },
   croatia: { hotelDelta: -4, flightDelta: 16 },
-  cyprus: { hotelDelta: -2, flightDelta: 22 },
+  cyprus: { hotelDelta: -2, flightDelta: 24 },
 
   poland: { hotelDelta: -10, flightDelta: 8 },
   "czech republic": { hotelDelta: -10, flightDelta: 8 },
@@ -160,11 +163,11 @@ const COUNTRY_COSTS: Record<string, CountryCostProfile> = {
   bosnia: { hotelDelta: -14, flightDelta: 14 },
   "bosnia and herzegovina": { hotelDelta: -14, flightDelta: 14 },
 
-  iceland: { hotelDelta: 24, flightDelta: 28 },
-  norway: { hotelDelta: 18, flightDelta: 18 },
-  sweden: { hotelDelta: 14, flightDelta: 14 },
-  finland: { hotelDelta: 16, flightDelta: 18 },
-  denmark: { hotelDelta: 12, flightDelta: 10 },
+  iceland: { hotelDelta: 24, flightDelta: 30 },
+  norway: { hotelDelta: 18, flightDelta: 20 },
+  sweden: { hotelDelta: 14, flightDelta: 16 },
+  finland: { hotelDelta: 16, flightDelta: 20 },
+  denmark: { hotelDelta: 12, flightDelta: 12 },
 };
 
 const BIG_CLUB_TOKENS = [
@@ -223,45 +226,6 @@ const DERBY_PAIRS: [string[], string[], number][] = [
   [["porto"], ["benfica"], 4],
 ];
 
-// Dumb validator compatibility.
-// The current validation script text-matches [id, number] tuples instead of reading the actual logic.
-// Keep this in sync with football.ts so the script can verify full league coverage.
-const VALIDATION_LEAGUE_MARKERS: [number, number][] = [
-  [2, 1],
-  [3, 1],
-  [848, 1],
-  [39, 1],
-  [140, 1],
-  [135, 1],
-  [78, 1],
-  [61, 1],
-  [88, 1],
-  [94, 1],
-  [179, 1],
-  [203, 1],
-  [144, 1],
-  [218, 1],
-  [207, 1],
-  [197, 1],
-  [119, 1],
-  [345, 1],
-  [106, 1],
-  [210, 1],
-  [286, 1],
-  [271, 1],
-  [283, 1],
-  [332, 1],
-  [373, 1],
-  [172, 1],
-  [318, 1],
-  [315, 1],
-  [357, 1],
-  [113, 1],
-  [103, 1],
-  [244, 1],
-  [164, 1],
-];
-
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -281,6 +245,10 @@ function roundToNearest5(value: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function clampEstimatedPrice(value: number, min: number, max: number): number {
+  return roundToNearest5(clamp(value, min, max));
 }
 
 function getLeagueId(row: FixtureListRow): number | null {
@@ -321,6 +289,7 @@ function getAwayName(row: FixtureListRow): string {
 function kickoffDate(row: FixtureListRow): Date | null {
   const raw = clean(row?.fixture?.date);
   if (!raw) return null;
+
   const dt = new Date(raw);
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
@@ -328,6 +297,7 @@ function kickoffDate(row: FixtureListRow): Date | null {
 function isWeekend(row: FixtureListRow): boolean {
   const dt = kickoffDate(row);
   if (!dt) return false;
+
   const day = dt.getUTCDay();
   return day === 5 || day === 6 || day === 0;
 }
@@ -335,6 +305,7 @@ function isWeekend(row: FixtureListRow): boolean {
 function isEvening(row: FixtureListRow): boolean {
   const dt = kickoffDate(row);
   if (!dt) return false;
+
   const hour = dt.getUTCHours();
   return hour >= 18 && hour <= 21;
 }
@@ -409,7 +380,7 @@ function deriveProfileFromLeagueMeta(leagueId: number): LeaguePricingProfile {
 
 const LEAGUE_PRICING: Record<number, LeaguePricingProfile> = LEAGUES.reduce(
   (acc, league) => {
-    const id = Number(league.id);
+    const id = Number(league.leagueId);
     if (!Number.isFinite(id)) return acc;
 
     acc[id] = EXPLICIT_LEAGUE_PRICING[id]
@@ -549,11 +520,11 @@ function hotelNightFloor(row: FixtureListRow): number {
 
   let value = profile.hotelBase + cityProfile.hotelDelta + countryProfile.hotelDelta;
 
-  if (isWeekend(row)) value += 8;
-  if (isEuropeanCompetition(row)) value += 6;
-  if (profile.cityPull + (cityProfile.cityPullBoost ?? 0) >= 6) value += 4;
+  if (isWeekend(row)) value += 10;
+  if (isEuropeanCompetition(row)) value += 8;
+  if (profile.cityPull + (cityProfile.cityPullBoost ?? 0) >= 6) value += 6;
 
-  return roundToNearest5(value);
+  return clampEstimatedPrice(value, 35, 260);
 }
 
 function flightFloor(row: FixtureListRow): number {
@@ -565,10 +536,10 @@ function flightFloor(row: FixtureListRow): number {
 
   let value = profile.flightBase + cityProfile.flightDelta + countryProfile.flightDelta;
 
-  if (isWeekend(row)) value += 6;
-  if (isEuropeanCompetition(row)) value += 4;
+  if (isWeekend(row)) value += 8;
+  if (isEuropeanCompetition(row)) value += 6;
 
-  return roundToNearest5(value);
+  return clampEstimatedPrice(value, 25, 260);
 }
 
 function ticketFloor(row: FixtureListRow): number {
@@ -577,21 +548,24 @@ function ticketFloor(row: FixtureListRow): number {
 
   let value = profile.ticketBase;
 
-  value += demand.bigClubCount * 10;
+  value += demand.bigClubCount * 12;
 
-  if (demand.derbyIntensity >= 5) value += 35;
-  else if (demand.derbyIntensity >= 4) value += 24;
-  else if (demand.derbyIntensity >= 3) value += 14;
+  if (demand.derbyIntensity >= 5) value += 45;
+  else if (demand.derbyIntensity >= 4) value += 30;
+  else if (demand.derbyIntensity >= 3) value += 18;
 
-  if (isWeekend(row)) value += 8;
-  if (isEvening(row)) value += 5;
-  if (demand.europeanOccasion) value += 10;
+  if (isWeekend(row)) value += 10;
+  if (isEvening(row)) value += 6;
+  if (demand.europeanOccasion) value += 14;
 
   if (demand.difficulty === "easy") value -= 10;
-  if (demand.difficulty === "hard") value += 14;
-  if (demand.difficulty === "very_hard") value += 30;
+  if (demand.difficulty === "hard") value += 18;
+  if (demand.difficulty === "very_hard") value += 38;
 
-  return roundToNearest5(value);
+  const min = demand.derbyIntensity >= 5 || demand.difficulty === "very_hard" ? 70 : 15;
+  const max = demand.difficulty === "very_hard" ? 280 : 190;
+
+  return clampEstimatedPrice(value, min, max);
 }
 
 function tripFloor(
@@ -604,12 +578,12 @@ function tripFloor(
 
   let value = hotelNightFromGbp + flightFromGbp + ticketFromGbp;
 
-  if (isWeekend(row)) value += 12;
-  if (isEvening(row)) value += 4;
-  if (profile.value <= 2) value += 6;
-  if (profile.value >= 4) value -= 4;
+  if (isWeekend(row)) value += 15;
+  if (isEvening(row)) value += 5;
+  if (profile.value <= 2) value += 10;
+  if (profile.value >= 4) value -= 5;
 
-  return roundToNearest5(value);
+  return clampEstimatedPrice(value, 85, 650);
 }
 
 function confidenceFor(row: FixtureListRow): DiscoverPriceConfidence {
@@ -648,7 +622,7 @@ function confidenceFor(row: FixtureListRow): DiscoverPriceConfidence {
   return "low";
 }
 
-export function formatFromPrice(value: number | null, prefix = "From"): string | null {
+export function formatFromPrice(value: number | null, prefix = "Est. from"): string | null {
   if (value == null || !Number.isFinite(value) || value <= 0) return null;
   return `${prefix} £${Math.round(value)}`;
 }
@@ -658,7 +632,7 @@ export function getDiscoverLeaguePricingCoverage(): {
   coveredLeagueIds: number[];
   missingLeagueIds: number[];
 } {
-  const configuredIds = LEAGUES.map((league) => Number(league.id)).filter((id) =>
+  const configuredIds = LEAGUES.map((league) => Number(league.leagueId)).filter((id) =>
     Number.isFinite(id)
   );
 
@@ -691,4 +665,4 @@ export function estimateFixturePricing(row: FixtureListRow): DiscoverPriceEstima
     flightLabel: formatFromPrice(flightFromGbp),
     isEstimated: true,
   };
-    }
+}
