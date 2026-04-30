@@ -1,3 +1,5 @@
+// src/features/discover/useDiscoverController.ts
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutAnimation } from "react-native";
 import { useRouter } from "expo-router";
@@ -167,26 +169,6 @@ function buildCanonicalTripStartParams(args: {
   };
 }
 
-function cacheKeyForDiscover(args: {
-  from: string;
-  to: string;
-  windowKey: DiscoverWindowKey;
-  origin: string;
-  tripLength: DiscoverTripLength;
-  vibes: DiscoverVibe[];
-  category: DiscoverCategory;
-}) {
-  return [
-    args.from,
-    args.to,
-    args.windowKey,
-    normaliseOrigin(args.origin).toLowerCase(),
-    args.tripLength,
-    [...args.vibes].sort().join(","),
-    args.category,
-  ].join("|");
-}
-
 function fixtureId(row: FixtureListRow | null | undefined): string {
   return row?.fixture?.id != null ? String(row.fixture.id) : "";
 }
@@ -219,6 +201,30 @@ function uniqueRows(rows: FixtureListRow[]): FixtureListRow[] {
   return Array.from(map.values());
 }
 
+function sortedVibesKey(vibes: DiscoverVibe[]): string {
+  return [...vibes].sort().join(",");
+}
+
+function cacheKeyForDiscover(args: {
+  from: string;
+  to: string;
+  windowKey: DiscoverWindowKey;
+  origin: string;
+  tripLength: DiscoverTripLength;
+  vibesKey: string;
+  category: DiscoverCategory;
+}) {
+  return [
+    args.from,
+    args.to,
+    args.windowKey,
+    normaliseOrigin(args.origin).toLowerCase(),
+    args.tripLength,
+    args.vibesKey,
+    args.category,
+  ].join("|");
+}
+
 export default function useDiscoverController(): UseDiscoverControllerReturn {
   const router = useRouter();
 
@@ -236,11 +242,9 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
   const requestIdRef = useRef(0);
   const cacheRef = useRef(new Map<string, LivePoolCacheValue>());
 
-  const currentWindow = useMemo(() => {
-    return windowForKey(discoverWindowKey);
-  }, [discoverWindowKey]);
-
+  const currentWindow = useMemo(() => windowForKey(discoverWindowKey), [discoverWindowKey]);
   const normalisedOrigin = useMemo(() => normaliseOrigin(discoverOrigin), [discoverOrigin]);
+  const vibesKey = useMemo(() => sortedVibesKey(discoverVibes), [discoverVibes]);
 
   const seededCategory = useMemo(() => {
     return categorySeedFromFilters({
@@ -257,7 +261,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       windowKey: discoverWindowKey,
       origin: normalisedOrigin,
       tripLength: discoverTripLength,
-      vibes: discoverVibes,
+      vibesKey,
       category: seededCategory,
     });
   }, [
@@ -266,7 +270,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     discoverWindowKey,
     normalisedOrigin,
     discoverTripLength,
-    discoverVibes,
+    vibesKey,
     seededCategory,
   ]);
 
@@ -308,8 +312,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
   }, [discoverWindowKey, discoverTripLength, discoverVibes, normalisedOrigin]);
 
   const browseModeLabel = useMemo(() => {
-    const meta = DISCOVER_CATEGORY_META[seededCategory];
-    return meta?.title ?? "Best-fit routes";
+    return DISCOVER_CATEGORY_META[seededCategory]?.title ?? "Best-fit routes";
   }, [seededCategory]);
 
   const toggleSetup = useCallback(() => {
@@ -365,14 +368,15 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
 
         const safePool = uniqueRows(Array.isArray(pool) ? pool : []);
         cacheRef.current.set(liveCacheKey, { ts: Date.now(), rows: safePool });
+
         setLiveRows(safePool);
         setLiveError(null);
       } catch (e: any) {
         if (cancelled || requestIdRef.current !== requestId) return;
 
-        const cachedFallback = cacheRef.current.get(liveCacheKey);
-        if (cachedFallback?.rows?.length) {
-          setLiveRows(cachedFallback.rows);
+        const staleFallback = cacheRef.current.get(liveCacheKey);
+        if (staleFallback?.rows?.length) {
+          setLiveRows(staleFallback.rows);
           setLiveError(null);
           return;
         }
@@ -397,7 +401,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     discoverWindowKey,
     normalisedOrigin,
     discoverTripLength,
-    discoverVibes,
+    vibesKey,
     seededCategory,
   ]);
 
@@ -425,9 +429,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
   const trendingTrips = useMemo(() => {
     return [...rankedLive]
       .sort((a, b) => {
-        const aRow = a.item.fixture;
-        const bRow = b.item.fixture;
-        return trendingScore(bRow, b.score) - trendingScore(aRow, a.score);
+        return trendingScore(b.item.fixture, b.score) - trendingScore(a.item.fixture, a.score);
       })
       .slice(0, TRENDING_LIMIT);
   }, [rankedLive]);
@@ -450,11 +452,18 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           discover: category,
           ...(normalisedOrigin ? { discoverFrom: normalisedOrigin } : {}),
           discoverTripLength,
-          discoverVibes: discoverVibes.join(","),
+          discoverVibes: vibesKey,
         },
       } as never);
     },
-    [router, currentWindow.from, currentWindow.to, normalisedOrigin, discoverTripLength, discoverVibes]
+    [
+      router,
+      currentWindow.from,
+      currentWindow.to,
+      normalisedOrigin,
+      discoverTripLength,
+      vibesKey,
+    ]
   );
 
   const goMatchFromRow = useCallback(
@@ -490,14 +499,14 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           discover: discoverWindowKey === "wknd" ? "weekendTrips" : "multiMatchTrips",
           ...(normalisedOrigin ? { discoverFrom: normalisedOrigin } : {}),
           discoverTripLength,
-          discoverVibes: discoverVibes.join(","),
+          discoverVibes: vibesKey,
           comboMode: "1",
           comboTitle: trip.title,
           comboIds: trip.fixtureIds.join(","),
         },
       } as never);
     },
-    [router, normalisedOrigin, discoverTripLength, discoverVibes, discoverWindowKey]
+    [router, normalisedOrigin, discoverTripLength, vibesKey, discoverWindowKey]
   );
 
   const applyPreset = useCallback(
@@ -505,6 +514,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       const nextWindowKey = preset.windowKey ?? discoverWindowKey;
       const nextTripLength = preset.tripLength ?? discoverTripLength;
       const nextVibes = preset.vibe ? [preset.vibe] : discoverVibes;
+      const nextVibesKey = sortedVibesKey(nextVibes);
       const nextWindow = windowForKey(nextWindowKey);
 
       if (preset.windowKey && preset.windowKey !== discoverWindowKey) {
@@ -527,7 +537,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           discover: preset.category,
           ...(normalisedOrigin ? { discoverFrom: normalisedOrigin } : {}),
           discoverTripLength: nextTripLength,
-          discoverVibes: nextVibes.join(","),
+          discoverVibes: nextVibesKey,
         },
       } as never);
     },
@@ -539,6 +549,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       const nextWindowKey = spark.windowKey ?? discoverWindowKey;
       const nextTripLength = spark.tripLength ?? discoverTripLength;
       const nextVibes = spark.vibe ? [spark.vibe] : discoverVibes;
+      const nextVibesKey = sortedVibesKey(nextVibes);
       const nextWindow = windowForKey(nextWindowKey);
 
       if (spark.windowKey && spark.windowKey !== discoverWindowKey) {
@@ -561,7 +572,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           discover: spark.category,
           ...(normalisedOrigin ? { discoverFrom: normalisedOrigin } : {}),
           discoverTripLength: nextTripLength,
-          discoverVibes: nextVibes.join(","),
+          discoverVibes: nextVibesKey,
         },
       } as never);
     },
@@ -649,4 +660,4 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       rankLabel,
     },
   };
-        }
+     }
