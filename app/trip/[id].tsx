@@ -3,14 +3,11 @@
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
-  ImageBackground,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  type ImageSourcePropType,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -18,8 +15,9 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import Background from "@/src/components/Background";
 import GlassCard from "@/src/components/GlassCard";
 import TicketOptionsSheet from "@/src/components/tickets/TicketOptionsSheet";
+import MatchHeroCard from "@/src/components/trip/MatchHeroCard";
 
-import { getBackground, getCityBackground } from "@/src/constants/backgrounds";
+import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import useTripWorkspace from "@/src/features/tripDetail/useTripWorkspace";
@@ -32,26 +30,16 @@ import { getCityGuide } from "@/src/data/cityGuides";
 import { getTeam } from "@/src/data/teams";
 import { hasTeamGuide } from "@/src/data/teamGuides";
 
-const FALLBACK_CITY_IMAGE =
-  "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1600&q=90";
-
 type GuideRow = {
   key: string;
   title: string;
   detail: string;
   badge: string;
-  enabled: boolean;
   onPress: () => void;
 };
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
-}
-
-function asImageSource(value: string | ImageSourcePropType | null | undefined) {
-  if (!value) return { uri: FALLBACK_CITY_IMAGE };
-  if (typeof value === "string") return { uri: value };
-  return value;
 }
 
 function readNestedString(source: unknown, paths: string[][]): string | null {
@@ -152,6 +140,13 @@ function getFixtureInfo(fixture: unknown, trip: any) {
     status === "PST" ||
     (!hasFixture && Boolean(trip?.kickoffTbc));
 
+  const hasRealMatch =
+    hasFixture &&
+    homeName !== "Home" &&
+    awayName !== "Away" &&
+    Boolean(clean(homeName)) &&
+    Boolean(clean(awayName));
+
   return {
     homeName,
     awayName,
@@ -162,21 +157,8 @@ function getFixtureInfo(fixture: unknown, trip: any) {
     venue,
     kickoff,
     tbc,
+    hasRealMatch,
   };
-}
-
-function dateLabel(value?: string | null) {
-  const raw = clean(value);
-  if (!raw) return "Date TBC";
-
-  const date = new Date(raw);
-  if (!Number.isFinite(date.getTime())) return "Date TBC";
-
-  return date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 function shortDateLabel(value?: string | null) {
@@ -189,6 +171,7 @@ function shortDateLabel(value?: string | null) {
   return date.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
+    year: "numeric",
   });
 }
 
@@ -203,20 +186,6 @@ function timeLabel(value?: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function initials(name?: string | null) {
-  const value = clean(name);
-  if (!value) return "?";
-
-  const parts = value
-    .replace(/[^a-zA-Z0-9\s]/g, " ")
-    .split(" ")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length <= 1) return value.slice(0, 3).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
 function nightsCount(start?: string | null, end?: string | null) {
@@ -274,21 +243,17 @@ function bookedCount(progress: any) {
 
 function progressStateLabel(state: string) {
   if (state === "booked") return "Confirmed";
-  if (state === "pending") return "Pending";
-  if (state === "saved") return "Saved";
+  if (state === "pending") return "In progress";
+  if (state === "saved") return "Saved idea";
   return "Find options";
 }
 
-function TeamBadge({ name, logo }: { name: string; logo?: string | null }) {
-  return (
-    <View style={styles.teamBadge}>
-      {logo ? (
-        <Image source={{ uri: logo }} style={styles.teamBadgeImage} resizeMode="contain" />
-      ) : (
-        <Text style={styles.teamBadgeText}>{initials(name)}</Text>
-      )}
-    </View>
-  );
+function nextStepLabel(progress: any) {
+  if (progress?.tickets !== "booked") return "Next step: choose match tickets";
+  if (progress?.hotel !== "booked") return "Next step: compare stays";
+  if (progress?.flight !== "booked") return "Next step: plan travel";
+  if (progress?.things !== "booked") return "Next step: explore the city";
+  return "Trip essentials are in place";
 }
 
 function MiniIcon({ label }: { label: string }) {
@@ -335,16 +300,18 @@ export default function TripScreen() {
 
   const fixture = useMemo(() => getFixtureInfo(primaryFixture, trip), [primaryFixture, trip]);
 
-  const cityImage = useMemo(() => {
-    return asImageSource(getCityBackground(data.cityName || "rome"));
-  }, [data.cityName]);
-
   const completion = progressCompletion(data.progress);
   const booked = bookedCount(data.progress);
 
   const homeTeam = useMemo(() => getTeam(fixture.homeName), [fixture.homeName]);
   const awayTeam = useMemo(() => getTeam(fixture.awayName), [fixture.awayName]);
   const cityGuide = useMemo(() => getCityGuide(data.cityName || ""), [data.cityName]);
+
+  const heroCountry =
+    clean(homeTeam?.country) ||
+    clean(awayTeam?.country) ||
+    clean(cityGuide?.country) ||
+    "Italy";
 
   const guideRows: GuideRow[] = useMemo(() => {
     const rows: GuideRow[] = [];
@@ -355,7 +322,6 @@ export default function TripScreen() {
         title: `${cityGuide.name || data.cityName} City Guide`,
         detail: "Areas, food, transport and matchday city tips",
         badge: "CITY",
-        enabled: true,
         onPress: () => {
           router.push({
             pathname: "/city/key/[cityKey]",
@@ -369,9 +335,8 @@ export default function TripScreen() {
       rows.push({
         key: "home",
         title: `${homeTeam.name} Team Guide`,
-        detail: homeTeam.stadiumKey ? "Club, stadium and local context" : "Club and local context",
+        detail: "Club, stadium and local context",
         badge: "HOME",
-        enabled: true,
         onPress: () => {
           router.push({
             pathname: "/team/[teamKey]",
@@ -385,9 +350,8 @@ export default function TripScreen() {
       rows.push({
         key: "away",
         title: `${awayTeam.name} Team Guide`,
-        detail: awayTeam.stadiumKey ? "Club, stadium and local context" : "Club and local context",
+        detail: "Club, stadium and local context",
         badge: "TEAM",
-        enabled: true,
         onPress: () => {
           router.push({
             pathname: "/team/[teamKey]",
@@ -403,27 +367,11 @@ export default function TripScreen() {
   const itineraryRows = useMemo(
     () => [
       {
-        key: "travel",
-        icon: "✈",
-        label: "Travel",
-        detail: "Flights and main route",
-        state: data.progress?.flight ?? "empty",
-        onPress: () => void controller.onOpenSection("travel"),
-      },
-      {
-        key: "stay",
-        icon: "▰",
-        label: "Stay",
-        detail: data.cityName ? `Hotels in ${data.cityName}` : "Find the right area",
-        state: data.progress?.hotel ?? "empty",
-        onPress: () => void controller.onOpenSection("stay"),
-      },
-      {
         key: "tickets",
         icon: "🎟",
         label: "Match tickets",
         detail:
-          fixture.homeName !== "Home"
+          fixture.hasRealMatch
             ? `${fixture.homeName} vs ${fixture.awayName}`
             : "Compare ticket routes",
         state: data.progress?.tickets ?? "empty",
@@ -436,9 +384,25 @@ export default function TripScreen() {
         },
       },
       {
+        key: "stay",
+        icon: "▰",
+        label: "Stay",
+        detail: data.cityName ? `Hotels in ${data.cityName}` : "Find the right area",
+        state: data.progress?.hotel ?? "empty",
+        onPress: () => void controller.onOpenSection("stay"),
+      },
+      {
+        key: "travel",
+        icon: "✈",
+        label: "Travel",
+        detail: "Flights and main route",
+        state: data.progress?.flight ?? "empty",
+        onPress: () => void controller.onOpenSection("travel"),
+      },
+      {
         key: "things",
         icon: "★",
-        label: "Experiences",
+        label: "Things to do",
         detail: "City break extras and saved ideas",
         state: data.progress?.things ?? "empty",
         onPress: () => void controller.onOpenSection("things"),
@@ -450,6 +414,7 @@ export default function TripScreen() {
       data.primaryMatchId,
       data.progress,
       fixture.awayName,
+      fixture.hasRealMatch,
       fixture.homeName,
     ]
   );
@@ -511,45 +476,20 @@ export default function TripScreen() {
           contentContainerStyle={[styles.content, { paddingBottom: 42 + insets.bottom }]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.heroShell}>
-            <ImageBackground source={cityImage} style={styles.heroImage} imageStyle={styles.heroImageInner}>
-              <View style={styles.heroShade} />
-              <View style={styles.heroGlow} />
-
-              <View style={styles.heroBadgeTop}>
-                <TeamBadge name={fixture.homeName} logo={fixture.homeLogo} />
-              </View>
-
-              <View style={styles.heroCopy}>
-                <Text style={styles.heroTitle}>
-                  {fixture.homeName} vs {fixture.awayName}
-                </Text>
-
-                <Text style={styles.heroMeta}>
-                  {fixture.leagueName}
-                  {fixture.round ? ` • ${fixture.round}` : ""}
-                </Text>
-
-                <View style={styles.heroChips}>
-                  <View style={styles.heroChip}>
-                    <Text style={styles.heroChipText}>▣ {shortDateLabel(fixture.kickoff)}</Text>
-                  </View>
-
-                  <View style={styles.heroChip}>
-                    <Text style={styles.heroChipText}>
-                      ◷ {fixture.tbc ? "TBC" : timeLabel(fixture.kickoff)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.heroChipWide}>
-                    <Text style={styles.heroChipText} numberOfLines={1}>
-                      ◉ {fixture.venue}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </ImageBackground>
-          </View>
+          <MatchHeroCard
+            homeName={fixture.homeName}
+            awayName={fixture.awayName}
+            homeLogo={fixture.homeLogo}
+            awayLogo={fixture.awayLogo}
+            country={heroCountry}
+            leagueName={fixture.leagueName}
+            round={fixture.round}
+            dateLabel={shortDateLabel(fixture.kickoff)}
+            timeLabel={fixture.tbc ? "TBC" : timeLabel(fixture.kickoff)}
+            venueLabel={fixture.hasRealMatch ? fixture.venue : "Add stadium"}
+            hasRealMatch={fixture.hasRealMatch}
+            cityName={data.cityName}
+          />
 
           <View style={styles.tripSummaryCard}>
             <View style={styles.tripSummaryTop}>
@@ -563,7 +503,8 @@ export default function TripScreen() {
               <Text style={styles.tripSummaryIcon}>✈</Text>
             </View>
 
-            <Text style={styles.tripBookedLine}>{booked}/6 booked</Text>
+            <Text style={styles.tripBookedLine}>{booked}/6 confirmed</Text>
+            <Text style={styles.nextStep}>{nextStepLabel(data.progress)}</Text>
 
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${completion}%` }]} />
@@ -571,7 +512,7 @@ export default function TripScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your itinerary</Text>
+            <Text style={styles.sectionTitle}>Booking checklist</Text>
 
             <View style={styles.itineraryList}>
               {itineraryRows.map((row) => {
@@ -686,129 +627,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  heroShell: {
-    height: 360,
-    borderRadius: 36,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.24)",
-    backgroundColor: "#031208",
-    shadowColor: "#22C55E",
-    shadowOpacity: 0.24,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 9,
-  },
-
-  heroImage: {
-    flex: 1,
-  },
-
-  heroImageInner: {
-    borderRadius: 36,
-  },
-
-  heroShade: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,22,10,0.66)",
-  },
-
-  heroGlow: {
-    position: "absolute",
-    left: -60,
-    right: -60,
-    bottom: -80,
-    height: 210,
-    backgroundColor: "rgba(21,128,61,0.34)",
-    borderRadius: 999,
-  },
-
-  heroBadgeTop: {
-    alignItems: "center",
-    paddingTop: 22,
-  },
-
-  heroCopy: {
-    position: "absolute",
-    left: 22,
-    right: 22,
-    bottom: 24,
-    alignItems: "center",
-  },
-
-  heroTitle: {
-    color: "#FFFFFF",
-    fontSize: 31,
-    lineHeight: 37,
-    fontWeight: "900",
-    letterSpacing: -0.7,
-    textAlign: "center",
-  },
-
-  heroMeta: {
-    marginTop: 8,
-    color: "rgba(245,247,246,0.78)",
-    fontSize: 15,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-
-  heroChips: {
-    marginTop: 20,
-    flexDirection: "row",
-    gap: 8,
-    width: "100%",
-  },
-
-  heroChip: {
-    minHeight: 42,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    justifyContent: "center",
-    backgroundColor: "rgba(0,20,9,0.72)",
-    borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.14)",
-  },
-
-  heroChipWide: {
-    flex: 1,
-    minHeight: 42,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    justifyContent: "center",
-    backgroundColor: "rgba(0,20,9,0.72)",
-    borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.14)",
-  },
-
-  heroChipText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  teamBadge: {
-    width: 76,
-    height: 76,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.52)",
-    borderWidth: 2,
-    borderColor: "rgba(190,242,100,0.56)",
-  },
-
-  teamBadgeImage: {
-    width: 58,
-    height: 58,
-  },
-
-  teamBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-
   tripSummaryCard: {
     padding: 20,
     borderRadius: 27,
@@ -855,6 +673,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
     color: "#FFFFFF",
     fontSize: 15,
+    fontWeight: "900",
+  },
+
+  nextStep: {
+    marginTop: 6,
+    color: "#A3E635",
+    fontSize: 13,
     fontWeight: "900",
   },
 
