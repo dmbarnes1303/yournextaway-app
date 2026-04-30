@@ -11,20 +11,12 @@ import type {
 } from "./discoverEngine";
 import type { DiscoverCategory } from "./discoverCategories";
 
-/* -------------------------------------------------------------------------- */
-/* Core helpers                                                               */
-/* -------------------------------------------------------------------------- */
-
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
 function norm(value: unknown): string {
   return clean(value).toLowerCase();
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 function hasPopularTeam(id: unknown): boolean {
@@ -38,6 +30,7 @@ function getLeagueId(row: FixtureListRow): number | null {
 function parseFixtureDate(row: FixtureListRow): Date | null {
   const raw = row?.fixture?.date;
   if (!raw) return null;
+
   const dt = new Date(raw);
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
@@ -50,6 +43,7 @@ function fixtureHour(row: FixtureListRow): number | null {
 function isWeekendFixture(row: FixtureListRow): boolean {
   const dt = parseFixtureDate(row);
   if (!dt) return false;
+
   const day = dt.getDay();
   return day === 5 || day === 6 || day === 0;
 }
@@ -57,6 +51,7 @@ function isWeekendFixture(row: FixtureListRow): boolean {
 function isMidweekFixture(row: FixtureListRow): boolean {
   const dt = parseFixtureDate(row);
   if (!dt) return false;
+
   const day = dt.getDay();
   return day >= 1 && day <= 4;
 }
@@ -149,61 +144,57 @@ function cityPrestigeScore(city: string): number {
   return 0;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Base market pull                                                           */
-/* -------------------------------------------------------------------------- */
-
 function leagueWeight(leagueId: number | null): number {
   if (leagueId == null) return 54;
 
-  if (leagueId === 2) return 126;
-  if (leagueId === 3) return 102;
-  if (leagueId === 848) return 90;
+  if (leagueId === 2) return 136;
+  if (leagueId === 3) return 106;
+  if (leagueId === 848) return 88;
 
-  if (leagueId === 39) return 118;
-  if (leagueId === 140) return 112;
-  if (leagueId === 135) return 108;
-  if (leagueId === 78) return 104;
-  if (leagueId === 61) return 96;
+  if (leagueId === 140) return 124;
+  if (leagueId === 135) return 120;
+  if (leagueId === 78) return 116;
+  if (leagueId === 61) return 106;
+  if (leagueId === 39) return 104;
 
-  if (leagueId === 88) return 88;
-  if (leagueId === 94) return 86;
-  if (leagueId === 203) return 85;
-  if (leagueId === 179) return 82;
-  if (leagueId === 144) return 80;
-  if (leagueId === 218) return 78;
-  if (leagueId === 207) return 77;
-  if (leagueId === 197) return 77;
+  if (leagueId === 88) return 92;
+  if (leagueId === 94) return 90;
+  if (leagueId === 203) return 82;
+  if (leagueId === 179) return 80;
+  if (leagueId === 144) return 78;
+  if (leagueId === 218) return 76;
+  if (leagueId === 207) return 75;
+  if (leagueId === 197) return 75;
 
-  if (leagueId === 119) return 73;
-  if (leagueId === 345) return 73;
-  if (leagueId === 106) return 72;
-  if (leagueId === 210) return 71;
-  if (leagueId === 286) return 71;
-  if (leagueId === 271) return 69;
-  if (leagueId === 283) return 69;
-  if (leagueId === 332) return 67;
-  if (leagueId === 373) return 66;
-  if (leagueId === 172) return 66;
-  if (leagueId === 318) return 65;
-  if (leagueId === 315) return 64;
+  if (leagueId === 119) return 72;
+  if (leagueId === 345) return 72;
+  if (leagueId === 106) return 71;
+  if (leagueId === 210) return 70;
+  if (leagueId === 286) return 70;
+  if (leagueId === 271) return 68;
+  if (leagueId === 283) return 68;
+  if (leagueId === 332) return 66;
+  if (leagueId === 373) return 65;
+  if (leagueId === 172) return 65;
+  if (leagueId === 318) return 64;
+  if (leagueId === 315) return 63;
 
-  if (leagueId === 357) return 61;
-  if (leagueId === 113) return 60;
-  if (leagueId === 103) return 60;
-  if (leagueId === 244) return 58;
-  if (leagueId === 164) return 56;
+  if (leagueId === 357) return 60;
+  if (leagueId === 113) return 59;
+  if (leagueId === 103) return 59;
+  if (leagueId === 244) return 57;
+  if (leagueId === 164) return 55;
 
   return 54;
 }
 
 function leagueBreadthBonus(leagueId: number | null): number {
   if (leagueId == null) return 0;
-  if (EUROPEAN_COMPETITION_IDS.has(leagueId)) return 18;
-  if (ELITE_DOMESTIC_LEAGUES.has(leagueId)) return 12;
-  if (STRONG_SECOND_TIER_LEAGUES.has(leagueId)) return 9;
-  if (VALUE_DEPTH_LEAGUES.has(leagueId)) return 6;
-  return 4;
+  if (EUROPEAN_COMPETITION_IDS.has(leagueId)) return 20;
+  if (ELITE_DOMESTIC_LEAGUES.has(leagueId)) return 14;
+  if (STRONG_SECOND_TIER_LEAGUES.has(leagueId)) return 8;
+  if (VALUE_DEPTH_LEAGUES.has(leagueId)) return 5;
+  return 3;
 }
 
 export function baseFixtureScore(row: FixtureListRow): number {
@@ -213,31 +204,26 @@ export function baseFixtureScore(row: FixtureListRow): number {
   const homeId = row?.teams?.home?.id;
   const awayId = row?.teams?.away?.id;
 
-  if (hasPopularTeam(homeId)) score += 26;
-  if (hasPopularTeam(awayId)) score += 26;
+  if (hasPopularTeam(homeId)) score += 30;
+  if (hasPopularTeam(awayId)) score += 30;
 
   if (hasConfirmedVenue(row)) score += 8;
-  if (hasConfirmedCity(row)) score += 6;
+  if (hasConfirmedCity(row)) score += 7;
 
-  const cityPrestige = cityPrestigeScore(String(row?.fixture?.venue?.city ?? ""));
-  score += cityPrestige * 8;
+  score += cityPrestigeScore(String(row?.fixture?.venue?.city ?? "")) * 8;
 
   const hour = fixtureHour(row);
   if (hour != null) {
-    if (hour >= 19 && hour <= 21) score += 10;
-    else if (hour >= 17 && hour <= 22) score += 6;
+    if (hour >= 19 && hour <= 21) score += 11;
+    else if (hour >= 17 && hour <= 22) score += 7;
   }
 
-  if (isWeekendFixture(row)) score += 8;
-  if (isMidweekFixture(row) && isEuropeanCompetitionFixture(row)) score += 8;
-  if (isEuropeanCompetitionFixture(row)) score += 18;
+  if (isWeekendFixture(row)) score += 9;
+  if (isMidweekFixture(row) && isEuropeanCompetitionFixture(row)) score += 10;
+  if (isEuropeanCompetitionFixture(row)) score += 22;
 
   return score;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Context helpers                                                            */
-/* -------------------------------------------------------------------------- */
 
 function vibesFromContext(ctx?: DiscoverContext | null): DiscoverVibe[] {
   return Array.isArray(ctx?.vibes) ? ctx.vibes.filter(Boolean) : [];
@@ -248,10 +234,6 @@ function tripLengthFromContext(ctx?: DiscoverContext | null): DiscoverTripLength
   if (value === "day" || value === "1" || value === "2" || value === "3") return value;
   return null;
 }
-
-/* -------------------------------------------------------------------------- */
-/* User-fit modifiers                                                         */
-/* -------------------------------------------------------------------------- */
 
 function vibeBoost(scored: DiscoverFixture, ctx?: DiscoverContext | null): number {
   const vibes = vibesFromContext(ctx);
@@ -269,10 +251,10 @@ function vibeBoost(scored: DiscoverFixture, ctx?: DiscoverContext | null): numbe
         break;
 
       case "big":
-        boost += scored.scores.derbyScore * 12;
-        boost += scored.scores.glamourScore * 8;
-        boost += scored.scores.atmosphereScore * 5;
-        boost += scored.scores.europeScore * 5;
+        boost += scored.scores.derbyScore * 13;
+        boost += scored.scores.glamourScore * 9;
+        boost += scored.scores.atmosphereScore * 6;
+        boost += scored.scores.europeScore * 6;
         break;
 
       case "nightlife":
@@ -342,18 +324,14 @@ function tripLengthBoost(scored: DiscoverFixture, ctx?: DiscoverContext | null):
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Category score builders                                                    */
-/* -------------------------------------------------------------------------- */
-
 function scoreBigMatches(scored: DiscoverFixture): number {
   return (
     baseFixtureScore(scored.fixture) +
-    scored.scores.derbyScore * 28 +
-    scored.scores.atmosphereScore * 20 +
-    scored.scores.glamourScore * 18 +
+    scored.scores.derbyScore * 30 +
+    scored.scores.atmosphereScore * 21 +
+    scored.scores.glamourScore * 20 +
     scored.scores.titleDramaScore * 16 +
-    scored.scores.europeScore * 10 +
+    scored.scores.europeScore * 12 +
     scored.scores.nightScore * 6
   );
 }
@@ -361,8 +339,8 @@ function scoreBigMatches(scored: DiscoverFixture): number {
 function scoreDerbies(scored: DiscoverFixture): number {
   return (
     baseFixtureScore(scored.fixture) +
-    scored.scores.derbyScore * 60 +
-    scored.scores.atmosphereScore * 12 +
+    scored.scores.derbyScore * 64 +
+    scored.scores.atmosphereScore * 13 +
     scored.scores.cultureScore * 10 +
     scored.scores.nightScore * 5
   );
@@ -371,7 +349,7 @@ function scoreDerbies(scored: DiscoverFixture): number {
 function scoreAtmospheres(scored: DiscoverFixture): number {
   return (
     baseFixtureScore(scored.fixture) +
-    scored.scores.atmosphereScore * 42 +
+    scored.scores.atmosphereScore * 44 +
     scored.scores.cultureScore * 14 +
     scored.scores.derbyScore * 10 +
     scored.scores.nightScore * 8 +
@@ -381,12 +359,12 @@ function scoreAtmospheres(scored: DiscoverFixture): number {
 
 function scoreValueTrips(scored: DiscoverFixture): number {
   return (
-    baseFixtureScore(scored.fixture) * 0.3 +
-    scored.scores.valueScore * 54 +
+    baseFixtureScore(scored.fixture) * 0.28 +
+    scored.scores.valueScore * 56 +
     scored.scores.ticketEaseScore * 16 +
     scored.scores.tripEaseScore * 14 +
     scored.scores.cityScore * 8 +
-    scored.scores.underratedScore * 10
+    scored.scores.underratedScore * 12
   );
 }
 
@@ -394,14 +372,14 @@ function scorePerfectTrips(scored: DiscoverFixture): number {
   return (
     baseFixtureScore(scored.fixture) +
     scored.scores.atmosphereScore * 16 +
-    scored.scores.valueScore * 16 +
-    scored.scores.cityScore * 16 +
+    scored.scores.valueScore * 15 +
+    scored.scores.cityScore * 18 +
     scored.scores.cultureScore * 16 +
     scored.scores.tripEaseScore * 16 +
     scored.scores.ticketEaseScore * 10 +
     scored.scores.nightlifeScore * 8 +
     scored.scores.multiMatchScore * 8 +
-    scored.scores.weekendTripScore * 6
+    scored.scores.weekendTripScore * 7
   );
 }
 
@@ -418,11 +396,11 @@ function scoreEasyTickets(scored: DiscoverFixture): number {
 function scoreLegendaryStadiums(scored: DiscoverFixture): number {
   return (
     baseFixtureScore(scored.fixture) +
-    scored.scores.stadiumScore * 56 +
+    scored.scores.stadiumScore * 58 +
     scored.scores.atmosphereScore * 12 +
     scored.scores.cityScore * 10 +
     scored.scores.derbyScore * 6 +
-    scored.scores.glamourScore * 8
+    scored.scores.glamourScore * 9
   );
 }
 
@@ -432,7 +410,7 @@ function scoreIconicCities(scored: DiscoverFixture): number {
 
   return (
     baseFixtureScore(scored.fixture) +
-    cityPrestige * 46 +
+    cityPrestige * 48 +
     scored.scores.cityScore * 22 +
     scored.scores.cultureScore * 18 +
     scored.scores.stadiumScore * 10 +
@@ -444,7 +422,7 @@ function scoreIconicCities(scored: DiscoverFixture): number {
 function scoreNightMatches(scored: DiscoverFixture): number {
   return (
     baseFixtureScore(scored.fixture) +
-    scored.scores.nightScore * 56 +
+    scored.scores.nightScore * 58 +
     scored.scores.nightlifeScore * 22 +
     scored.scores.atmosphereScore * 12 +
     scored.scores.derbyScore * 8 +
@@ -473,12 +451,12 @@ function scoreTitleDrama(scored: DiscoverFixture): number {
 function scoreBucketList(scored: DiscoverFixture): number {
   return (
     baseFixtureScore(scored.fixture) +
-    scored.scores.stadiumScore * 34 +
-    scored.scores.atmosphereScore * 26 +
+    scored.scores.stadiumScore * 36 +
+    scored.scores.atmosphereScore * 27 +
     scored.scores.derbyScore * 18 +
     scored.scores.cityScore * 14 +
-    scored.scores.glamourScore * 14 +
-    scored.scores.europeScore * 8 +
+    scored.scores.glamourScore * 15 +
+    scored.scores.europeScore * 9 +
     scored.scores.nightScore * 6
   );
 }
@@ -486,7 +464,7 @@ function scoreBucketList(scored: DiscoverFixture): number {
 function scoreMatchdayCulture(scored: DiscoverFixture): number {
   return (
     baseFixtureScore(scored.fixture) +
-    scored.scores.cultureScore * 36 +
+    scored.scores.cultureScore * 38 +
     scored.scores.atmosphereScore * 22 +
     scored.scores.cityScore * 14 +
     scored.scores.derbyScore * 10 +
@@ -502,8 +480,8 @@ function scoreUnderratedTrips(scored: DiscoverFixture): number {
   if (hasPopularTeam(row?.teams?.away?.id)) glamourPenalty += 16;
 
   return (
-    baseFixtureScore(row) * 0.72 +
-    scored.scores.underratedScore * 34 +
+    baseFixtureScore(row) * 0.7 +
+    scored.scores.underratedScore * 36 +
     scored.scores.atmosphereScore * 16 +
     scored.scores.valueScore * 18 +
     scored.scores.cityScore * 10 +
@@ -517,16 +495,17 @@ function scoreEuropeanNights(scored: DiscoverFixture): number {
 
   let score =
     baseFixtureScore(row) +
-    scored.scores.europeScore * 42 +
-    scored.scores.glamourScore * 18 +
+    scored.scores.europeScore * 44 +
+    scored.scores.glamourScore * 19 +
     scored.scores.atmosphereScore * 18 +
     scored.scores.nightScore * 16 +
     scored.scores.cityScore * 10 +
     scored.scores.stadiumScore * 8;
 
-  if (isEuropeanCompetitionFixture(row)) score += 120;
+  if (isEuropeanCompetitionFixture(row)) score += 128;
   if (scored.scores.derbyScore >= 3) score += 8;
   if (isMidweekFixture(row)) score += 12;
+  if (isEveningFixture(row)) score += 8;
 
   return score;
 }
@@ -536,7 +515,7 @@ function scoreMultiMatchTrips(scored: DiscoverFixture): number {
 
   let score =
     baseFixtureScore(row) +
-    scored.scores.multiMatchScore * 36 +
+    scored.scores.multiMatchScore * 38 +
     scored.scores.tripEaseScore * 18 +
     scored.scores.cityScore * 18 +
     scored.scores.cultureScore * 12 +
@@ -555,7 +534,7 @@ function scoreWeekendTrips(scored: DiscoverFixture): number {
 
   let score =
     baseFixtureScore(row) +
-    scored.scores.weekendTripScore * 36 +
+    scored.scores.weekendTripScore * 38 +
     scored.scores.tripEaseScore * 16 +
     scored.scores.cityScore * 14 +
     scored.scores.cultureScore * 10 +
@@ -563,15 +542,11 @@ function scoreWeekendTrips(scored: DiscoverFixture): number {
     scored.scores.valueScore * 8 +
     scored.scores.nightlifeScore * 8;
 
-  if (isWeekendFixture(row)) score += 96;
-  if (isEuropeanCompetitionFixture(row)) score -= 6;
+  if (isWeekendFixture(row)) score += 100;
+  if (isEuropeanCompetitionFixture(row)) score -= 4;
 
   return score;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Public API                                                                 */
-/* -------------------------------------------------------------------------- */
 
 export function discoverScoreForCategory(
   category: DiscoverCategory,
@@ -584,67 +559,51 @@ export function discoverScoreForCategory(
     case "bigMatches":
       score = scoreBigMatches(scored);
       break;
-
     case "derbies":
       score = scoreDerbies(scored);
       break;
-
     case "atmospheres":
       score = scoreAtmospheres(scored);
       break;
-
     case "valueTrips":
       score = scoreValueTrips(scored);
       break;
-
     case "perfectTrips":
       score = scorePerfectTrips(scored);
       break;
-
     case "easyTickets":
       score = scoreEasyTickets(scored);
       break;
-
     case "legendaryStadiums":
       score = scoreLegendaryStadiums(scored);
       break;
-
     case "iconicCities":
       score = scoreIconicCities(scored);
       break;
-
     case "nightMatches":
       score = scoreNightMatches(scored);
       break;
-
     case "titleDrama":
       score = scoreTitleDrama(scored);
       break;
-
     case "bucketList":
       score = scoreBucketList(scored);
       break;
-
     case "matchdayCulture":
       score = scoreMatchdayCulture(scored);
       break;
-
     case "underratedTrips":
       score = scoreUnderratedTrips(scored);
       break;
-
     case "europeanNights":
       score = scoreEuropeanNights(scored);
       break;
-
     case "multiMatchTrips":
       score = scoreMultiMatchTrips(scored);
       break;
-
     case "weekendTrips":
       score = scoreWeekendTrips(scored);
       break;
-
     default:
       score = baseFixtureScore(scored.fixture);
       break;
