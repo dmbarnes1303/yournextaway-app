@@ -1,13 +1,19 @@
+// src/features/discover/discoverPresets.ts
+
 import type { InspirationPreset, QuickSpark } from "./types";
 
 export const PLACEHOLDER_DISCOVER_IMAGE =
   "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1600&h=1000&fm=jpg&q=82";
 
+/* -------------------------------------------------------------------------- */
+/* Inspiration presets (editorial entry points)                                */
+/* -------------------------------------------------------------------------- */
+
 export const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "best-now",
     title: "Best trips right now",
-    subtitle: "Strong live options for a football trip soon",
+    subtitle: "Strongest overall football-trip options in the near window",
     icon: "flash-outline",
     category: "perfectTrips",
     windowKey: "d30",
@@ -15,7 +21,7 @@ export const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "easy",
     title: "Easy city breaks",
-    subtitle: "Lower-friction trips with cleaner planning potential",
+    subtitle: "Low-friction trips with realistic access and simple planning",
     icon: "navigate-outline",
     vibe: "easy",
     category: "easyTickets",
@@ -24,8 +30,8 @@ export const INSPIRATION_PRESETS: InspirationPreset[] = [
   },
   {
     id: "big",
-    title: "Big matches",
-    subtitle: "High-profile fixtures worth travelling for",
+    title: "Big match trips",
+    subtitle: "High-profile fixtures with real occasion and travel pull",
     icon: "star-outline",
     vibe: "big",
     category: "bigMatches",
@@ -34,7 +40,7 @@ export const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "europe",
     title: "European nights",
-    subtitle: "Champions League, Europa League and Conference League pull",
+    subtitle: "Midweek continental fixtures with stronger atmosphere and pull",
     icon: "flash-outline",
     vibe: "big",
     category: "europeanNights",
@@ -43,7 +49,7 @@ export const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "weekend",
     title: "Weekend football trips",
-    subtitle: "Friday-to-Sunday trips with cleaner stacking potential",
+    subtitle: "Clean Friday–Sunday trips that actually work in practice",
     icon: "calendar-outline",
     category: "weekendTrips",
     windowKey: "wknd",
@@ -52,7 +58,7 @@ export const INSPIRATION_PRESETS: InspirationPreset[] = [
   {
     id: "culture",
     title: "City + match trips",
-    subtitle: "Trips where the place matters as much as the game",
+    subtitle: "Trips where the destination matters as much as the fixture",
     icon: "people-outline",
     vibe: "culture",
     category: "matchdayCulture",
@@ -60,7 +66,19 @@ export const INSPIRATION_PRESETS: InspirationPreset[] = [
   },
 ];
 
+/* -------------------------------------------------------------------------- */
+/* Quick sparks (fast entry shortcuts)                                         */
+/* -------------------------------------------------------------------------- */
+
 export const QUICK_SPARKS: QuickSpark[] = [
+  {
+    id: "big-now",
+    title: "Big matches now",
+    icon: "flame-outline",
+    category: "bigMatches",
+    vibe: "big",
+    windowKey: "d14",
+  },
   {
     id: "european-nights",
     title: "European nights",
@@ -70,8 +88,8 @@ export const QUICK_SPARKS: QuickSpark[] = [
     windowKey: "d30",
   },
   {
-    id: "weekend-stacks",
-    title: "Weekend football trips",
+    id: "weekend-trips",
+    title: "Weekend trips",
     icon: "calendar-outline",
     category: "weekendTrips",
     tripLength: "2",
@@ -79,31 +97,23 @@ export const QUICK_SPARKS: QuickSpark[] = [
   },
   {
     id: "multi-match",
-    title: "Multi-match trips",
+    title: "Stack trips",
     icon: "git-compare-outline",
     category: "multiMatchTrips",
     tripLength: "2",
     windowKey: "d30",
   },
   {
-    id: "derby-nights",
-    title: "Big derby nights",
-    icon: "flame-outline",
-    category: "derbies",
-    vibe: "big",
-    windowKey: "d90",
-  },
-  {
-    id: "midweek-football",
-    title: "Midweek football trips",
+    id: "night-games",
+    title: "Night games",
     icon: "moon-outline",
     category: "nightMatches",
     vibe: "nightlife",
     windowKey: "d30",
   },
   {
-    id: "best-value",
-    title: "Best value trips",
+    id: "value",
+    title: "Value trips",
     icon: "cash-outline",
     category: "valueTrips",
     vibe: "easy",
