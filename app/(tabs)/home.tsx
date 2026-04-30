@@ -30,6 +30,7 @@ import {
   toIsoDate,
   type LeagueOption,
   windowFromTomorrowIso,
+  nextWeekendWindowIso,
 } from "@/src/constants/football";
 
 import { formatUkDateOnly, formatUkDateTimeMaybe } from "@/src/utils/formatters";
@@ -49,16 +50,13 @@ import UpcomingMatches from "@/src/features/home/UpcomingMatches";
 const HOME_PREFETCH_DELAY_MS = 900;
 const HOME_MATCH_WINDOW_DAYS = 45;
 const DEFAULT_USER_COUNTRY_CODE = "GB";
-
 const ALL_COMPETITIONS_ID = 0;
 
-const FAST_DISCOVERY_LEAGUE_IDS = [
-  140, 135, 78, 61, 88, 94, 2, 3, 848,
-];
+const HOME_DISCOVERY_LEAGUE_ORDER = [140, 135, 78, 61, 88, 94, 2, 3, 848, 179, 203];
 
-const HOME_DISCOVERY_LEAGUE_ORDER = [
-  140, 135, 78, 61, 88, 94, 2, 3, 848, 179, 203,
-];
+const MAJOR_PICK_LEAGUE_IDS = [2, 140, 135, 78, 61, 39, 3, 848, 88, 94];
+
+const FAST_DISCOVERY_LEAGUE_IDS = [2, 140, 135, 78, 61, 88, 94, 3, 848, 179, 203];
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
   `https://media.api-sports.io/football/teams/${teamId}.png`;
@@ -87,26 +85,91 @@ const ALL_COMPETITIONS: LeagueOption = {
 };
 
 const MARQUEE_TEAM_TERMS = [
-  "arsenal", "aston villa", "atletico", "atlético", "ajax", "bayern", "benfica",
-  "borussia dortmund", "barcelona", "celtic", "chelsea", "dortmund", "fenerbahce",
-  "fenerbahçe", "galatasaray", "inter", "juventus", "lazio", "liverpool",
-  "manchester city", "manchester united", "milan", "napoli", "newcastle",
-  "olympiacos", "porto", "psg", "paris saint-germain", "real madrid", "roma",
-  "rangers", "sl benfica", "sporting", "tottenham", "tottenham hotspur", "west ham",
+  "arsenal",
+  "aston villa",
+  "atletico",
+  "atlético",
+  "ajax",
+  "bayern",
+  "benfica",
+  "borussia dortmund",
+  "barcelona",
+  "celtic",
+  "chelsea",
+  "dortmund",
+  "fenerbahce",
+  "fenerbahçe",
+  "galatasaray",
+  "inter",
+  "juventus",
+  "lazio",
+  "liverpool",
+  "manchester city",
+  "manchester united",
+  "milan",
+  "napoli",
+  "newcastle",
+  "olympiacos",
+  "porto",
+  "psg",
+  "paris saint-germain",
+  "real madrid",
+  "roma",
+  "rangers",
+  "sl benfica",
+  "sporting",
+  "tottenham",
+  "tottenham hotspur",
+  "west ham",
 ];
 
 const DESTINATION_CITY_TERMS = [
-  "amsterdam", "barcelona", "berlin", "bilbao", "dortmund", "florence", "glasgow",
-  "istanbul", "lisbon", "liverpool", "london", "madrid", "manchester", "milan",
-  "munich", "naples", "napoli", "porto", "prague", "rome", "san sebastian",
-  "seville", "turin", "valencia", "vienna",
+  "amsterdam",
+  "barcelona",
+  "berlin",
+  "bilbao",
+  "dortmund",
+  "florence",
+  "glasgow",
+  "istanbul",
+  "lisbon",
+  "liverpool",
+  "london",
+  "madrid",
+  "manchester",
+  "milan",
+  "munich",
+  "naples",
+  "napoli",
+  "porto",
+  "prague",
+  "rome",
+  "san sebastian",
+  "seville",
+  "turin",
+  "valencia",
+  "vienna",
 ];
 
 const ICONIC_VENUE_TERMS = [
-  "allianz arena", "anfield", "bernabeu", "camp nou", "celtic park", "emirates",
-  "estadio da luz", "ibrox", "johan cruijff arena", "mestalla", "old trafford",
-  "olympico", "san siro", "signal iduna park", "stamford bridge",
-  "tottenham hotspur stadium", "wanda metropolitano", "wembley",
+  "allianz arena",
+  "anfield",
+  "bernabeu",
+  "camp nou",
+  "celtic park",
+  "emirates",
+  "estadio da luz",
+  "ibrox",
+  "johan cruijff arena",
+  "mestalla",
+  "old trafford",
+  "olympico",
+  "san siro",
+  "signal iduna park",
+  "stamford bridge",
+  "tottenham hotspur stadium",
+  "wanda metropolitano",
+  "wembley",
 ];
 
 const RIVALRY_PATTERNS: Array<readonly [string, string]> = [
@@ -114,11 +177,15 @@ const RIVALRY_PATTERNS: Array<readonly [string, string]> = [
   ["barcelona", "real madrid"],
   ["bayern", "dortmund"],
   ["celtic", "rangers"],
+  ["chelsea", "arsenal"],
+  ["chelsea", "tottenham"],
   ["everton", "liverpool"],
   ["inter", "milan"],
   ["lazio", "roma"],
   ["manchester city", "manchester united"],
   ["real madrid", "atletico"],
+  ["roma", "napoli"],
+  ["tottenham", "west ham"],
 ];
 
 function clean(value: unknown): string {
@@ -221,20 +288,34 @@ function hasRivalryBoost(home: string, away: string) {
 
 function leagueBaseScore(leagueId?: number | null, userCountryCode = DEFAULT_USER_COUNTRY_CODE) {
   const league = LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
-  const domesticPenalty = league && isDomesticLeague(league, userCountryCode) ? -44 : 0;
+  const domesticPenalty = league && isDomesticLeague(league, userCountryCode) ? -42 : 0;
 
-  if (leagueId === 140) return 124 + domesticPenalty;
-  if (leagueId === 135) return 120 + domesticPenalty;
-  if (leagueId === 78) return 116 + domesticPenalty;
-  if (leagueId === 61) return 108 + domesticPenalty;
-  if (leagueId === 88) return 102 + domesticPenalty;
-  if (leagueId === 94) return 100 + domesticPenalty;
-  if (leagueId === 2) return 118;
-  if (leagueId === 3) return 104;
-  if (leagueId === 848) return 94;
-  if (leagueId === 39) return 96 + domesticPenalty;
+  if (leagueId === 2) return 150;
+  if (leagueId === 140) return 138 + domesticPenalty;
+  if (leagueId === 135) return 134 + domesticPenalty;
+  if (leagueId === 78) return 130 + domesticPenalty;
+  if (leagueId === 61) return 118 + domesticPenalty;
+  if (leagueId === 39) return 112 + domesticPenalty;
+  if (leagueId === 3) return 110;
+  if (leagueId === 848) return 98;
+  if (leagueId === 88) return 104 + domesticPenalty;
+  if (leagueId === 94) return 102 + domesticPenalty;
+  if (leagueId === 179) return 86 + domesticPenalty;
+  if (leagueId === 203) return 86 + domesticPenalty;
 
-  return 72 + domesticPenalty;
+  return 70 + domesticPenalty;
+}
+
+function majorLeagueBoost(leagueId?: number | null) {
+  if (leagueId === 2) return 44;
+  if (leagueId === 140) return 34;
+  if (leagueId === 135) return 31;
+  if (leagueId === 78) return 29;
+  if (leagueId === 61) return 22;
+  if (leagueId === 39) return 18;
+  if (leagueId === 3) return 16;
+  if (leagueId === 848) return 8;
+  return 0;
 }
 
 function kickoffTimingScore(dt: Date) {
@@ -244,15 +325,15 @@ function kickoffTimingScore(dt: Date) {
   let s = 0;
 
   if (day === 6) s += 22;
-  else if (day === 0) s += 18;
-  else if (day === 5) s += 14;
-  else if (day === 3 || day === 2) s += 6;
-  else if (day === 1 || day === 4) s += 2;
+  else if (day === 0) s += 20;
+  else if (day === 5) s += 15;
+  else if (day === 3 || day === 2) s += 8;
+  else if (day === 1 || day === 4) s += 3;
 
-  if (day === 6 && hr >= 14 && hr <= 20) s += 12;
-  else if (day === 0 && hr >= 13 && hr <= 19) s += 9;
-  else if (day === 5 && hr >= 18 && hr <= 21) s += 8;
-  else if (hr >= 17 && hr <= 21) s += 7;
+  if (day === 6 && hr >= 14 && hr <= 21) s += 13;
+  else if (day === 0 && hr >= 13 && hr <= 21) s += 11;
+  else if (day === 5 && hr >= 18 && hr <= 22) s += 9;
+  else if (hr >= 17 && hr <= 22) s += 7;
   else if (hr >= 12 && hr <= 16) s += 3;
 
   return s;
@@ -267,18 +348,18 @@ function scoreFixture(r: FixtureListRow, userCountryCode = DEFAULT_USER_COUNTRY_
   const venue = clean(r?.fixture?.venue?.name);
   const city = clean(r?.fixture?.venue?.city);
 
-  const combinedTeams = `${home} ${away}`.toLowerCase();
-  const combinedLocation = `${venue} ${city}`.toLowerCase();
+  const teamsText = `${home} ${away}`.toLowerCase();
+  const locationText = `${venue} ${city}`.toLowerCase();
 
   s += leagueBaseScore(leagueId, userCountryCode);
+  s += majorLeagueBoost(leagueId);
 
   if (venue) s += 10;
   if (city) s += 10;
-
-  if (includesAny(combinedTeams, MARQUEE_TEAM_TERMS)) s += 18;
-  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 22;
-  if (includesAny(combinedLocation, ICONIC_VENUE_TERMS)) s += 16;
-  if (hasRivalryBoost(home, away)) s += 28;
+  if (includesAny(teamsText, MARQUEE_TEAM_TERMS)) s += 24;
+  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 18;
+  if (includesAny(locationText, ICONIC_VENUE_TERMS)) s += 18;
+  if (hasRivalryBoost(home, away)) s += 42;
 
   const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
   if (dt && !Number.isNaN(dt.getTime())) s += kickoffTimingScore(dt);
@@ -303,6 +384,37 @@ function dedupeFixtures(rows: FixtureListRow[]): FixtureListRow[] {
   return Array.from(map.values());
 }
 
+function oneBestFixturePerLeague(rows: FixtureListRow[], userCountryCode: string): FixtureListRow[] {
+  const best = new Map<number, { row: FixtureListRow; score: number }>();
+
+  for (const row of rows) {
+    const leagueId = Number(row?.league?.id);
+    if (!Number.isFinite(leagueId)) continue;
+
+    const score = scoreFixture(row, userCountryCode);
+    const existing = best.get(leagueId);
+
+    if (!existing || score > existing.score) {
+      best.set(leagueId, { row, score });
+    }
+  }
+
+  return Array.from(best.values())
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.row);
+}
+
+function isWithinWindow(row: FixtureListRow, window: ShortcutWindow): boolean {
+  const raw = clean(row?.fixture?.date);
+  if (!raw) return false;
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const day = toIsoDate(date);
+  return day >= window.from && day <= window.to;
+}
+
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
 
@@ -317,8 +429,12 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 function mapFixtureError(message: string | null): string | null {
   const value = clean(message).toLowerCase();
   if (!value) return null;
-  if (value.includes("backend_timeout")) return "Live fixtures took too long to respond. Try again in a moment.";
-  if (value.includes("timeout")) return "Fixture data is taking longer than expected. Try again shortly.";
+  if (value.includes("backend_timeout")) {
+    return "Live fixtures took too long to respond. Try again in a moment.";
+  }
+  if (value.includes("timeout")) {
+    return "Fixture data is taking longer than expected. Try again shortly.";
+  }
   return message;
 }
 
@@ -350,6 +466,7 @@ export default function HomeScreen() {
     const domestic = homeVisible.filter((l) => isDomesticLeague(l, userCountryCode));
     const ordered = orderHomeLeagues([...foreignFirst, ...domestic]);
     const fallback = orderHomeLeagues(LEAGUES.filter((l) => !isDomesticLeague(l, userCountryCode)));
+
     return [ALL_COMPETITIONS, ...(ordered.length ? ordered : fallback).slice(0, 10)];
   }, [userCountryCode]);
 
@@ -357,6 +474,7 @@ export default function HomeScreen() {
 
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
   const upcomingWindow = useMemo(() => windowFromTomorrowIso(HOME_MATCH_WINDOW_DAYS), []);
+  const weekendWindow = useMemo(() => nextWeekendWindowIso(), []);
 
   const [loadedTrips, setLoadedTrips] = useState(tripsStore.getState().loaded);
   const [trips, setTrips] = useState<Trip[]>(tripsStore.getState().trips);
@@ -451,10 +569,12 @@ export default function HomeScreen() {
             fastSettled.flatMap((s) => (s.status === "fulfilled" ? s.value : []))
           );
 
+          const fastOnePerLeague = oneBestFixturePerLeague(fastRows, userCountryCode);
+
           if (cancelled || activeFixtureRequestRef.current !== requestId) return;
 
-          fixtureCacheRef.current.set(fixtureWindowKey, fastRows);
-          setFxRows(fastRows);
+          fixtureCacheRef.current.set(fixtureWindowKey, fastOnePerLeague);
+          setFxRows(fastOnePerLeague);
           setFxLoading(false);
           setFxRefreshing(false);
 
@@ -468,19 +588,20 @@ export default function HomeScreen() {
               chunks.push(remaining.slice(i, i + 4));
             }
 
-            let merged = fastRows;
+            let mergedRaw = fastRows;
 
             for (const chunk of chunks) {
               if (cancelled || activeFixtureRequestRef.current !== requestId) return;
 
               const settled = await Promise.allSettled(chunk.map(fetchLeagueRows));
               const more = settled.flatMap((s) => (s.status === "fulfilled" ? s.value : []));
-              merged = dedupeFixtures([...merged, ...more]);
+              mergedRaw = dedupeFixtures([...mergedRaw, ...more]);
 
-              fixtureCacheRef.current.set(fixtureWindowKey, merged);
+              const onePerLeague = oneBestFixturePerLeague(mergedRaw, userCountryCode);
+              fixtureCacheRef.current.set(fixtureWindowKey, onePerLeague);
 
               if (!cancelled && activeFixtureRequestRef.current === requestId) {
-                setFxRows(merged);
+                setFxRows(onePerLeague);
               }
             }
           })();
@@ -562,12 +683,28 @@ export default function HomeScreen() {
   }, [homeTopLeagues, league.leagueId, upcomingWindow.from, upcomingWindow.to]);
 
   const fxOrdered = useMemo(() => {
-    return (fxRows ?? [])
+    const selectedIsAll = league.leagueId === ALL_COMPETITIONS_ID;
+
+    const sourceRows = selectedIsAll
+      ? oneBestFixturePerLeague(fxRows ?? [], userCountryCode)
+      : fxRows ?? [];
+
+    return sourceRows
       .filter((r) => r?.fixture?.id != null)
-      .map((r) => ({ r, s: scoreFixture(r, userCountryCode) }))
+      .map((r) => {
+        const weekend = isWithinWindow(r, weekendWindow);
+        const major = MAJOR_PICK_LEAGUE_IDS.includes(Number(r?.league?.id));
+        const majorWeekendBoost = selectedIsAll && weekend && major ? 70 : 0;
+        const weekendBoost = selectedIsAll && weekend ? 24 : 0;
+
+        return {
+          r,
+          s: scoreFixture(r, userCountryCode) + majorWeekendBoost + weekendBoost,
+        };
+      })
       .sort((a, b) => b.s - a.s)
       .map((x) => x.r);
-  }, [fxRows, userCountryCode]);
+  }, [fxRows, userCountryCode, league.leagueId, weekendWindow]);
 
   const featured = useMemo(() => fxOrdered[0] ?? null, [fxOrdered]);
   const list = useMemo(() => fxOrdered.slice(1, 4), [fxOrdered]);
@@ -660,18 +797,22 @@ export default function HomeScreen() {
 
   const goMatch = useCallback(
     (fixtureId: string) => {
+      const target = fxRows.find((row) => String(row?.fixture?.id) === String(fixtureId));
+      const targetLeagueId = target?.league?.id ?? league.leagueId;
+      const targetLeague = LEAGUES.find((l) => l.leagueId === Number(targetLeagueId));
+
       router.push({
         pathname: "/match/[id]",
         params: {
           id: fixtureId,
-          ...(league.leagueId !== ALL_COMPETITIONS_ID ? { leagueId: String(league.leagueId) } : {}),
-          ...(league.leagueId !== ALL_COMPETITIONS_ID ? { season: String(league.season) } : {}),
+          leagueId: String(targetLeague?.leagueId ?? targetLeagueId),
+          season: String(targetLeague?.season ?? league.season),
           from: fromIso,
           to: toIso,
         },
       } as any);
     },
-    [router, league.leagueId, league.season, fromIso, toIso]
+    [router, league.leagueId, league.season, fromIso, toIso, fxRows]
   );
 
   const goCityKey = useCallback(
@@ -817,7 +958,10 @@ export default function HomeScreen() {
       const city = clean(featured?.fixture?.venue?.city);
       const leagueName = clean(featured?.league?.name);
       const when = formatUkDateTimeMaybe(featured?.fixture?.date);
-      return [city, leagueName, when].filter(Boolean).join(" • ") || "Plan the whole weekend, not just the match.";
+      return (
+        [city, leagueName, when].filter(Boolean).join(" • ") ||
+        "Plan the whole weekend, not just the match."
+      );
     }
 
     if (nextTripCityTitle) return "Trips, guides, fixtures and bookings all in one workspace.";
@@ -944,7 +1088,9 @@ export default function HomeScreen() {
 
                 {!searchBuilding && !searchError ? (
                   flatSearchResults.length === 0 ? (
-                    <Text style={styles.groupEmpty}>No results yet. Try a team, city, league or stadium.</Text>
+                    <Text style={styles.groupEmpty}>
+                      No results yet. Try a team, city, league or stadium.
+                    </Text>
                   ) : (
                     <View style={styles.resultList}>
                       {flatSearchResults.map((r, idx) => (
