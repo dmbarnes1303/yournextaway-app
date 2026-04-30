@@ -6,10 +6,7 @@ import {
 } from "@/src/constants/football";
 import type { DiscoverCategory } from "./discoverCategories";
 import type { DiscoverTripLength, DiscoverVibe } from "./discoverEngine";
-import type {
-  DiscoverWindowKey,
-  ShortcutWindow,
-} from "./types";
+import type { DiscoverWindowKey, ShortcutWindow } from "./types";
 
 export { fetchDiscoverPool } from "./discoverPoolBuilder";
 export { buildMultiMatchTrips, comboWhy } from "./discoverTripBuilder";
@@ -90,8 +87,9 @@ export function pickRandom<T>(arr: T[]): T | null {
 }
 
 export function clampVibes(next: DiscoverVibe[]) {
-  if (next.length <= 3) return next;
-  return next.slice(next.length - 3);
+  const clean = Array.from(new Set(next.filter(Boolean)));
+  if (clean.length <= 3) return clean;
+  return clean.slice(clean.length - 3);
 }
 
 export function categorySeedFromFilters(params: {
@@ -101,13 +99,15 @@ export function categorySeedFromFilters(params: {
 }): DiscoverCategory {
   const { vibes, windowKey, tripLength } = params;
 
-  if (windowKey === "wknd") return "weekendTrips";
-  if (tripLength === "2" || tripLength === "3") return "multiMatchTrips";
   if (vibes.includes("big")) return "bigMatches";
+  if (windowKey === "wknd") return "weekendTrips";
+  if (tripLength === "3") return "multiMatchTrips";
+  if (tripLength === "2" && !vibes.includes("easy")) return "perfectTrips";
   if (vibes.includes("nightlife")) return "nightMatches";
   if (vibes.includes("culture")) return "matchdayCulture";
   if (vibes.includes("warm")) return "iconicCities";
   if (vibes.includes("easy")) return "easyTickets";
+
   return "perfectTrips";
 }
 
@@ -115,9 +115,7 @@ export function prioritiseCategories(
   categories: DiscoverCategory[],
   preferred: DiscoverCategory
 ): DiscoverCategory[] {
-  const deduped = categories.filter(
-    (category, index) => categories.indexOf(category) === index
-  );
+  const deduped = Array.from(new Set(categories));
   const withoutPreferred = deduped.filter((category) => category !== preferred);
   return deduped.includes(preferred) ? [preferred, ...withoutPreferred] : deduped;
 }
