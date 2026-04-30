@@ -46,11 +46,19 @@ import { getCityImageUrl } from "@/src/data/cityImages";
 import ContinuePlanning from "@/src/features/home/ContinuePlanning";
 import UpcomingMatches from "@/src/features/home/UpcomingMatches";
 
-const HOME_PREFETCH_LIMIT = 2;
 const HOME_PREFETCH_DELAY_MS = 900;
 const HOME_MATCH_WINDOW_DAYS = 45;
-
 const DEFAULT_USER_COUNTRY_CODE = "GB";
+
+const ALL_COMPETITIONS_ID = 0;
+
+const FAST_DISCOVERY_LEAGUE_IDS = [
+  140, 135, 78, 61, 88, 94, 2, 3, 848,
+];
+
+const HOME_DISCOVERY_LEAGUE_ORDER = [
+  140, 135, 78, 61, 88, 94, 2, 3, 848, 179, 203,
+];
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
   `https://media.api-sports.io/football/teams/${teamId}.png`;
@@ -64,106 +72,41 @@ type TripIdea = {
   hook: string;
 };
 
-const HOME_DISCOVERY_LEAGUE_ORDER = [
-  140, // La Liga
-  135, // Serie A
-  78, // Bundesliga
-  61, // Ligue 1
-  88, // Eredivisie
-  94, // Primeira Liga
-  2, // Champions League
-  3, // Europa League
-  848, // Conference League
-  179, // Scotland
-  203, // Turkey
-];
+const ALL_COMPETITIONS: LeagueOption = {
+  slug: "yournextaway-best",
+  label: "YourNextAway",
+  leagueId: ALL_COMPETITIONS_ID,
+  logo: "",
+  season: LEAGUES[0]?.season ?? new Date().getFullYear(),
+  country: "Europe",
+  countryCode: "EU",
+  browseRegion: "featured-europe",
+  featured: true,
+  homeVisible: true,
+  featuredClubKeys: [],
+};
 
 const MARQUEE_TEAM_TERMS = [
-  "arsenal",
-  "aston villa",
-  "atletico",
-  "atlético",
-  "ajax",
-  "bayern",
-  "benfica",
-  "borussia dortmund",
-  "barcelona",
-  "celtic",
-  "chelsea",
-  "dortmund",
-  "fenerbahce",
-  "fenerbahçe",
-  "galatasaray",
-  "inter",
-  "juventus",
-  "lazio",
-  "liverpool",
-  "manchester city",
-  "manchester united",
-  "milan",
-  "napoli",
-  "newcastle",
-  "olympiacos",
-  "porto",
-  "psg",
-  "paris saint-germain",
-  "real madrid",
-  "roma",
-  "rangers",
-  "sl benfica",
-  "sporting",
-  "tottenham",
-  "tottenham hotspur",
-  "west ham",
+  "arsenal", "aston villa", "atletico", "atlético", "ajax", "bayern", "benfica",
+  "borussia dortmund", "barcelona", "celtic", "chelsea", "dortmund", "fenerbahce",
+  "fenerbahçe", "galatasaray", "inter", "juventus", "lazio", "liverpool",
+  "manchester city", "manchester united", "milan", "napoli", "newcastle",
+  "olympiacos", "porto", "psg", "paris saint-germain", "real madrid", "roma",
+  "rangers", "sl benfica", "sporting", "tottenham", "tottenham hotspur", "west ham",
 ];
 
 const DESTINATION_CITY_TERMS = [
-  "amsterdam",
-  "barcelona",
-  "berlin",
-  "bilbao",
-  "dortmund",
-  "florence",
-  "glasgow",
-  "istanbul",
-  "lisbon",
-  "liverpool",
-  "london",
-  "madrid",
-  "manchester",
-  "milan",
-  "munich",
-  "naples",
-  "napoli",
-  "porto",
-  "prague",
-  "rome",
-  "san sebastian",
-  "seville",
-  "turin",
-  "valencia",
-  "vienna",
+  "amsterdam", "barcelona", "berlin", "bilbao", "dortmund", "florence", "glasgow",
+  "istanbul", "lisbon", "liverpool", "london", "madrid", "manchester", "milan",
+  "munich", "naples", "napoli", "porto", "prague", "rome", "san sebastian",
+  "seville", "turin", "valencia", "vienna",
 ];
 
 const ICONIC_VENUE_TERMS = [
-  "allianz arena",
-  "anfield",
-  "bernabeu",
-  "camp nou",
-  "celtic park",
-  "emirates",
-  "estadio da luz",
-  "ibrox",
-  "johan cruijff arena",
-  "mestalla",
-  "old trafford",
-  "olympico",
-  "san siro",
-  "signal iduna park",
-  "stamford bridge",
-  "tottenham hotspur stadium",
-  "wanda metropolitano",
-  "wembley",
+  "allianz arena", "anfield", "bernabeu", "camp nou", "celtic park", "emirates",
+  "estadio da luz", "ibrox", "johan cruijff arena", "mestalla", "old trafford",
+  "olympico", "san siro", "signal iduna park", "stamford bridge",
+  "tottenham hotspur stadium", "wanda metropolitano", "wembley",
 ];
 
 const RIVALRY_PATTERNS: Array<readonly [string, string]> = [
@@ -196,9 +139,7 @@ function isDomesticLeague(league: LeagueOption, userCountryCode: string): boolea
   const user = normaliseCountryCode(userCountryCode);
   const leagueCountry = normaliseCountryCode(league.countryCode);
 
-  if (!user || !leagueCountry) return false;
-  if (leagueCountry === "EU") return false;
-
+  if (!user || !leagueCountry || leagueCountry === "EU") return false;
   return user === leagueCountry;
 }
 
@@ -350,6 +291,18 @@ function scoreFixture(r: FixtureListRow, userCountryCode = DEFAULT_USER_COUNTRY_
   return s;
 }
 
+function dedupeFixtures(rows: FixtureListRow[]): FixtureListRow[] {
+  const map = new Map<string, FixtureListRow>();
+
+  for (const row of rows) {
+    const id = row?.fixture?.id;
+    if (id == null) continue;
+    map.set(String(id), row);
+  }
+
+  return Array.from(map.values());
+}
+
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState(value);
 
@@ -364,35 +317,16 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 function mapFixtureError(message: string | null): string | null {
   const value = clean(message).toLowerCase();
   if (!value) return null;
-  if (value.includes("backend_timeout")) {
-    return "Live fixtures took too long to respond. Try again in a moment.";
-  }
-  if (value.includes("timeout")) {
-    return "Fixture data is taking longer than expected. Try again shortly.";
-  }
+  if (value.includes("backend_timeout")) return "Live fixtures took too long to respond. Try again in a moment.";
+  if (value.includes("timeout")) return "Fixture data is taking longer than expected. Try again shortly.";
   return message;
 }
 
 function getTripIdeas(): TripIdea[] {
   return [
-    {
-      key: "milan",
-      cityKey: "milan",
-      title: "Milan",
-      hook: "San Siro nights + city break",
-    },
-    {
-      key: "dortmund",
-      cityKey: "dortmund",
-      title: "Dortmund",
-      hook: "Yellow Wall weekend",
-    },
-    {
-      key: "lisbon",
-      cityKey: "lisbon",
-      title: "Lisbon",
-      hook: "Sun, stadiums & easy city trip",
-    },
+    { key: "milan", cityKey: "milan", title: "Milan", hook: "San Siro nights + city break" },
+    { key: "dortmund", cityKey: "dortmund", title: "Dortmund", hook: "Yellow Wall weekend" },
+    { key: "lisbon", cityKey: "lisbon", title: "Lisbon", hook: "Sun, stadiums & easy city trip" },
   ];
 }
 
@@ -408,31 +342,18 @@ function resultTypeLabel(type: SearchResult["type"]) {
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
   const userCountryCode = useMemo(() => detectUserCountryCode(), []);
 
   const homeTopLeagues = useMemo(() => {
     const homeVisible = LEAGUES.filter((l) => l.homeVisible);
     const foreignFirst = homeVisible.filter((l) => !isDomesticLeague(l, userCountryCode));
     const domestic = homeVisible.filter((l) => isDomesticLeague(l, userCountryCode));
-
     const ordered = orderHomeLeagues([...foreignFirst, ...domestic]);
-
-    if (ordered.length >= 6) return ordered.slice(0, 8);
-
-    return orderHomeLeagues(LEAGUES.filter((l) => !isDomesticLeague(l, userCountryCode))).slice(
-      0,
-      8
-    );
+    const fallback = orderHomeLeagues(LEAGUES.filter((l) => !isDomesticLeague(l, userCountryCode)));
+    return [ALL_COMPETITIONS, ...(ordered.length ? ordered : fallback).slice(0, 10)];
   }, [userCountryCode]);
 
-  const [league, setLeague] = useState<LeagueOption>(homeTopLeagues[0] ?? LEAGUES[0]);
-
-  useEffect(() => {
-    if (!homeTopLeagues.length) return;
-    if (homeTopLeagues.some((l) => l.leagueId === league.leagueId)) return;
-    setLeague(homeTopLeagues[0]);
-  }, [homeTopLeagues, league.leagueId]);
+  const [league, setLeague] = useState<LeagueOption>(ALL_COMPETITIONS);
 
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
   const upcomingWindow = useMemo(() => windowFromTomorrowIso(HOME_MATCH_WINDOW_DAYS), []);
@@ -446,9 +367,7 @@ export default function HomeScreen() {
       setTrips(s.trips);
     });
 
-    if (!tripsStore.getState().loaded) {
-      tripsStore.loadTrips().catch(() => {});
-    }
+    if (!tripsStore.getState().loaded) tripsStore.loadTrips().catch(() => {});
 
     return unsub;
   }, []);
@@ -473,8 +392,9 @@ export default function HomeScreen() {
   const [fxRefreshing, setFxRefreshing] = useState(false);
   const [fxError, setFxError] = useState<string | null>(null);
   const [fxRows, setFxRows] = useState<FixtureListRow[]>([]);
+
   const activeFixtureRequestRef = useRef(0);
-  const prefetchedKeysRef = useRef(new Set<string>());
+  const fixtureCacheRef = useRef(new Map<string, FixtureListRow[]>());
 
   const fixtureWindowKey = useMemo(() => {
     return `${league.leagueId}|${league.season}|${upcomingWindow.from}|${upcomingWindow.to}`;
@@ -485,25 +405,95 @@ export default function HomeScreen() {
     const requestId = activeFixtureRequestRef.current + 1;
     activeFixtureRequestRef.current = requestId;
 
-    async function run() {
-      const hasExistingRows = fxRows.length > 0;
+    const selectedIsAll = league.leagueId === ALL_COMPETITIONS_ID;
 
+    async function fetchLeagueRows(item: LeagueOption) {
+      const key = `${item.leagueId}|${item.season}|${upcomingWindow.from}|${upcomingWindow.to}`;
+      const cached = fixtureCacheRef.current.get(key);
+      if (cached) return cached;
+
+      const rows = await getFixtures({
+        league: item.leagueId,
+        season: item.season,
+        from: upcomingWindow.from,
+        to: upcomingWindow.to,
+      });
+
+      const safeRows = Array.isArray(rows) ? rows : [];
+      fixtureCacheRef.current.set(key, safeRows);
+      return safeRows;
+    }
+
+    async function run() {
+      const cached = fixtureCacheRef.current.get(fixtureWindowKey);
+      if (cached) {
+        setFxRows(cached);
+        setFxLoading(false);
+        setFxRefreshing(false);
+        setFxError(null);
+        return;
+      }
+
+      const hasExistingRows = fxRows.length > 0;
       if (hasExistingRows) setFxRefreshing(true);
       else setFxLoading(true);
 
       setFxError(null);
 
       try {
-        const rows = await getFixtures({
-          league: league.leagueId,
-          season: league.season,
-          from: upcomingWindow.from,
-          to: upcomingWindow.to,
-        });
+        if (selectedIsAll) {
+          const fastLeagues = FAST_DISCOVERY_LEAGUE_IDS.map((id) =>
+            LEAGUES.find((l) => l.leagueId === id)
+          ).filter((x): x is LeagueOption => Boolean(x));
+
+          const fastSettled = await Promise.allSettled(fastLeagues.map(fetchLeagueRows));
+          const fastRows = dedupeFixtures(
+            fastSettled.flatMap((s) => (s.status === "fulfilled" ? s.value : []))
+          );
+
+          if (cancelled || activeFixtureRequestRef.current !== requestId) return;
+
+          fixtureCacheRef.current.set(fixtureWindowKey, fastRows);
+          setFxRows(fastRows);
+          setFxLoading(false);
+          setFxRefreshing(false);
+
+          const remaining = LEAGUES.filter(
+            (l) => !FAST_DISCOVERY_LEAGUE_IDS.includes(l.leagueId)
+          );
+
+          void (async () => {
+            const chunks: LeagueOption[][] = [];
+            for (let i = 0; i < remaining.length; i += 4) {
+              chunks.push(remaining.slice(i, i + 4));
+            }
+
+            let merged = fastRows;
+
+            for (const chunk of chunks) {
+              if (cancelled || activeFixtureRequestRef.current !== requestId) return;
+
+              const settled = await Promise.allSettled(chunk.map(fetchLeagueRows));
+              const more = settled.flatMap((s) => (s.status === "fulfilled" ? s.value : []));
+              merged = dedupeFixtures([...merged, ...more]);
+
+              fixtureCacheRef.current.set(fixtureWindowKey, merged);
+
+              if (!cancelled && activeFixtureRequestRef.current === requestId) {
+                setFxRows(merged);
+              }
+            }
+          })();
+
+          return;
+        }
+
+        const rows = await fetchLeagueRows(league);
 
         if (cancelled || activeFixtureRequestRef.current !== requestId) return;
 
-        setFxRows(Array.isArray(rows) ? rows : []);
+        fixtureCacheRef.current.set(fixtureWindowKey, rows);
+        setFxRows(rows);
         setFxError(null);
       } catch (e: any) {
         if (cancelled || activeFixtureRequestRef.current !== requestId) return;
@@ -534,49 +524,42 @@ export default function HomeScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    const currentKey = fixtureWindowKey;
-    if (prefetchedKeysRef.current.has(currentKey)) return;
-
     const timeout = setTimeout(() => {
-      async function prefetchOtherHomeLeagues() {
+      async function prefetchVisibleLeagues() {
         const targets = homeTopLeagues
+          .filter((l) => l.leagueId !== ALL_COMPETITIONS_ID)
           .filter((l) => l.leagueId !== league.leagueId)
-          .slice(0, HOME_PREFETCH_LIMIT);
+          .slice(0, 4);
 
         await Promise.all(
           targets.map(async (item) => {
-            if (cancelled) return;
+            const key = `${item.leagueId}|${item.season}|${upcomingWindow.from}|${upcomingWindow.to}`;
+            if (fixtureCacheRef.current.has(key)) return;
 
             try {
-              await getFixtures({
+              const rows = await getFixtures({
                 league: item.leagueId,
                 season: item.season,
                 from: upcomingWindow.from,
                 to: upcomingWindow.to,
               });
+
+              if (!cancelled) fixtureCacheRef.current.set(key, Array.isArray(rows) ? rows : []);
             } catch {
               return;
             }
           })
         );
-
-        if (!cancelled) prefetchedKeysRef.current.add(currentKey);
       }
 
-      prefetchOtherHomeLeagues().catch(() => null);
+      prefetchVisibleLeagues().catch(() => null);
     }, HOME_PREFETCH_DELAY_MS);
 
     return () => {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [
-    fixtureWindowKey,
-    homeTopLeagues,
-    league.leagueId,
-    upcomingWindow.from,
-    upcomingWindow.to,
-  ]);
+  }, [homeTopLeagues, league.leagueId, upcomingWindow.from, upcomingWindow.to]);
 
   const fxOrdered = useMemo(() => {
     return (fxRows ?? [])
@@ -668,13 +651,8 @@ export default function HomeScreen() {
     [router]
   );
 
-  const goDiscover = useCallback(() => {
-    router.push("/(tabs)/discover" as any);
-  }, [router]);
-
-  const goTrips = useCallback(() => {
-    router.push("/(tabs)/trips" as any);
-  }, [router]);
+  const goDiscover = useCallback(() => router.push("/(tabs)/discover" as any), [router]);
+  const goTrips = useCallback(() => router.push("/(tabs)/trips" as any), [router]);
 
   const goFixturesHub = useCallback(() => {
     goFixtures({ window: windowFromTomorrowIso(HOME_MATCH_WINDOW_DAYS) });
@@ -686,8 +664,8 @@ export default function HomeScreen() {
         pathname: "/match/[id]",
         params: {
           id: fixtureId,
-          leagueId: String(league.leagueId),
-          season: String(league.season),
+          ...(league.leagueId !== ALL_COMPETITIONS_ID ? { leagueId: String(league.leagueId) } : {}),
+          ...(league.leagueId !== ALL_COMPETITIONS_ID ? { season: String(league.season) } : {}),
           from: fromIso,
           to: toIso,
         },
@@ -733,8 +711,7 @@ export default function HomeScreen() {
       }
 
       if (p?.kind === "venue") {
-        const venueName = clean(r.title);
-        goFixtures({ window: { from: fromIso, to: toIso }, venue: venueName });
+        goFixtures({ window: { from: fromIso, to: toIso }, venue: clean(r.title) });
         return;
       }
 
@@ -840,14 +817,10 @@ export default function HomeScreen() {
       const city = clean(featured?.fixture?.venue?.city);
       const leagueName = clean(featured?.league?.name);
       const when = formatUkDateTimeMaybe(featured?.fixture?.date);
-      const parts = [city, leagueName, when].filter(Boolean);
-      return parts.join(" • ") || "Plan the whole weekend, not just the match.";
+      return [city, leagueName, when].filter(Boolean).join(" • ") || "Plan the whole weekend, not just the match.";
     }
 
-    if (nextTripCityTitle) {
-      return "Trips, guides, fixtures and bookings all in one workspace.";
-    }
-
+    if (nextTripCityTitle) return "Trips, guides, fixtures and bookings all in one workspace.";
     return "Find the fixture worth travelling for.";
   }, [featured, nextTripCityTitle]);
 
@@ -1029,6 +1002,7 @@ export default function HomeScreen() {
                 setLeague={setLeague}
                 upcomingWindow={upcomingWindow}
                 fxLoading={showInitialFixtureLoading}
+                fxRefreshing={fxRefreshing && fxRows.length > 0}
                 fxError={showFixtureError ? homeFixtureError : null}
                 featured={featured}
                 list={list}
@@ -1037,14 +1011,8 @@ export default function HomeScreen() {
                 goFixtures={goFixtures}
                 goFixturesHub={goFixturesHub}
                 goMatch={goMatch}
+                allCompetitionsLeagueId={ALL_COMPETITIONS_ID}
               />
-
-              {fxRefreshing && fxRows.length > 0 ? (
-                <View style={styles.refreshingBadge}>
-                  <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-                  <Text style={styles.refreshingText}>Refreshing best upcoming matches…</Text>
-                </View>
-              ) : null}
 
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
@@ -1206,7 +1174,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: Platform.OS === "android" ? "rgba(17,24,22,0.92)" : "rgba(255,255,255,0.09)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(17,24,22,0.92)" : "rgba(255,255,255,0.09)",
     borderWidth: 1,
     borderColor: "rgba(163,230,53,0.22)",
   },
@@ -1280,7 +1249,8 @@ const styles = StyleSheet.create({
   resultList: {
     borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: Platform.OS === "android" ? "rgba(10,18,14,0.78)" : "rgba(10,18,14,0.72)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(10,18,14,0.78)" : "rgba(10,18,14,0.72)",
     borderWidth: 1,
     borderColor: "rgba(163,230,53,0.16)",
   },
@@ -1362,27 +1332,6 @@ const styles = StyleSheet.create({
   mainStack: {
     gap: 18,
     paddingTop: 2,
-  },
-
-  refreshingBadge: {
-    marginTop: -8,
-    alignSelf: "flex-start",
-    marginLeft: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-  },
-
-  refreshingText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.bold,
   },
 
   section: {
