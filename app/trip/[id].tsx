@@ -39,6 +39,7 @@ type GuideRow = {
 };
 
 type PrimaryAction = {
+  key: string;
   eyebrow: string;
   title: string;
   detail: string;
@@ -252,22 +253,22 @@ function bookedCount(progress: any) {
 function progressStateLabel(state: string) {
   if (state === "booked") return "Confirmed";
   if (state === "pending") return "In progress";
-  if (state === "saved") return "Saved idea";
-  return "Find options";
+  if (state === "saved") return "Saved";
+  return "Open";
 }
 
 function nextStepLabel(progress: any) {
-  if (progress?.tickets !== "booked") return "Next step: choose match tickets";
-  if (progress?.flight !== "booked") return "Next step: plan travel";
-  if (progress?.hotel !== "booked") return "Next step: compare stays";
-  if (progress?.things !== "booked") return "Next step: explore the city";
+  if (progress?.tickets !== "booked") return "Secure tickets first";
+  if (progress?.hotel !== "booked") return "Choose where to stay";
+  if (progress?.flight !== "booked") return "Lock in travel";
+  if (progress?.things !== "booked") return "Add city plans";
   return "Trip essentials are in place";
 }
 
-function MiniIcon({ label }: { label: string }) {
+function StepIcon({ label }: { label: string }) {
   return (
-    <View style={styles.miniIcon}>
-      <Text style={styles.miniIconText}>{label}</Text>
+    <View style={styles.stepIcon}>
+      <Text style={styles.stepIconText}>{label}</Text>
     </View>
   );
 }
@@ -321,90 +322,97 @@ export default function TripScreen() {
     clean(cityGuide?.country) ||
     "Italy";
 
-const primaryAction = useMemo(() => {
-  const ticketsState = data.progress?.tickets ?? "empty";
-  const hotelState = data.progress?.hotel ?? "empty";
-  const flightState = data.progress?.flight ?? "empty";
-  const thingsState = data.progress?.things ?? "empty";
+  const primaryAction: PrimaryAction = useMemo(() => {
+    const ticketsState = data.progress?.tickets ?? "empty";
+    const hotelState = data.progress?.hotel ?? "empty";
+    const flightState = data.progress?.flight ?? "empty";
+    const thingsState = data.progress?.things ?? "empty";
 
-  if (ticketsState !== "booked") {
+    if (ticketsState !== "booked") {
+      return {
+        key: "tickets",
+        eyebrow: "FIRST MOVE",
+        title:
+          ticketsState === "pending" || ticketsState === "saved"
+            ? "Finish the ticket decision"
+            : "Secure the match before building around it",
+        detail:
+          ticketsState === "pending" || ticketsState === "saved"
+            ? "You’ve already started this step. Finish tickets before committing the rest of the trip."
+            : fixture.hasRealMatch
+              ? `Start with ${fixture.homeName} vs ${fixture.awayName}. Without tickets, the rest is just a wishlist.`
+              : "Pick the match ticket route first so this trip is built on something real.",
+        cta: ticketLoading
+          ? "Checking tickets…"
+          : ticketsState === "pending" || ticketsState === "saved"
+            ? "Finish tickets"
+            : "Find ticket options",
+        onPress: () => {
+          if (data.primaryMatchId) {
+            void controller.openTicketsForMatch(String(data.primaryMatchId));
+          } else {
+            controller.onAddMatch();
+          }
+        },
+      };
+    }
+
+    if (hotelState !== "booked") {
+      return {
+        key: "stay",
+        eyebrow: "NEXT BEST STEP",
+        title: "Lock in where you’re staying",
+        detail: data.cityName
+          ? `Compare stays in ${data.cityName} for your exact trip dates.`
+          : "Choose a stay that fits the match and your trip window.",
+        cta: hotelState === "pending" || hotelState === "saved" ? "Finish stay" : "Compare stays",
+        onPress: () => void controller.onOpenSection("stay"),
+      };
+    }
+
+    if (flightState !== "booked") {
+      return {
+        key: "travel",
+        eyebrow: "ROUTE CHECK",
+        title: "Make sure the trip actually works",
+        detail: "Check the route before the trip becomes awkward, expensive or rushed.",
+        cta:
+          flightState === "pending" || flightState === "saved"
+            ? "Finish travel"
+            : "Compare travel",
+        onPress: () => void controller.onOpenSection("travel"),
+      };
+    }
+
+    if (thingsState !== "booked") {
+      return {
+        key: "things",
+        eyebrow: "CITY BREAK",
+        title: "Add something around the match",
+        detail: "Turn this from a match booking into an actual trip worth remembering.",
+        cta: "Add city plans",
+        onPress: () => void controller.onOpenSection("things"),
+      };
+    }
+
     return {
-      key: "tickets",
-      title:
-        ticketsState === "pending" || ticketsState === "saved"
-          ? "Finish your ticket decision"
-          : "This trip starts with tickets",
-      detail:
-        ticketsState === "pending" || ticketsState === "saved"
-          ? "You’ve already started. Finish the ticket step before building the rest."
-          : fixture.hasRealMatch
-            ? `Secure tickets for ${fixture.homeName} vs ${fixture.awayName} before planning around it.`
-            : "Choose the match ticket route first so the trip is built on something real.",
-      cta:
-        ticketsState === "pending" || ticketsState === "saved"
-          ? "Finish tickets"
-          : "Secure your tickets",
-      onPress: () => {
-        if (data.primaryMatchId) {
-          void controller.openTicketsForMatch(String(data.primaryMatchId));
-        } else {
-          controller.onAddMatch();
-        }
-      },
+      key: "wallet",
+      eyebrow: "READY",
+      title: "Your trip is taking shape",
+      detail: "Tickets, stay and travel are confirmed. Keep proof and key details in Wallet.",
+      cta: "View Wallet",
+      onPress: controller.onViewWallet,
     };
-  }
-
-  if (hotelState !== "booked") {
-    return {
-      key: "stay",
-      title: "Lock in where you’re staying",
-      detail: data.cityName
-        ? `Compare stays in ${data.cityName} for your exact trip dates.`
-        : "Choose a stay that fits the match and your trip window.",
-      cta: hotelState === "pending" || hotelState === "saved" ? "Finish stay" : "Book your stay",
-      onPress: () => void controller.onOpenSection("stay"),
-    };
-  }
-
-  if (flightState !== "booked") {
-    return {
-      key: "travel",
-      title: "Make sure this trip actually works",
-      detail: "Check the route before the trip becomes awkward, expensive or rushed.",
-      cta:
-        flightState === "pending" || flightState === "saved"
-          ? "Finish travel"
-          : "Lock in your travel",
-      onPress: () => void controller.onOpenSection("travel"),
-    };
-  }
-
-  if (thingsState !== "booked") {
-    return {
-      key: "things",
-      title: "Add something around the match",
-      detail: "Turn this from a match booking into an actual city break.",
-      cta: "Add something to the trip",
-      onPress: () => void controller.onOpenSection("things"),
-    };
-  }
-
-  return {
-    key: "wallet",
-    title: "Your trip is taking shape",
-    detail: "Tickets, stay and travel are now confirmed. Keep the important stuff in Wallet.",
-    cta: "View your booked trip",
-    onPress: controller.onViewWallet,
-  };
-}, [
-  controller,
-  data.cityName,
-  data.primaryMatchId,
-  data.progress,
-  fixture.awayName,
-  fixture.hasRealMatch,
-  fixture.homeName,
-]);
+  }, [
+    controller,
+    data.cityName,
+    data.primaryMatchId,
+    data.progress,
+    fixture.awayName,
+    fixture.hasRealMatch,
+    fixture.homeName,
+    ticketLoading,
+  ]);
 
   const guideRows: GuideRow[] = useMemo(() => {
     const rows: GuideRow[] = [];
@@ -413,7 +421,7 @@ const primaryAction = useMemo(() => {
       rows.push({
         key: "city",
         title: `${cityGuide.name || data.cityName} City Guide`,
-        detail: "Areas, food, transport and matchday city tips",
+        detail: "Areas, food, transport and city-break planning",
         badge: "CITY",
         onPress: () => {
           router.push({
@@ -461,8 +469,8 @@ const primaryAction = useMemo(() => {
     () => [
       {
         key: "tickets",
-        icon: "🎟",
-        label: "Match tickets",
+        icon: "01",
+        label: "Tickets",
         detail:
           fixture.hasRealMatch
             ? `${fixture.homeName} vs ${fixture.awayName}`
@@ -477,25 +485,25 @@ const primaryAction = useMemo(() => {
         },
       },
       {
-        key: "travel",
-        icon: "✈",
-        label: "Travel",
-        detail: "Flights and main route",
-        state: data.progress?.flight ?? "empty",
-        onPress: () => void controller.onOpenSection("travel"),
-      },
-      {
         key: "stay",
-        icon: "▰",
+        icon: "02",
         label: "Stay",
         detail: data.cityName ? `Hotels in ${data.cityName}` : "Find the right area",
         state: data.progress?.hotel ?? "empty",
         onPress: () => void controller.onOpenSection("stay"),
       },
       {
+        key: "travel",
+        icon: "03",
+        label: "Travel",
+        detail: "Flights and main route",
+        state: data.progress?.flight ?? "empty",
+        onPress: () => void controller.onOpenSection("travel"),
+      },
+      {
         key: "things",
-        icon: "★",
-        label: "Things to do",
+        icon: "04",
+        label: "Plans",
         detail: "City break extras and saved ideas",
         state: data.progress?.things ?? "empty",
         onPress: () => void controller.onOpenSection("things"),
@@ -535,7 +543,7 @@ const primaryAction = useMemo(() => {
 
   if (!trip) {
     return (
-      <Background imageSource={getBackground("trip")} overlayOpacity={0.94}>
+      <Background imageSource={getBackground("trip")} overlayOpacity={0.96}>
         <Stack.Screen
           options={{
             headerTransparent: true,
@@ -554,7 +562,7 @@ const primaryAction = useMemo(() => {
   }
 
   return (
-    <Background imageSource={getBackground("trip")} overlayOpacity={0.94}>
+    <Background imageSource={getBackground("trip")} overlayOpacity={0.9}>
       <Stack.Screen
         options={{
           headerTransparent: true,
@@ -584,7 +592,13 @@ const primaryAction = useMemo(() => {
             cityName={data.cityName}
           />
 
+          <View style={styles.brandStrip}>
+            <Text style={styles.brandStripText}>PLAN • FLY • WATCH • REPEAT</Text>
+          </View>
+
           <View style={styles.primaryActionCard}>
+            <View style={styles.primaryActionGlow} />
+
             <Text style={styles.primaryActionEyebrow}>{primaryAction.eyebrow}</Text>
             <Text style={styles.primaryActionTitle}>{primaryAction.title}</Text>
             <Text style={styles.primaryActionDetail}>{primaryAction.detail}</Text>
@@ -593,9 +607,9 @@ const primaryAction = useMemo(() => {
               style={({ pressed }) => [
                 styles.primaryActionButton,
                 pressed && styles.pressed,
-                ticketLoading && styles.primaryActionButtonDisabled,
+                ticketLoading && primaryAction.key === "tickets" && styles.primaryActionButtonDisabled,
               ]}
-              disabled={ticketLoading && primaryAction.cta === "Checking tickets…"}
+              disabled={ticketLoading && primaryAction.key === "tickets"}
               onPress={primaryAction.onPress}
             >
               <Text style={styles.primaryActionButtonText}>{primaryAction.cta}</Text>
@@ -605,17 +619,31 @@ const primaryAction = useMemo(() => {
           <View style={styles.tripSummaryCard}>
             <View style={styles.tripSummaryTop}>
               <View style={styles.tripSummaryCopy}>
-                <Text style={styles.tripSummaryTitle}>Your Trip to {data.cityName || "the city"}</Text>
+                <Text style={styles.tripSummaryKicker}>TRIP STATUS</Text>
+                <Text style={styles.tripSummaryTitle}>
+                  {data.cityName ? `${data.cityName} Trip` : "Your Trip"}
+                </Text>
                 <Text style={styles.tripSummaryDates}>
                   {tripDateLine(trip.startDate, trip.endDate)} • {nightsLine(trip.startDate, trip.endDate)}
                 </Text>
               </View>
 
-              <Text style={styles.tripSummaryIcon}>✈</Text>
+              <View style={styles.tripMedallion}>
+                <Text style={styles.tripMedallionText}>{completion}%</Text>
+              </View>
             </View>
 
-            <Text style={styles.tripBookedLine}>{booked}/6 confirmed</Text>
-            <Text style={styles.nextStep}>{nextStepLabel(data.progress)}</Text>
+            <View style={styles.tripStatsRow}>
+              <View style={styles.tripStatPill}>
+                <Text style={styles.tripStatValue}>{booked}/6</Text>
+                <Text style={styles.tripStatLabel}>confirmed</Text>
+              </View>
+
+              <View style={styles.tripStatPillWide}>
+                <Text style={styles.tripStatLabel}>Next</Text>
+                <Text style={styles.tripStatValueSmall}>{nextStepLabel(data.progress)}</Text>
+              </View>
+            </View>
 
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${completion}%` }]} />
@@ -623,7 +651,10 @@ const primaryAction = useMemo(() => {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Trip checklist</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionEyebrow}>BUILD SEQUENCE</Text>
+              <Text style={styles.sectionTitle}>Trip checklist</Text>
+            </View>
 
             <View style={styles.itineraryList}>
               {itineraryRows.map((row) => {
@@ -632,24 +663,32 @@ const primaryAction = useMemo(() => {
 
                 return (
                   <Pressable key={row.key} style={styles.itineraryRow} onPress={row.onPress}>
-                    <MiniIcon label={row.icon} />
+                    <StepIcon label={row.icon} />
 
                     <View style={styles.itineraryCopy}>
                       <Text style={styles.itineraryTitle}>{row.label}</Text>
                       <Text style={styles.itineraryDetail}>{row.detail}</Text>
                     </View>
 
-                    <Text
+                    <View
                       style={[
-                        styles.itineraryStatus,
-                        confirmed && styles.statusConfirmed,
-                        started && styles.statusStarted,
+                        styles.statusPill,
+                        confirmed && styles.statusPillConfirmed,
+                        started && styles.statusPillStarted,
                       ]}
                     >
-                      {ticketLoading && row.key === "tickets"
-                        ? "Checking"
-                        : progressStateLabel(row.state)}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.itineraryStatus,
+                          confirmed && styles.statusConfirmed,
+                          started && styles.statusStarted,
+                        ]}
+                      >
+                        {ticketLoading && row.key === "tickets"
+                          ? "Checking"
+                          : progressStateLabel(row.state)}
+                      </Text>
+                    </View>
 
                     <Text style={styles.chevron}>›</Text>
                   </Pressable>
@@ -660,7 +699,10 @@ const primaryAction = useMemo(() => {
 
           {guideRows.length > 0 ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Local intelligence</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionEyebrow}>TRIP INTELLIGENCE</Text>
+                <Text style={styles.sectionTitle}>Local guides</Text>
+              </View>
 
               <View style={styles.guideGrid}>
                 {guideRows.map((row) => (
@@ -680,13 +722,14 @@ const primaryAction = useMemo(() => {
           ) : null}
 
           <GlassCard level="subtle" style={styles.walletCard}>
+            <Text style={styles.walletKicker}>OFFLINE READY</Text>
             <Text style={styles.walletTitle}>Wallet</Text>
             <Text style={styles.walletSub}>
               {workspace.booked.length} booked • {workspace.pending.length} pending
             </Text>
 
             <Pressable style={styles.walletButton} onPress={controller.onViewWallet}>
-              <Text style={styles.walletButtonText}>Open wallet</Text>
+              <Text style={styles.walletButtonText}>Open Wallet</Text>
             </Pressable>
           </GlassCard>
         </ScrollView>
@@ -723,7 +766,7 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: 92,
     paddingHorizontal: 20,
-    gap: 22,
+    gap: 20,
   },
 
   pressed: {
@@ -743,73 +786,106 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  primaryActionCard: {
-    padding: 20,
-    borderRadius: 28,
-    backgroundColor: "rgba(10,78,36,0.86)",
+  brandStrip: {
+    alignSelf: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.56)",
     borderWidth: 1,
-    borderColor: "rgba(163,230,53,0.42)",
-    shadowColor: "#A3E635",
-    shadowOpacity: 0.2,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 12 },
+    borderColor: "rgba(212,175,55,0.34)",
   },
 
-  primaryActionEyebrow: {
-    color: "#BEF264",
-    fontSize: 11,
+  brandStripText: {
+    color: "#FDE68A",
+    fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.2,
   },
 
-  primaryActionTitle: {
-    marginTop: 8,
-    color: "#FFFFFF",
-    fontSize: 24,
-    lineHeight: 29,
+  primaryActionCard: {
+    overflow: "hidden",
+    padding: 22,
+    borderRadius: 30,
+    backgroundColor: "rgba(3,22,12,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(163,230,53,0.42)",
+    shadowColor: "#A3E635",
+    shadowOpacity: 0.24,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
+  },
+
+  primaryActionGlow: {
+    position: "absolute",
+    top: -90,
+    right: -90,
+    width: 190,
+    height: 190,
+    borderRadius: 999,
+    backgroundColor: "rgba(163,230,53,0.16)",
+  },
+
+  primaryActionEyebrow: {
+    color: "#FDE68A",
+    fontSize: 11,
     fontWeight: "900",
-    letterSpacing: -0.4,
+    letterSpacing: 1.35,
+  },
+
+  primaryActionTitle: {
+    marginTop: 9,
+    color: "#FFFFFF",
+    fontSize: 25,
+    lineHeight: 30,
+    fontWeight: "900",
+    letterSpacing: -0.5,
   },
 
   primaryActionDetail: {
-    marginTop: 9,
-    color: "rgba(245,247,246,0.74)",
+    marginTop: 10,
+    color: "rgba(245,247,246,0.76)",
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "800",
   },
 
   primaryActionButton: {
-    marginTop: 18,
-    minHeight: 56,
-    borderRadius: 18,
+    marginTop: 20,
+    minHeight: 58,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#A3E635",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.24)",
+    borderColor: "rgba(255,255,255,0.30)",
+    shadowColor: "#A3E635",
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
   },
 
   primaryActionButtonDisabled: {
-    opacity: 0.7,
+    opacity: 0.72,
   },
 
   primaryActionButtonText: {
-    color: "#10220D",
+    color: "#071307",
     fontSize: 15,
     fontWeight: "900",
+    letterSpacing: 0.1,
   },
 
   tripSummaryCard: {
     padding: 20,
-    borderRadius: 27,
-    backgroundColor: "rgba(0,48,22,0.72)",
+    borderRadius: 29,
+    backgroundColor: "rgba(5,18,12,0.88)",
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.34)",
-    shadowColor: "#22C55E",
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
+    borderColor: "rgba(212,175,55,0.28)",
+    shadowColor: "#D4AF37",
+    shadowOpacity: 0.13,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
   },
 
   tripSummaryTop: {
@@ -822,42 +898,95 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  tripSummaryTitle: {
-    color: "#FFFFFF",
-    fontSize: 22,
+  tripSummaryKicker: {
+    color: "#FDE68A",
+    fontSize: 10,
     fontWeight: "900",
-    letterSpacing: -0.3,
+    letterSpacing: 1.2,
+  },
+
+  tripSummaryTitle: {
+    marginTop: 7,
+    color: "#FFFFFF",
+    fontSize: 23,
+    fontWeight: "900",
+    letterSpacing: -0.4,
   },
 
   tripSummaryDates: {
     marginTop: 8,
-    color: "rgba(245,247,246,0.74)",
+    color: "rgba(245,247,246,0.72)",
     fontSize: 14,
     fontWeight: "800",
+    lineHeight: 19,
   },
 
-  tripSummaryIcon: {
-    color: "#FDE68A",
-    fontSize: 31,
+  tripMedallion: {
+    width: 62,
+    height: 62,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(163,230,53,0.10)",
+    borderWidth: 2,
+    borderColor: "rgba(163,230,53,0.46)",
+  },
+
+  tripMedallionText: {
+    color: "#BEF264",
+    fontSize: 17,
     fontWeight: "900",
   },
 
-  tripBookedLine: {
-    marginTop: 20,
+  tripStatsRow: {
+    marginTop: 18,
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  tripStatPill: {
+    minWidth: 96,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  tripStatPillWide: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  tripStatValue: {
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "900",
   },
 
-  nextStep: {
-    marginTop: 6,
-    color: "#A3E635",
-    fontSize: 13,
+  tripStatValueSmall: {
+    marginTop: 3,
+    color: "#FFFFFF",
+    fontSize: 12,
     fontWeight: "900",
   },
 
+  tripStatLabel: {
+    color: "rgba(245,247,246,0.58)",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+
   progressTrack: {
-    marginTop: 12,
+    marginTop: 14,
     height: 9,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.10)",
@@ -874,11 +1003,22 @@ const styles = StyleSheet.create({
     gap: 14,
   },
 
+  sectionHeaderRow: {
+    gap: 4,
+  },
+
+  sectionEyebrow: {
+    color: "#FDE68A",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+
   sectionTitle: {
     color: "#FFFFFF",
     fontSize: 25,
     fontWeight: "900",
-    letterSpacing: -0.4,
+    letterSpacing: -0.45,
   },
 
   itineraryList: {
@@ -889,30 +1029,31 @@ const styles = StyleSheet.create({
     minHeight: 88,
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 16,
+    gap: 13,
+    paddingHorizontal: 15,
     paddingVertical: 14,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,37,18,0.72)",
+    borderRadius: 22,
+    backgroundColor: "rgba(3,20,11,0.82)",
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.16)",
+    borderColor: "rgba(163,230,53,0.14)",
   },
 
-  miniIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
+  stepIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.07)",
+    backgroundColor: "rgba(212,175,55,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.09)",
+    borderColor: "rgba(212,175,55,0.28)",
   },
 
-  miniIconText: {
+  stepIconText: {
     color: "#FDE68A",
-    fontSize: 21,
+    fontSize: 13,
     fontWeight: "900",
+    letterSpacing: 0.5,
   },
 
   itineraryCopy: {
@@ -921,34 +1062,54 @@ const styles = StyleSheet.create({
 
   itineraryTitle: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
   },
 
   itineraryDetail: {
     marginTop: 4,
     color: "rgba(245,247,246,0.62)",
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: "800",
   },
 
+  statusPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  statusPillConfirmed: {
+    backgroundColor: "rgba(163,230,53,0.10)",
+    borderColor: "rgba(163,230,53,0.30)",
+  },
+
+  statusPillStarted: {
+    backgroundColor: "rgba(250,204,21,0.10)",
+    borderColor: "rgba(250,204,21,0.25)",
+  },
+
   itineraryStatus: {
-    color: "rgba(245,247,246,0.52)",
-    fontSize: 13,
+    color: "rgba(245,247,246,0.58)",
+    fontSize: 11,
     fontWeight: "900",
   },
 
   statusConfirmed: {
-    color: "#A3E635",
+    color: "#BEF264",
   },
 
   statusStarted: {
-    color: "#FACC15",
+    color: "#FDE68A",
   },
 
   chevron: {
-    color: "rgba(255,255,255,0.72)",
-    fontSize: 26,
+    color: "rgba(255,255,255,0.64)",
+    fontSize: 24,
     marginTop: -2,
   },
 
@@ -957,11 +1118,11 @@ const styles = StyleSheet.create({
   },
 
   guideCard: {
-    padding: 17,
-    borderRadius: 22,
-    backgroundColor: "rgba(0,30,14,0.78)",
+    padding: 18,
+    borderRadius: 24,
+    backgroundColor: "rgba(5,18,12,0.86)",
     borderWidth: 1,
-    borderColor: "rgba(250,204,21,0.20)",
+    borderColor: "rgba(212,175,55,0.24)",
   },
 
   guideBadge: {
@@ -969,9 +1130,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(250,204,21,0.13)",
+    backgroundColor: "rgba(212,175,55,0.13)",
     borderWidth: 1,
-    borderColor: "rgba(250,204,21,0.25)",
+    borderColor: "rgba(212,175,55,0.30)",
   },
 
   guideBadgeText: {
@@ -986,32 +1147,44 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "900",
+    letterSpacing: -0.2,
   },
 
   guideDetail: {
     marginTop: 5,
-    color: "rgba(245,247,246,0.62)",
+    color: "rgba(245,247,246,0.64)",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "800",
   },
 
   guideCta: {
-    marginTop: 13,
+    marginTop: 14,
     color: "#A3E635",
     fontSize: 13,
     fontWeight: "900",
   },
 
   walletCard: {
-    padding: 20,
-    borderRadius: 26,
+    padding: 21,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(163,230,53,0.18)",
+  },
+
+  walletKicker: {
+    color: "#FDE68A",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
   },
 
   walletTitle: {
+    marginTop: 7,
     color: "#FFFFFF",
-    fontSize: 23,
+    fontSize: 24,
     fontWeight: "900",
+    letterSpacing: -0.4,
   },
 
   walletSub: {
@@ -1023,13 +1196,13 @@ const styles = StyleSheet.create({
 
   walletButton: {
     marginTop: 18,
-    minHeight: 52,
-    borderRadius: 16,
+    minHeight: 54,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(163,230,53,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(163,230,53,0.26)",
   },
 
   walletButtonText: {
