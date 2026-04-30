@@ -60,9 +60,7 @@ export default function DiscoverHero({
             size={15}
             color="#FFFFFF"
           />
-          <Text style={styles.setupButtonText}>
-            {setupExpanded ? "Hide" : "Refine"}
-          </Text>
+          <Text style={styles.setupButtonText}>{setupExpanded ? "Hide" : "Refine"}</Text>
         </View>
       </Pressable>
 
@@ -71,10 +69,14 @@ export default function DiscoverHero({
           onPress={onPressFeatured}
           style={({ pressed }) => [styles.featureCard, pressed && styles.pressed]}
         >
-          <Image source={{ uri: PLACEHOLDER_DISCOVER_IMAGE }} style={styles.featureImage} />
-          <View style={styles.imageShade} />
-          <View style={styles.bottomFade} />
-          <View style={styles.glow} />
+          <Image
+            source={{ uri: PLACEHOLDER_DISCOVER_IMAGE }}
+            style={styles.featureImage}
+            resizeMode="cover"
+          />
+          <View style={styles.imageShade} pointerEvents="none" />
+          <View style={styles.bottomFade} pointerEvents="none" />
+          <View style={styles.glow} pointerEvents="none" />
 
           <View style={styles.featureContent}>
             <View style={styles.topRow}>
@@ -101,9 +103,12 @@ export default function DiscoverHero({
               ) : null}
 
               {featuredWhy ? (
-                <Text style={styles.featureWhy} numberOfLines={2}>
-                  {featuredWhy}
-                </Text>
+                <View style={styles.whyBox}>
+                  <Text style={styles.whyLabel}>Why this works</Text>
+                  <Text style={styles.featureWhy} numberOfLines={3}>
+                    {featuredWhy}
+                  </Text>
+                </View>
               ) : null}
             </View>
 
@@ -118,6 +123,10 @@ export default function DiscoverHero({
         </Pressable>
       ) : (
         <GlassCard style={styles.emptyCard} variant="matte" level="default">
+          <View style={styles.emptyIcon}>
+            <Ionicons name="search-outline" size={18} color={theme.colors.textSecondary} />
+          </View>
+
           <Text style={styles.emptyTitle}>No live route surfaced yet</Text>
           <Text style={styles.emptyText}>
             Refine the setup and Discover will find a stronger football-trip option.
@@ -137,7 +146,6 @@ export default function DiscoverHero({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: theme.spacing.lg,
     gap: 14,
   },
 
@@ -338,12 +346,31 @@ const styles = StyleSheet.create({
     maxWidth: "94%",
   },
 
+  whyBox: {
+    marginTop: 2,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 11,
+    backgroundColor: "rgba(0,0,0,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(163,230,53,0.14)",
+    gap: 4,
+    maxWidth: "96%",
+  },
+
+  whyLabel: {
+    color: "#BEF264",
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+  },
+
   featureWhy: {
-    color: "rgba(240,245,242,0.70)",
+    color: "rgba(240,245,242,0.76)",
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
-    maxWidth: "94%",
   },
 
   footer: {
@@ -382,6 +409,18 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 24,
     gap: 10,
+  },
+
+  emptyIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   emptyTitle: {
