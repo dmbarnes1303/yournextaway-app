@@ -25,42 +25,42 @@ function presetEyebrow(preset: InspirationPreset) {
   if (preset.category === "easyTickets") return "Lower friction";
   if (preset.category === "bigMatches") return "Occasion-led";
   if (preset.category === "europeanNights") return "Midweek spotlight";
-  if (preset.category === "weekendTrips") return "Fast weekend route";
+  if (preset.category === "weekendTrips") return "Weekend route";
   if (preset.category === "matchdayCulture") return "City + football";
-  return "Discover preset";
+  return "Preset route";
 }
 
 function presetSupport(preset: InspirationPreset) {
   if (preset.category === "perfectTrips") {
-    return "Balanced football city breaks with stronger all-round trip shape.";
+    return "Balanced football city breaks with strong overall trip shape.";
   }
   if (preset.category === "easyTickets") {
-    return "Cleaner routes where access, planning and travel friction should be more manageable.";
+    return "Cleaner routes with lower planning friction.";
   }
   if (preset.category === "bigMatches") {
-    return "Higher-profile fixtures with more atmosphere, glamour and travel pull.";
+    return "High-profile fixtures with real travel pull.";
   }
   if (preset.category === "europeanNights") {
-    return "Continental fixtures that feel bigger than a standard domestic trip.";
+    return "European nights that feel bigger than domestic fixtures.";
   }
   if (preset.category === "weekendTrips") {
-    return "Friday-to-Sunday football breaks with stronger stacking potential.";
+    return "Friday–Sunday football breaks that actually work.";
   }
   if (preset.category === "matchdayCulture") {
-    return "Trips where the city, football culture and matchday feel all matter.";
+    return "Trips where the city and matchday both matter.";
   }
   return preset.subtitle;
 }
 
 function presetFooter(preset: InspirationPreset) {
-  if (preset.tripLength === "day") return "Day-trip bias";
-  if (preset.tripLength === "1") return "1-night bias";
-  if (preset.tripLength === "2") return "2-night bias";
-  if (preset.tripLength === "3") return "3-night bias";
-  if (preset.windowKey === "wknd") return "Weekend window";
+  if (preset.tripLength === "day") return "Day trip";
+  if (preset.tripLength === "1") return "1 night";
+  if (preset.tripLength === "2") return "2 nights";
+  if (preset.tripLength === "3") return "3 nights";
+  if (preset.windowKey === "wknd") return "Weekend";
   if (preset.windowKey === "d30") return "Next 30 days";
   if (preset.windowKey === "d60") return "Next 60 days";
-  return "Smart preset";
+  return "Preset";
 }
 
 export default function DiscoverInspirationRow({
@@ -79,17 +79,22 @@ export default function DiscoverInspirationRow({
         <Pressable
           key={preset.id}
           onPress={() => onPressPreset(preset)}
-          style={({ pressed }) => [styles.cardPress, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.cardPress,
+            pressed && styles.pressed,
+          ]}
         >
           <GlassCard strength="default" style={styles.card} noPadding>
             <View style={styles.inner}>
               <View style={styles.topRow}>
                 <View style={styles.iconWrap}>
-                  <Ionicons name={preset.icon} size={18} color={theme.colors.text} />
+                  <Ionicons name={preset.icon} size={18} color="#F5CC57" />
                 </View>
 
                 <View style={styles.eyebrowPill}>
-                  <Text style={styles.eyebrowText}>{presetEyebrow(preset)}</Text>
+                  <Text style={styles.eyebrowText}>
+                    {presetEyebrow(preset)}
+                  </Text>
                 </View>
               </View>
 
@@ -109,10 +114,19 @@ export default function DiscoverInspirationRow({
 
               <View style={styles.footerRow}>
                 <View style={styles.footerPill}>
-                  <Text style={styles.footerPillText}>{presetFooter(preset)}</Text>
+                  <Text style={styles.footerPillText}>
+                    {presetFooter(preset)}
+                  </Text>
                 </View>
 
-                <Text style={styles.footerLink}>Open route</Text>
+                <View style={styles.cta}>
+                  <Text style={styles.footerLink}>Open route</Text>
+                  <Ionicons
+                    name="arrow-forward-outline"
+                    size={14}
+                    color="#F5CC57"
+                  />
+                </View>
               </View>
             </View>
           </GlassCard>
@@ -129,19 +143,20 @@ const styles = StyleSheet.create({
   },
 
   cardPress: {
-    width: 252,
-    borderRadius: 20,
+    width: 260,
+    borderRadius: 22,
     overflow: "hidden",
   },
 
   card: {
-    borderRadius: 20,
-    minHeight: 188,
+    borderRadius: 22,
+    minHeight: 190,
+    borderColor: "rgba(250,204,21,0.15)",
   },
 
   inner: {
-    padding: 14,
-    minHeight: 188,
+    padding: 15,
+    minHeight: 190,
     gap: 12,
     justifyContent: "space-between",
   },
@@ -160,8 +175,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.20)",
-    backgroundColor: "rgba(87,162,56,0.08)",
+    borderColor: "rgba(250,204,21,0.25)",
+    backgroundColor: "rgba(250,204,21,0.08)",
+    shadowColor: "#F5CC57",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
   },
 
   eyebrowPill: {
@@ -172,14 +191,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+      Platform.OS === "android"
+        ? "rgba(0,0,0,0.20)"
+        : "rgba(255,255,255,0.05)",
   },
 
   eyebrowText: {
-    color: theme.colors.textSecondary,
+    color: "rgba(240,245,242,0.65)",
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.2,
   },
 
   copyWrap: {
@@ -189,20 +209,20 @@ const styles = StyleSheet.create({
 
   title: {
     color: theme.colors.text,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 21,
     fontWeight: theme.fontWeight.black,
   },
 
   subtitle: {
-    color: theme.colors.primary,
+    color: "#F5CC57",
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.black,
   },
 
   support: {
-    color: theme.colors.textSecondary,
+    color: "rgba(240,245,242,0.7)",
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
@@ -213,7 +233,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    paddingTop: 2,
+    paddingTop: 4,
   },
 
   footerPill: {
@@ -223,7 +243,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+      Platform.OS === "android"
+        ? "rgba(0,0,0,0.16)"
+        : "rgba(255,255,255,0.04)",
   },
 
   footerPillText: {
@@ -233,9 +255,15 @@ const styles = StyleSheet.create({
   },
 
   footerLink: {
-    color: theme.colors.primary,
+    color: "#F5CC57",
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
+  },
+
+  cta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
 
   pressed: {
