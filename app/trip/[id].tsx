@@ -321,88 +321,90 @@ export default function TripScreen() {
     clean(cityGuide?.country) ||
     "Italy";
 
-  const primaryAction = useMemo<PrimaryAction>(() => {
-    const progress = data.progress ?? {};
-    const hasPrimaryMatch = Boolean(data.primaryMatchId);
+const primaryAction = useMemo(() => {
+  const ticketsState = data.progress?.tickets ?? "empty";
+  const hotelState = data.progress?.hotel ?? "empty";
+  const flightState = data.progress?.flight ?? "empty";
+  const thingsState = data.progress?.things ?? "empty";
 
-    if (!hasPrimaryMatch) {
-      return {
-        eyebrow: "START HERE",
-        title: "Choose the match this trip is built around",
-        detail: "A trip without a match is just a loose idea. Add the anchor first.",
-        cta: "Choose match",
-        onPress: controller.onAddMatch,
-      };
-    }
-
-    if (progress.tickets !== "booked") {
-      return {
-        eyebrow: "NEXT STEP",
-        title: progress.tickets === "pending" || progress.tickets === "saved"
-          ? "Finish deciding your match tickets"
-          : "Find tickets before anything else",
-        detail:
-          fixture.hasRealMatch
-            ? `${fixture.homeName} vs ${fixture.awayName} is the anchor. Sort tickets first, then build around it.`
-            : "Tickets are the first real commitment. Everything else depends on the match.",
-        cta: ticketLoading ? "Checking tickets…" : "Find tickets",
-        onPress: () => {
-          if (data.primaryMatchId) {
-            void controller.openTicketsForMatch(String(data.primaryMatchId));
-          }
-        },
-      };
-    }
-
-    if (progress.flight !== "booked") {
-      return {
-        eyebrow: "NEXT STEP",
-        title: "Plan your route",
-        detail: "Tickets are handled. Now make sure the travel route actually works for these dates.",
-        cta: "Plan travel",
-        onPress: () => void controller.onOpenSection("travel"),
-      };
-    }
-
-    if (progress.hotel !== "booked") {
-      return {
-        eyebrow: "NEXT STEP",
-        title: "Choose where to stay",
-        detail: data.cityName
-          ? `Lock in the right area for ${data.cityName}.`
-          : "Now sort the stay so the trip has a real base.",
-        cta: "Find stays",
-        onPress: () => void controller.onOpenSection("stay"),
-      };
-    }
-
-    if (progress.things !== "booked") {
-      return {
-        eyebrow: "OPTIONAL EXTRA",
-        title: "Add one thing worth doing",
-        detail: "The essentials are covered. Add city-break value if it improves the trip.",
-        cta: "Explore extras",
-        onPress: () => void controller.onOpenSection("things"),
-      };
-    }
-
+  if (ticketsState !== "booked") {
     return {
-      eyebrow: "TRIP READY",
-      title: "Your trip essentials are in place",
-      detail: "Check the Wallet for booked items, proofs and pending actions.",
-      cta: "Open wallet",
-      onPress: controller.onViewWallet,
+      key: "tickets",
+      title:
+        ticketsState === "pending" || ticketsState === "saved"
+          ? "Finish your ticket decision"
+          : "This trip starts with tickets",
+      detail:
+        ticketsState === "pending" || ticketsState === "saved"
+          ? "You’ve already started. Finish the ticket step before building the rest."
+          : fixture.hasRealMatch
+            ? `Secure tickets for ${fixture.homeName} vs ${fixture.awayName} before planning around it.`
+            : "Choose the match ticket route first so the trip is built on something real.",
+      cta:
+        ticketsState === "pending" || ticketsState === "saved"
+          ? "Finish tickets"
+          : "Secure your tickets",
+      onPress: () => {
+        if (data.primaryMatchId) {
+          void controller.openTicketsForMatch(String(data.primaryMatchId));
+        } else {
+          controller.onAddMatch();
+        }
+      },
     };
-  }, [
-    controller,
-    data.cityName,
-    data.primaryMatchId,
-    data.progress,
-    fixture.awayName,
-    fixture.hasRealMatch,
-    fixture.homeName,
-    ticketLoading,
-  ]);
+  }
+
+  if (hotelState !== "booked") {
+    return {
+      key: "stay",
+      title: "Lock in where you’re staying",
+      detail: data.cityName
+        ? `Compare stays in ${data.cityName} for your exact trip dates.`
+        : "Choose a stay that fits the match and your trip window.",
+      cta: hotelState === "pending" || hotelState === "saved" ? "Finish stay" : "Book your stay",
+      onPress: () => void controller.onOpenSection("stay"),
+    };
+  }
+
+  if (flightState !== "booked") {
+    return {
+      key: "travel",
+      title: "Make sure this trip actually works",
+      detail: "Check the route before the trip becomes awkward, expensive or rushed.",
+      cta:
+        flightState === "pending" || flightState === "saved"
+          ? "Finish travel"
+          : "Lock in your travel",
+      onPress: () => void controller.onOpenSection("travel"),
+    };
+  }
+
+  if (thingsState !== "booked") {
+    return {
+      key: "things",
+      title: "Add something around the match",
+      detail: "Turn this from a match booking into an actual city break.",
+      cta: "Add something to the trip",
+      onPress: () => void controller.onOpenSection("things"),
+    };
+  }
+
+  return {
+    key: "wallet",
+    title: "Your trip is taking shape",
+    detail: "Tickets, stay and travel are now confirmed. Keep the important stuff in Wallet.",
+    cta: "View your booked trip",
+    onPress: controller.onViewWallet,
+  };
+}, [
+  controller,
+  data.cityName,
+  data.primaryMatchId,
+  data.progress,
+  fixture.awayName,
+  fixture.hasRealMatch,
+  fixture.homeName,
+]);
 
   const guideRows: GuideRow[] = useMemo(() => {
     const rows: GuideRow[] = [];
