@@ -3,16 +3,11 @@ import { expandQueryTokens, normalizeSearchText, tokenizeQuery } from "@/src/con
 import cityGuidesRegistry from "@/src/data/cityGuides";
 import teamGuidesRegistry from "@/src/data/teamGuides";
 import teamsRegistry, { normalizeTeamKey, resolveTeamKey } from "@/src/data/teams";
+import stadiumsRegistry from "@/src/data/stadiums";
+import type { StadiumRecord } from "@/src/data/stadiums/types";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import { getFixtures } from "@/src/services/apiFootball";
 import { normalizeCityKey } from "@/src/utils/city";
-
-/**
- * Search Index
- * - Deterministic + in-memory
- * - Safe with partial data (never crash)
- * - Uses league config as source of truth for league/country search
- */
 
 export type SearchEntityType = "team" | "city" | "venue" | "country" | "league";
 
@@ -113,9 +108,6 @@ function canonicalTeamSlug(input: string | undefined | null): {
   return { slug: fallback || null, resolved: false };
 }
 
-/**
- * scoreMatch MUST return 0 when there is no meaningful overlap.
- */
 function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
   if (!queryTokens.length || !entryTokens.length) return 0;
 
@@ -151,7 +143,8 @@ function scoreMatch(queryTokens: string[], entryTokens: string[]): number {
 function typeBoost(t: SearchEntityType): number {
   if (t === "team") return 3;
   if (t === "city") return 2;
-  if (t === "venue") return 1;
+  if (t === "venue") return 2;
+  if (t === "league") return 1;
   return 0;
 }
 
@@ -254,7 +247,14 @@ function buildTeamsRegistryEntries(map: Map<string, IndexEntry>) {
       key: `team:${slug}`,
       title: name,
       subtitle,
-      tokens: toEntryTokens([name, slug, team.city as string, team.country as string, ...aliases]),
+      tokens: toEntryTokens([
+        name,
+        slug,
+        team.city as string,
+        team.country as string,
+        team.stadiumKey as string,
+        ...aliases,
+      ]),
       payload: {
         kind: "team",
         slug,
@@ -288,6 +288,66 @@ function buildTeamGuideEntries(map: Map<string, IndexEntry>) {
       ]),
       payload: { kind: "team", slug },
     });
+  });
+}
+
+function buildStadiumRegistryEntries(map: Map<string, IndexEntry>) {
+  Object.values(stadiumsRegistry as Record<string, StadiumRecord>).forEach((stadium) => {
+    const name = safeStr(stadium.name);
+    if (!name) return;
+
+    const slug = normalizeVenueKey(stadium.stadiumKey || name);
+    if (!slug) return;
+
+    const city = safeStr(stadium.city);
+    const country = safeStr(stadium.country);
+    const address = safeStr(stadium.address);
+    const airport = safeStr(stadium.airport);
+
+    const transitTokens = Array.isArray(stadium.transit)
+      ? stadium.transit.flatMap((item) => [safeStr(item.label), safeStr(item.note)])
+      : [];
+
+    const stayTokens = Array.isArray(stadium.stayAreas)
+      ? stadium.stayAreas.flatMap((item) => [safeStr(item.area), safeStr(item.why)])
+      : [];
+
+    const teamTokens = Array.isArray(stadium.teamKeys) ? stadium.teamKeys.map((x) => safeStr(x)) : [];
+
+    upsertEntry(map, {
+      type: "venue",
+      key: `venue:${slug}`,
+      title: name,
+      subtitle: [city, country].filter(Boolean).join(" • ") || "Stadium",
+      tokens: toEntryTokens([
+        name,
+        slug,
+        stadium.stadiumKey,
+        city,
+        country,
+        address,
+        airport,
+        ...(stadium.tips ?? []),
+        ...teamTokens,
+        ...transitTokens,
+        ...stayTokens,
+      ]),
+      payload: { kind: "venue", slug },
+    });
+
+    if (city) {
+      const citySlug = normalizeCityKey(city);
+      if (citySlug) {
+        upsertEntry(map, {
+          type: "city",
+          key: `city:${citySlug}`,
+          title: city,
+          subtitle: country || "City",
+          tokens: toEntryTokens([city, citySlug, country, name, ...teamTokens]),
+          payload: { kind: "city", slug: citySlug },
+        });
+      }
+    }
   });
 }
 
@@ -438,6 +498,7 @@ export async function buildSearchIndex(args: {
   buildCountriesFromLeagues(map, leagues);
   buildTeamsRegistryEntries(map);
   buildTeamGuideEntries(map);
+  buildStadiumRegistryEntries(map);
   buildLeagueEntries(map, leagues);
 
   let fixtureRowsScanned = 0;
@@ -517,7 +578,7 @@ export function querySearchIndex(
       } satisfies SearchResult;
     })
     .filter((x): x is SearchResult => x !== null)
-    .sort((a, b) => b.score - a.score);
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
 
   return scored.slice(0, limit);
 }
