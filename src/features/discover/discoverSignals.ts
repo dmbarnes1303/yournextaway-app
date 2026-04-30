@@ -352,15 +352,7 @@ const CITY_PROFILES: Record<string, CityProfile> = {
   nicosia: { cityPull: 1, nightlife: 1, warmth: 5, stackability: 1 },
 };
 
-const WARM_COUNTRY_KEYS = [
-  "spain",
-  "portugal",
-  "italy",
-  "greece",
-  "turkey",
-  "cyprus",
-  "croatia",
-];
+const WARM_COUNTRY_KEYS = ["spain", "portugal", "italy", "greece", "turkey", "cyprus", "croatia"];
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -383,8 +375,10 @@ function getLeagueId(fixture: FixtureListRow): number | null {
 }
 
 function parseFixtureDate(dateIso?: string | null): Date | null {
-  if (!dateIso) return null;
-  const d = new Date(dateIso);
+  const value = clean(dateIso);
+  if (!value) return null;
+
+  const d = new Date(value);
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
@@ -408,7 +402,8 @@ function isEuropeanCompetition(fixture: FixtureListRow): boolean {
 function isWeekendFixture(fixture: FixtureListRow): boolean {
   const d = parseFixtureDate(fixture?.fixture?.date);
   if (!d) return false;
-  const day = d.getUTCDay();
+
+  const day = d.getDay();
   return day === 5 || day === 6 || day === 0;
 }
 
@@ -419,12 +414,18 @@ function getRoundLabel(fixture: FixtureListRow): string {
 function resolveTeamMeta(input?: string | null): TeamRecord | null {
   const raw = clean(input);
   if (!raw) return null;
-  return getTeam(raw) ?? null;
+
+  try {
+    return getTeam(raw) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function resolveTeamKey(input?: string | null): string {
   const meta = resolveTeamMeta(input);
   if (meta?.teamKey) return meta.teamKey;
+
   return normalizeTeamKey(clean(input));
 }
 
@@ -457,6 +458,7 @@ function getLeagueCountry(fixture: FixtureListRow): string {
 
   const leagueId = getLeagueId(fixture);
   if (!leagueId) return "";
+
   return lower(getLeagueById(leagueId)?.country);
 }
 
@@ -476,12 +478,8 @@ function derbyScore(homeName: string, awayName: string): number {
   const awayKey = resolveTeamKey(awayName);
 
   for (const derby of DERBIES) {
-    const forward =
-      includesAnyTeamKey(homeKey, derby.home) &&
-      includesAnyTeamKey(awayKey, derby.away);
-    const reverse =
-      includesAnyTeamKey(homeKey, derby.away) &&
-      includesAnyTeamKey(awayKey, derby.home);
+    const forward = includesAnyTeamKey(homeKey, derby.home) && includesAnyTeamKey(awayKey, derby.away);
+    const reverse = includesAnyTeamKey(homeKey, derby.away) && includesAnyTeamKey(awayKey, derby.home);
 
     if (forward || reverse) return derby.score;
   }
@@ -493,10 +491,11 @@ function nightMatchScore(dateIso?: string | null): number {
   const d = parseFixtureDate(dateIso);
   if (!d) return 0;
 
-  const hour = d.getUTCHours();
+  const hour = d.getHours();
   if (hour >= 20) return 5;
   if (hour >= 18) return 4;
   if (hour >= 16) return 2;
+
   return 0;
 }
 
@@ -508,6 +507,7 @@ function stadiumScore(homeName: string, awayName: string): number {
   if (LEGENDARY_STADIUM_CLUB_KEYS.has(awayKey)) return 3;
   if (ELITE_CLUB_KEYS.has(homeKey)) return 3;
   if (ELITE_CLUB_KEYS.has(awayKey)) return 2;
+
   return 1;
 }
 
@@ -537,6 +537,7 @@ function titleDramaScore(fixture: FixtureListRow): number {
   if (roundNum >= 30) return 4;
   if (roundNum >= 26) return 3;
   if (roundNum >= 22) return 2;
+
   return 1;
 }
 
@@ -570,6 +571,7 @@ function nightlifeScore(fixture: FixtureListRow, city: string, night: number): n
 
   let score = Math.max(1, profile.nightlife);
   score += cityNightlife;
+
   if (night >= 4) score += 1;
 
   return clampScore(score, 1, 5);
@@ -580,6 +582,7 @@ function warmWeatherScore(fixture: FixtureListRow, city: string): number {
   const cityWarmth = getCityProfile(city).warmth;
 
   let score = getLeagueProfile(fixture).warmth;
+
   if (WARM_COUNTRY_KEYS.some((key) => country.includes(key))) score += 1;
   score += cityWarmth;
 
@@ -636,16 +639,20 @@ function glamourScore(
 
   if (ELITE_CLUB_KEYS.has(homeKey)) score += 2;
   if (ELITE_CLUB_KEYS.has(awayKey)) score += 2;
+
   if (typeof fixture?.teams?.home?.id === "number" && POPULAR_TEAM_IDS.has(fixture.teams.home.id)) {
     score += 1;
   }
+
   if (typeof fixture?.teams?.away?.id === "number" && POPULAR_TEAM_IDS.has(fixture.teams.away.id)) {
     score += 1;
   }
+
   if (stadium >= 4) score += 1;
   if (cityPull >= 4) score += 1;
   if (derby >= 4) score += 1;
   if (atmosphere >= 4) score += 1;
+
   if (isChampionsLeague(fixture)) score += 2;
   else if (isEuropaLeague(fixture)) score += 1;
 
@@ -670,6 +677,7 @@ function underratedScore(
   if (typeof fixture?.teams?.home?.id === "number" && POPULAR_TEAM_IDS.has(fixture.teams.home.id)) {
     score -= 2;
   }
+
   if (typeof fixture?.teams?.away?.id === "number" && POPULAR_TEAM_IDS.has(fixture.teams.away.id)) {
     score -= 2;
   }
@@ -681,21 +689,30 @@ function europeScore(fixture: FixtureListRow, glamour: number, atmosphere: numbe
   if (isChampionsLeague(fixture)) {
     return clampScore(3 + (glamour >= 6 ? 1 : 0) + (atmosphere >= 4 ? 1 : 0), 0, 5);
   }
+
   if (isEuropaLeague(fixture)) {
     return clampScore(2 + (atmosphere >= 4 ? 1 : 0) + (glamour >= 5 ? 1 : 0), 0, 5);
   }
+
   if (isConferenceLeague(fixture)) {
     return clampScore(2 + (atmosphere >= 4 ? 1 : 0), 0, 4);
   }
+
   return 0;
 }
 
-function multiMatchScore(fixture: FixtureListRow, city: string, cityPull: number, tripEase: number): number {
+function multiMatchScore(
+  fixture: FixtureListRow,
+  city: string,
+  cityPull: number,
+  tripEase: number
+): number {
   const profile = getLeagueProfile(fixture);
   const cityStack = getCityProfile(city).stackability;
 
   let score = profile.stackability;
   score += cityStack;
+
   if (cityPull >= 4) score += 1;
   if (tripEase >= 4) score += 1;
   if (isEuropeanCompetition(fixture)) score += 1;
@@ -725,6 +742,7 @@ export function buildDiscoverSignals(fixture: FixtureListRow): DiscoverSignalRes
   const home = clean(fixture?.teams?.home?.name);
   const away = clean(fixture?.teams?.away?.name);
   const city = clean(fixture?.fixture?.venue?.city);
+  const cityKey = lower(city);
 
   const derby = derbyScore(home, away);
 
@@ -740,22 +758,23 @@ export function buildDiscoverSignals(fixture: FixtureListRow): DiscoverSignalRes
   if (HIGH_ATMOSPHERE_CLUB_KEYS.has(homeKey)) atmosphere += 1;
   if (HIGH_ATMOSPHERE_CLUB_KEYS.has(awayKey)) atmosphere += 1;
   if (derby >= 4) atmosphere += 1;
+
   atmosphere = clampScore(atmosphere, 1, 5);
 
   const stadium = stadiumScore(home, away);
   const value = valueScore(fixture);
   const night = nightMatchScore(fixture?.fixture?.date);
   const drama = titleDramaScore(fixture);
-  const cityPull = getCityProfile(city).cityPull || 1;
-  const culture = cultureScore(fixture, home, away, city, stadium, atmosphere);
-  const nightlife = nightlifeScore(fixture, city, night);
-  const warmth = warmWeatherScore(fixture, city);
+  const cityPull = getCityProfile(cityKey).cityPull || 1;
+  const culture = cultureScore(fixture, home, away, cityKey, stadium, atmosphere);
+  const nightlife = nightlifeScore(fixture, cityKey, night);
+  const warmth = warmWeatherScore(fixture, cityKey);
   const ticketEase = ticketEaseScore(fixture);
-  const tripEase = tripEaseScore(fixture, lower(city));
+  const tripEase = tripEaseScore(fixture, cityKey);
   const glamour = glamourScore(fixture, home, away, stadium, cityPull, derby, atmosphere);
   const underrated = underratedScore(fixture, atmosphere, value, glamour, cityPull);
   const europe = europeScore(fixture, glamour, atmosphere);
-  const multiMatch = multiMatchScore(fixture, lower(city), cityPull, tripEase);
+  const multiMatch = multiMatchScore(fixture, cityKey, cityPull, tripEase);
   const weekendTrip = weekendTripScore(fixture, night, cityPull, nightlife, multiMatch);
 
   const reasons: DiscoverReason[] = [];
@@ -776,9 +795,11 @@ export function buildDiscoverSignals(fixture: FixtureListRow): DiscoverSignalRes
   if (isChampionsLeague(fixture)) reasons.push("Champions League night");
   if (isEuropaLeague(fixture)) reasons.push("Europa League trip");
   if (isConferenceLeague(fixture) && value >= 3) reasons.push("Conference League value");
+
   if (isEuropeanCompetition(fixture) && (glamour >= 5 || atmosphere >= 4)) {
     reasons.push("Continental occasion");
   }
+
   if (multiMatch >= 4) reasons.push("Multi-match city potential");
   if (weekendTrip >= 4) reasons.push("Weekend double potential");
 
@@ -811,4 +832,4 @@ export function buildDiscoverSignalsForFixtures(
   fixtures: FixtureListRow[]
 ): DiscoverSignalResult[] {
   return fixtures.map(buildDiscoverSignals);
-        }
+      }
