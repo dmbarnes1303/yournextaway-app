@@ -15,7 +15,7 @@ import {
   DISCOVER_CATEGORY_META,
   type DiscoverCategory,
 } from "@/src/features/discover/discoverCategories";
-import { PLACEHOLDER_DISCOVER_IMAGE } from "@/src/features/discover/discoverPresets";
+import { getDiscoverCategoryArtwork } from "@/src/features/discover/discoverCategoryArtwork";
 
 type Props = {
   category: DiscoverCategory;
@@ -23,10 +23,7 @@ type Props = {
   onPress: (category: DiscoverCategory) => void;
 };
 
-/**
- * Short + sharp → no waffle
- */
-function tagLabel(category: DiscoverCategory, compact: boolean) {
+function fallbackTagLabel(category: DiscoverCategory, compact: boolean) {
   if (compact) return "Browse";
 
   switch (category) {
@@ -106,17 +103,15 @@ function helperLine(category: DiscoverCategory) {
   }
 }
 
-function actionLabel(category: DiscoverCategory) {
-  return "Browse routes";
-}
-
 export default function DiscoverCategoryCard({
   category,
   compact = false,
   onPress,
 }: Props) {
   const meta = DISCOVER_CATEGORY_META[category];
+  const artwork = getDiscoverCategoryArtwork(category);
   const primary = meta.emphasis === "primary";
+  const badgeLabel = artwork.eyebrow ?? fallbackTagLabel(category, compact);
 
   return (
     <Pressable
@@ -130,36 +125,46 @@ export default function DiscoverCategoryCard({
         strength={primary && !compact ? "strong" : "default"}
         style={[
           compact ? styles.cardCompact : styles.card,
-          primary && !compact && styles.cardPrimary,
+          primary && !compact ? styles.cardPrimary : null,
         ]}
         noPadding
       >
-        {/* IMAGE */}
         <View style={compact ? styles.imageWrapCompact : styles.imageWrap}>
           <Image
-            source={{ uri: PLACEHOLDER_DISCOVER_IMAGE }}
+            source={{ uri: artwork.imageUrl }}
             style={styles.image}
             resizeMode="cover"
           />
-          <View style={styles.overlay} />
+
+          <View
+            style={[
+              styles.overlay,
+              primary && !compact ? styles.overlayPrimary : null,
+            ]}
+            pointerEvents="none"
+          />
 
           <View style={styles.badgeRow}>
             <View
               style={[
                 styles.badge,
-                primary && !compact && styles.badgePrimary,
+                primary && !compact ? styles.badgePrimary : null,
               ]}
             >
-              <Text style={styles.badgeText}>
-                {tagLabel(category, compact)}
+              <Text style={styles.badgeText} numberOfLines={1}>
+                {badgeLabel}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* BODY */}
         <View style={compact ? styles.bodyCompact : styles.body}>
-          <View style={styles.iconWrap}>
+          <View
+            style={[
+              styles.iconWrap,
+              primary && !compact ? styles.iconWrapPrimary : null,
+            ]}
+          >
             <Ionicons name={meta.icon} size={18} color={theme.colors.text} />
           </View>
 
@@ -172,17 +177,24 @@ export default function DiscoverCategoryCard({
               {meta.subtitle}
             </Text>
 
-            {!compact && (
+            {!compact ? (
               <Text style={styles.helper} numberOfLines={2}>
                 {helperLine(category)}
               </Text>
-            )}
+            ) : null}
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>{actionLabel(category)}</Text>
+            <Text style={styles.footerText} numberOfLines={1}>
+              Browse routes
+            </Text>
 
-            <View style={styles.arrow}>
+            <View
+              style={[
+                styles.arrow,
+                primary && !compact ? styles.arrowPrimary : null,
+              ]}
+            >
               <Ionicons
                 name="arrow-forward-outline"
                 size={14}
@@ -224,11 +236,13 @@ const styles = StyleSheet.create({
   },
 
   imageWrap: {
-    height: 90,
+    height: 92,
+    position: "relative",
   },
 
   imageWrapCompact: {
-    height: 80,
+    height: 82,
+    position: "relative",
   },
 
   image: {
@@ -238,40 +252,54 @@ const styles = StyleSheet.create({
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,10,0.35)",
+    backgroundColor: "rgba(5,8,10,0.38)",
+  },
+
+  overlayPrimary: {
+    backgroundColor: "rgba(5,8,10,0.30)",
   },
 
   badgeRow: {
     position: "absolute",
     top: 10,
     left: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
   },
 
   badge: {
+    maxWidth: "100%",
     borderRadius: 999,
     paddingVertical: 5,
     paddingHorizontal: 9,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(0,0,0,0.58)",
   },
 
   badgePrimary: {
-    backgroundColor: "rgba(87,162,56,0.25)",
+    borderColor: "rgba(87,162,56,0.24)",
+    backgroundColor: "rgba(6,10,8,0.66)",
   },
 
   badgeText: {
     color: theme.colors.text,
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.25,
   },
 
   body: {
     padding: 14,
     gap: 10,
+    minHeight: 140,
   },
 
   bodyCompact: {
     padding: 14,
     gap: 10,
+    minHeight: 94,
   },
 
   iconWrap: {
@@ -288,36 +316,48 @@ const styles = StyleSheet.create({
         : "rgba(255,255,255,0.04)",
   },
 
+  iconWrapPrimary: {
+    borderColor: "rgba(87,162,56,0.20)",
+    backgroundColor: "rgba(87,162,56,0.09)",
+  },
+
   textWrap: {
     gap: 4,
+    flexShrink: 1,
   },
 
   title: {
     color: theme.colors.text,
     fontSize: 15,
+    lineHeight: 19,
     fontWeight: theme.fontWeight.black,
   },
 
   subtitle: {
     color: theme.colors.textSecondary,
     fontSize: 12,
+    lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
   },
 
   helper: {
     color: theme.colors.textTertiary,
     fontSize: 11,
+    lineHeight: 16,
     fontWeight: theme.fontWeight.bold,
   },
 
   footer: {
-    marginTop: 6,
+    marginTop: "auto",
+    paddingTop: 4,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
   },
 
   footerText: {
+    flex: 1,
     color: theme.colors.primary,
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
@@ -329,7 +369,17 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor:
+      Platform.OS === "android"
+        ? "rgba(0,0,0,0.14)"
+        : "rgba(255,255,255,0.05)",
+  },
+
+  arrowPrimary: {
+    borderColor: "rgba(87,162,56,0.20)",
+    backgroundColor: "rgba(87,162,56,0.08)",
   },
 
   pressed: {
