@@ -73,7 +73,7 @@ const CATEGORY_TO_SAVED_ITEM_TYPE: Record<PartnerCategory, SavedItemType> = {
 };
 
 export function mapPartnerCategoryToSavedItemType(category: PartnerCategory): SavedItemType {
-  return CATEGORY_TO_SAVED_ITEM_TYPE[category];
+  return CATEGORY_TO_SAVED_ITEM_TYPE[category] ?? "other";
 }
 
 function logInfo(message: string, context?: Record<string, unknown>) {
@@ -92,7 +92,7 @@ function logError(message: string, error: unknown, context?: Record<string, unkn
   });
 }
 
-function now(): number {
+function now() {
   return Date.now();
 }
 
@@ -116,7 +116,7 @@ function isValidSavedItemType(value: unknown): value is SavedItemType {
 }
 
 function isRecent(click: LastPartnerClick): boolean {
-  return now() - click.createdAt <= CLICK_RETENTION_MS;
+  return now() - Number(click.createdAt || 0) <= CLICK_RETENTION_MS;
 }
 
 function normalizeUrl(url: string): string {
@@ -230,6 +230,7 @@ async function loadLastClickOnce(): Promise<void> {
 
     lastClick = candidate;
   } catch (error) {
+    lastClickLoaded = false;
     logError("loadLastClickOnce failed", error);
   }
 }
@@ -301,7 +302,7 @@ function buildDefaultTitle(args: {
   type: SavedItemType;
   metadata?: Record<string, unknown>;
 }): string {
-  const metadata = args.metadata as Record<string, unknown> | undefined;
+  const metadata = args.metadata;
   const city = cleanString(metadata?.city ?? metadata?.destination ?? metadata?.place) || null;
   const label = getSavedItemTypeLabel(args.type);
 
@@ -332,6 +333,7 @@ function findReusableItem(args: {
   if (!tripId || !strictUrl) return null;
 
   const items = savedItemsStore.getAll();
+
   const matches = items.filter((item) => {
     if (cleanString(item.tripId) !== tripId) return false;
     if (cleanString(item.partnerId) !== args.partnerId) return false;
@@ -346,9 +348,28 @@ function findReusableItem(args: {
 
   if (!matches.length) return null;
 
-  return matches.find((item) => item.status === "pending") ??
+  return (
+    matches.find((item) => item.status === "pending") ??
     matches.find((item) => item.status === "saved") ??
-    null;
+    null
+  );
+}
+
+async function shouldPromptForReturn(click: LastPartnerClick): Promise<boolean> {
+  if (!click || !isRecent(click)) return false;
+
+  await ensureSavedItemsLoaded();
+
+  const item = getItemById(click.itemId);
+  if (!item) return false;
+
+  // Crucial: only ask after a live partner-open item.
+  // Saved = user already said they did not book / moved it back.
+  // Booked = user already confirmed.
+  // Archived = hidden.
+  if (item.status !== "pending") return false;
+
+  return true;
 }
 
 async function triggerReturnIfPresent(): Promise<void> {
@@ -369,6 +390,12 @@ async function triggerReturnIfPresent(): Promise<void> {
       return;
     }
 
+    const promptable = await shouldPromptForReturn(click);
+    if (!promptable) {
+      await clearLastClickState();
+      return;
+    }
+
     if (click.tracked && isTrackedPartnerClickId(click.clickId)) {
       await markPartnerClickReturned({
         clickId: click.clickId,
@@ -379,6 +406,7 @@ async function triggerReturnIfPresent(): Promise<void> {
     const handler = onReturnHandler;
     if (!handler) return;
 
+    // Clear before UI delivery to prevent repeat prompts from AppState bounce.
     await clearLastClickState();
 
     try {
@@ -621,11 +649,9 @@ export async function beginPartnerClick(args: {
       try {
         await savedItemsStore.remove(itemForOpen.id);
       } catch (removeError) {
-        logError(
-          "Failed to remove newly created pending item after browser open failure",
-          removeError,
-          { itemId: itemForOpen.id }
-        );
+        logError("Failed to remove newly created pending item after browser open failure", removeError, {
+          itemId: itemForOpen.id,
+        });
       }
     } else if (promotedFromSaved) {
       await transitionIfCurrent(itemForOpen.id, "pending", "saved");
@@ -671,6 +697,7 @@ export async function markBooked(
   if (!id) return;
 
   await ensureSavedItemsLoaded();
+
   const current = getItemById(id);
   if (!current) return;
 
@@ -694,6 +721,11 @@ export async function markBooked(
       bookingStatus: "booked",
       metadata: {
         ...(options?.metadata ?? {}),
+        conversionSource: "user_confirmed",
+        verificationStatus:
+          Array.isArray(refreshed.attachments) && refreshed.attachments.length > 0
+            ? "proof_attached"
+            : "unverified",
         partnerTier: refreshed.partnerTier,
         partnerCategory: refreshed.partnerCategory,
       },
@@ -710,6 +742,7 @@ export async function markBooked(
       metadata: {
         ...(options?.metadata ?? {}),
         bookingStatus: "booked",
+        conversionSource: "user_confirmed",
         partnerTier: refreshed.partnerTier,
         partnerCategory: refreshed.partnerCategory,
       },
@@ -735,8 +768,8 @@ export async function markNotBooked(itemId: string): Promise<void> {
   if (!id) return;
 
   await transitionIfCurrent(id, "pending", "saved");
-  const current = getItemById(id);
 
+  const current = getItemById(id);
   const trackedClickId =
     current?.partnerClickId && isTrackedPartnerClickId(current.partnerClickId)
       ? current.partnerClickId
@@ -752,6 +785,7 @@ export async function markNotBooked(itemId: string): Promise<void> {
       sourceSurface: current.sourceSurface,
       sourceSection: current.sourceSection,
       metadata: {
+        bookingStatus: "not_booked",
         partnerTier: current.partnerTier,
         partnerCategory: current.partnerCategory,
       },
@@ -772,7 +806,11 @@ export async function markNotBooked(itemId: string): Promise<void> {
 
 export async function dismissReturnPrompt(itemId?: string): Promise<void> {
   await loadLastClickOnce();
-  if (!lastClick) return;
+
+  if (!lastClick) {
+    lastReturnHandledAt = now();
+    return;
+  }
 
   if (!itemId) {
     await clearLastClickState();
@@ -781,6 +819,7 @@ export async function dismissReturnPrompt(itemId?: string): Promise<void> {
   }
 
   const id = cleanString(itemId);
+
   if (id && lastClick.itemId === id) {
     await clearLastClickState();
     lastReturnHandledAt = now();
