@@ -6,7 +6,7 @@ import {
   buildDiscoverSignalsForFixtures,
   type DiscoverReason,
   type DiscoverScores,
-} from "./discoverSignals";
+} from "@/src/features/discover/discoverSignals";
 
 /* -------------------------------------------------------------------------- */
 /* Public types                                                               */
@@ -19,6 +19,7 @@ export type DiscoverFixture = {
 };
 
 export type DiscoverTripLength = "day" | "1" | "2" | "3";
+
 export type DiscoverVibe = "easy" | "big" | "nightlife" | "culture" | "warm";
 
 export type DiscoverContext = {
@@ -28,21 +29,20 @@ export type DiscoverContext = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Compatibility exports                                                      */
+/* Canonical scoring entry points                                             */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Canonical single-fixture discover scoring entry point.
+ * Score one fixture for Discover.
  *
- * This file is now intentionally thin.
- * All heavy signal logic lives in discoverSignals.ts.
+ * Keep this file thin. The actual signal logic belongs in discoverSignals.ts.
  */
 export function scoreFixture(fixture: FixtureListRow): DiscoverFixture {
   return buildDiscoverSignals(fixture);
 }
 
 /**
- * Canonical bulk discover scoring entry point.
+ * Score a fixture pool for Discover.
  */
 export function buildDiscoverScores(fixtures: FixtureListRow[]): DiscoverFixture[] {
   return buildDiscoverSignalsForFixtures(fixtures);
