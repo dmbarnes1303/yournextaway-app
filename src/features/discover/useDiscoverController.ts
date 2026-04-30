@@ -13,6 +13,7 @@ import {
 } from "@/src/features/discover/discoverCategories";
 import {
   buildDiscoverScores,
+  type DiscoverFixture,
   type DiscoverTripLength,
   type DiscoverVibe,
 } from "@/src/features/discover/discoverEngine";
@@ -98,6 +99,9 @@ const LIVE_POOL_CACHE_TTL_MS = 5 * 60 * 1000;
 const PREVIEW_LIMIT = 6;
 const TRENDING_LIMIT = 6;
 const RANDOM_POOL_LIMIT = 12;
+
+const HERO_WINDOW_KEY: DiscoverWindowKey = "d30";
+const HERO_CATEGORY: DiscoverCategory = "bigMatches";
 
 type LivePoolCacheValue = {
   ts: number;
@@ -225,6 +229,69 @@ function cacheKeyForDiscover(args: {
   ].join("|");
 }
 
+function heroScore(item: DiscoverFixture): number {
+  const s = item.scores;
+  const row = item.fixture;
+
+  let score = 0;
+
+  score += s.derbyScore * 80;
+  score += s.glamourScore * 34;
+  score += s.atmosphereScore * 28;
+  score += s.stadiumScore * 24;
+  score += s.europeScore * 30;
+  score += s.cityScore * 22;
+  score += s.cultureScore * 14;
+  score += s.titleDramaScore * 14;
+  score += s.valueScore * 8;
+  score += s.ticketEaseScore * 5;
+  score += s.tripEaseScore * 5;
+
+  const leagueId = row?.league?.id != null ? Number(row.league.id) : null;
+
+  if (leagueId === 2) score += 130;
+  if (leagueId === 140) score += 95;
+  if (leagueId === 135) score += 92;
+  if (leagueId === 78) score += 84;
+  if (leagueId === 61) score += 74;
+  if (leagueId === 39) score += 58;
+  if (leagueId === 3) score += 52;
+  if (leagueId === 848) score += 32;
+
+  if (item.signals?.hasPopularHomeTeam) score += 34;
+  if (item.signals?.hasPopularAwayTeam) score += 34;
+  if (item.signals?.isWeekendFixture) score += 12;
+  if (item.signals?.isEveningKickoff) score += 10;
+
+  const reasons = item.reasons ?? [];
+  if (reasons.includes("Major derby")) score += 90;
+  if (reasons.includes("Champions League night")) score += 70;
+  if (reasons.includes("Continental occasion")) score += 36;
+  if (reasons.includes("Legendary stadium")) score += 30;
+  if (reasons.includes("Strong city-break potential")) score += 26;
+  if (reasons.includes("Good value league")) score += 16;
+  if (reasons.includes("Easier home ticket route")) score += 8;
+
+  return Math.round(score);
+}
+
+function buildHeroPick(rows: FixtureListRow[]): RankedDiscoverPick | null {
+  if (!rows.length) return null;
+
+  return buildDiscoverScores(rows)
+    .map((item) => ({
+      item,
+      score: heroScore(item),
+    }))
+    .filter((entry) => fixtureId(entry.item.fixture))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return cleanString(a.item.fixture?.fixture?.date).localeCompare(
+        cleanString(b.item.fixture?.fixture?.date)
+      );
+    })[0] ?? null;
+}
+
 export default function useDiscoverController(): UseDiscoverControllerReturn {
   const router = useRouter();
 
@@ -238,11 +305,13 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
   const [loadingLive, setLoadingLive] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveRows, setLiveRows] = useState<FixtureListRow[]>([]);
+  const [heroRows, setHeroRows] = useState<FixtureListRow[]>([]);
 
   const requestIdRef = useRef(0);
   const cacheRef = useRef(new Map<string, LivePoolCacheValue>());
 
   const currentWindow = useMemo(() => windowForKey(discoverWindowKey), [discoverWindowKey]);
+  const heroWindow = useMemo(() => windowForKey(HERO_WINDOW_KEY), []);
   const normalisedOrigin = useMemo(() => normaliseOrigin(discoverOrigin), [discoverOrigin]);
   const vibesKey = useMemo(() => sortedVibesKey(discoverVibes), [discoverVibes]);
 
@@ -273,6 +342,18 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     vibesKey,
     seededCategory,
   ]);
+
+  const heroCacheKey = useMemo(() => {
+    return cacheKeyForDiscover({
+      from: heroWindow.from,
+      to: heroWindow.to,
+      windowKey: HERO_WINDOW_KEY,
+      origin: "",
+      tripLength: "2",
+      vibesKey: "",
+      category: HERO_CATEGORY,
+    });
+  }, [heroWindow.from, heroWindow.to]);
 
   const prioritisedPrimaryCategories = useMemo(() => {
     return prioritiseCategories(DISCOVER_PRIMARY_CATEGORIES, seededCategory);
@@ -405,6 +486,53 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     seededCategory,
   ]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runHero() {
+      const cached = cacheRef.current.get(heroCacheKey);
+      const now = Date.now();
+
+      if (cached && now - cached.ts < LIVE_POOL_CACHE_TTL_MS) {
+        setHeroRows(cached.rows);
+        return;
+      }
+
+      try {
+        const pool = await fetchDiscoverPool({
+          window: heroWindow,
+          windowKey: HERO_WINDOW_KEY,
+          origin: "",
+          tripLength: "2",
+          vibes: ["big"],
+          category: HERO_CATEGORY,
+          minFixtures: 48,
+          maxLeagueFetches: 18,
+          batchSize: 5,
+        });
+
+        if (cancelled) return;
+
+        const safePool = uniqueRows(Array.isArray(pool) ? pool : []);
+        cacheRef.current.set(heroCacheKey, { ts: Date.now(), rows: safePool });
+        setHeroRows(safePool);
+      } catch {
+        if (cancelled) return;
+
+        const staleFallback = cacheRef.current.get(heroCacheKey);
+        if (staleFallback?.rows?.length) {
+          setHeroRows(staleFallback.rows);
+        }
+      }
+    }
+
+    runHero();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [heroCacheKey, heroWindow]);
+
   const rankedLive = useMemo<RankedDiscoverPick[]>(() => {
     if (!liveRows.length) return [];
 
@@ -423,7 +551,10 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       .sort((a, b) => b.score - a.score);
   }, [liveRows, seededCategory, normalisedOrigin, discoverTripLength, discoverVibes]);
 
-  const featuredLive = useMemo(() => rankedLive[0] ?? null, [rankedLive]);
+  const featuredLive = useMemo(() => {
+    return buildHeroPick(heroRows) ?? rankedLive[0] ?? null;
+  }, [heroRows, rankedLive]);
+
   const previewLive = useMemo(() => rankedLive.slice(0, PREVIEW_LIMIT), [rankedLive]);
 
   const trendingTrips = useMemo(() => {
@@ -660,4 +791,4 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       rankLabel,
     },
   };
-     }
+}
