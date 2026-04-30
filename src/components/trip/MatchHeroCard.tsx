@@ -1,13 +1,7 @@
 // src/components/trip/MatchHeroCard.tsx
 
 import React from "react";
-import {
-  Image,
-  ImageBackground,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Image, ImageBackground, StyleSheet, Text, View } from "react-native";
 
 import { getCountryVisual } from "@/src/constants/visualAssets";
 
@@ -44,22 +38,31 @@ function initials(name?: string | null) {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-function TeamCrest({
-  name,
-  logo,
-  side,
-}: {
-  name: string;
-  logo?: string | null;
-  side: "home" | "away";
-}) {
+function Crest({ name, logo, large }: { name: string; logo?: string | null; large?: boolean }) {
+  if (logo) {
+    return (
+      <Image
+        source={{ uri: logo }}
+        style={[styles.crestImage, large && styles.crestImageLarge]}
+        resizeMode="contain"
+      />
+    );
+  }
+
   return (
-    <View style={[styles.crestShell, side === "away" && styles.awayCrestShell]}>
-      {logo ? (
-        <Image source={{ uri: logo }} style={styles.crestImage} resizeMode="contain" />
-      ) : (
-        <Text style={styles.crestFallback}>{initials(name)}</Text>
-      )}
+    <View style={[styles.fallbackCrest, large && styles.fallbackCrestLarge]}>
+      <Text style={styles.fallbackText}>{initials(name)}</Text>
+    </View>
+  );
+}
+
+function InfoCard({ icon, label, wide }: { icon: string; label: string; wide?: boolean }) {
+  return (
+    <View style={[styles.infoCard, wide && styles.infoCardWide]}>
+      <Text style={styles.infoIcon}>{icon}</Text>
+      <Text style={styles.infoLabel} numberOfLines={wide ? 2 : 1}>
+        {label}
+      </Text>
     </View>
   );
 }
@@ -97,33 +100,32 @@ export default function MatchHeroCard({
         style={styles.flagBackground}
         imageStyle={styles.flagImage}
       >
-        <View style={styles.darkOverlay} />
-        <View
-          style={[
-            styles.colourWashLeft,
-            { backgroundColor: visual.accentLeft },
-          ]}
-        />
-        <View
-          style={[
-            styles.colourWashRight,
-            { backgroundColor: visual.accentRight },
-          ]}
-        />
-        <View style={styles.waveOne} />
-        <View style={styles.waveTwo} />
-        <View style={styles.waveThree} />
-        <View style={styles.bottomVignette} />
+        <View style={styles.flagBoost} />
+        <View style={styles.fabricHighlightOne} />
+        <View style={styles.fabricHighlightTwo} />
+        <View style={styles.fabricShadowOne} />
+        <View style={styles.fabricShadowTwo} />
+        <View style={styles.topShadow} />
+        <View style={styles.bottomShadow} />
 
-        <View style={styles.crestsRow}>
-          <TeamCrest name={homeName} logo={hasRealMatch ? homeLogo : null} side="home" />
+        {hasRealMatch ? (
+          <View style={styles.matchCrestsLayer}>
+            <View style={styles.homeCrestWrap}>
+              <Crest name={homeName} logo={homeLogo} large />
+            </View>
 
-          <View style={styles.vsDisc}>
             <Text style={styles.vsText}>VS</Text>
-          </View>
 
-          <TeamCrest name={awayName} logo={hasRealMatch ? awayLogo : null} side="away" />
-        </View>
+            <View style={styles.awayCrestWrap}>
+              <Crest name={awayName} logo={awayLogo} large />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.noMatchPanel}>
+            <Text style={styles.noMatchKicker}>TRIP MODE</Text>
+            <Text style={styles.noMatchTitle}>Choose your match</Text>
+          </View>
+        )}
 
         <View style={styles.copy}>
           <Text style={styles.title} numberOfLines={2}>
@@ -134,27 +136,10 @@ export default function MatchHeroCard({
             {subtitle}
           </Text>
 
-          <View style={styles.infoGrid}>
-            <View style={styles.infoChip}>
-              <Text style={styles.infoIcon}>▣</Text>
-              <Text style={styles.infoText} numberOfLines={1}>
-                {dateLabel}
-              </Text>
-            </View>
-
-            <View style={styles.infoChip}>
-              <Text style={styles.infoIcon}>◷</Text>
-              <Text style={styles.infoText} numberOfLines={1}>
-                {timeLabel}
-              </Text>
-            </View>
-
-            <View style={styles.infoChipWide}>
-              <Text style={styles.infoIcon}>◉</Text>
-              <Text style={styles.infoText} numberOfLines={1}>
-                {venueLabel}
-              </Text>
-            </View>
+          <View style={styles.infoRow}>
+            <InfoCard icon="▣" label={dateLabel} />
+            <InfoCard icon="◷" label={timeLabel} />
+            <InfoCard icon="◉" label={venueLabel} wide />
           </View>
         </View>
       </ImageBackground>
@@ -164,15 +149,15 @@ export default function MatchHeroCard({
 
 const styles = StyleSheet.create({
   shell: {
-    height: 364,
+    height: 438,
     borderRadius: 34,
     overflow: "hidden",
-    backgroundColor: "#041008",
+    backgroundColor: "#031007",
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.28)",
+    borderColor: "rgba(134,239,172,0.30)",
     shadowColor: "#22C55E",
-    shadowOpacity: 0.26,
-    shadowRadius: 24,
+    shadowOpacity: 0.24,
+    shadowRadius: 26,
     shadowOffset: { width: 0, height: 14 },
     elevation: 10,
   },
@@ -183,206 +168,241 @@ const styles = StyleSheet.create({
 
   flagImage: {
     borderRadius: 34,
-    opacity: 0.82,
+    opacity: 0.95,
   },
 
-  darkOverlay: {
+  flagBoost: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,18,8,0.58)",
+    backgroundColor: "rgba(0,0,0,0.16)",
   },
 
-  colourWashLeft: {
-    position: "absolute",
-    left: -70,
-    top: -30,
-    width: 190,
-    height: 420,
-    opacity: 0.22,
-    transform: [{ rotate: "-14deg" }],
-    borderRadius: 80,
-  },
-
-  colourWashRight: {
-    position: "absolute",
-    right: -80,
-    top: -40,
-    width: 210,
-    height: 430,
-    opacity: 0.20,
-    transform: [{ rotate: "16deg" }],
-    borderRadius: 80,
-  },
-
-  waveOne: {
+  fabricHighlightOne: {
     position: "absolute",
     left: -70,
     right: -30,
-    top: 96,
-    height: 88,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    opacity: 0.44,
+    top: 42,
+    height: 105,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    opacity: 0.62,
     transform: [{ rotate: "-8deg" }],
-    borderRadius: 999,
   },
 
-  waveTwo: {
+  fabricHighlightTwo: {
     position: "absolute",
-    left: -40,
+    left: 20,
+    right: -90,
+    top: 132,
+    height: 92,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    opacity: 0.5,
+    transform: [{ rotate: "7deg" }],
+  },
+
+  fabricShadowOne: {
+    position: "absolute",
+    left: -60,
     right: -80,
-    top: 172,
-    height: 96,
-    backgroundColor: "rgba(0,0,0,0.28)",
-    opacity: 0.7,
-    transform: [{ rotate: "8deg" }],
+    top: 202,
+    height: 115,
     borderRadius: 999,
-  },
-
-  waveThree: {
-    position: "absolute",
-    left: -90,
-    right: -60,
-    bottom: 18,
-    height: 94,
-    backgroundColor: "rgba(34,197,94,0.14)",
-    opacity: 0.7,
+    backgroundColor: "rgba(0,0,0,0.34)",
+    opacity: 0.6,
     transform: [{ rotate: "-6deg" }],
-    borderRadius: 999,
   },
 
-  bottomVignette: {
+  fabricShadowTwo: {
+    position: "absolute",
+    left: -80,
+    right: -40,
+    bottom: 112,
+    height: 112,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,40,18,0.42)",
+    opacity: 0.62,
+    transform: [{ rotate: "8deg" }],
+  },
+
+  topShadow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 90,
+    backgroundColor: "rgba(0,0,0,0.24)",
+  },
+
+  bottomShadow: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: 180,
-    backgroundColor: "rgba(0,16,8,0.74)",
+    height: 230,
+    backgroundColor: "rgba(0,10,5,0.84)",
   },
 
-  crestsRow: {
+  matchCrestsLayer: {
     position: "absolute",
-    left: 28,
-    right: 28,
-    top: 92,
+    left: 30,
+    right: 30,
+    top: 82,
+    height: 118,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
 
-  crestShell: {
-    width: 86,
-    height: 86,
-    borderRadius: 28,
+  homeCrestWrap: {
+    width: 112,
+    height: 112,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.52)",
+  },
+
+  awayCrestWrap: {
+    width: 118,
+    height: 118,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  crestImage: {
+    width: 86,
+    height: 86,
+  },
+
+  crestImageLarge: {
+    width: 108,
+    height: 108,
+  },
+
+  fallbackCrest: {
+    width: 78,
+    height: 78,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.20)",
   },
 
-  awayCrestShell: {
-    shadowColor: "#000000",
-    shadowOpacity: 0.34,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
+  fallbackCrestLarge: {
+    width: 98,
+    height: 98,
   },
 
-  crestImage: {
-    width: 66,
-    height: 66,
-  },
-
-  crestFallback: {
+  fallbackText: {
     color: "#FFFFFF",
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: "900",
-  },
-
-  vsDisc: {
-    width: 54,
-    height: 54,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FACC15",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.24)",
   },
 
   vsText: {
-    color: "#061008",
-    fontSize: 14,
+    color: "#FFFFFF",
+    fontSize: 28,
     fontWeight: "900",
+    letterSpacing: -1,
+    textShadowColor: "rgba(0,0,0,0.75)",
+    textShadowRadius: 10,
+    textShadowOffset: { width: 0, height: 3 },
+  },
+
+  noMatchPanel: {
+    position: "absolute",
+    left: 32,
+    right: 32,
+    top: 72,
+    minHeight: 118,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,13,6,0.42)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+
+  noMatchKicker: {
+    color: "#A3E635",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+
+  noMatchTitle: {
+    marginTop: 8,
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: -0.3,
   },
 
   copy: {
     position: "absolute",
-    left: 22,
-    right: 22,
-    bottom: 22,
+    left: 24,
+    right: 24,
+    bottom: 24,
     alignItems: "center",
   },
 
   title: {
     color: "#FFFFFF",
-    fontSize: 31,
-    lineHeight: 36,
+    fontSize: 34,
+    lineHeight: 40,
     fontWeight: "900",
-    letterSpacing: -0.8,
+    letterSpacing: -0.95,
     textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.70)",
+    textShadowRadius: 10,
+    textShadowOffset: { width: 0, height: 4 },
   },
 
   subtitle: {
-    marginTop: 8,
+    marginTop: 11,
     color: "#A3E635",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
     textAlign: "center",
     textTransform: "uppercase",
   },
 
-  infoGrid: {
-    marginTop: 20,
+  infoRow: {
+    marginTop: 25,
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     width: "100%",
   },
 
-  infoChip: {
-    minHeight: 44,
-    paddingHorizontal: 11,
-    borderRadius: 14,
-    flexDirection: "row",
+  infoCard: {
+    flex: 1,
+    minHeight: 78,
+    borderRadius: 17,
     alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(0,15,7,0.72)",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(0,13,7,0.76)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.16)",
   },
 
-  infoChipWide: {
-    flex: 1,
-    minHeight: 44,
-    paddingHorizontal: 11,
-    borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(0,15,7,0.72)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+  infoCardWide: {
+    flex: 1.18,
   },
 
   infoIcon: {
-    color: "#FDE68A",
-    fontSize: 10,
+    color: "#D9F99D",
+    fontSize: 18,
     fontWeight: "900",
+    marginBottom: 8,
   },
 
-  infoText: {
-    flexShrink: 1,
+  infoLabel: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: "900",
+    textAlign: "center",
   },
 });
