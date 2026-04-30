@@ -1,3 +1,5 @@
+// app/(tabs)/home.tsx
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -44,10 +46,11 @@ import { getCityImageUrl } from "@/src/data/cityImages";
 import ContinuePlanning from "@/src/features/home/ContinuePlanning";
 import UpcomingMatches from "@/src/features/home/UpcomingMatches";
 
-const HOME_TOP_LEAGUE_IDS = new Set<number>([39, 140, 135, 78, 61, 88, 94]);
 const HOME_PREFETCH_LIMIT = 2;
 const HOME_PREFETCH_DELAY_MS = 900;
 const HOME_MATCH_WINDOW_DAYS = 45;
+
+const DEFAULT_USER_COUNTRY_CODE = "GB";
 
 const API_SPORTS_TEAM_LOGO = (teamId: number) =>
   `https://media.api-sports.io/football/teams/${teamId}.png`;
@@ -60,6 +63,20 @@ type TripIdea = {
   title: string;
   hook: string;
 };
+
+const HOME_DISCOVERY_LEAGUE_ORDER = [
+  140, // La Liga
+  135, // Serie A
+  78, // Bundesliga
+  61, // Ligue 1
+  88, // Eredivisie
+  94, // Primeira Liga
+  2, // Champions League
+  3, // Europa League
+  848, // Conference League
+  179, // Scotland
+  203, // Turkey
+];
 
 const MARQUEE_TEAM_TERMS = [
   "arsenal",
@@ -103,7 +120,6 @@ const MARQUEE_TEAM_TERMS = [
 const DESTINATION_CITY_TERMS = [
   "amsterdam",
   "barcelona",
-  "benfica",
   "berlin",
   "bilbao",
   "dortmund",
@@ -135,7 +151,6 @@ const ICONIC_VENUE_TERMS = [
   "bernabeu",
   "camp nou",
   "celtic park",
-  "emet",
   "emirates",
   "estadio da luz",
   "ibrox",
@@ -156,23 +171,59 @@ const RIVALRY_PATTERNS: Array<readonly [string, string]> = [
   ["barcelona", "real madrid"],
   ["bayern", "dortmund"],
   ["celtic", "rangers"],
-  ["chelsea", "arsenal"],
-  ["chelsea", "tottenham"],
   ["everton", "liverpool"],
   ["inter", "milan"],
   ["lazio", "roma"],
   ["manchester city", "manchester united"],
-  ["newcastle", "sunderland"],
   ["real madrid", "atletico"],
-  ["roma", "napoli"],
-  ["tottenham", "west ham"],
 ];
 
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function detectUserCountryCode(): string {
+  return DEFAULT_USER_COUNTRY_CODE;
+}
+
+function normaliseCountryCode(code?: string | null): string {
+  const c = clean(code).toUpperCase();
+  if (c === "ENG" || c === "SCO" || c === "WAL" || c === "NIR") return "GB";
+  return c;
+}
+
+function isDomesticLeague(league: LeagueOption, userCountryCode: string): boolean {
+  const user = normaliseCountryCode(userCountryCode);
+  const leagueCountry = normaliseCountryCode(league.countryCode);
+
+  if (!user || !leagueCountry) return false;
+  if (leagueCountry === "EU") return false;
+
+  return user === leagueCountry;
+}
+
+function orderHomeLeagues(leagues: LeagueOption[]): LeagueOption[] {
+  const byId = new Map(leagues.map((l) => [l.leagueId, l]));
+
+  const ordered = HOME_DISCOVERY_LEAGUE_ORDER.map((id) => byId.get(id)).filter(
+    (x): x is LeagueOption => Boolean(x)
+  );
+
+  const rest = leagues
+    .filter((l) => !HOME_DISCOVERY_LEAGUE_ORDER.includes(l.leagueId))
+    .sort((a, b) => {
+      if (a.featured !== b.featured) return a.featured ? -1 : 1;
+      if (a.homeVisible !== b.homeVisible) return a.homeVisible ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+
+  return [...ordered, ...rest];
+}
+
 function titleFromSlug(s: string) {
-  const clean = String(s ?? "").trim();
-  if (!clean) return "";
-  const spaced = clean.replace(/[-_]+/g, " ");
-  return spaced.replace(/\b\w/g, (m) => m.toUpperCase());
+  const value = clean(s);
+  if (!value) return "";
+  return value.replace(/[-_]+/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function tripSummaryLine(t: Trip) {
@@ -227,15 +278,22 @@ function hasRivalryBoost(home: string, away: string) {
   });
 }
 
-function leagueBaseScore(leagueId?: number | null) {
-  if (leagueId === 39) return 130;
-  if (leagueId === 140) return 116;
-  if (leagueId === 135) return 112;
-  if (leagueId === 78) return 104;
-  if (leagueId === 61) return 98;
-  if (leagueId === 88) return 92;
-  if (leagueId === 94) return 90;
-  return 68;
+function leagueBaseScore(leagueId?: number | null, userCountryCode = DEFAULT_USER_COUNTRY_CODE) {
+  const league = LEAGUES.find((l) => l.leagueId === leagueId) ?? null;
+  const domesticPenalty = league && isDomesticLeague(league, userCountryCode) ? -44 : 0;
+
+  if (leagueId === 140) return 124 + domesticPenalty;
+  if (leagueId === 135) return 120 + domesticPenalty;
+  if (leagueId === 78) return 116 + domesticPenalty;
+  if (leagueId === 61) return 108 + domesticPenalty;
+  if (leagueId === 88) return 102 + domesticPenalty;
+  if (leagueId === 94) return 100 + domesticPenalty;
+  if (leagueId === 2) return 118;
+  if (leagueId === 3) return 104;
+  if (leagueId === 848) return 94;
+  if (leagueId === 39) return 96 + domesticPenalty;
+
+  return 72 + domesticPenalty;
 }
 
 function kickoffTimingScore(dt: Date) {
@@ -259,33 +317,30 @@ function kickoffTimingScore(dt: Date) {
   return s;
 }
 
-function scoreFixture(r: FixtureListRow): number {
+function scoreFixture(r: FixtureListRow, userCountryCode = DEFAULT_USER_COUNTRY_CODE): number {
   let s = 0;
 
   const leagueId = r?.league?.id;
-  const home = String(r?.teams?.home?.name ?? "").trim();
-  const away = String(r?.teams?.away?.name ?? "").trim();
-  const venue = String(r?.fixture?.venue?.name ?? "").trim();
-  const city = String(r?.fixture?.venue?.city ?? "").trim();
+  const home = clean(r?.teams?.home?.name);
+  const away = clean(r?.teams?.away?.name);
+  const venue = clean(r?.fixture?.venue?.name);
+  const city = clean(r?.fixture?.venue?.city);
 
   const combinedTeams = `${home} ${away}`.toLowerCase();
   const combinedLocation = `${venue} ${city}`.toLowerCase();
 
-  s += leagueBaseScore(leagueId);
+  s += leagueBaseScore(leagueId, userCountryCode);
 
   if (venue) s += 10;
-  if (city) s += 8;
+  if (city) s += 10;
 
   if (includesAny(combinedTeams, MARQUEE_TEAM_TERMS)) s += 18;
-  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 16;
-  if (includesAny(combinedLocation, ICONIC_VENUE_TERMS)) s += 14;
-
-  if (hasRivalryBoost(home, away)) s += 26;
+  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 22;
+  if (includesAny(combinedLocation, ICONIC_VENUE_TERMS)) s += 16;
+  if (hasRivalryBoost(home, away)) s += 28;
 
   const dt = r?.fixture?.date ? new Date(r.fixture.date) : null;
-  if (dt && !Number.isNaN(dt.getTime())) {
-    s += kickoffTimingScore(dt);
-  }
+  if (dt && !Number.isNaN(dt.getTime())) s += kickoffTimingScore(dt);
 
   if (home && away) {
     const longNames = (home.length >= 8 ? 1 : 0) + (away.length >= 8 ? 1 : 0);
@@ -307,12 +362,12 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 }
 
 function mapFixtureError(message: string | null): string | null {
-  const clean = String(message ?? "").trim().toLowerCase();
-  if (!clean) return null;
-  if (clean.includes("backend_timeout")) {
+  const value = clean(message).toLowerCase();
+  if (!value) return null;
+  if (value.includes("backend_timeout")) {
     return "Live fixtures took too long to respond. Try again in a moment.";
   }
-  if (clean.includes("timeout")) {
+  if (value.includes("timeout")) {
     return "Fixture data is taking longer than expected. Try again shortly.";
   }
   return message;
@@ -341,16 +396,43 @@ function getTripIdeas(): TripIdea[] {
   ];
 }
 
+function resultTypeLabel(type: SearchResult["type"]) {
+  if (type === "team") return "Team";
+  if (type === "city") return "City";
+  if (type === "venue") return "Stadium";
+  if (type === "country") return "Country";
+  if (type === "league") return "League";
+  return "Result";
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const userCountryCode = useMemo(() => detectUserCountryCode(), []);
+
   const homeTopLeagues = useMemo(() => {
-    const list = LEAGUES.filter((l) => HOME_TOP_LEAGUE_IDS.has(l.leagueId));
-    return list.length ? list : LEAGUES.slice(0, 6);
-  }, []);
+    const homeVisible = LEAGUES.filter((l) => l.homeVisible);
+    const foreignFirst = homeVisible.filter((l) => !isDomesticLeague(l, userCountryCode));
+    const domestic = homeVisible.filter((l) => isDomesticLeague(l, userCountryCode));
+
+    const ordered = orderHomeLeagues([...foreignFirst, ...domestic]);
+
+    if (ordered.length >= 6) return ordered.slice(0, 8);
+
+    return orderHomeLeagues(LEAGUES.filter((l) => !isDomesticLeague(l, userCountryCode))).slice(
+      0,
+      8
+    );
+  }, [userCountryCode]);
 
   const [league, setLeague] = useState<LeagueOption>(homeTopLeagues[0] ?? LEAGUES[0]);
+
+  useEffect(() => {
+    if (!homeTopLeagues.length) return;
+    if (homeTopLeagues.some((l) => l.leagueId === league.leagueId)) return;
+    setLeague(homeTopLeagues[0]);
+  }, [homeTopLeagues, league.leagueId]);
 
   const { from: fromIso, to: toIso } = useMemo(() => getRollingWindowIso(), []);
   const upcomingWindow = useMemo(() => windowFromTomorrowIso(HOME_MATCH_WINDOW_DAYS), []);
@@ -406,11 +488,8 @@ export default function HomeScreen() {
     async function run() {
       const hasExistingRows = fxRows.length > 0;
 
-      if (hasExistingRows) {
-        setFxRefreshing(true);
-      } else {
-        setFxLoading(true);
-      }
+      if (hasExistingRows) setFxRefreshing(true);
+      else setFxLoading(true);
 
       setFxError(null);
 
@@ -481,9 +560,7 @@ export default function HomeScreen() {
           })
         );
 
-        if (!cancelled) {
-          prefetchedKeysRef.current.add(currentKey);
-        }
+        if (!cancelled) prefetchedKeysRef.current.add(currentKey);
       }
 
       prefetchOtherHomeLeagues().catch(() => null);
@@ -504,17 +581,17 @@ export default function HomeScreen() {
   const fxOrdered = useMemo(() => {
     return (fxRows ?? [])
       .filter((r) => r?.fixture?.id != null)
-      .map((r) => ({ r, s: scoreFixture(r) }))
+      .map((r) => ({ r, s: scoreFixture(r, userCountryCode) }))
       .sort((a, b) => b.s - a.s)
       .map((x) => x.r);
-  }, [fxRows]);
+  }, [fxRows, userCountryCode]);
 
   const featured = useMemo(() => fxOrdered[0] ?? null, [fxOrdered]);
   const list = useMemo(() => fxOrdered.slice(1, 4), [fxOrdered]);
 
   const [q, setQ] = useState("");
   const qNorm = useMemo(() => q.trim(), [q]);
-  const qDebounced = useDebouncedValue(qNorm, 140);
+  const qDebounced = useDebouncedValue(qNorm, 90);
   const showSearchResults = qNorm.length > 0;
 
   const [searchBuilding, setSearchBuilding] = useState(false);
@@ -556,7 +633,7 @@ export default function HomeScreen() {
   const rawSearchResults = useMemo(() => {
     const idx = indexRef.current;
     if (!idx || !qDebounced) return [];
-    return querySearchIndex(idx, qDebounced, { limit: 16 });
+    return querySearchIndex(idx, qDebounced, { limit: 24 });
   }, [qDebounced]);
 
   const buckets = useMemo(() => splitSearchBuckets(rawSearchResults), [rawSearchResults]);
@@ -621,7 +698,7 @@ export default function HomeScreen() {
 
   const goCityKey = useCallback(
     (cityKey: string) => {
-      const ck = String(cityKey ?? "").trim();
+      const ck = clean(cityKey);
       if (!ck) return;
 
       Keyboard.dismiss();
@@ -639,9 +716,10 @@ export default function HomeScreen() {
     (r: SearchResult) => {
       const p: any = r.payload;
 
+      Keyboard.dismiss();
+      setQ("");
+
       if (p?.kind === "team") {
-        Keyboard.dismiss();
-        setQ("");
         router.push({
           pathname: "/team/[teamKey]",
           params: { teamKey: p.slug, from: fromIso, to: toIso },
@@ -655,16 +733,12 @@ export default function HomeScreen() {
       }
 
       if (p?.kind === "venue") {
-        const venueName = String(r.title ?? "").trim();
-        Keyboard.dismiss();
-        setQ("");
+        const venueName = clean(r.title);
         goFixtures({ window: { from: fromIso, to: toIso }, venue: venueName });
         return;
       }
 
       if (p?.kind === "country" || p?.kind === "league") {
-        Keyboard.dismiss();
-        setQ("");
         goFixtures({
           window: { from: fromIso, to: toIso },
           leagueId: Number(p.leagueId),
@@ -695,9 +769,9 @@ export default function HomeScreen() {
         ...buckets.teams,
         ...buckets.cities,
         ...buckets.venues,
-        ...buckets.countries,
         ...buckets.leagues,
-      ].slice(0, 12),
+        ...buckets.countries,
+      ].slice(0, 14),
     [buckets]
   );
 
@@ -747,8 +821,8 @@ export default function HomeScreen() {
   }, [nextTrip, nextTripCityTitle]);
 
   const featuredCityImage = useMemo(() => {
-    const city = String(featured?.fixture?.venue?.city ?? "").trim();
-    return getCityImageUrl(city || "london");
+    const city = clean(featured?.fixture?.venue?.city);
+    return getCityImageUrl(city || "milan");
   }, [featured]);
 
   const homeFixtureError = useMemo(() => mapFixtureError(fxError), [fxError]);
@@ -763,8 +837,8 @@ export default function HomeScreen() {
 
   const heroSubtitle = useMemo(() => {
     if (featured) {
-      const city = String(featured?.fixture?.venue?.city ?? "").trim();
-      const leagueName = String(featured?.league?.name ?? "").trim();
+      const city = clean(featured?.fixture?.venue?.city);
+      const leagueName = clean(featured?.league?.name);
       const when = formatUkDateTimeMaybe(featured?.fixture?.date);
       const parts = [city, leagueName, when].filter(Boolean);
       return parts.join(" • ") || "Plan the whole weekend, not just the match.";
@@ -780,7 +854,7 @@ export default function HomeScreen() {
   const heroImage = useMemo(() => {
     if (featuredCityImage) return featuredCityImage;
     if (nextTripCityImage) return nextTripCityImage;
-    return getCityImageUrl("london");
+    return getCityImageUrl("milan");
   }, [featuredCityImage, nextTripCityImage]);
 
   const tripIdeas = useMemo(() => getTripIdeas(), []);
@@ -816,7 +890,7 @@ export default function HomeScreen() {
             <View style={styles.heroGlow} pointerEvents="none" />
 
             <View style={styles.heroContent}>
-              <Text style={styles.heroTag}>Top pick this week</Text>
+              <Text style={styles.heroTag}>Top European pick this week</Text>
               <Text style={styles.heroTitle}>{heroTitle}</Text>
               <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
 
@@ -836,11 +910,13 @@ export default function HomeScreen() {
 
           <View style={styles.commandWrap}>
             <View style={styles.searchBar}>
+              <Text style={styles.searchIcon}>⌕</Text>
+
               <TextInput
                 value={q}
                 onChangeText={setQ}
-                placeholder="Search teams, cities, countries or stadiums"
-                placeholderTextColor="rgba(224,231,225,0.42)"
+                placeholder="Search Man United, Milan, Lisbon, San Siro..."
+                placeholderTextColor="rgba(240,245,242,0.58)"
                 style={styles.searchInput}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -895,7 +971,7 @@ export default function HomeScreen() {
 
                 {!searchBuilding && !searchError ? (
                   flatSearchResults.length === 0 ? (
-                    <Text style={styles.groupEmpty}>No results.</Text>
+                    <Text style={styles.groupEmpty}>No results yet. Try a team, city, league or stadium.</Text>
                   ) : (
                     <View style={styles.resultList}>
                       {flatSearchResults.map((r, idx) => (
@@ -909,10 +985,15 @@ export default function HomeScreen() {
                           ]}
                           android_ripple={{ color: "rgba(34,197,94,0.08)" }}
                         >
+                          <View style={styles.resultTypePill}>
+                            <Text style={styles.resultTypeText}>{resultTypeLabel(r.type)}</Text>
+                          </View>
+
                           <View style={styles.resultTextWrap}>
                             <Text style={styles.resultTitle}>{r.title}</Text>
                             <Text style={styles.resultMeta}>{resultMeta(r)}</Text>
                           </View>
+
                           <Text style={styles.chev}>›</Text>
                         </Pressable>
                       ))}
@@ -1031,12 +1112,12 @@ const styles = StyleSheet.create({
 
   heroImageShade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,5,7,0.34)",
+    backgroundColor: "rgba(2,5,7,0.30)",
   },
 
   heroBottomFade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(2,5,7,0.28)",
+    backgroundColor: "rgba(2,5,7,0.32)",
   },
 
   heroGlow: {
@@ -1046,7 +1127,7 @@ const styles = StyleSheet.create({
     bottom: -12,
     height: 72,
     borderRadius: 999,
-    backgroundColor: "rgba(0,210,106,0.10)",
+    backgroundColor: "rgba(0,210,106,0.12)",
   },
 
   heroContent: {
@@ -1075,7 +1156,7 @@ const styles = StyleSheet.create({
   },
 
   heroSubtitle: {
-    color: "rgba(240,245,242,0.86)",
+    color: "rgba(240,245,242,0.88)",
     fontSize: 13,
     lineHeight: 19,
     fontWeight: theme.fontWeight.bold,
@@ -1096,9 +1177,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(22,126,58,0.34)",
+    backgroundColor: "rgba(22,126,58,0.38)",
     borderWidth: 1,
-    borderColor: "rgba(104,241,138,0.22)",
+    borderColor: "rgba(104,241,138,0.25)",
   },
 
   heroPrimaryCtaText: {
@@ -1108,7 +1189,7 @@ const styles = StyleSheet.create({
   },
 
   heroSecondaryLink: {
-    color: "rgba(255,255,255,0.80)",
+    color: "rgba(255,255,255,0.82)",
     fontSize: 13,
     fontWeight: theme.fontWeight.black,
   },
@@ -1119,22 +1200,29 @@ const styles = StyleSheet.create({
   },
 
   searchBar: {
-    minHeight: 58,
-    borderRadius: 18,
+    minHeight: 60,
+    borderRadius: 20,
     paddingHorizontal: 15,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: Platform.OS === "android" ? "rgba(9,12,14,0.62)" : "rgba(255,255,255,0.05)",
+    backgroundColor: Platform.OS === "android" ? "rgba(17,24,22,0.92)" : "rgba(255,255,255,0.09)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(163,230,53,0.22)",
+  },
+
+  searchIcon: {
+    color: "#A3E635",
+    fontSize: 22,
+    fontWeight: theme.fontWeight.black,
+    marginTop: -2,
   },
 
   searchInput: {
     flex: 1,
     color: theme.colors.text,
     fontSize: 15,
-    fontWeight: theme.fontWeight.bold,
+    fontWeight: theme.fontWeight.black,
     paddingVertical: Platform.OS === "ios" ? 14 : 12,
   },
 
@@ -1142,7 +1230,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
 
   clearText: {
@@ -1161,9 +1249,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: "rgba(18,103,49,0.28)",
+    backgroundColor: "rgba(18,103,49,0.30)",
     borderWidth: 1,
-    borderColor: "rgba(104,241,138,0.20)",
+    borderColor: "rgba(104,241,138,0.22)",
   },
 
   commandChipPrimaryText: {
@@ -1176,7 +1264,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.05)",
   },
 
   commandChipText: {
@@ -1190,25 +1278,44 @@ const styles = StyleSheet.create({
   },
 
   resultList: {
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: Platform.OS === "android" ? "rgba(6,10,8,0.34)" : "rgba(6,10,8,0.30)",
+    backgroundColor: Platform.OS === "android" ? "rgba(10,18,14,0.78)" : "rgba(10,18,14,0.72)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: "rgba(163,230,53,0.16)",
   },
 
   resultRow: {
-    paddingVertical: 12,
+    paddingVertical: 13,
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.04)",
+    borderTopColor: "rgba(255,255,255,0.06)",
   },
 
   resultRowFirst: {
     borderTopWidth: 0,
+  },
+
+  resultTypePill: {
+    minWidth: 62,
+    alignItems: "center",
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(163,230,53,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(163,230,53,0.18)",
+  },
+
+  resultTypeText: {
+    color: "#BEF264",
+    fontSize: 10,
+    fontWeight: theme.fontWeight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
   },
 
   resultTextWrap: {
