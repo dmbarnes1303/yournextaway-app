@@ -1,5 +1,12 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Image, Platform } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Image,
+  Platform,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import GlassCard from "@/src/components/GlassCard";
@@ -16,61 +23,25 @@ type Props = {
   onPress: (category: DiscoverCategory) => void;
 };
 
-function categoryActionLabel(category: DiscoverCategory) {
-  switch (category) {
-    case "bigMatches":
-      return "Browse big fixtures";
-    case "derbies":
-      return "Browse rivalries";
-    case "atmospheres":
-      return "Browse loudest trips";
-    case "valueTrips":
-      return "Browse value routes";
-    case "perfectTrips":
-      return "Browse best trips";
-    case "easyTickets":
-      return "Browse easier routes";
-    case "multiMatchTrips":
-      return "Browse stacked trips";
-    case "weekendTrips":
-      return "Browse weekend trips";
-    case "europeanNights":
-      return "Browse European nights";
-    case "legendaryStadiums":
-      return "Browse iconic grounds";
-    case "iconicCities":
-      return "Browse city-led trips";
-    case "nightMatches":
-      return "Browse night fixtures";
-    case "titleDrama":
-      return "Browse pressure games";
-    case "bucketList":
-      return "Browse must-do trips";
-    case "matchdayCulture":
-      return "Browse culture picks";
-    case "underratedTrips":
-      return "Browse hidden gems";
-    default:
-      return "Open category";
-  }
-}
-
-function categoryTagLabel(category: DiscoverCategory, compact: boolean) {
+/**
+ * Short + sharp → no waffle
+ */
+function tagLabel(category: DiscoverCategory, compact: boolean) {
   if (compact) return "Browse";
 
   switch (category) {
     case "perfectTrips":
       return "Best fit";
     case "bigMatches":
-      return "Occasion-led";
+      return "Big games";
     case "derbies":
-      return "Rivalries";
+      return "Derbies";
     case "atmospheres":
-      return "Energy";
+      return "Atmosphere";
     case "valueTrips":
       return "Value";
     case "easyTickets":
-      return "Low friction";
+      return "Easier";
     case "multiMatchTrips":
       return "Stackable";
     case "weekendTrips":
@@ -78,11 +49,11 @@ function categoryTagLabel(category: DiscoverCategory, compact: boolean) {
     case "europeanNights":
       return "Europe";
     case "legendaryStadiums":
-      return "Ground-led";
+      return "Iconic";
     case "iconicCities":
       return "City-led";
     case "nightMatches":
-      return "Evening";
+      return "Night";
     case "titleDrama":
       return "Stakes";
     case "bucketList":
@@ -90,7 +61,7 @@ function categoryTagLabel(category: DiscoverCategory, compact: boolean) {
     case "matchdayCulture":
       return "Culture";
     case "underratedTrips":
-      return "Hidden upside";
+      return "Hidden";
     default:
       return "Discover";
   }
@@ -99,40 +70,44 @@ function categoryTagLabel(category: DiscoverCategory, compact: boolean) {
 function helperLine(category: DiscoverCategory) {
   switch (category) {
     case "perfectTrips":
-      return "Best overall balance of fixture, city, access and trip quality.";
+      return "Strongest overall trip quality.";
     case "bigMatches":
-      return "Higher-profile fixtures with stronger occasion feel.";
+      return "Higher-profile fixtures.";
     case "derbies":
-      return "History, rivalry tension and edge first.";
+      return "Rivalry intensity first.";
     case "atmospheres":
-      return "Crowd force, noise and matchday intensity.";
+      return "Loud, high-energy matches.";
     case "valueTrips":
-      return "Better experience-per-pound potential.";
+      return "Better experience per pound.";
     case "easyTickets":
-      return "Cleaner routes where access looks more realistic.";
+      return "Lower access friction.";
     case "multiMatchTrips":
-      return "Trips that can support more than one match.";
+      return "More than one fixture.";
     case "weekendTrips":
-      return "Friday-to-Sunday football breaks that actually work.";
+      return "Clean Fri–Sun trips.";
     case "europeanNights":
-      return "Continental fixtures with stronger night-game pull.";
+      return "Midweek European feel.";
     case "legendaryStadiums":
-      return "Ground prestige and club pull doing the heavy lifting.";
+      return "Ground-led trips.";
     case "iconicCities":
-      return "Trips where the city matters as much as the match.";
+      return "City-first travel.";
     case "nightMatches":
-      return "Later kickoffs with better lights-on energy.";
+      return "Evening kickoffs.";
     case "titleDrama":
-      return "Fixtures with sharper late-season pressure.";
+      return "Pressure fixtures.";
     case "bucketList":
-      return "Trips that should be done at least once.";
+      return "Do it once trips.";
     case "matchdayCulture":
-      return "Football culture beyond the 90 minutes.";
+      return "Beyond the 90 mins.";
     case "underratedTrips":
-      return "Less obvious trips with stronger upside than expected.";
+      return "Less obvious wins.";
     default:
-      return "Open this route to browse ranked live options.";
+      return "Browse live routes.";
   }
+}
+
+function actionLabel(category: DiscoverCategory) {
+  return "Browse routes";
 }
 
 export default function DiscoverCategoryCard({
@@ -142,90 +117,72 @@ export default function DiscoverCategoryCard({
 }: Props) {
   const meta = DISCOVER_CATEGORY_META[category];
   const primary = meta.emphasis === "primary";
-  const actionLabel = categoryActionLabel(category);
-  const tagLabel = categoryTagLabel(category, compact);
-  const helper = compact ? null : helperLine(category);
 
   return (
     <Pressable
       onPress={() => onPress(category)}
       style={({ pressed }) => [
-        compact ? styles.categoryPressCompact : styles.categoryPress,
+        compact ? styles.pressCompact : styles.press,
         pressed && styles.pressed,
       ]}
     >
       <GlassCard
         strength={primary && !compact ? "strong" : "default"}
         style={[
-          compact ? styles.categoryCardCompact : styles.categoryCard,
-          primary && !compact ? styles.categoryCardPrimary : null,
+          compact ? styles.cardCompact : styles.card,
+          primary && !compact && styles.cardPrimary,
         ]}
         noPadding
       >
-        <View style={compact ? styles.categoryImageWrapCompact : styles.categoryImageWrap}>
+        {/* IMAGE */}
+        <View style={compact ? styles.imageWrapCompact : styles.imageWrap}>
           <Image
             source={{ uri: PLACEHOLDER_DISCOVER_IMAGE }}
-            style={styles.categoryImage}
+            style={styles.image}
             resizeMode="cover"
           />
-          <View
-            style={[
-              styles.categoryImageOverlay,
-              primary && !compact ? styles.categoryImageOverlayPrimary : null,
-            ]}
-          />
+          <View style={styles.overlay} />
 
-          <View style={styles.imageTopRow}>
+          <View style={styles.badgeRow}>
             <View
               style={[
-                styles.categoryEyebrowPill,
-                primary && !compact ? styles.categoryEyebrowPillPrimary : null,
+                styles.badge,
+                primary && !compact && styles.badgePrimary,
               ]}
             >
-              <Text style={styles.categoryEyebrowText}>{tagLabel}</Text>
+              <Text style={styles.badgeText}>
+                {tagLabel(category, compact)}
+              </Text>
             </View>
           </View>
         </View>
 
-        <View style={compact ? styles.categoryInnerCompact : styles.categoryInner}>
-          <View style={styles.categoryTopRow}>
-            <View
-              style={[
-                styles.categoryIconWrap,
-                primary && !compact ? styles.categoryIconWrapPrimary : null,
-              ]}
-            >
-              <Ionicons name={meta.icon} size={18} color={theme.colors.text} />
-            </View>
+        {/* BODY */}
+        <View style={compact ? styles.bodyCompact : styles.body}>
+          <View style={styles.iconWrap}>
+            <Ionicons name={meta.icon} size={18} color={theme.colors.text} />
           </View>
 
-          <View style={styles.categoryTextWrap}>
-            <Text style={styles.categoryTitle} numberOfLines={compact ? 2 : 2}>
+          <View style={styles.textWrap}>
+            <Text style={styles.title} numberOfLines={2}>
               {meta.title}
             </Text>
 
-            <Text style={styles.categorySubtitle} numberOfLines={compact ? 2 : 2}>
+            <Text style={styles.subtitle} numberOfLines={2}>
               {meta.subtitle}
             </Text>
 
-            {helper ? (
-              <Text style={styles.categoryHelper} numberOfLines={3}>
-                {helper}
+            {!compact && (
+              <Text style={styles.helper} numberOfLines={2}>
+                {helperLine(category)}
               </Text>
-            ) : null}
+            )}
           </View>
 
-          <View style={styles.categoryFooterRow}>
-            <Text style={styles.categoryFooterText} numberOfLines={1}>
-              {actionLabel}
-            </Text>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>{actionLabel(category)}</Text>
 
-            <View
-              style={[
-                styles.footerArrowWrap,
-                primary && !compact ? styles.footerArrowWrapPrimary : null,
-              ]}
-            >
+            <View style={styles.arrow}>
               <Ionicons
                 name="arrow-forward-outline"
                 size={14}
@@ -240,186 +197,143 @@ export default function DiscoverCategoryCard({
 }
 
 const styles = StyleSheet.create({
-  categoryPress: {
+  press: {
     width: "48.5%",
     borderRadius: 20,
     overflow: "hidden",
   },
 
-  categoryPressCompact: {
+  pressCompact: {
     width: 224,
     borderRadius: 20,
     overflow: "hidden",
   },
 
-  categoryCard: {
+  card: {
     borderRadius: 20,
-    minHeight: 246,
+    minHeight: 232,
   },
 
-  categoryCardCompact: {
+  cardCompact: {
     borderRadius: 20,
-    minHeight: 188,
+    minHeight: 176,
   },
 
-  categoryCardPrimary: {
-    borderColor: "rgba(87,162,56,0.16)",
+  cardPrimary: {
+    borderColor: "rgba(87,162,56,0.18)",
   },
 
-  categoryImageWrap: {
-    height: 98,
-    position: "relative",
+  imageWrap: {
+    height: 90,
   },
 
-  categoryImageWrapCompact: {
-    height: 84,
-    position: "relative",
+  imageWrapCompact: {
+    height: 80,
   },
 
-  categoryImage: {
+  image: {
     width: "100%",
     height: "100%",
   },
 
-  categoryImageOverlay: {
+  overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(5,8,10,0.38)",
+    backgroundColor: "rgba(5,8,10,0.35)",
   },
 
-  categoryImageOverlayPrimary: {
-    backgroundColor: "rgba(5,8,10,0.28)",
-  },
-
-  imageTopRow: {
+  badgeRow: {
     position: "absolute",
     top: 10,
     left: 10,
-    right: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
   },
 
-  categoryEyebrowPill: {
+  badge: {
     borderRadius: 999,
     paddingVertical: 5,
     paddingHorizontal: 9,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(8,10,10,0.58)",
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
 
-  categoryEyebrowPillPrimary: {
-    borderColor: "rgba(87,162,56,0.22)",
-    backgroundColor: "rgba(6,10,8,0.64)",
+  badgePrimary: {
+    backgroundColor: "rgba(87,162,56,0.25)",
   },
 
-  categoryEyebrowText: {
+  badgeText: {
     color: theme.colors.text,
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
   },
 
-  categoryInner: {
+  body: {
     padding: 14,
-    minHeight: 148,
-    gap: 12,
-    justifyContent: "space-between",
-  },
-
-  categoryInnerCompact: {
-    padding: 14,
-    minHeight: 104,
-    gap: 12,
-    justifyContent: "space-between",
-  },
-
-  categoryTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
     gap: 10,
   },
 
-  categoryIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
+  bodyCompact: {
+    padding: 14,
+    gap: 10,
+  },
+
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+      Platform.OS === "android"
+        ? "rgba(0,0,0,0.16)"
+        : "rgba(255,255,255,0.04)",
   },
 
-  categoryIconWrapPrimary: {
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.08)",
+  textWrap: {
+    gap: 4,
   },
 
-  categoryTextWrap: {
-    gap: 6,
-    flexShrink: 1,
-  },
-
-  categoryTitle: {
+  title: {
     color: theme.colors.text,
     fontSize: 15,
-    lineHeight: 19,
     fontWeight: theme.fontWeight.black,
   },
 
-  categorySubtitle: {
+  subtitle: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
   },
 
-  categoryHelper: {
+  helper: {
     color: theme.colors.textTertiary,
     fontSize: 11,
-    lineHeight: 16,
     fontWeight: theme.fontWeight.bold,
-    marginTop: 2,
   },
 
-  categoryFooterRow: {
-    marginTop: 2,
+  footer: {
+    marginTop: 6,
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    alignItems: "center",
   },
 
-  categoryFooterText: {
-    flex: 1,
+  footerText: {
     color: theme.colors.primary,
     fontSize: 11,
     fontWeight: theme.fontWeight.black,
   },
 
-  footerArrowWrap: {
-    width: 30,
-    height: 30,
+  arrow: {
+    width: 28,
+    height: 28,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.04)",
-  },
-
-  footerArrowWrapPrimary: {
-    borderColor: "rgba(87,162,56,0.20)",
-    backgroundColor: "rgba(87,162,56,0.08)",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
 
   pressed: {
-    opacity: 0.94,
+    opacity: 0.95,
     transform: [{ scale: 0.995 }],
   },
 });
