@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Image,
   Platform,
-  ImageSourcePropType,
+  type ImageSourcePropType,
 } from "react-native";
 
 import EmptyState from "@/src/components/EmptyState";
@@ -62,17 +62,17 @@ function hasRivalryBoost(home: string, away: string) {
 }
 
 function leagueBaseScore(leagueId?: number | null) {
-  if (leagueId === 140) return 124;
-  if (leagueId === 135) return 120;
-  if (leagueId === 78) return 116;
-  if (leagueId === 2) return 118;
-  if (leagueId === 61) return 108;
-  if (leagueId === 3) return 104;
-  if (leagueId === 88) return 102;
-  if (leagueId === 94) return 100;
-  if (leagueId === 848) return 94;
-  if (leagueId === 39) return 96;
-  return 72;
+  if (leagueId === 2) return 150;
+  if (leagueId === 140) return 138;
+  if (leagueId === 135) return 134;
+  if (leagueId === 78) return 130;
+  if (leagueId === 61) return 118;
+  if (leagueId === 39) return 112;
+  if (leagueId === 3) return 110;
+  if (leagueId === 88) return 104;
+  if (leagueId === 94) return 102;
+  if (leagueId === 848) return 98;
+  return 70;
 }
 
 function kickoffTimingScore(dt: Date) {
@@ -82,41 +82,106 @@ function kickoffTimingScore(dt: Date) {
   let s = 0;
 
   if (day === 6) s += 22;
-  else if (day === 0) s += 18;
-  else if (day === 5) s += 14;
-  else if (day === 3 || day === 2) s += 6;
-  else if (day === 1 || day === 4) s += 2;
+  else if (day === 0) s += 20;
+  else if (day === 5) s += 15;
+  else if (day === 3 || day === 2) s += 8;
+  else if (day === 1 || day === 4) s += 3;
 
-  if (day === 6 && hr >= 14 && hr <= 20) s += 12;
-  else if (day === 0 && hr >= 13 && hr <= 19) s += 9;
-  else if (day === 5 && hr >= 18 && hr <= 21) s += 8;
-  else if (hr >= 17 && hr <= 21) s += 7;
+  if (day === 6 && hr >= 14 && hr <= 21) s += 13;
+  else if (day === 0 && hr >= 13 && hr <= 21) s += 11;
+  else if (day === 5 && hr >= 18 && hr <= 22) s += 9;
+  else if (hr >= 17 && hr <= 22) s += 7;
   else if (hr >= 12 && hr <= 16) s += 3;
 
   return s;
 }
 
 const MARQUEE_TEAM_TERMS = [
-  "arsenal", "aston villa", "atletico", "atlético", "ajax", "bayern", "benfica",
-  "borussia dortmund", "barcelona", "celtic", "chelsea", "dortmund", "fenerbahce",
-  "fenerbahçe", "galatasaray", "inter", "juventus", "lazio", "liverpool",
-  "manchester city", "manchester united", "milan", "napoli", "newcastle",
-  "olympiacos", "porto", "psg", "paris saint-germain", "real madrid", "roma",
-  "rangers", "sl benfica", "sporting", "tottenham", "tottenham hotspur", "west ham",
+  "arsenal",
+  "aston villa",
+  "atletico",
+  "atlético",
+  "ajax",
+  "bayern",
+  "benfica",
+  "borussia dortmund",
+  "barcelona",
+  "celtic",
+  "chelsea",
+  "dortmund",
+  "fenerbahce",
+  "fenerbahçe",
+  "galatasaray",
+  "inter",
+  "juventus",
+  "lazio",
+  "liverpool",
+  "manchester city",
+  "manchester united",
+  "milan",
+  "napoli",
+  "newcastle",
+  "olympiacos",
+  "porto",
+  "psg",
+  "paris saint-germain",
+  "real madrid",
+  "roma",
+  "rangers",
+  "sl benfica",
+  "sporting",
+  "tottenham",
+  "tottenham hotspur",
+  "west ham",
 ] as const;
 
 const DESTINATION_CITY_TERMS = [
-  "amsterdam", "barcelona", "berlin", "bilbao", "dortmund", "florence", "glasgow",
-  "istanbul", "lisbon", "liverpool", "london", "madrid", "manchester", "milan",
-  "munich", "naples", "napoli", "porto", "prague", "rome", "san sebastian",
-  "seville", "turin", "valencia", "vienna",
+  "amsterdam",
+  "barcelona",
+  "berlin",
+  "bilbao",
+  "dortmund",
+  "florence",
+  "glasgow",
+  "istanbul",
+  "lisbon",
+  "liverpool",
+  "london",
+  "madrid",
+  "manchester",
+  "milan",
+  "munich",
+  "naples",
+  "napoli",
+  "porto",
+  "prague",
+  "rome",
+  "san sebastian",
+  "seville",
+  "turin",
+  "valencia",
+  "vienna",
 ] as const;
 
 const ICONIC_VENUE_TERMS = [
-  "allianz arena", "anfield", "bernabeu", "camp nou", "celtic park", "emirates",
-  "estadio da luz", "ibrox", "johan cruijff arena", "mestalla", "old trafford",
-  "olympico", "san siro", "signal iduna park", "stamford bridge",
-  "tottenham hotspur stadium", "wanda metropolitano", "wembley",
+  "allianz arena",
+  "anfield",
+  "bernabeu",
+  "camp nou",
+  "celtic park",
+  "emirates",
+  "estadio da luz",
+  "ibrox",
+  "johan cruijff arena",
+  "mestalla",
+  "old trafford",
+  "olympico",
+  "san siro",
+  "signal iduna park",
+  "stamford bridge",
+  "tottenham hotspur stadium",
+  "wanda metropolitano",
+  "wembley",
 ] as const;
 
 type ConfidenceTier = "top" | "strong" | "good";
@@ -137,10 +202,10 @@ function scoreFixture(row: FixtureListRow): number {
 
   if (venue) s += 10;
   if (city) s += 10;
-  if (includesAny(teamsText, MARQUEE_TEAM_TERMS)) s += 18;
-  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 22;
-  if (includesAny(locationText, ICONIC_VENUE_TERMS)) s += 16;
-  if (hasRivalryBoost(home, away)) s += 28;
+  if (includesAny(teamsText, MARQUEE_TEAM_TERMS)) s += 24;
+  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 18;
+  if (includesAny(locationText, ICONIC_VENUE_TERMS)) s += 18;
+  if (hasRivalryBoost(home, away)) s += 42;
 
   const dt = row?.fixture?.date ? new Date(row.fixture.date) : null;
   if (dt && !Number.isNaN(dt.getTime())) s += kickoffTimingScore(dt);
@@ -155,8 +220,8 @@ function scoreFixture(row: FixtureListRow): number {
 
 function getConfidenceTier(row: FixtureListRow): ConfidenceTier {
   const score = scoreFixture(row);
-  if (score >= 150) return "top";
-  if (score >= 110) return "strong";
+  if (score >= 185) return "top";
+  if (score >= 135) return "strong";
   return "good";
 }
 
@@ -288,10 +353,7 @@ export default function UpcomingMatches(props: Props) {
 
   const isAllCompetitions = league.leagueId === allCompetitionsLeagueId;
 
-  const featuredTier = useMemo(
-    () => (featured ? getConfidenceTier(featured) : null),
-    [featured]
-  );
+  const featuredTier = useMemo(() => (featured ? getConfidenceTier(featured) : null), [featured]);
 
   const featuredConfidence = useMemo(
     () => (featuredTier ? getConfidenceCopy(featuredTier) : null),
@@ -301,11 +363,11 @@ export default function UpcomingMatches(props: Props) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.sectionHeadingCopy}>
           <Text style={styles.sectionTitle}>Best Upcoming Matches</Text>
           <Text style={styles.sectionSubtitle}>
             {isAllCompetitions
-              ? "Across YourNextAway’s European coverage"
+              ? "One standout fixture per league, ranked for football travel"
               : `Best from ${league.label}`}
           </Text>
         </View>
@@ -340,9 +402,7 @@ export default function UpcomingMatches(props: Props) {
       {fxRefreshing ? (
         <View style={styles.refreshingBadge}>
           <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-          <Text style={styles.refreshingText}>
-            Adding more fixtures in the background…
-          </Text>
+          <Text style={styles.refreshingText}>Scanning more leagues in the background…</Text>
         </View>
       ) : null}
 
@@ -351,13 +411,13 @@ export default function UpcomingMatches(props: Props) {
           <View style={styles.stateCard}>
             <View style={styles.stateBadge}>
               <Text style={styles.stateBadgeText}>
-                {isAllCompetitions ? "Fast scan" : "Live scan"}
+                {isAllCompetitions ? "Europe scan" : "Live scan"}
               </Text>
             </View>
             <ActivityIndicator color={theme.colors.textSecondary} />
             <Text style={styles.stateText}>
               {isAllCompetitions
-                ? "Finding the strongest matches across Europe…"
+                ? "Finding the biggest upcoming football-trip fixtures…"
                 : "Checking the best upcoming fixtures…"}
             </Text>
           </View>
@@ -387,7 +447,9 @@ export default function UpcomingMatches(props: Props) {
               <Text style={styles.panelTag}>
                 {isAllCompetitions ? "YourNextAway pick" : "Top pick"}
               </Text>
-              <Text style={styles.panelHint}>Best trip-worthy option</Text>
+              <Text style={styles.panelHint}>
+                {isAllCompetitions ? "Major European game first" : "Best trip-worthy option"}
+              </Text>
             </View>
 
             <Pressable
@@ -464,7 +526,9 @@ export default function UpcomingMatches(props: Props) {
 
             {list.length > 0 ? (
               <View style={styles.listWrap}>
-                <Text style={styles.listLabel}>More strong picks</Text>
+                <Text style={styles.listLabel}>
+                  {isAllCompetitions ? "Best of other leagues" : "More strong picks"}
+                </Text>
 
                 <View style={styles.list}>
                   {list.map((r, idx) => {
@@ -565,6 +629,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 12,
+  },
+
+  sectionHeadingCopy: {
+    flex: 1,
   },
 
   sectionTitle: {
