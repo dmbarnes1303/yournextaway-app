@@ -14,10 +14,6 @@ type TripFinderSummaryHelpers = {
   rankReasonsText: (trip: RankedTrip | null) => string | null;
 };
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -28,7 +24,23 @@ function toFiniteNumber(value: unknown): number | null {
 }
 
 function safeRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function uniqueCleanIds(values: unknown[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const value of values) {
+    const id = clean(value);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+
+  return out;
 }
 
 function getTicketPriority(item: SavedItem): number {
@@ -48,10 +60,12 @@ function sortTicketCandidates(items: SavedItem[]): SavedItem[] {
     const statusDiff = getTicketPriority(a) - getTicketPriority(b);
     if (statusDiff !== 0) return statusDiff;
 
-    const updatedDiff = getSavedItemTimestamp(b, "updatedAt") - getSavedItemTimestamp(a, "updatedAt");
+    const updatedDiff =
+      getSavedItemTimestamp(b, "updatedAt") - getSavedItemTimestamp(a, "updatedAt");
     if (updatedDiff !== 0) return updatedDiff;
 
-    const createdDiff = getSavedItemTimestamp(b, "createdAt") - getSavedItemTimestamp(a, "createdAt");
+    const createdDiff =
+      getSavedItemTimestamp(b, "createdAt") - getSavedItemTimestamp(a, "createdAt");
     if (createdDiff !== 0) return createdDiff;
 
     return clean(a.id).localeCompare(clean(b.id));
@@ -59,27 +73,25 @@ function sortTicketCandidates(items: SavedItem[]): SavedItem[] {
 }
 
 function itemFixtureId(item: SavedItem): string {
+  const metadata = safeRecord(item.metadata);
+
   return (
-    clean(item.metadata?.fixtureId) ||
-    clean((item.metadata as Record<string, unknown> | undefined)?.matchId) ||
-    clean((item.metadata as Record<string, unknown> | undefined)?.primaryMatchId) ||
+    clean(metadata?.fixtureId) ||
+    clean(metadata?.matchId) ||
+    clean(metadata?.primaryMatchId) ||
     ""
   );
 }
 
-export function pickPrimaryMatchId(
-  trip: Trip | null,
-  numericMatchIds: string[]
-): string | null {
-  if (!Array.isArray(numericMatchIds) || numericMatchIds.length === 0) return null;
-
+export function pickPrimaryMatchId(trip: Trip | null, matchIds: string[]): string | null {
+  const ids = uniqueCleanIds(matchIds);
   const preferred = clean(trip?.fixtureIdPrimary);
-  if (preferred && numericMatchIds.includes(preferred)) {
-    return preferred;
+
+  if (preferred) {
+    if (!ids.length || ids.includes(preferred)) return preferred;
   }
 
-  const first = clean(numericMatchIds[0]);
-  return first || null;
+  return ids[0] ?? null;
 }
 
 export function getTripCity(
@@ -91,6 +103,7 @@ export function getTripCity(
     clean(trip?.venueCity) ||
     clean(primaryFixture?.fixture?.venue?.city) ||
     clean((trip as Trip & { city?: unknown })?.city) ||
+    clean(trip?.citySlug) ||
     clean(trip?.cityId) ||
     "Trip";
 
@@ -101,13 +114,11 @@ export function getPrimaryLeagueId(
   trip: Trip | null,
   primaryFixture: FixtureListRow | null
 ): number | undefined {
-  const fromFixture = toFiniteNumber(primaryFixture?.league?.id);
-  if (fromFixture != null) return fromFixture;
-
-  const fromTrip = toFiniteNumber(trip?.leagueId);
-  if (fromTrip != null) return fromTrip;
-
-  return undefined;
+  return (
+    toFiniteNumber(primaryFixture?.league?.id) ??
+    toFiniteNumber(trip?.leagueId) ??
+    undefined
+  );
 }
 
 export function getPrimaryHomeName(
@@ -128,24 +139,21 @@ export function getPrimaryKickoffIso(
   trip: Trip | null,
   primaryFixture: FixtureListRow | null
 ): string | null {
-  return clean(primaryFixture?.fixture?.date ?? trip?.kickoffIso) || null;
+  return clean(primaryFixture?.fixture?.date) || clean(trip?.kickoffIso) || null;
 }
 
 export function buildTicketsByMatchId(args: {
   numericMatchIds: string[];
   savedItems: SavedItem[];
 }): TicketMap {
-  const { numericMatchIds, savedItems } = args;
-
+  const matchIds = uniqueCleanIds(args.numericMatchIds);
   const next: TicketMap = {};
-  const ticketCandidates = savedItems.filter(
+
+  const ticketCandidates = args.savedItems.filter(
     (item) => item.type === "tickets" && item.status !== "archived"
   );
 
-  for (const rawMid of numericMatchIds) {
-    const matchId = clean(rawMid);
-    if (!matchId) continue;
-
+  for (const matchId of matchIds) {
     const exact = ticketCandidates.filter((item) => itemFixtureId(item) === matchId);
     next[matchId] = sortTicketCandidates(exact)[0] ?? null;
   }
@@ -157,16 +165,18 @@ export function buildPrimaryFixture(
   primaryMatchId: string | null,
   fixturesById: FixtureMap
 ): FixtureListRow | null {
-  if (!primaryMatchId) return null;
-  return fixturesById[clean(primaryMatchId)] ?? null;
+  const id = clean(primaryMatchId);
+  if (!id) return null;
+  return fixturesById[id] ?? null;
 }
 
 export function buildPrimaryTicketItem(
   primaryMatchId: string | null,
   ticketsByMatchId: TicketMap
 ): SavedItem | null {
-  if (!primaryMatchId) return null;
-  return ticketsByMatchId[clean(primaryMatchId)] ?? null;
+  const id = clean(primaryMatchId);
+  if (!id) return null;
+  return ticketsByMatchId[id] ?? null;
 }
 
 export function buildDateIsoForPrimaryMatch(args: {
@@ -191,11 +201,7 @@ export function buildTripFinderSummary(
     toFiniteNumber(rankedTripRecord?.score) ??
     null;
 
-  const rawDifficulty =
-    breakdown?.travelDifficulty ??
-    rankedTripRecord?.travelDifficulty ??
-    null;
-
+  const rawDifficulty = breakdown?.travelDifficulty ?? rankedTripRecord?.travelDifficulty ?? null;
   const rawConfidence = toFiniteNumber(rankedTripRecord?.confidence);
 
   return {
