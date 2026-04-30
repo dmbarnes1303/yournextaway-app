@@ -1,3 +1,5 @@
+// src/features/discover/components/DiscoverCategoryCard.tsx
+
 import React from "react";
 import {
   View,
@@ -22,47 +24,6 @@ type Props = {
   compact?: boolean;
   onPress: (category: DiscoverCategory) => void;
 };
-
-function fallbackTagLabel(category: DiscoverCategory, compact: boolean) {
-  if (compact) return "Browse";
-
-  switch (category) {
-    case "perfectTrips":
-      return "Best fit";
-    case "bigMatches":
-      return "Big games";
-    case "derbies":
-      return "Derbies";
-    case "atmospheres":
-      return "Atmosphere";
-    case "valueTrips":
-      return "Value";
-    case "easyTickets":
-      return "Easier";
-    case "multiMatchTrips":
-      return "Stackable";
-    case "weekendTrips":
-      return "Weekend";
-    case "europeanNights":
-      return "Europe";
-    case "legendaryStadiums":
-      return "Iconic";
-    case "iconicCities":
-      return "City-led";
-    case "nightMatches":
-      return "Night";
-    case "titleDrama":
-      return "Stakes";
-    case "bucketList":
-      return "Must-do";
-    case "matchdayCulture":
-      return "Culture";
-    case "underratedTrips":
-      return "Hidden";
-    default:
-      return "Discover";
-  }
-}
 
 function helperLine(category: DiscoverCategory) {
   switch (category) {
@@ -111,7 +72,7 @@ export default function DiscoverCategoryCard({
   const meta = DISCOVER_CATEGORY_META[category];
   const artwork = getDiscoverCategoryArtwork(category);
   const primary = meta.emphasis === "primary";
-  const badgeLabel = artwork.eyebrow ?? fallbackTagLabel(category, compact);
+  const badgeLabel = compact ? "Browse" : artwork.eyebrow ?? "Discover";
 
   return (
     <Pressable
@@ -130,27 +91,14 @@ export default function DiscoverCategoryCard({
         noPadding
       >
         <View style={compact ? styles.imageWrapCompact : styles.imageWrap}>
-          <Image
-            source={{ uri: artwork.imageUrl }}
-            style={styles.image}
-            resizeMode="cover"
-          />
-
+          <Image source={{ uri: artwork.imageUrl }} style={styles.image} resizeMode="cover" />
           <View
-            style={[
-              styles.overlay,
-              primary && !compact ? styles.overlayPrimary : null,
-            ]}
+            style={[styles.overlay, primary && !compact ? styles.overlayPrimary : null]}
             pointerEvents="none"
           />
 
           <View style={styles.badgeRow}>
-            <View
-              style={[
-                styles.badge,
-                primary && !compact ? styles.badgePrimary : null,
-              ]}
-            >
+            <View style={[styles.badge, primary && !compact ? styles.badgePrimary : null]}>
               <Text style={styles.badgeText} numberOfLines={1}>
                 {badgeLabel}
               </Text>
@@ -159,12 +107,7 @@ export default function DiscoverCategoryCard({
         </View>
 
         <View style={compact ? styles.bodyCompact : styles.body}>
-          <View
-            style={[
-              styles.iconWrap,
-              primary && !compact ? styles.iconWrapPrimary : null,
-            ]}
-          >
+          <View style={[styles.iconWrap, primary && !compact ? styles.iconWrapPrimary : null]}>
             <Ionicons name={meta.icon} size={18} color={theme.colors.text} />
           </View>
 
@@ -189,17 +132,8 @@ export default function DiscoverCategoryCard({
               Browse routes
             </Text>
 
-            <View
-              style={[
-                styles.arrow,
-                primary && !compact ? styles.arrowPrimary : null,
-              ]}
-            >
-              <Ionicons
-                name="arrow-forward-outline"
-                size={14}
-                color={theme.colors.text}
-              />
+            <View style={[styles.arrow, primary && !compact ? styles.arrowPrimary : null]}>
+              <Ionicons name="arrow-forward-outline" size={14} color={theme.colors.text} />
             </View>
           </View>
         </View>
@@ -311,9 +245,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android"
-        ? "rgba(0,0,0,0.16)"
-        : "rgba(255,255,255,0.04)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
   },
 
   iconWrapPrimary: {
@@ -372,9 +304,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android"
-        ? "rgba(0,0,0,0.14)"
-        : "rgba(255,255,255,0.05)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.05)",
   },
 
   arrowPrimary: {
