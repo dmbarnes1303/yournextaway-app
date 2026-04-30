@@ -38,6 +38,14 @@ type GuideRow = {
   onPress: () => void;
 };
 
+type PrimaryAction = {
+  eyebrow: string;
+  title: string;
+  detail: string;
+  cta: string;
+  onPress: () => void;
+};
+
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -250,8 +258,8 @@ function progressStateLabel(state: string) {
 
 function nextStepLabel(progress: any) {
   if (progress?.tickets !== "booked") return "Next step: choose match tickets";
-  if (progress?.hotel !== "booked") return "Next step: compare stays";
   if (progress?.flight !== "booked") return "Next step: plan travel";
+  if (progress?.hotel !== "booked") return "Next step: compare stays";
   if (progress?.things !== "booked") return "Next step: explore the city";
   return "Trip essentials are in place";
 }
@@ -312,6 +320,89 @@ export default function TripScreen() {
     clean(awayTeam?.country) ||
     clean(cityGuide?.country) ||
     "Italy";
+
+  const primaryAction = useMemo<PrimaryAction>(() => {
+    const progress = data.progress ?? {};
+    const hasPrimaryMatch = Boolean(data.primaryMatchId);
+
+    if (!hasPrimaryMatch) {
+      return {
+        eyebrow: "START HERE",
+        title: "Choose the match this trip is built around",
+        detail: "A trip without a match is just a loose idea. Add the anchor first.",
+        cta: "Choose match",
+        onPress: controller.onAddMatch,
+      };
+    }
+
+    if (progress.tickets !== "booked") {
+      return {
+        eyebrow: "NEXT STEP",
+        title: progress.tickets === "pending" || progress.tickets === "saved"
+          ? "Finish deciding your match tickets"
+          : "Find tickets before anything else",
+        detail:
+          fixture.hasRealMatch
+            ? `${fixture.homeName} vs ${fixture.awayName} is the anchor. Sort tickets first, then build around it.`
+            : "Tickets are the first real commitment. Everything else depends on the match.",
+        cta: ticketLoading ? "Checking tickets…" : "Find tickets",
+        onPress: () => {
+          if (data.primaryMatchId) {
+            void controller.openTicketsForMatch(String(data.primaryMatchId));
+          }
+        },
+      };
+    }
+
+    if (progress.flight !== "booked") {
+      return {
+        eyebrow: "NEXT STEP",
+        title: "Plan your route",
+        detail: "Tickets are handled. Now make sure the travel route actually works for these dates.",
+        cta: "Plan travel",
+        onPress: () => void controller.onOpenSection("travel"),
+      };
+    }
+
+    if (progress.hotel !== "booked") {
+      return {
+        eyebrow: "NEXT STEP",
+        title: "Choose where to stay",
+        detail: data.cityName
+          ? `Lock in the right area for ${data.cityName}.`
+          : "Now sort the stay so the trip has a real base.",
+        cta: "Find stays",
+        onPress: () => void controller.onOpenSection("stay"),
+      };
+    }
+
+    if (progress.things !== "booked") {
+      return {
+        eyebrow: "OPTIONAL EXTRA",
+        title: "Add one thing worth doing",
+        detail: "The essentials are covered. Add city-break value if it improves the trip.",
+        cta: "Explore extras",
+        onPress: () => void controller.onOpenSection("things"),
+      };
+    }
+
+    return {
+      eyebrow: "TRIP READY",
+      title: "Your trip essentials are in place",
+      detail: "Check the Wallet for booked items, proofs and pending actions.",
+      cta: "Open wallet",
+      onPress: controller.onViewWallet,
+    };
+  }, [
+    controller,
+    data.cityName,
+    data.primaryMatchId,
+    data.progress,
+    fixture.awayName,
+    fixture.hasRealMatch,
+    fixture.homeName,
+    ticketLoading,
+  ]);
 
   const guideRows: GuideRow[] = useMemo(() => {
     const rows: GuideRow[] = [];
@@ -384,20 +475,20 @@ export default function TripScreen() {
         },
       },
       {
-        key: "stay",
-        icon: "▰",
-        label: "Stay",
-        detail: data.cityName ? `Hotels in ${data.cityName}` : "Find the right area",
-        state: data.progress?.hotel ?? "empty",
-        onPress: () => void controller.onOpenSection("stay"),
-      },
-      {
         key: "travel",
         icon: "✈",
         label: "Travel",
         detail: "Flights and main route",
         state: data.progress?.flight ?? "empty",
         onPress: () => void controller.onOpenSection("travel"),
+      },
+      {
+        key: "stay",
+        icon: "▰",
+        label: "Stay",
+        detail: data.cityName ? `Hotels in ${data.cityName}` : "Find the right area",
+        state: data.progress?.hotel ?? "empty",
+        onPress: () => void controller.onOpenSection("stay"),
       },
       {
         key: "things",
@@ -491,6 +582,24 @@ export default function TripScreen() {
             cityName={data.cityName}
           />
 
+          <View style={styles.primaryActionCard}>
+            <Text style={styles.primaryActionEyebrow}>{primaryAction.eyebrow}</Text>
+            <Text style={styles.primaryActionTitle}>{primaryAction.title}</Text>
+            <Text style={styles.primaryActionDetail}>{primaryAction.detail}</Text>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryActionButton,
+                pressed && styles.pressed,
+                ticketLoading && styles.primaryActionButtonDisabled,
+              ]}
+              disabled={ticketLoading && primaryAction.cta === "Checking tickets…"}
+              onPress={primaryAction.onPress}
+            >
+              <Text style={styles.primaryActionButtonText}>{primaryAction.cta}</Text>
+            </Pressable>
+          </View>
+
           <View style={styles.tripSummaryCard}>
             <View style={styles.tripSummaryTop}>
               <View style={styles.tripSummaryCopy}>
@@ -512,7 +621,7 @@ export default function TripScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Booking checklist</Text>
+            <Text style={styles.sectionTitle}>Trip checklist</Text>
 
             <View style={styles.itineraryList}>
               {itineraryRows.map((row) => {
@@ -615,6 +724,11 @@ const styles = StyleSheet.create({
     gap: 22,
   },
 
+  pressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.995 }],
+  },
+
   loadingShell: {
     flex: 1,
     alignItems: "center",
@@ -624,6 +738,63 @@ const styles = StyleSheet.create({
 
   loadingText: {
     color: "#FFFFFF",
+    fontWeight: "900",
+  },
+
+  primaryActionCard: {
+    padding: 20,
+    borderRadius: 28,
+    backgroundColor: "rgba(10,78,36,0.86)",
+    borderWidth: 1,
+    borderColor: "rgba(163,230,53,0.42)",
+    shadowColor: "#A3E635",
+    shadowOpacity: 0.2,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+  },
+
+  primaryActionEyebrow: {
+    color: "#BEF264",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+
+  primaryActionTitle: {
+    marginTop: 8,
+    color: "#FFFFFF",
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: "900",
+    letterSpacing: -0.4,
+  },
+
+  primaryActionDetail: {
+    marginTop: 9,
+    color: "rgba(245,247,246,0.74)",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "800",
+  },
+
+  primaryActionButton: {
+    marginTop: 18,
+    minHeight: 56,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#A3E635",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+  },
+
+  primaryActionButtonDisabled: {
+    opacity: 0.7,
+  },
+
+  primaryActionButtonText: {
+    color: "#10220D",
+    fontSize: 15,
     fontWeight: "900",
   },
 
