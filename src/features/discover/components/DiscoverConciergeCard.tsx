@@ -29,25 +29,32 @@ export default function DiscoverConciergeCard({
     <Pressable
       onPress={onPress}
       disabled={loading}
-      style={({ pressed }) => [styles.cardPress, (pressed || loading) && styles.pressed]}
+      style={({ pressed }) => [
+        styles.cardPress,
+        (pressed || loading) && styles.pressed,
+      ]}
     >
       <GlassCard strength="strong" style={styles.card} noPadding>
         <View style={styles.inner}>
           <View style={styles.topRow}>
             <View style={styles.copyWrap}>
-              <Text style={styles.kicker}>CONCIERGE PICK</Text>
-              <Text style={styles.title}>Let the app choose your best live route</Text>
+              <View style={styles.kickerPill}>
+                <Ionicons name="sparkles-outline" size={13} color="#F5CC57" />
+                <Text style={styles.kicker}>CONCIERGE PICK</Text>
+              </View>
+
+              <Text style={styles.title}>Let YourNextAway choose the route</Text>
+
               <Text style={styles.sub}>
-                This is not random filler. The app scores the live pool against your current setup
-                and surfaces one of the strongest real options.
+                One stronger live option, ranked against your setup — not endless scrolling.
               </Text>
             </View>
 
             <View style={styles.iconWrap}>
               {loading ? (
-                <ActivityIndicator />
+                <ActivityIndicator color="#F5CC57" />
               ) : (
-                <Ionicons name="sparkles-outline" size={18} color={theme.colors.text} />
+                <Ionicons name="compass-outline" size={21} color="#F5CC57" />
               )}
             </View>
           </View>
@@ -67,27 +74,22 @@ export default function DiscoverConciergeCard({
           </View>
 
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Using your current setup</Text>
+            <Text style={styles.summaryLabel}>Using your setup</Text>
             <Text style={styles.summaryText}>{filterSummary}</Text>
           </View>
 
-          <View style={styles.whyBox}>
-            <View style={styles.whyRow}>
-              <View style={styles.whyIconWrap}>
-                <Ionicons name="options-outline" size={14} color={theme.colors.textSecondary} />
-              </View>
-              <Text style={styles.whyText}>
-                Better when you want one strong answer instead of scrolling endless routes.
+          <View style={styles.reasonBox}>
+            <View style={styles.reasonRow}>
+              <Ionicons name="options-outline" size={15} color="#8EF2A5" />
+              <Text style={styles.reasonText}>
+                Applies your date window, trip length and vibe before choosing.
               </Text>
             </View>
 
-            <View style={styles.whyRow}>
-              <View style={styles.whyIconWrap}>
-                <Ionicons name="pulse-outline" size={14} color={theme.colors.textSecondary} />
-              </View>
-              <Text style={styles.whyText}>
-                Pulls from the live fixture pool, then applies your current trip logic before
-                choosing.
+            <View style={styles.reasonRow}>
+              <Ionicons name="pulse-outline" size={15} color="#8EF2A5" />
+              <Text style={styles.reasonText}>
+                Best when you want one good answer, not another browse list.
               </Text>
             </View>
           </View>
@@ -95,20 +97,20 @@ export default function DiscoverConciergeCard({
           <View style={styles.ctaRow}>
             <View style={styles.ctaTextWrap}>
               <Text style={styles.ctaTitle}>
-                {loading ? "Finding a strong live route…" : "Pick my route"}
+                {loading ? "Finding your route…" : "Pick my route"}
               </Text>
               <Text style={styles.ctaSub}>
                 {loading
-                  ? "Scoring live options now"
-                  : "Open a stronger live option matched to this setup"}
+                  ? "Scoring live fixtures now"
+                  : "Open the strongest live match-trip option"}
               </Text>
             </View>
 
             <View style={[styles.ctaArrowWrap, loading && styles.ctaArrowWrapLoading]}>
               {loading ? (
-                <ActivityIndicator size="small" />
+                <ActivityIndicator size="small" color="#F5CC57" />
               ) : (
-                <Ionicons name="arrow-forward-outline" size={16} color={theme.colors.text} />
+                <Ionicons name="arrow-forward-outline" size={17} color="#07100A" />
               )}
             </View>
           </View>
@@ -120,62 +122,81 @@ export default function DiscoverConciergeCard({
 
 const styles = StyleSheet.create({
   cardPress: {
-    borderRadius: 22,
+    borderRadius: 24,
     overflow: "hidden",
   },
 
   card: {
-    borderRadius: 22,
-    borderColor: "rgba(87,162,56,0.16)",
+    borderRadius: 24,
+    borderColor: "rgba(250,204,21,0.18)",
   },
 
   inner: {
-    padding: 16,
-    gap: 14,
+    padding: 17,
+    gap: 15,
   },
 
   topRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 12,
+    gap: 14,
   },
 
   copyWrap: {
     flex: 1,
-    gap: 4,
+    gap: 7,
+  },
+
+  kickerPill: {
+    alignSelf: "flex-start",
+    minHeight: 30,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "rgba(250,204,21,0.22)",
+    backgroundColor: "rgba(250,204,21,0.08)",
   },
 
   kicker: {
-    color: theme.colors.primary,
+    color: "#F5CC57",
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 1,
+    letterSpacing: 0.9,
   },
 
   title: {
     color: theme.colors.text,
-    fontSize: 20,
-    lineHeight: 25,
+    fontSize: 22,
+    lineHeight: 27,
     fontWeight: theme.fontWeight.black,
+    maxWidth: "94%",
   },
 
   sub: {
-    color: theme.colors.textSecondary,
+    color: "rgba(240,245,242,0.72)",
     fontSize: 12,
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
 
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.20)",
-    backgroundColor: "rgba(87,162,56,0.08)",
+    borderColor: "rgba(250,204,21,0.24)",
+    backgroundColor: "rgba(250,204,21,0.08)",
+    shadowColor: "#F5CC57",
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
   },
 
   signalRow: {
@@ -186,27 +207,27 @@ const styles = StyleSheet.create({
 
   signalPillStrong: {
     borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.24)",
-    backgroundColor: "rgba(87,162,56,0.10)",
+    borderColor: "rgba(142,242,165,0.25)",
+    backgroundColor: "rgba(34,197,94,0.10)",
   },
 
   signalPillStrongText: {
-    color: theme.colors.text,
+    color: "#8EF2A5",
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
   },
 
   signalPill: {
     borderRadius: 999,
-    paddingVertical: 5,
-    paddingHorizontal: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
   },
 
   signalPillText: {
@@ -216,21 +237,22 @@ const styles = StyleSheet.create({
   },
 
   summaryCard: {
-    borderRadius: 16,
+    borderRadius: 17,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.09)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.04)",
+      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.045)",
     paddingHorizontal: 12,
     paddingVertical: 12,
-    gap: 4,
+    gap: 5,
   },
 
   summaryLabel: {
     color: theme.colors.textTertiary,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.3,
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
   },
 
   summaryText: {
@@ -240,37 +262,30 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  whyBox: {
-    gap: 8,
+  reasonBox: {
+    gap: 9,
   },
 
-  whyRow: {
+  reasonRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
   },
 
-  whyIconWrap: {
-    width: 22,
-    alignItems: "center",
-    paddingTop: 1,
-  },
-
-  whyText: {
+  reasonText: {
     flex: 1,
-    color: theme.colors.textSecondary,
+    color: "rgba(240,245,242,0.68)",
     fontSize: 12,
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
 
   ctaRow: {
-    minHeight: 56,
-    borderRadius: 16,
+    minHeight: 58,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.26)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(87,162,56,0.10)" : "rgba(87,162,56,0.08)",
+    borderColor: "rgba(250,204,21,0.30)",
+    backgroundColor: "rgba(250,204,21,0.10)",
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: "row",
@@ -286,7 +301,7 @@ const styles = StyleSheet.create({
 
   ctaTitle: {
     color: theme.colors.text,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -298,20 +313,19 @@ const styles = StyleSheet.create({
   },
 
   ctaArrowWrap: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#F5CC57",
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.18)",
-    backgroundColor: "rgba(87,162,56,0.08)",
+    borderColor: "rgba(255,255,255,0.18)",
   },
 
   ctaArrowWrapLoading: {
-    borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.14)" : "rgba(255,255,255,0.03)",
+    backgroundColor: "rgba(250,204,21,0.10)",
+    borderColor: "rgba(250,204,21,0.20)",
   },
 
   pressed: {
