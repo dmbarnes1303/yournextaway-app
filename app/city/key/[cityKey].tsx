@@ -1,3 +1,5 @@
+// app/city/key/[cityKey].tsx
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -33,10 +35,6 @@ import type { CityGuide, CityTopThing } from "@/src/data/cityGuides/types";
 import { getCityGuide } from "@/src/data/cityGuides";
 import { getCityByKeyLive, type CityRecord } from "@/src/services/citiesRegistry";
 import { normalizeCityKey } from "@/src/utils/city";
-
-/* -------------------------------------------------------------------------- */
-/* Utils */
-/* -------------------------------------------------------------------------- */
 
 type GuideBlock = { heading?: string; text: string };
 type GuideFull = { title: string; blocks: GuideBlock[] };
@@ -104,10 +102,7 @@ function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string
     end.getDate()
   ).padStart(2, "0")}`;
 
-  return {
-    from: dateOnly,
-    to: toIso,
-  };
+  return { from: dateOnly, to: toIso };
 }
 
 function buildCanonicalTripStartParams(args: {
@@ -152,6 +147,7 @@ function groupByMonth(rows: FixtureListRow[]) {
   }
 
   const out: { key: string; title: string; rows: FixtureListRow[] }[] = [];
+
   for (const [key, list] of map.entries()) {
     out.push({ key, title: key, rows: list });
   }
@@ -189,6 +185,7 @@ function joinBullets(items: string[] | undefined, max = 16) {
 function joinTopThings(items: CityTopThing[] | undefined, max = 10) {
   const list = Array.isArray(items) ? items : [];
   if (!list.length) return "";
+
   return list
     .slice(0, max)
     .map((x) => {
@@ -225,10 +222,6 @@ function splitLinesToBullets(text: string) {
 
   return { bullets, paragraph: "" };
 }
-
-/* -------------------------------------------------------------------------- */
-/* Country → ISO2 resolver (flags) */
-/* -------------------------------------------------------------------------- */
 
 function countryToIso2(code?: string, name?: string): string | null {
   const c = safeStr(code).toUpperCase();
@@ -312,14 +305,12 @@ function countryToIso2(code?: string, name?: string): string | null {
 function FlagMini({ countryCode, countryName }: { countryCode?: string; countryName?: string }) {
   const iso2 = countryToIso2(countryCode, countryName);
   if (!iso2) return null;
+
   const url = getFlagImageUrl(iso2, { size: 64 });
   if (!url) return null;
+
   return <Image source={{ uri: url }} style={styles.flagMini} resizeMode="cover" />;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Guide loader (safe) */
-/* -------------------------------------------------------------------------- */
 
 function getCityGuideFull(cityKey: string): GuideFull | null {
   const key = safeStr(cityKey);
@@ -359,10 +350,6 @@ function getCityGuideFull(cityKey: string): GuideFull | null {
   return { title, blocks };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Guide Modal */
-/* -------------------------------------------------------------------------- */
-
 function GuideAccordionSection({
   heading,
   text,
@@ -376,7 +363,6 @@ function GuideAccordionSection({
 }) {
   const h = safeStr(heading) || "Guide";
   const { bullets, paragraph } = splitLinesToBullets(text);
-
   const paragraphPreview = paragraph ? clampText(paragraph, 260) : "";
   const showInlinePreview = !expanded && !!paragraphPreview;
 
@@ -444,12 +430,7 @@ function GuideModal({
   }, []);
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <Background imageSource={backgroundSource} overlayOpacity={0.78}>
         <SafeAreaView style={styles.modalSafe} edges={["top", "bottom"]}>
           <View style={styles.modalTop}>
@@ -471,11 +452,7 @@ function GuideModal({
             </Pressable>
           </View>
 
-          <ScrollView
-            style={styles.modalScroll}
-            contentContainerStyle={styles.modalContent}
-            showsVerticalScrollIndicator={false}
-          >
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
             {!blocks.length ? (
               <GlassCard strength="default" style={styles.block} noPadding>
                 <View style={styles.blockInner}>
@@ -507,10 +484,6 @@ function GuideModal({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Fixture Row */
-/* -------------------------------------------------------------------------- */
-
 function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: () => void }) {
   const homeName = safeStr(row?.teams?.home?.name) || "Home";
   const awayName = safeStr(row?.teams?.away?.name) || "Away";
@@ -525,9 +498,7 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
     <View style={styles.fxRow}>
       <View style={styles.matchLine}>
         <View style={styles.teamSideLeft}>
-          {homeLogo ? (
-            <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" />
-          ) : null}
+          {homeLogo ? <Image source={{ uri: homeLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
           <Text style={styles.teamNameLeft} numberOfLines={2}>
             {homeName}
           </Text>
@@ -541,9 +512,7 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
           <Text style={styles.teamNameRight} numberOfLines={2}>
             {awayName}
           </Text>
-          {awayLogo ? (
-            <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" />
-          ) : null}
+          {awayLogo ? <Image source={{ uri: awayLogo }} style={styles.smallCrestImg} resizeMode="contain" /> : null}
         </View>
       </View>
 
@@ -568,31 +537,24 @@ function FixtureRow({ row, onPressPlan }: { row: FixtureListRow; onPressPlan: ()
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Fixtures fetching strategy */
-/* -------------------------------------------------------------------------- */
-
 function uniqueLeaguesById(list: LeagueOption[]) {
   const seen = new Set<number>();
   const out: LeagueOption[] = [];
+
   for (const l of list) {
     if (!l?.leagueId) continue;
     if (seen.has(l.leagueId)) continue;
     seen.add(l.leagueId);
     out.push(l);
   }
+
   return out;
 }
 
-function pickLeaguesForCity(
-  city: CityRecord | null,
-  fallback: LeagueOption[]
-): { leagues: LeagueOption[]; reason: string } {
+function pickLeaguesForCity(city: CityRecord | null, fallback: LeagueOption[]): { leagues: LeagueOption[]; reason: string } {
   const all = uniqueLeaguesById(fallback);
 
-  const leagueIds = Array.isArray((city as any)?.leagueIds)
-    ? (((city as any).leagueIds as any[]) ?? [])
-    : [];
+  const leagueIds = Array.isArray((city as any)?.leagueIds) ? (((city as any).leagueIds as any[]) ?? []) : [];
   const leagueIdNums = leagueIds.map((x) => Number(x)).filter((n) => Number.isFinite(n));
 
   if (leagueIdNums.length) {
@@ -626,7 +588,6 @@ async function fetchFixturesBatched({
 }) {
   const total = leagues.length;
   const out: FixtureListRow[] = [];
-  let done = 0;
 
   const runOne = async (l: LeagueOption) => {
     const rows = await getFixtures({ league: l.leagueId, season: l.season, from, to });
@@ -643,16 +604,11 @@ async function fetchFixturesBatched({
       if (s.status === "fulfilled") out.push(...s.value);
     }
 
-    done = Math.min(i + batch.length, total);
-    onProgress?.(done, total);
+    onProgress?.(Math.min(i + batch.length, total), total);
   }
 
   return out;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Screen */
-/* -------------------------------------------------------------------------- */
 
 export default function CityScreen() {
   const router = useRouter();
@@ -686,18 +642,23 @@ export default function CityScreen() {
   });
 
   const cancelRef = useRef(false);
+  const requestSeqRef = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     cancelRef.current = false;
     return () => {
       cancelRef.current = true;
+      requestSeqRef.current += 1;
     };
   }, []);
 
   const loadCityFixtures = useCallback(
-    async (cityOverride?: CityRecord | null) => {
-      const activeCity = cityOverride ?? cityLive;
+    async (activeCity: CityRecord | null) => {
+      const requestId = requestSeqRef.current + 1;
+      requestSeqRef.current = requestId;
+
+      const isStale = () => cancelRef.current || requestSeqRef.current !== requestId;
 
       if (!citySlug) {
         setLoadingFx(false);
@@ -712,7 +673,7 @@ export default function CityScreen() {
 
       try {
         const venueIds = Array.isArray(activeCity?.venueIds) ? activeCity.venueIds : [];
-        const targetSlug = activeCity?.slug || citySlug;
+        const targetSlug = safeStr(activeCity?.slug) || citySlug;
 
         const pick = pickLeaguesForCity(activeCity, LEAGUES);
         setProgress({ done: 0, total: pick.leagues.length, reason: pick.reason });
@@ -722,11 +683,13 @@ export default function CityScreen() {
           from,
           to,
           concurrency: 5,
-          onProgress: (done, total) => setProgress((p) => ({ ...p, done, total })),
-          shouldCancel: () => cancelRef.current,
+          onProgress: (done, total) => {
+            if (!isStale()) setProgress((p) => ({ ...p, done, total }));
+          },
+          shouldCancel: isStale,
         });
 
-        if (cancelRef.current) return;
+        if (isStale()) return;
 
         const filtered = all.filter((r) => {
           const vCity = safeStr(r?.fixture?.venue?.city);
@@ -740,6 +703,7 @@ export default function CityScreen() {
         });
 
         const dedup = new Map<string, FixtureListRow>();
+
         for (const r of filtered) {
           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
           if (!id) continue;
@@ -754,34 +718,45 @@ export default function CityScreen() {
 
         setFxRows(cleaned);
       } catch (e: any) {
-        if (cancelRef.current) return;
+        if (isStale()) return;
         setFxError(e?.message ?? "Failed to load city fixtures.");
       } finally {
-        if (!cancelRef.current) setLoadingFx(false);
+        if (!isStale()) setLoadingFx(false);
       }
     },
-    [citySlug, cityLive, from, to]
+    [citySlug, from, to]
   );
 
   useEffect(() => {
     let mounted = true;
 
     async function boot() {
-      if (!citySlug) return;
+      if (!citySlug) {
+        setCityLive(null);
+        setCityLiveLoading(false);
+        await loadCityFixtures(null);
+        return;
+      }
+
       setCityLiveLoading(true);
-      const c = await getCityByKeyLive(citySlug, LEAGUES);
-      if (!mounted || cancelRef.current) return;
-      setCityLive(c);
-      setCityLiveLoading(false);
-      await loadCityFixtures(c);
+
+      try {
+        const c = await getCityByKeyLive(citySlug, LEAGUES);
+        if (!mounted || cancelRef.current) return;
+
+        setCityLive(c);
+        setCityLiveLoading(false);
+        await loadCityFixtures(c);
+      } catch {
+        if (!mounted || cancelRef.current) return;
+
+        setCityLive(null);
+        setCityLiveLoading(false);
+        await loadCityFixtures(null);
+      }
     }
 
-    boot().catch(() => {
-      if (!mounted || cancelRef.current) return;
-      setCityLive(null);
-      setCityLiveLoading(false);
-      loadCityFixtures(null).catch(() => null);
-    });
+    void boot();
 
     return () => {
       mounted = false;
@@ -790,13 +765,16 @@ export default function CityScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+
     try {
-      const c = await getCityByKeyLive(citySlug, LEAGUES);
+      const c = citySlug ? await getCityByKeyLive(citySlug, LEAGUES) : null;
       if (cancelRef.current) return;
+
       setCityLive(c);
       await loadCityFixtures(c);
     } catch {
       if (cancelRef.current) return;
+
       setCityLive(null);
       await loadCityFixtures(null);
     } finally {
@@ -810,9 +788,7 @@ export default function CityScreen() {
   const countryCode = safeStr(cityLive?.countryCode);
   const countryName = safeStr(cityLive?.country);
 
-  const guideBlocks = useMemo<GuideBlock[]>(() => {
-    return guideFull?.blocks ?? [];
-  }, [guideFull]);
+  const guideBlocks = useMemo<GuideBlock[]>(() => guideFull?.blocks ?? [], [guideFull]);
 
   const overview = useMemo(() => {
     return (
@@ -828,32 +804,30 @@ export default function CityScreen() {
 
   const guideStats = useMemo(() => {
     if (!guideFull) return "";
+
     const sections = guideBlocks.length;
     const hasTop = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("top"));
     const hasStay = guideBlocks.some((b) => safeStr(b.heading).toLowerCase().includes("stay"));
-    const parts = [
+
+    return [
       sections ? `${sections} sections` : "",
       hasTop ? "things to do" : "",
       hasStay ? "where to stay" : "",
-    ].filter(Boolean);
-    return parts.join(" • ");
+    ]
+      .filter(Boolean)
+      .join(" • ");
   }, [guideFull, guideBlocks]);
 
   const guideHelper = useMemo(() => {
-    if (!guideFull) {
-      return "We’ll add this city soon. For now, use fixtures below to anchor your trip.";
-    }
-
-    if (!activeTripId) {
-      return "This guide is editorial only. Pick a fixture below to start a real trip.";
-    }
-
+    if (!guideFull) return "We’ll add this city soon. For now, use fixtures below to anchor your trip.";
+    if (!activeTripId) return "This guide is editorial only. Pick a fixture below to start a real trip.";
     return "This guide is editorial planning support. Use a fixture below to build the actual trip.";
   }, [guideFull, activeTripId]);
 
   const progressLine = useMemo(() => {
     if (!loadingFx) return "";
     if (!progress.total) return "Searching leagues…";
+
     const base = `Searching ${progress.done}/${progress.total} leagues…`;
     if (progress.reason === "registry-leagueIds") return `${base} (matched by city registry)`;
     if (progress.reason === "country-filter") return `${base} (filtered to country)`;
@@ -903,11 +877,7 @@ export default function CityScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.colors.textSecondary}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.textSecondary} />
           }
         >
           <GlassCard strength="strong" style={styles.hero} noPadding>
@@ -935,9 +905,7 @@ export default function CityScreen() {
               ) : null}
 
               <Text style={styles.heroRange}>
-                {from && to
-                  ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}`
-                  : ""}
+                {from && to ? `${ddmmyyyyFromIsoDateOnly(from)} → ${ddmmyyyyFromIsoDateOnly(to)}` : ""}
               </Text>
 
               <View style={styles.heroActions}>
@@ -960,9 +928,7 @@ export default function CityScreen() {
                 <View style={styles.flexTextWrap}>
                   <Text style={styles.blockTitle}>Guide</Text>
                   <Text style={styles.guideSub} numberOfLines={1}>
-                    {guideFull
-                      ? guideStats || "Practical, city-break planning notes."
-                      : "Guide content unavailable for this city yet."}
+                    {guideFull ? guideStats || "Practical, city-break planning notes." : "Guide content unavailable for this city yet."}
                   </Text>
                 </View>
 
@@ -980,7 +946,6 @@ export default function CityScreen() {
               </View>
 
               {guideFull && guidePreview ? <Text style={styles.blockNote}>{guidePreview}</Text> : null}
-
               <Text style={styles.blockNote}>{guideHelper}</Text>
             </View>
           </GlassCard>
@@ -996,9 +961,7 @@ export default function CityScreen() {
                 </View>
               ) : null}
 
-              {!loadingFx && fxError ? (
-                <EmptyState title="Fixtures Unavailable" message={fxError} />
-              ) : null}
+              {!loadingFx && fxError ? <EmptyState title="Fixtures Unavailable" message={fxError} /> : null}
 
               {!loadingFx && !fxError && fxRows.length === 0 ? (
                 <EmptyState title="No City Fixtures Found" message="Try another date window." />
@@ -1014,13 +977,8 @@ export default function CityScreen() {
                         {g.rows.map((r, idx) => {
                           const id = r?.fixture?.id != null ? String(r.fixture.id) : "";
                           const stableKey = id ? `fx-${id}` : `fx-${g.key}-${idx}`;
-                          return (
-                            <FixtureRow
-                              key={stableKey}
-                              row={r}
-                              onPressPlan={() => goPlanTrip(r)}
-                            />
-                          );
+
+                          return <FixtureRow key={stableKey} row={r} onPressPlan={() => goPlanTrip(r)} />;
                         })}
                       </View>
                     </View>
@@ -1044,10 +1002,6 @@ export default function CityScreen() {
     </Background>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* Styles */
-/* -------------------------------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
