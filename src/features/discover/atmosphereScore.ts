@@ -1,4 +1,4 @@
-const HIGH_ATMOSPHERE_TEAMS = [
+const HIGH_ATMOSPHERE_TEAMS = new Set([
   "borussia dortmund",
   "napoli",
   "galatasaray",
@@ -26,9 +26,9 @@ const HIGH_ATMOSPHERE_TEAMS = [
   "partizan",
   "rapid vienna",
   "ferencvaros",
-];
+]);
 
-const STRONG_ATMOSPHERE_TEAMS = [
+const STRONG_ATMOSPHERE_TEAMS = new Set([
   "liverpool",
   "newcastle",
   "aston villa",
@@ -56,31 +56,57 @@ const STRONG_ATMOSPHERE_TEAMS = [
   "bodo glimt",
   "shamrock rovers",
   "bohemians",
-];
+]);
 
-function norm(value: unknown) {
+// lightweight alias normalisation (fixes duplicate names properly)
+const TEAM_ALIASES: Record<string, string> = {
+  "inter milan": "inter",
+  "ac milan": "milan",
+  "sporting cp": "sporting",
+  "athletic bilbao": "athletic club",
+  "bayern": "bayern munich",
+};
+
+function norm(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
-function includesAny(name: string, keys: string[]) {
-  return keys.some((k) => name.includes(k));
+function normaliseTeam(name: string): string {
+  const key = norm(name);
+  return TEAM_ALIASES[key] ?? key;
 }
 
-export function atmosphereScore(homeTeam: string) {
-  const key = norm(homeTeam);
-  if (!key) return 1;
+function keywordBoost(name: string): number {
+  let score = 0;
 
-  if (includesAny(key, HIGH_ATMOSPHERE_TEAMS)) return 5;
-  if (includesAny(key, STRONG_ATMOSPHERE_TEAMS)) return 4;
+  if (name.includes("derby")) score += 1;
+  if (name.includes("dinamo")) score += 1;
+  if (name.includes("ultras")) score += 1;
+  if (name.includes("athletic")) score += 0.5;
 
-  if (
-    key.includes("ultras") ||
-    key.includes("dinamo") ||
-    key.includes("derby") ||
-    key.includes("athletic")
-  ) {
-    return 4;
-  }
+  return score;
+}
+
+/**
+ * Atmosphere scale:
+ * 5 = elite (bucket list atmospheres)
+ * 4 = consistently strong
+ * 3 = solid / above average
+ * 2 = normal
+ * 1 = weak / unknown
+ */
+export function atmosphereScore(homeTeam: string): number {
+  const team = normaliseTeam(homeTeam);
+  if (!team) return 1;
+
+  if (HIGH_ATMOSPHERE_TEAMS.has(team)) return 5;
+  if (STRONG_ATMOSPHERE_TEAMS.has(team)) return 4;
+
+  // softer heuristic layer (instead of dumb includes)
+  const boost = keywordBoost(team);
+
+  if (boost >= 2) return 4;
+  if (boost >= 1) return 3;
 
   return 2;
 }
