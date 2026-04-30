@@ -214,7 +214,7 @@ export const COUNTRY_VISUALS: Record<string, CountryVisualAsset> = {
     accentLeft: "#D57800",
     accentRight: "#FFFFFF",
   },
-  bosnia-and-herzegovina: {
+  "bosnia-and-herzegovina": {
     countryKey: "bosnia-and-herzegovina",
     name: "Bosnia and Herzegovina",
     flagUrl: `${FLAG_BASE}/ba.png`,
@@ -232,9 +232,9 @@ export const COUNTRY_VISUALS: Record<string, CountryVisualAsset> = {
 
 const COUNTRY_ALIASES: Record<string, string> = {
   uk: "england",
+  gb: "england",
   "united-kingdom": "england",
   "great-britain": "england",
-  gb: "england",
   england: "england",
   scotland: "scotland",
   spain: "spain",
@@ -284,3 +284,5 @@ export function getCountryVisual(input?: string | null): CountryVisualAsset {
 export function getCountryFlagUrl(input?: string | null): string {
   return getCountryVisual(input).flagUrl;
 }
+
+export default COUNTRY_VISUALS;
