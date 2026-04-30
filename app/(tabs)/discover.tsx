@@ -15,7 +15,6 @@ import Background from "@/src/components/Background";
 import EmptyState from "@/src/components/EmptyState";
 import GlassCard from "@/src/components/GlassCard";
 import Button from "@/src/components/Button";
-import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
 
 import { DISCOVER_CATEGORY_META } from "@/src/features/discover/discoverCategories";
@@ -122,65 +121,67 @@ export default function DiscoverScreen() {
   const hasMultiMatchTrips = multiMatchTrips.length > 0;
 
   return (
-    <Background
-      imageSource={getBackground("explore")}
-      overlayOpacity={0.04}
-      topShadeOpacity={0.34}
-      bottomShadeOpacity={0.42}
-      centerShadeOpacity={0.04}
-    >
+    <Background mode="solid" solidColor="#050708">
       <SafeAreaView style={styles.container} edges={["top"]}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: 32 + insets.bottom },
+            { paddingBottom: 34 + insets.bottom },
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <DiscoverHero
-            compactSummary={compactSummary}
-            setupExpanded={setupExpanded}
-            onToggleSetup={toggleSetup}
-            featuredTitle={featuredLive ? helpers.fixtureTitle(featuredLive.item.fixture) : null}
-            featuredMeta={featuredLive ? helpers.fixtureMeta(featuredLive.item.fixture) : null}
-            featuredWhy={
-              featuredLive
-                ? helpers.whyThisFits(
-                    featuredLive.item.fixture,
-                    seededCategory,
-                    discoverVibes,
-                    discoverTripLength
-                  )
-                : null
-            }
-            featuredIcon={DISCOVER_CATEGORY_META[seededCategory].icon}
-            onPressFeatured={
-              featuredLive ? () => goMatchFromRow(featuredLive.item.fixture) : undefined
-            }
-          />
+          <View style={styles.heroShell}>
+            <DiscoverHero
+              compactSummary={compactSummary}
+              setupExpanded={setupExpanded}
+              onToggleSetup={toggleSetup}
+              featuredTitle={
+                featuredLive ? helpers.fixtureTitle(featuredLive.item.fixture) : null
+              }
+              featuredMeta={
+                featuredLive ? helpers.fixtureMeta(featuredLive.item.fixture) : null
+              }
+              featuredWhy={
+                featuredLive
+                  ? helpers.whyThisFits(
+                      featuredLive.item.fixture,
+                      seededCategory,
+                      discoverVibes,
+                      discoverTripLength
+                    )
+                  : null
+              }
+              featuredIcon={DISCOVER_CATEGORY_META[seededCategory].icon}
+              onPressFeatured={
+                featuredLive ? () => goMatchFromRow(featuredLive.item.fixture) : undefined
+              }
+            />
+          </View>
 
-          <DiscoverTripSetup
-            setupExpanded={setupExpanded}
-            onToggleSetup={toggleSetup}
-            onReset={resetFilters}
-            browseModeLabel={browseModeLabel}
-            filterSummary={filterSummary}
-            discoverOrigin={discoverOrigin}
-            setDiscoverOrigin={setDiscoverOrigin}
-            discoverWindowKey={discoverWindowKey}
-            setDiscoverWindowKey={setDiscoverWindowKey}
-            discoverTripLength={discoverTripLength}
-            setDiscoverTripLength={setDiscoverTripLength}
-            discoverVibes={discoverVibes}
-            onToggleVibe={toggleVibe}
-          />
+          <Surface tone="green">
+            <DiscoverTripSetup
+              setupExpanded={setupExpanded}
+              onToggleSetup={toggleSetup}
+              onReset={resetFilters}
+              browseModeLabel={browseModeLabel}
+              filterSummary={filterSummary}
+              discoverOrigin={discoverOrigin}
+              setDiscoverOrigin={setDiscoverOrigin}
+              discoverWindowKey={discoverWindowKey}
+              setDiscoverWindowKey={setDiscoverWindowKey}
+              discoverTripLength={discoverTripLength}
+              setDiscoverTripLength={setDiscoverTripLength}
+              discoverVibes={discoverVibes}
+              onToggleVibe={toggleVibe}
+            />
+          </Surface>
 
           <Surface tone="green">
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Fast ways in"
-                subtitle="Start with a trip type, not a blank search."
+                subtitle="Pick a route style and let Discover do the filtering."
               />
               <DiscoverQuickSparks sparks={QUICK_SPARKS} onPressSpark={applyQuickSpark} />
             </View>
@@ -192,7 +193,7 @@ export default function DiscoverScreen() {
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Best live options"
-                subtitle="Current fixtures that fit your setup now, not generic filler."
+                subtitle="Current fixtures that fit your setup now."
               />
 
               {loadingLive ? (
@@ -236,8 +237,7 @@ export default function DiscoverScreen() {
                 <GlassCard style={styles.stateCard} variant="matte" level="default">
                   <Text style={styles.stateTitle}>No live fits yet</Text>
                   <Text style={styles.stateText}>
-                    Try widening the date window, switching trip length, or dropping one vibe so
-                    Discover can surface more routes.
+                    Try widening the date window, switching trip length, or dropping one vibe.
                   </Text>
                 </GlassCard>
               )}
@@ -250,7 +250,7 @@ export default function DiscoverScreen() {
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Trending trips"
-                subtitle="The louder, bigger, more travel-worthy fixtures in the current pool."
+                subtitle="Bigger, louder, more travel-worthy fixtures from the current pool."
               />
 
               {loadingLive ? (
@@ -310,8 +310,7 @@ export default function DiscoverScreen() {
                 <GlassCard style={styles.stateCard} variant="matte" level="default">
                   <Text style={styles.stateTitle}>No strong combos yet</Text>
                   <Text style={styles.stateText}>
-                    Your current setup is producing mainly single-match routes. Try a longer window
-                    or 2–3 nights to unlock better stackable options.
+                    Try a longer window or 2–3 nights to unlock better stackable options.
                   </Text>
                 </GlassCard>
               )}
@@ -324,7 +323,7 @@ export default function DiscoverScreen() {
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Start from a mood"
-                subtitle="Fast editorial routes for the kind of trip that already sounds right."
+                subtitle="Editorial routes for the kind of trip that already sounds right."
               />
               <DiscoverInspirationRow
                 presets={INSPIRATION_PRESETS}
@@ -371,7 +370,7 @@ export default function DiscoverScreen() {
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Specialist browse angles"
-                subtitle="Use narrower lenses when you care more about atmosphere, city pull, stakes or specific trip logic."
+                subtitle="Use narrower lenses for atmosphere, city pull, stakes or trip logic."
               />
 
               <ScrollView
@@ -397,7 +396,7 @@ export default function DiscoverScreen() {
             <View style={styles.section}>
               <DiscoverSectionHeader
                 title="Need one good answer?"
-                subtitle="Let Discover stop browsing and just hand you one of the strongest live routes."
+                subtitle="Let Discover stop browsing and hand you one strong live route."
               />
               <DiscoverConciergeCard
                 loading={loadingRandom}
@@ -439,7 +438,11 @@ const styles = StyleSheet.create({
 
   content: {
     paddingHorizontal: theme.spacing.lg,
-    gap: 16,
+    gap: 18,
+  },
+
+  heroShell: {
+    marginTop: theme.spacing.lg,
   },
 
   section: {
@@ -451,7 +454,7 @@ const styles = StyleSheet.create({
   },
 
   surface: {
-    borderRadius: 26,
+    borderRadius: 28,
     overflow: "hidden",
   },
 
@@ -461,20 +464,23 @@ const styles = StyleSheet.create({
 
   surfaceGreen: {
     borderWidth: 1,
-    borderColor: theme.colors.borderGreenSoft,
-    backgroundColor: "rgba(34,197,94,0.03)",
+    borderColor: "rgba(163,230,53,0.20)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(9,18,13,0.74)" : "rgba(9,18,13,0.68)",
   },
 
   surfaceGold: {
     borderWidth: 1,
-    borderColor: theme.colors.borderGoldSoft,
-    backgroundColor: "rgba(250,204,21,0.03)",
+    borderColor: "rgba(245,204,87,0.18)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(24,18,6,0.56)" : "rgba(24,18,6,0.48)",
   },
 
   surfaceNeutral: {
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.025)",
+    borderColor: "rgba(255,255,255,0.07)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(8,11,14,0.58)" : "rgba(255,255,255,0.04)",
   },
 
   liveRow: {
