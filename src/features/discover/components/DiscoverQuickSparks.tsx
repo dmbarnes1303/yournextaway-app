@@ -25,31 +25,31 @@ function sparkEyebrow(spark: QuickSpark) {
   if (spark.category === "weekendTrips") return "Fast weekend route";
   if (spark.category === "multiMatchTrips") return "Stacked football";
   if (spark.category === "derbies") return "Occasion-led";
-  if (spark.category === "nightMatches") return "Later kickoffs";
-  if (spark.category === "valueTrips") return "Smarter spend";
-  return "Quick discover";
+  if (spark.category === "nightMatches") return "Night fixtures";
+  if (spark.category === "valueTrips") return "Smart routes";
+  return "Quick route";
 }
 
 function sparkSupport(spark: QuickSpark) {
   if (spark.category === "europeanNights") {
-    return "Champions League, Europa League and Conference League travel pull.";
+    return "European nights with real travel pull.";
   }
   if (spark.category === "weekendTrips") {
-    return "Cleaner Friday-to-Sunday football breaks with better trip shape.";
+    return "Clean Friday–Sunday football breaks.";
   }
   if (spark.category === "multiMatchTrips") {
-    return "Cities and routes that can support more than one live fixture.";
+    return "Cities that support multiple fixtures.";
   }
   if (spark.category === "derbies") {
-    return "History, rivalry and stronger edge than a standard fixture.";
+    return "Rivalries with real edge.";
   }
   if (spark.category === "nightMatches") {
-    return "Evening fixtures with better lights-on feel and nightlife overlap.";
+    return "Evening kickoffs + nightlife overlap.";
   }
   if (spark.category === "valueTrips") {
-    return "Better experience-per-pound routes without defaulting to the obvious.";
+    return "Better trips without premium pricing.";
   }
-  return "Fast route into one of the stronger live discover angles.";
+  return "Strong live discover angle.";
 }
 
 export default function DiscoverQuickSparks({
@@ -68,17 +68,22 @@ export default function DiscoverQuickSparks({
         <Pressable
           key={spark.id}
           onPress={() => onPressSpark(spark)}
-          style={({ pressed }) => [styles.cardPress, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.cardPress,
+            pressed && styles.pressed,
+          ]}
         >
           <GlassCard strength="default" style={styles.card} noPadding>
             <View style={styles.inner}>
               <View style={styles.topRow}>
                 <View style={styles.iconWrap}>
-                  <Ionicons name={spark.icon} size={18} color={theme.colors.text} />
+                  <Ionicons name={spark.icon} size={18} color="#9AF2AE" />
                 </View>
 
                 <View style={styles.eyebrowPill}>
-                  <Text style={styles.eyebrowText}>{sparkEyebrow(spark)}</Text>
+                  <Text style={styles.eyebrowText}>
+                    {sparkEyebrow(spark)}
+                  </Text>
                 </View>
               </View>
 
@@ -97,7 +102,7 @@ export default function DiscoverQuickSparks({
                 <Ionicons
                   name="arrow-forward-outline"
                   size={15}
-                  color={theme.colors.textSecondary}
+                  color="#9AF2AE"
                 />
               </View>
             </View>
@@ -115,19 +120,20 @@ const styles = StyleSheet.create({
   },
 
   cardPress: {
-    width: 232,
-    borderRadius: 20,
+    width: 240,
+    borderRadius: 22,
     overflow: "hidden",
   },
 
   card: {
-    borderRadius: 20,
-    minHeight: 164,
+    borderRadius: 22,
+    minHeight: 170,
+    borderColor: "rgba(163,230,53,0.15)",
   },
 
   inner: {
-    padding: 14,
-    minHeight: 164,
+    padding: 15,
+    minHeight: 170,
     gap: 12,
     justifyContent: "space-between",
   },
@@ -140,32 +146,37 @@ const styles = StyleSheet.create({
   },
 
   iconWrap: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(87,162,56,0.20)",
-    backgroundColor: "rgba(87,162,56,0.08)",
+    borderColor: "rgba(163,230,53,0.25)",
+    backgroundColor: "rgba(163,230,53,0.08)",
+    shadowColor: "#A3E635",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
   },
 
   eyebrowPill: {
-    maxWidth: 136,
+    maxWidth: 140,
     borderRadius: 999,
     paddingVertical: 5,
     paddingHorizontal: 9,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
     backgroundColor:
-      Platform.OS === "android" ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.04)",
+      Platform.OS === "android"
+        ? "rgba(0,0,0,0.20)"
+        : "rgba(255,255,255,0.05)",
   },
 
   eyebrowText: {
-    color: theme.colors.textSecondary,
+    color: "rgba(240,245,242,0.65)",
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.2,
   },
 
   copyWrap: {
@@ -175,13 +186,13 @@ const styles = StyleSheet.create({
 
   title: {
     color: theme.colors.text,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 21,
     fontWeight: theme.fontWeight.black,
   },
 
   support: {
-    color: theme.colors.textSecondary,
+    color: "rgba(240,245,242,0.7)",
     fontSize: 12,
     lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
@@ -192,11 +203,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    paddingTop: 2,
+    paddingTop: 4,
   },
 
   footerText: {
-    color: theme.colors.primary,
+    color: "#9AF2AE",
     fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
