@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutAnimation } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -92,14 +92,34 @@ export type UseDiscoverControllerReturn = {
   };
 };
 
+const LIVE_POOL_CACHE_TTL_MS = 5 * 60 * 1000;
+const PREVIEW_LIMIT = 6;
+const TRENDING_LIMIT = 6;
+const RANDOM_POOL_LIMIT = 12;
+
+type LivePoolCacheValue = {
+  ts: number;
+  rows: FixtureListRow[];
+};
+
 function cleanString(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function normaliseOrigin(value: string): string {
+  return cleanString(value).replace(/\s+/g, " ");
 }
 
 function fixtureDateOnly(iso?: string | null): string {
   const value = cleanString(iso);
   const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
   return match?.[1] ?? "";
+}
+
+function toIsoDateOnly(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate()
+  ).padStart(2, "0")}`;
 }
 
 function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string; to?: string } {
@@ -112,13 +132,9 @@ function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string
   const end = new Date(start);
   end.setDate(end.getDate() + 2);
 
-  const toIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
-    end.getDate()
-  ).padStart(2, "0")}`;
-
   return {
     from: dateOnly,
-    to: toIso,
+    to: toIsoDateOnly(end),
   };
 }
 
@@ -151,6 +167,58 @@ function buildCanonicalTripStartParams(args: {
   };
 }
 
+function cacheKeyForDiscover(args: {
+  from: string;
+  to: string;
+  windowKey: DiscoverWindowKey;
+  origin: string;
+  tripLength: DiscoverTripLength;
+  vibes: DiscoverVibe[];
+  category: DiscoverCategory;
+}) {
+  return [
+    args.from,
+    args.to,
+    args.windowKey,
+    normaliseOrigin(args.origin).toLowerCase(),
+    args.tripLength,
+    [...args.vibes].sort().join(","),
+    args.category,
+  ].join("|");
+}
+
+function fixtureId(row: FixtureListRow | null | undefined): string {
+  return row?.fixture?.id != null ? String(row.fixture.id) : "";
+}
+
+function fixtureLeagueId(row: FixtureListRow | null | undefined): string | null {
+  return row?.league?.id != null ? String(row.league.id) : null;
+}
+
+function fixtureSeason(row: FixtureListRow | null | undefined): string | null {
+  return typeof row?.league?.season === "number" ? String(row.league.season) : null;
+}
+
+function fixtureCity(row: FixtureListRow | null | undefined): string | null {
+  return cleanString(row?.fixture?.venue?.city) || null;
+}
+
+function fixtureKickoff(row: FixtureListRow | null | undefined): string | null {
+  return cleanString(row?.fixture?.date) || null;
+}
+
+function uniqueRows(rows: FixtureListRow[]): FixtureListRow[] {
+  const map = new Map<string, FixtureListRow>();
+
+  for (const row of rows) {
+    const id = fixtureId(row);
+    if (!id) continue;
+    map.set(id, row);
+  }
+
+  return Array.from(map.values());
+}
+
 export default function useDiscoverController(): UseDiscoverControllerReturn {
   const router = useRouter();
 
@@ -165,29 +233,14 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveRows, setLiveRows] = useState<FixtureListRow[]>([]);
 
-  const toggleSetup = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setSetupExpanded((prev) => !prev);
-  }, []);
-
-  const toggleVibe = useCallback((vibe: DiscoverVibe) => {
-    setDiscoverVibes((prev) => {
-      const has = prev.includes(vibe);
-      const next = has ? prev.filter((value) => value !== vibe) : [...prev, vibe];
-      return clampVibes(next);
-    });
-  }, []);
-
-  const resetFilters = useCallback(() => {
-    setDiscoverWindowKey("d30");
-    setDiscoverTripLength("2");
-    setDiscoverVibes(["easy"]);
-    setDiscoverOrigin("");
-  }, []);
+  const requestIdRef = useRef(0);
+  const cacheRef = useRef(new Map<string, LivePoolCacheValue>());
 
   const currentWindow = useMemo(() => {
     return windowForKey(discoverWindowKey);
   }, [discoverWindowKey]);
+
+  const normalisedOrigin = useMemo(() => normaliseOrigin(discoverOrigin), [discoverOrigin]);
 
   const seededCategory = useMemo(() => {
     return categorySeedFromFilters({
@@ -196,6 +249,26 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       tripLength: discoverTripLength,
     });
   }, [discoverVibes, discoverWindowKey, discoverTripLength]);
+
+  const liveCacheKey = useMemo(() => {
+    return cacheKeyForDiscover({
+      from: currentWindow.from,
+      to: currentWindow.to,
+      windowKey: discoverWindowKey,
+      origin: normalisedOrigin,
+      tripLength: discoverTripLength,
+      vibes: discoverVibes,
+      category: seededCategory,
+    });
+  }, [
+    currentWindow.from,
+    currentWindow.to,
+    discoverWindowKey,
+    normalisedOrigin,
+    discoverTripLength,
+    discoverVibes,
+    seededCategory,
+  ]);
 
   const prioritisedPrimaryCategories = useMemo(() => {
     return prioritiseCategories(DISCOVER_PRIMARY_CATEGORIES, seededCategory);
@@ -219,9 +292,9 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       discoverVibes.length ? discoverVibes.map(labelForVibe).join(" • ") : "Any vibe",
     ];
 
-    if (discoverOrigin.trim()) parts.push(`From ${discoverOrigin.trim()}`);
+    if (normalisedOrigin) parts.push(`From ${normalisedOrigin}`);
     return parts.join(" • ");
-  }, [discoverWindowKey, discoverTripLength, discoverVibes, discoverOrigin]);
+  }, [discoverWindowKey, discoverTripLength, discoverVibes, normalisedOrigin]);
 
   const compactSummary = useMemo(() => {
     const parts = [
@@ -230,19 +303,51 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       discoverVibes.length ? discoverVibes.map(shortLabelForVibe).join(" + ") : "Any vibe",
     ];
 
-    if (discoverOrigin.trim()) parts.push(discoverOrigin.trim());
+    if (normalisedOrigin) parts.push(normalisedOrigin);
     return parts.join(" • ");
-  }, [discoverWindowKey, discoverTripLength, discoverVibes, discoverOrigin]);
+  }, [discoverWindowKey, discoverTripLength, discoverVibes, normalisedOrigin]);
 
   const browseModeLabel = useMemo(() => {
     const meta = DISCOVER_CATEGORY_META[seededCategory];
     return meta?.title ?? "Best-fit routes";
   }, [seededCategory]);
 
+  const toggleSetup = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSetupExpanded((prev) => !prev);
+  }, []);
+
+  const toggleVibe = useCallback((vibe: DiscoverVibe) => {
+    setDiscoverVibes((prev) => {
+      const has = prev.includes(vibe);
+      const next = has ? prev.filter((value) => value !== vibe) : [...prev, vibe];
+      return clampVibes(next);
+    });
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setDiscoverWindowKey("d30");
+    setDiscoverTripLength("2");
+    setDiscoverVibes(["easy"]);
+    setDiscoverOrigin("");
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
 
     async function run() {
+      const cached = cacheRef.current.get(liveCacheKey);
+      const now = Date.now();
+
+      if (cached && now - cached.ts < LIVE_POOL_CACHE_TTL_MS) {
+        setLiveRows(cached.rows);
+        setLiveError(null);
+        setLoadingLive(false);
+        return;
+      }
+
       setLoadingLive(true);
       setLiveError(null);
 
@@ -250,20 +355,34 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
         const pool = await fetchDiscoverPool({
           window: currentWindow,
           windowKey: discoverWindowKey,
-          origin: discoverOrigin,
+          origin: normalisedOrigin,
           tripLength: discoverTripLength,
           vibes: discoverVibes,
           category: seededCategory,
         });
 
-        if (cancelled) return;
-        setLiveRows(pool);
+        if (cancelled || requestIdRef.current !== requestId) return;
+
+        const safePool = uniqueRows(Array.isArray(pool) ? pool : []);
+        cacheRef.current.set(liveCacheKey, { ts: Date.now(), rows: safePool });
+        setLiveRows(safePool);
+        setLiveError(null);
       } catch (e: any) {
-        if (cancelled) return;
+        if (cancelled || requestIdRef.current !== requestId) return;
+
+        const cachedFallback = cacheRef.current.get(liveCacheKey);
+        if (cachedFallback?.rows?.length) {
+          setLiveRows(cachedFallback.rows);
+          setLiveError(null);
+          return;
+        }
+
         setLiveRows([]);
         setLiveError(e?.message ?? "Failed to load live route previews.");
       } finally {
-        if (!cancelled) setLoadingLive(false);
+        if (!cancelled && requestIdRef.current === requestId) {
+          setLoadingLive(false);
+        }
       }
     }
 
@@ -273,9 +392,10 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       cancelled = true;
     };
   }, [
+    liveCacheKey,
     currentWindow,
     discoverWindowKey,
-    discoverOrigin,
+    normalisedOrigin,
     discoverTripLength,
     discoverVibes,
     seededCategory,
@@ -290,16 +410,17 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       .map((item) => ({
         item,
         score: discoverScoreForCategory(seededCategory, item, {
-          origin: discoverOrigin.trim() || null,
+          origin: normalisedOrigin || null,
           tripLength: discoverTripLength,
           vibes: discoverVibes,
         }),
       }))
+      .filter((entry) => fixtureId(entry.item.fixture))
       .sort((a, b) => b.score - a.score);
-  }, [liveRows, seededCategory, discoverOrigin, discoverTripLength, discoverVibes]);
+  }, [liveRows, seededCategory, normalisedOrigin, discoverTripLength, discoverVibes]);
 
   const featuredLive = useMemo(() => rankedLive[0] ?? null, [rankedLive]);
-  const previewLive = useMemo(() => rankedLive.slice(0, 6), [rankedLive]);
+  const previewLive = useMemo(() => rankedLive.slice(0, PREVIEW_LIMIT), [rankedLive]);
 
   const trendingTrips = useMemo(() => {
     return [...rankedLive]
@@ -308,7 +429,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
         const bRow = b.item.fixture;
         return trendingScore(bRow, b.score) - trendingScore(aRow, a.score);
       })
-      .slice(0, 6);
+      .slice(0, TRENDING_LIMIT);
   }, [rankedLive]);
 
   const multiMatchTrips = useMemo(() => {
@@ -327,32 +448,26 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           from: currentWindow.from,
           to: currentWindow.to,
           discover: category,
-          discoverFrom: discoverOrigin.trim() || undefined,
+          ...(normalisedOrigin ? { discoverFrom: normalisedOrigin } : {}),
           discoverTripLength,
           discoverVibes: discoverVibes.join(","),
         },
       } as never);
     },
-    [router, currentWindow, discoverOrigin, discoverTripLength, discoverVibes]
+    [router, currentWindow.from, currentWindow.to, normalisedOrigin, discoverTripLength, discoverVibes]
   );
 
   const goMatchFromRow = useCallback(
     (row: FixtureListRow | null | undefined) => {
-      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : "";
-      if (!fixtureId) return;
-
-      const leagueId = row?.league?.id != null ? String(row.league.id) : null;
-      const season =
-        typeof row?.league?.season === "number" ? String(row.league.season) : null;
-      const city = cleanString(row?.fixture?.venue?.city) || null;
-      const kickoffIso = cleanString(row?.fixture?.date) || null;
+      const id = fixtureId(row);
+      if (!id) return;
 
       const tripStartParams = buildCanonicalTripStartParams({
-        fixtureId,
-        leagueId,
-        season,
-        city,
-        kickoffIso,
+        fixtureId: id,
+        leagueId: fixtureLeagueId(row),
+        season: fixtureSeason(row),
+        city: fixtureCity(row),
+        kickoffIso: fixtureKickoff(row),
         from: currentWindow.from,
         to: currentWindow.to,
       });
@@ -373,7 +488,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           from: trip.from,
           to: trip.to,
           discover: discoverWindowKey === "wknd" ? "weekendTrips" : "multiMatchTrips",
-          discoverFrom: discoverOrigin.trim() || undefined,
+          ...(normalisedOrigin ? { discoverFrom: normalisedOrigin } : {}),
           discoverTripLength,
           discoverVibes: discoverVibes.join(","),
           comboMode: "1",
@@ -382,7 +497,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
         },
       } as never);
     },
-    [router, discoverOrigin, discoverTripLength, discoverVibes, discoverWindowKey]
+    [router, normalisedOrigin, discoverTripLength, discoverVibes, discoverWindowKey]
   );
 
   const applyPreset = useCallback(
@@ -390,12 +505,19 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       const nextWindowKey = preset.windowKey ?? discoverWindowKey;
       const nextTripLength = preset.tripLength ?? discoverTripLength;
       const nextVibes = preset.vibe ? [preset.vibe] : discoverVibes;
-
-      if (preset.windowKey) setDiscoverWindowKey(preset.windowKey);
-      if (preset.tripLength) setDiscoverTripLength(preset.tripLength);
-      if (preset.vibe) setDiscoverVibes([preset.vibe]);
-
       const nextWindow = windowForKey(nextWindowKey);
+
+      if (preset.windowKey && preset.windowKey !== discoverWindowKey) {
+        setDiscoverWindowKey(preset.windowKey);
+      }
+
+      if (preset.tripLength && preset.tripLength !== discoverTripLength) {
+        setDiscoverTripLength(preset.tripLength);
+      }
+
+      if (preset.vibe) {
+        setDiscoverVibes([preset.vibe]);
+      }
 
       router.push({
         pathname: "/(tabs)/fixtures",
@@ -403,13 +525,13 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           from: nextWindow.from,
           to: nextWindow.to,
           discover: preset.category,
-          discoverFrom: discoverOrigin.trim() || undefined,
+          ...(normalisedOrigin ? { discoverFrom: normalisedOrigin } : {}),
           discoverTripLength: nextTripLength,
           discoverVibes: nextVibes.join(","),
         },
       } as never);
     },
-    [router, discoverWindowKey, discoverOrigin, discoverTripLength, discoverVibes]
+    [router, discoverWindowKey, normalisedOrigin, discoverTripLength, discoverVibes]
   );
 
   const applyQuickSpark = useCallback(
@@ -417,12 +539,19 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       const nextWindowKey = spark.windowKey ?? discoverWindowKey;
       const nextTripLength = spark.tripLength ?? discoverTripLength;
       const nextVibes = spark.vibe ? [spark.vibe] : discoverVibes;
-
-      if (spark.windowKey) setDiscoverWindowKey(spark.windowKey);
-      if (spark.tripLength) setDiscoverTripLength(spark.tripLength);
-      if (spark.vibe) setDiscoverVibes([spark.vibe]);
-
       const nextWindow = windowForKey(nextWindowKey);
+
+      if (spark.windowKey && spark.windowKey !== discoverWindowKey) {
+        setDiscoverWindowKey(spark.windowKey);
+      }
+
+      if (spark.tripLength && spark.tripLength !== discoverTripLength) {
+        setDiscoverTripLength(spark.tripLength);
+      }
+
+      if (spark.vibe) {
+        setDiscoverVibes([spark.vibe]);
+      }
 
       router.push({
         pathname: "/(tabs)/fixtures",
@@ -430,13 +559,13 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
           from: nextWindow.from,
           to: nextWindow.to,
           discover: spark.category,
-          discoverFrom: discoverOrigin.trim() || undefined,
+          ...(normalisedOrigin ? { discoverFrom: normalisedOrigin } : {}),
           discoverTripLength: nextTripLength,
           discoverVibes: nextVibes.join(","),
         },
       } as never);
     },
-    [router, discoverWindowKey, discoverOrigin, discoverTripLength, discoverVibes]
+    [router, discoverWindowKey, normalisedOrigin, discoverTripLength, discoverVibes]
   );
 
   const goRandomTrip = useCallback(async () => {
@@ -445,40 +574,21 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     setLoadingRandom(true);
 
     try {
-      if (!liveRows.length) return;
+      if (!rankedLive.length) return;
 
-      const scored = buildDiscoverScores(liveRows);
-
-      const ranked: RankedDiscoverPick[] = scored
-        .map((item) => ({
-          item,
-          score: discoverScoreForCategory(seededCategory, item, {
-            origin: discoverOrigin.trim() || null,
-            tripLength: discoverTripLength,
-            vibes: discoverVibes,
-          }),
-        }))
-        .sort((a, b) => b.score - a.score);
-
-      const poolTop = ranked.slice(0, Math.min(12, ranked.length));
+      const poolTop = rankedLive.slice(0, Math.min(RANDOM_POOL_LIMIT, rankedLive.length));
       const chosen = pickRandom(poolTop);
       const row = chosen?.item?.fixture ?? null;
+      const id = fixtureId(row);
 
-      const fixtureId = row?.fixture?.id != null ? String(row.fixture.id) : "";
-      if (!fixtureId) return;
-
-      const leagueId = row?.league?.id != null ? String(row.league.id) : null;
-      const season =
-        typeof row?.league?.season === "number" ? String(row.league.season) : null;
-      const city = cleanString(row?.fixture?.venue?.city) || null;
-      const kickoffIso = cleanString(row?.fixture?.date) || null;
+      if (!id) return;
 
       const tripStartParams = buildCanonicalTripStartParams({
-        fixtureId,
-        leagueId,
-        season,
-        city,
-        kickoffIso,
+        fixtureId: id,
+        leagueId: fixtureLeagueId(row),
+        season: fixtureSeason(row),
+        city: fixtureCity(row),
+        kickoffIso: fixtureKickoff(row),
         from: currentWindow.from,
         to: currentWindow.to,
       });
@@ -490,17 +600,7 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
     } finally {
       setLoadingRandom(false);
     }
-  }, [
-    loadingRandom,
-    liveRows,
-    seededCategory,
-    discoverOrigin,
-    discoverTripLength,
-    discoverVibes,
-    router,
-    currentWindow.from,
-    currentWindow.to,
-  ]);
+  }, [loadingRandom, rankedLive, router, currentWindow.from, currentWindow.to]);
 
   return {
     discoverWindowKey,
@@ -549,4 +649,4 @@ export default function useDiscoverController(): UseDiscoverControllerReturn {
       rankLabel,
     },
   };
-                  }
+        }
