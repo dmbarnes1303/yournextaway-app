@@ -58,12 +58,7 @@ function normalizeProvider(provider: unknown): string {
 
 function isSe365(provider: unknown): boolean {
   const p = normalizeProvider(provider);
-  return (
-    p === "sportsevents365" ||
-    p === "sportsevents" ||
-    p === "se365" ||
-    p === "sports365"
-  );
+  return p === "sportsevents365" || p === "sportsevents" || p === "se365" || p === "sports365";
 }
 
 function isFtn(provider: unknown): boolean {
@@ -85,7 +80,7 @@ function canonicalizeProvider(provider: unknown): string {
 
 function isApprovedProvider(provider: unknown): boolean {
   const canonical = canonicalizeProvider(provider);
-  return APPROVED_PROVIDERS.includes(canonical as any);
+  return APPROVED_PROVIDERS.includes(canonical as (typeof APPROVED_PROVIDERS)[number]);
 }
 
 function safeJsonParse<T>(value: string): T | null {
@@ -214,25 +209,34 @@ function normalizeOption(input: unknown): TicketResolutionOption | null {
   };
 }
 
-function extractCandidateOptions(input: any): unknown[] {
+function extractCandidateOptions(input: unknown): unknown[] {
   const out: unknown[] = [];
 
-  if (!input || typeof input !== "object") return out;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return out;
 
-  if (Array.isArray(input.options)) out.push(...input.options);
-  if (Array.isArray(input.results)) out.push(...input.results);
-  if (Array.isArray(input.providerResults)) out.push(...input.providerResults);
-  if (Array.isArray(input.ticketOptions)) out.push(...input.ticketOptions);
+  const obj = input as Record<string, unknown>;
 
-  const providers = input.providers;
+  if (Array.isArray(obj.options)) out.push(...obj.options);
+  if (Array.isArray(obj.results)) out.push(...obj.results);
+  if (Array.isArray(obj.providerResults)) out.push(...obj.providerResults);
+  if (Array.isArray(obj.ticketOptions)) out.push(...obj.ticketOptions);
+
+  const providers = obj.providers;
+
   if (providers && typeof providers === "object" && !Array.isArray(providers)) {
     for (const [provider, value] of Object.entries(providers)) {
       if (Array.isArray(value)) {
         for (const item of value) {
-          out.push({ ...(typeof item === "object" && item ? item : {}), provider });
+          out.push({
+            ...(typeof item === "object" && item ? (item as Record<string, unknown>) : {}),
+            provider,
+          });
         }
       } else if (value && typeof value === "object") {
-        out.push({ ...(value as Record<string, unknown>), provider });
+        out.push({
+          ...(value as Record<string, unknown>),
+          provider,
+        });
       }
     }
   }
@@ -295,9 +299,10 @@ function dedupeAndSortOptions(options: TicketResolutionOption[]): TicketResoluti
     const provider = canonicalizeProvider(option.provider);
     const key = `${provider}|${option.url}`;
     const existing = byKey.get(key);
+    const next = { ...option, provider };
 
-    if (!existing || compareOptions(option, existing) < 0) {
-      byKey.set(key, { ...option, provider });
+    if (!existing || compareOptions(next, existing) < 0) {
+      byKey.set(key, next);
     }
   }
 
@@ -362,23 +367,21 @@ function normalizeResolutionResult(input: TicketResolutionResult | null): Ticket
 
   const fallbackTop = allOptions[0] ?? null;
 
-  const provider = fallbackTop?.provider ?? canonicalizeProvider(input.provider) ?? null;
+  const fallbackProvider = canonicalizeProvider(input.provider);
+  const provider = fallbackTop?.provider ?? (fallbackProvider || null);
   const url = fallbackTop?.url ?? safeUrl(input.url) ?? null;
-  const title = fallbackTop?.title ?? clean(input.title) || null;
-  const priceText = fallbackTop?.priceText ?? clean(input.priceText) || null;
+  const title = fallbackTop?.title ?? (clean(input.title) || null);
+  const priceText = fallbackTop?.priceText ?? (clean(input.priceText) || null);
   const score = fallbackTop?.score ?? normalizeScore(input.score);
   const rawScore = fallbackTop?.rawScore ?? normalizeScore(input.rawScore);
   const exact = fallbackTop?.exact ?? Boolean(input.exact);
   const urlQuality = normalizeUrlQuality(fallbackTop?.urlQuality ?? input.urlQuality);
 
-  const checkedProviders = normalizeCheckedProviders(input.checkedProviders);
-  const checkedProviderSet = new Set(checkedProviders);
+  const checkedProviderSet = new Set<string>(normalizeCheckedProviders(input.checkedProviders));
 
   for (const option of allOptions) {
     checkedProviderSet.add(option.provider);
   }
-
-  const finalCheckedProviders = Array.from(checkedProviderSet);
 
   const ok = allOptions.length > 0;
 
@@ -393,7 +396,7 @@ function normalizeResolutionResult(input: TicketResolutionResult | null): Ticket
     priceText: ok ? priceText : null,
     reason: normalizeTopLevelReason(input.reason, Boolean(provider), ok),
     urlQuality,
-    checkedProviders: finalCheckedProviders,
+    checkedProviders: Array.from(checkedProviderSet),
     options: allOptions,
     error: clean(input.error) || (!ok ? "not_found" : undefined),
   };
@@ -428,9 +431,7 @@ export async function resolveTicketForFixture(
 
   if (!url) return makeErrorResult("invalid_resolve_args");
 
-  const controller =
-    typeof AbortController !== "undefined" ? new AbortController() : null;
-
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeout = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : null;
 
   try {
