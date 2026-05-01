@@ -38,6 +38,17 @@ function initials(name?: string | null) {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
+function formatRoundLabel(round?: string | null): string {
+  const value = clean(round);
+  if (!value) return "";
+
+  return value
+    .replace(/\bRegular Season\b/gi, "Matchday")
+    .replace(/\s*-\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function Crest({ name, logo, large }: { name: string; logo?: string | null; large?: boolean }) {
   if (logo) {
     return (
@@ -89,8 +100,10 @@ export default function MatchHeroCard({
       ? `${cityName} Football Trip`
       : "Football Trip";
 
+  const roundLabel = formatRoundLabel(round);
+
   const subtitle = hasRealMatch
-    ? [clean(leagueName) || "Matchday", clean(round)].filter(Boolean).join(" • ")
+    ? [clean(leagueName) || "Matchday", roundLabel].filter(Boolean).join(" • ")
     : "Add your match";
 
   return (
@@ -101,10 +114,6 @@ export default function MatchHeroCard({
         imageStyle={styles.flagImage}
       >
         <View style={styles.flagBoost} />
-        <View style={styles.fabricHighlightOne} />
-        <View style={styles.fabricHighlightTwo} />
-        <View style={styles.fabricShadowOne} />
-        <View style={styles.fabricShadowTwo} />
         <View style={styles.topShadow} />
         <View style={styles.bottomShadow} />
 
@@ -168,60 +177,12 @@ const styles = StyleSheet.create({
 
   flagImage: {
     borderRadius: 34,
-    opacity: 0.95,
+    opacity: 0.92,
   },
 
   flagBoost: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.16)",
-  },
-
-  fabricHighlightOne: {
-    position: "absolute",
-    left: -70,
-    right: -30,
-    top: 42,
-    height: 105,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    opacity: 0.62,
-    transform: [{ rotate: "-8deg" }],
-  },
-
-  fabricHighlightTwo: {
-    position: "absolute",
-    left: 20,
-    right: -90,
-    top: 132,
-    height: 92,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    opacity: 0.5,
-    transform: [{ rotate: "7deg" }],
-  },
-
-  fabricShadowOne: {
-    position: "absolute",
-    left: -60,
-    right: -80,
-    top: 202,
-    height: 115,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.34)",
-    opacity: 0.6,
-    transform: [{ rotate: "-6deg" }],
-  },
-
-  fabricShadowTwo: {
-    position: "absolute",
-    left: -80,
-    right: -40,
-    bottom: 112,
-    height: 112,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,40,18,0.42)",
-    opacity: 0.62,
-    transform: [{ rotate: "8deg" }],
+    backgroundColor: "rgba(0,0,0,0.38)",
   },
 
   topShadow: {
@@ -229,8 +190,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: 90,
-    backgroundColor: "rgba(0,0,0,0.24)",
+    height: 110,
+    backgroundColor: "rgba(0,0,0,0.30)",
   },
 
   bottomShadow: {
@@ -238,8 +199,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 230,
-    backgroundColor: "rgba(0,10,5,0.84)",
+    height: 245,
+    backgroundColor: "rgba(0,10,5,0.86)",
   },
 
   matchCrestsLayer: {
