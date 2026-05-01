@@ -548,6 +548,7 @@ export default function TripScreen() {
             headerTintColor: "#FFFFFF",
           }}
         />
+
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingShell}>
             <ActivityIndicator color={theme.colors.emeraldSoft} />
@@ -590,12 +591,10 @@ export default function TripScreen() {
           />
 
           <View style={styles.brandStrip}>
-            <Text style={styles.brandStripText}>Plan • Fly • Stay • Watch</Text>
+            <Text style={styles.brandStripText}>Plan • Fly • Watch • Repeat</Text>
           </View>
 
           <View style={styles.tripSummaryCard}>
-            <View style={styles.summaryGlow} />
-
             <View style={styles.tripSummaryTop}>
               <View style={styles.tripSummaryCopy}>
                 <Text style={styles.cardEyebrow}>Trip hub</Text>
@@ -634,8 +633,6 @@ export default function TripScreen() {
           </View>
 
           <View style={styles.primaryActionCard}>
-            <View style={styles.primaryActionGlow} />
-
             <Text style={styles.actionEyebrow}>{primaryAction.eyebrow}</Text>
             <Text style={styles.primaryActionTitle}>{primaryAction.title}</Text>
             <Text style={styles.primaryActionDetail}>{primaryAction.detail}</Text>
@@ -657,9 +654,7 @@ export default function TripScreen() {
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.cardEyebrow}>Build sequence</Text>
               <Text style={styles.sectionTitle}>Trip checklist</Text>
-              <Text style={styles.sectionSub}>
-                Tickets first, then stay, travel and plans.
-              </Text>
+              <Text style={styles.sectionSub}>Tickets first, then stay, travel and plans.</Text>
             </View>
 
             <View style={styles.itineraryList}>
@@ -747,7 +742,10 @@ export default function TripScreen() {
               {workspace.booked.length} booked • {workspace.pending.length} pending
             </Text>
 
-            <Pressable style={({ pressed }) => [styles.walletButton, pressed && styles.pressed]} onPress={controller.onViewWallet}>
+            <Pressable
+              style={({ pressed }) => [styles.walletButton, pressed && styles.pressed]}
+              onPress={controller.onViewWallet}
+            >
               <Text style={styles.walletButtonText}>Open Wallet</Text>
             </Pressable>
           </GlassCard>
@@ -824,22 +822,11 @@ const styles = StyleSheet.create({
   },
 
   tripSummaryCard: {
-    overflow: "hidden",
     padding: 18,
     borderRadius: 28,
     backgroundColor: "rgba(7,12,12,0.94)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-  },
-
-  summaryGlow: {
-    position: "absolute",
-    top: -88,
-    right: -70,
-    width: 180,
-    height: 180,
-    borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.12)",
   },
 
   tripSummaryTop: {
@@ -973,22 +960,11 @@ const styles = StyleSheet.create({
   },
 
   primaryActionCard: {
-    overflow: "hidden",
     padding: 20,
     borderRadius: 28,
     backgroundColor: "rgba(8,16,13,0.94)",
     borderWidth: 1,
     borderColor: "rgba(34,197,94,0.20)",
-  },
-
-  primaryActionGlow: {
-    position: "absolute",
-    top: -90,
-    right: -90,
-    width: 190,
-    height: 190,
-    borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.10)",
   },
 
   actionEyebrow: {
@@ -1023,7 +999,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.emeraldSoft,
+    backgroundColor: "#22C55E",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.16)",
   },
