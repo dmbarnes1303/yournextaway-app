@@ -5,8 +5,6 @@ import type { TicketCandidate, TicketResolveInput } from "./types.js";
 
 const API_BASE = env.se365BaseUrl;
 const PUBLIC_BASE = "https://www.sportsevents365.com";
-
-// From SE365 docs: Football/Soccer eventType.id = 1000.
 const FOOTBALL_EVENT_TYPE_ID = "1000";
 
 type FetchResult = {
@@ -45,15 +43,14 @@ function clean(v: unknown): string {
 function normalize(v: unknown): string {
   return clean(v)
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/&/g, "and")
-    .replace(/\bfc\b/g, "")
-    .replace(/\bss\b/g, "")
-    .replace(/\bas\b/g, "")
-    .replace(/\bac\b/g, "")
-    .replace(/\bcalcio\b/g, "")
-    .replace(/\bfootball club\b/g, "")
+    .replace(/\b(fc|ss|as|ac|cf|afc|sc|sk|club|football club)\b/g, " ")
     .replace(/\bmilano\b/g, "milan")
     .replace(/\binternazionale\b/g, "inter")
+    .replace(/\bmunchen\b/g, "munich")
+    .replace(/\bmuenchen\b/g, "munich")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -149,19 +146,20 @@ function extractTickets(json: any): any[] {
 }
 
 function formatDateDdMmYyyy(date: Date): string {
-  return `${String(date.getDate()).padStart(2, "0")}/${String(
-    date.getMonth() + 1
-  ).padStart(2, "0")}/${date.getFullYear()}`;
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}/${date.getFullYear()}`;
 }
 
 function getDateRange(kickoffIso: string): { from: string; to: string } {
   const d = new Date(kickoffIso);
 
   const from = new Date(d);
-  from.setDate(from.getDate() - 3);
+  from.setDate(from.getDate() - 5);
 
   const to = new Date(d);
-  to.setDate(to.getDate() + 3);
+  to.setDate(to.getDate() + 5);
 
   return {
     from: formatDateDdMmYyyy(from),
@@ -170,23 +168,11 @@ function getDateRange(kickoffIso: string): { from: string; to: string } {
 }
 
 function eventName(ev: any): string {
-  return clean(
-    ev?.name ||
-      ev?.title ||
-      ev?.caption ||
-      ev?.eventName ||
-      ev?.meta?.title ||
-      ev?.description
-  );
+  return clean(ev?.name || ev?.title || ev?.caption || ev?.eventName || ev?.meta?.title || ev?.description);
 }
 
 function participantName(participant: any): string {
-  return clean(
-    participant?.name ||
-      participant?.title ||
-      participant?.participantName ||
-      participant?.caption
-  );
+  return clean(participant?.name || participant?.title || participant?.participantName || participant?.caption);
 }
 
 function participantId(participant: any): string {
@@ -198,19 +184,13 @@ function eventId(event: any): string {
 }
 
 function teamName(ev: any, side: "home" | "away"): string {
-  if (side === "home") {
-    return clean(ev?.homeTeam?.name || ev?.home?.name || ev?.homeName);
-  }
-
+  if (side === "home") return clean(ev?.homeTeam?.name || ev?.home?.name || ev?.homeName);
   return clean(ev?.awayTeam?.name || ev?.away?.name || ev?.awayName);
 }
 
 function participantNamesFromEvent(ev: any): string[] {
   if (!Array.isArray(ev?.participants)) return [];
-
-  return ev.participants
-    .map((participant: any) => participantName(participant))
-    .filter(Boolean);
+  return ev.participants.map((participant: any) => participantName(participant)).filter(Boolean);
 }
 
 function namesLooselyMatch(a: string, b: string): boolean {
@@ -221,28 +201,13 @@ function namesLooselyMatch(a: string, b: string): boolean {
 
   if (!aa || !bb || !ca || !cb) return false;
 
-  return (
-    aa === bb ||
-    aa.includes(bb) ||
-    bb.includes(aa) ||
-    ca === cb ||
-    ca.includes(cb) ||
-    cb.includes(ca)
-  );
+  return aa === bb || aa.includes(bb) || bb.includes(aa) || ca === cb || ca.includes(cb) || cb.includes(ca);
 }
 
 function matchEvent(ev: any, home: string, away: string): boolean {
-  const fields = [
-    eventName(ev),
-    teamName(ev, "home"),
-    teamName(ev, "away"),
-    ...participantNamesFromEvent(ev),
-  ].filter(Boolean);
+  const fields = [eventName(ev), teamName(ev, "home"), teamName(ev, "away"), ...participantNamesFromEvent(ev)].filter(Boolean);
 
-  return (
-    fields.some((field) => namesLooselyMatch(field, home)) &&
-    fields.some((field) => namesLooselyMatch(field, away))
-  );
+  return fields.some((field) => namesLooselyMatch(field, home)) && fields.some((field) => namesLooselyMatch(field, away));
 }
 
 function scoreParticipant(candidate: any, team: string): number {
@@ -285,11 +250,7 @@ function isBlockedPartnerUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     const host = parsed.hostname.toLowerCase();
-
-    return (
-      host === "tickets-partners.com" ||
-      host === "www.tickets-partners.com"
-    );
+    return host === "tickets-partners.com" || host === "www.tickets-partners.com";
   } catch {
     return false;
   }
@@ -301,10 +262,7 @@ function isUsablePublicEventUrl(value: string): boolean {
     const host = parsed.hostname.toLowerCase();
     const path = parsed.pathname.toLowerCase();
 
-    return (
-      (host === "sportsevents365.com" || host === "www.sportsevents365.com") &&
-      path.startsWith("/event/")
-    );
+    return (host === "sportsevents365.com" || host === "www.sportsevents365.com") && path.startsWith("/event/");
   } catch {
     return false;
   }
@@ -324,19 +282,11 @@ function affiliateUrlFromEvent(event: any, id: string): string {
   ].filter(Boolean);
 
   for (const rawUrl of possibleApiUrls) {
-    if (isBlockedPartnerUrl(rawUrl)) {
-      console.log("[SE365] ignored blocked partner URL", { rawUrl });
-      continue;
-    }
-
-    if (!isUsablePublicEventUrl(rawUrl)) {
-      console.log("[SE365] ignored non-public event URL", { rawUrl });
-      continue;
-    }
+    if (isBlockedPartnerUrl(rawUrl)) continue;
+    if (!isUsablePublicEventUrl(rawUrl)) continue;
 
     const parsed = new URL(rawUrl);
     if (affiliateId) parsed.searchParams.set("a_aid", affiliateId);
-
     return parsed.toString();
   }
 
@@ -362,12 +312,7 @@ function priceFromTicket(ticket: any): number | null {
 }
 
 function currencyFromTicket(ticket: any): string {
-  return (
-    clean(ticket?.currency) ||
-    clean(ticket?.priceCurrency) ||
-    clean(ticket?.ticket?.currency) ||
-    "GBP"
-  );
+  return clean(ticket?.currency) || clean(ticket?.priceCurrency) || clean(ticket?.ticket?.currency) || "GBP";
 }
 
 function formatPrice(amount: number, currency: string): string {
@@ -384,11 +329,7 @@ function extractTicketSummary(json: any): TicketSummary | null {
   const tickets = extractTickets(json);
 
   if (tickets.length === 0) {
-    return {
-      hasTickets: false,
-      priceText: null,
-      raw: json,
-    };
+    return { hasTickets: false, priceText: null, raw: json };
   }
 
   const priced = tickets
@@ -404,28 +345,22 @@ function extractTicketSummary(json: any): TicketSummary | null {
 
   return {
     hasTickets: true,
-    priceText:
-      cheapest?.price != null
-        ? formatPrice(Number(cheapest.price), cheapest.currency)
-        : "View live price",
+    priceText: cheapest?.price != null ? formatPrice(Number(cheapest.price), cheapest.currency) : "View live price",
     raw: json,
   };
 }
 
-function candidateFromEvent(
-  event: any,
-  home: string,
-  away: string,
-  ticketSummary: TicketSummary | null
-): TicketCandidate | null {
+function candidateFromEvent(event: any, home: string, away: string, ticketSummary: TicketSummary | null): TicketCandidate | null {
   const id = eventId(event);
   if (!id) return null;
+
+  const hasTicketProof = Boolean(ticketSummary?.hasTickets);
 
   return {
     provider: "sportsevents365",
     exact: true,
-    score: ticketSummary?.hasTickets ? 98 : 90,
-    rawScore: ticketSummary?.hasTickets ? 98 : 90,
+    score: hasTicketProof ? 98 : 86,
+    rawScore: hasTicketProof ? 98 : 86,
     url: affiliateUrlFromEvent(event, id),
     title: eventName(event) || `Tickets: ${home} vs ${away}`,
     priceText: ticketSummary?.priceText ?? "View live price",
@@ -441,11 +376,7 @@ async function fetchParticipantPool(): Promise<any[]> {
     return PARTICIPANT_POOL_CACHE.get(cacheKey) ?? [];
   }
 
-  const urls = [
-    new URL(`${API_BASE}/participants/top`),
-    new URL(`${API_BASE}/participants`),
-  ];
-
+  const urls = [new URL(`${API_BASE}/participants/top`), new URL(`${API_BASE}/participants`)];
   const all: any[] = [];
 
   for (const rawUrl of urls) {
@@ -477,7 +408,6 @@ async function fetchParticipantPool(): Promise<any[]> {
   }
 
   const pool = Array.from(deduped.values());
-
   PARTICIPANT_POOL_CACHE.set(cacheKey, pool);
   return pool;
 }
@@ -502,10 +432,7 @@ async function findParticipant(team: string): Promise<ParticipantMatch | null> {
   return match;
 }
 
-async function findEventsByParticipant(
-  participant: ParticipantMatch,
-  kickoffIso: string
-): Promise<EventMatch[]> {
+async function findEventsByParticipant(participant: ParticipantMatch, kickoffIso: string): Promise<EventMatch[]> {
   const { from, to } = getDateRange(kickoffIso);
   const cacheKey = `${participant.id}|${from}|${to}`;
 
@@ -558,7 +485,6 @@ async function getTicketsForEvent(eventIdValue: string): Promise<TicketSummary |
   }
 
   const url = appendApiKey(new URL(`${API_BASE}/tickets/${cacheKey}`));
-
   const result = await fetchJson(url);
   const summary = result.ok ? extractTicketSummary(result.json) : null;
 
@@ -575,14 +501,10 @@ async function getTicketsForEvent(eventIdValue: string): Promise<TicketSummary |
 
 function pickBestEvent(events: EventMatch[], home: string, away: string): EventMatch | null {
   const matches = events.filter((event) => matchEvent(event.raw, home, away));
-  if (matches.length === 0) return null;
-
-  return matches[0];
+  return matches[0] ?? null;
 }
 
-export async function resolveSe365Candidate(
-  input: TicketResolveInput
-): Promise<TicketCandidate | null> {
+export async function resolveSe365Candidate(input: TicketResolveInput): Promise<TicketCandidate | null> {
   if (!hasSe365Config()) {
     console.log("[SE365] skipped: missing config");
     return null;
@@ -604,10 +526,7 @@ export async function resolveSe365Candidate(
     apiBase: API_BASE,
   });
 
-  const [homeParticipant, awayParticipant] = await Promise.all([
-    findParticipant(home),
-    findParticipant(away),
-  ]);
+  const [homeParticipant, awayParticipant] = await Promise.all([findParticipant(home), findParticipant(away)]);
 
   if (!homeParticipant && !awayParticipant) {
     console.log("[SE365] no participants found; returning null", { home, away });
@@ -615,10 +534,7 @@ export async function resolveSe365Candidate(
   }
 
   const eventSources = [homeParticipant, awayParticipant].filter(Boolean) as ParticipantMatch[];
-
-  const eventLists = await Promise.all(
-    eventSources.map((participant) => findEventsByParticipant(participant, kickoff))
-  );
+  const eventLists = await Promise.all(eventSources.map((participant) => findEventsByParticipant(participant, kickoff)));
 
   const dedupedEvents = new Map<string, EventMatch>();
 
@@ -638,20 +554,12 @@ export async function resolveSe365Candidate(
   }
 
   const ticketSummary = await getTicketsForEvent(bestEvent.id);
-
-  if (!ticketSummary?.hasTickets) {
-    console.log("[SE365] matched event but no tickets returned; returning null", {
-      eventId: bestEvent.id,
-      name: bestEvent.name,
-    });
-    return null;
-  }
-
   const candidate = candidateFromEvent(bestEvent.raw, home, away, ticketSummary);
 
   console.log("[SE365] result", {
     found: Boolean(candidate),
     eventId: bestEvent.id,
+    hasTicketProof: Boolean(ticketSummary?.hasTickets),
     title: candidate?.title ?? null,
     url: candidate?.url ?? null,
     priceText: candidate?.priceText ?? null,
