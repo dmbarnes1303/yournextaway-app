@@ -1,6 +1,7 @@
 // src/features/fixtures/FixtureRowCard.tsx
 import React, { memo } from "react";
 import { View, Text, StyleSheet, Image, Pressable, Platform } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import GlassCard from "@/src/components/GlassCard";
 import Button from "@/src/components/Button";
@@ -18,204 +19,8 @@ type Props = {
   onPressBuildTrip: (id: string, ctx?: FixtureRouteCtx) => void;
 };
 
-type RecommendationTone = "top" | "strong" | "good";
-
 function clean(value: unknown): string {
   return String(value ?? "").trim();
-}
-
-function includesAny(text: string, terms: readonly string[]) {
-  return terms.some((term) => text.includes(term));
-}
-
-function hasRivalryBoost(home: string, away: string) {
-  const pairs: Array<readonly [string, string]> = [
-    ["arsenal", "tottenham"],
-    ["barcelona", "real madrid"],
-    ["bayern", "dortmund"],
-    ["celtic", "rangers"],
-    ["chelsea", "arsenal"],
-    ["chelsea", "tottenham"],
-    ["everton", "liverpool"],
-    ["inter", "milan"],
-    ["lazio", "roma"],
-    ["manchester city", "manchester united"],
-    ["real madrid", "atletico"],
-    ["roma", "napoli"],
-    ["tottenham", "west ham"],
-  ];
-
-  const h = home.toLowerCase();
-  const a = away.toLowerCase();
-
-  return pairs.some(([x, y]) => {
-    return (h.includes(x) && a.includes(y)) || (h.includes(y) && a.includes(x));
-  });
-}
-
-function leagueBaseScore(leagueId?: number | null) {
-  if (leagueId === 39) return 130;
-  if (leagueId === 140) return 116;
-  if (leagueId === 135) return 112;
-  if (leagueId === 78) return 104;
-  if (leagueId === 61) return 98;
-  if (leagueId === 88) return 92;
-  if (leagueId === 94) return 90;
-  return 68;
-}
-
-function kickoffTimingScore(dt: Date) {
-  const day = dt.getDay();
-  const hr = dt.getHours();
-
-  let s = 0;
-
-  if (day === 6) s += 22;
-  else if (day === 0) s += 18;
-  else if (day === 5) s += 14;
-  else if (day === 3 || day === 2) s += 6;
-  else if (day === 1 || day === 4) s += 2;
-
-  if (day === 6 && hr >= 14 && hr <= 20) s += 12;
-  else if (day === 0 && hr >= 13 && hr <= 19) s += 9;
-  else if (day === 5 && hr >= 18 && hr <= 21) s += 8;
-  else if (hr >= 17 && hr <= 21) s += 7;
-  else if (hr >= 12 && hr <= 16) s += 3;
-
-  return s;
-}
-
-const MARQUEE_TEAM_TERMS = [
-  "arsenal",
-  "aston villa",
-  "atletico",
-  "atlético",
-  "ajax",
-  "bayern",
-  "benfica",
-  "borussia dortmund",
-  "barcelona",
-  "celtic",
-  "chelsea",
-  "dortmund",
-  "fenerbahce",
-  "fenerbahçe",
-  "galatasaray",
-  "inter",
-  "juventus",
-  "lazio",
-  "liverpool",
-  "manchester city",
-  "manchester united",
-  "milan",
-  "napoli",
-  "newcastle",
-  "olympiacos",
-  "porto",
-  "psg",
-  "paris saint-germain",
-  "real madrid",
-  "roma",
-  "rangers",
-  "sl benfica",
-  "sporting",
-  "tottenham",
-  "tottenham hotspur",
-  "west ham",
-] as const;
-
-const DESTINATION_CITY_TERMS = [
-  "amsterdam",
-  "barcelona",
-  "berlin",
-  "bilbao",
-  "dortmund",
-  "florence",
-  "glasgow",
-  "istanbul",
-  "lisbon",
-  "liverpool",
-  "london",
-  "madrid",
-  "manchester",
-  "milan",
-  "munich",
-  "naples",
-  "napoli",
-  "porto",
-  "prague",
-  "rome",
-  "san sebastian",
-  "seville",
-  "turin",
-  "valencia",
-  "vienna",
-] as const;
-
-const ICONIC_VENUE_TERMS = [
-  "allianz arena",
-  "anfield",
-  "bernabeu",
-  "camp nou",
-  "celtic park",
-  "emirates",
-  "estadio da luz",
-  "ibrox",
-  "johan cruijff arena",
-  "mestalla",
-  "old trafford",
-  "olympico",
-  "san siro",
-  "signal iduna park",
-  "stamford bridge",
-  "tottenham hotspur stadium",
-  "wanda metropolitano",
-  "wembley",
-] as const;
-
-function scoreFixture(item: RankedFixtureRow): number {
-  let s = 0;
-
-  const leagueId = item?.league?.id;
-  const home = clean(item?.teams?.home?.name);
-  const away = clean(item?.teams?.away?.name);
-  const venue = clean(item?.fixture?.venue?.name);
-  const city = clean(item?.fixture?.venue?.city);
-
-  const teamsText = `${home} ${away}`.toLowerCase();
-  const locationText = `${venue} ${city}`.toLowerCase();
-
-  s += leagueBaseScore(leagueId);
-
-  if (venue) s += 10;
-  if (city) s += 8;
-  if (includesAny(teamsText, MARQUEE_TEAM_TERMS)) s += 18;
-  if (includesAny(city.toLowerCase(), DESTINATION_CITY_TERMS)) s += 16;
-  if (includesAny(locationText, ICONIC_VENUE_TERMS)) s += 14;
-  if (hasRivalryBoost(home, away)) s += 26;
-
-  const dt = item?.fixture?.date ? new Date(item.fixture.date) : null;
-  if (dt && !Number.isNaN(dt.getTime())) s += kickoffTimingScore(dt);
-
-  if (home && away) {
-    const longNames = (home.length >= 8 ? 1 : 0) + (away.length >= 8 ? 1 : 0);
-    if (longNames === 2) s += 4;
-  }
-
-  return s;
-}
-
-function getRecommendationTone(item: RankedFixtureRow): RecommendationTone {
-  const score = scoreFixture(item);
-  if (score >= 150) return "top";
-  if (score >= 110) return "strong";
-  return "good";
-}
-
-function getRecommendationCopy(tone: RecommendationTone) {
-  if (tone === "top") return { label: "Top Pick", sublabel: "Best travel angle" };
-  if (tone === "strong") return { label: "Strong Pick", sublabel: "Great weekend option" };
-  return { label: "Good Option", sublabel: "Worth a closer look" };
 }
 
 function getLocationLine(item: RankedFixtureRow) {
@@ -248,50 +53,30 @@ function Row({
     season: (item?.league as any)?.season ?? null,
   };
 
-  const tone = getRecommendationTone(item);
-  const recommendation = getRecommendationCopy(tone);
-
   return (
     <View style={styles.wrap}>
-      <GlassCard variant="glass" level="default" style={styles.card} padding={15}>
+      <GlassCard variant="glass" level="default" style={styles.card} padding={14}>
         <View style={styles.topGlow} pointerEvents="none" />
-        <View style={styles.bottomGlow} pointerEvents="none" />
+        <View style={styles.sideGlow} pointerEvents="none" />
 
         <View style={styles.topRow}>
           <View style={styles.leagueRow}>
             {leagueLogo ? <Image source={{ uri: leagueLogo }} style={styles.leagueLogo} /> : null}
             {countryCode ? <LeagueFlag code={countryCode} size="sm" /> : null}
             <Text style={styles.leagueText} numberOfLines={1}>
-              {leagueName || "League"}
+              {leagueName || "Competition"}
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.recommendationPill,
-              tone === "top"
-                ? styles.recommendationPillTop
-                : tone === "strong"
-                  ? styles.recommendationPillStrong
-                  : styles.recommendationPillGood,
-            ]}
-          >
-            <Text
-              style={[
-                styles.recommendationPillText,
-                tone === "top"
-                  ? styles.recommendationPillTextTop
-                  : tone === "strong"
-                    ? styles.recommendationPillTextStrong
-                    : styles.recommendationPillTextGood,
-              ]}
-            >
-              {recommendation.label}
+          <View style={styles.timeChip}>
+            <Ionicons name="time-outline" size={13} color={theme.colors.emeraldSoft} />
+            <Text style={styles.timeChipText} numberOfLines={1}>
+              {kickoff.time}
             </Text>
           </View>
         </View>
 
-        <View style={styles.mainRow}>
+        <View style={styles.matchRow}>
           <View style={styles.teamCol}>
             <View style={styles.crestShell}>
               <TeamCrest name={home} logo={item?.teams?.home?.logo} />
@@ -302,11 +87,18 @@ function Row({
           </View>
 
           <View style={styles.centerCol}>
-            <View style={styles.vsLine} />
-            <View style={styles.kickoffPill}>
-              <Text style={styles.kickoffText}>{kickoff.primary}</Text>
+            <Text style={styles.dateText} numberOfLines={1}>
+              {kickoff.date}
+            </Text>
+
+            <View style={styles.kickoffBox}>
+              <Text style={styles.kickoffTime}>{kickoff.time}</Text>
+              <Text style={styles.kickoffLabel}>local</Text>
             </View>
-            <Text style={styles.sublabel}>{recommendation.sublabel}</Text>
+
+            <View style={styles.vsPill}>
+              <Text style={styles.vsText}>VS</Text>
+            </View>
           </View>
 
           <View style={styles.teamCol}>
@@ -319,23 +111,30 @@ function Row({
           </View>
         </View>
 
-        {locationLine ? <Text style={styles.location}>{locationLine}</Text> : null}
+        {locationLine ? (
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={14} color={theme.colors.textMuted} />
+            <Text style={styles.location} numberOfLines={1}>
+              {locationLine}
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.actionsRow}>
           <Button
-            label="View match"
+            label="Match"
             onPress={() => onPressMatch(fixtureId, routeCtx)}
             tone="primary"
             size="sm"
-            style={styles.primaryButton}
+            style={styles.actionButton}
           />
 
           <Button
-            label="Plan trip"
+            label="Trip"
             onPress={() => onPressBuildTrip(fixtureId, routeCtx)}
             tone="secondary"
             size="sm"
-            style={styles.secondaryButton}
+            style={styles.actionButton}
           />
 
           <Pressable
@@ -347,8 +146,13 @@ function Row({
             ]}
             hitSlop={8}
           >
+            <Ionicons
+              name={isFollowed ? "notifications" : "notifications-outline"}
+              size={14}
+              color={isFollowed ? theme.badge.textEmerald : theme.colors.textSecondary}
+            />
             <Text style={[styles.followText, isFollowed && styles.followTextActive]}>
-              {isFollowed ? "Following" : "Follow"}
+              Follow
             </Text>
           </Pressable>
         </View>
@@ -376,23 +180,23 @@ const styles = StyleSheet.create({
 
   topGlow: {
     position: "absolute",
-    left: -40,
-    right: -40,
-    top: -80,
-    height: 120,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.025)",
+    left: -24,
+    right: -24,
+    top: -82,
+    height: 116,
+    borderRadius: theme.borderRadius.pill,
+    backgroundColor: "rgba(255,255,255,0.028)",
   },
 
-  bottomGlow: {
+  sideGlow: {
     position: "absolute",
-    left: 18,
-    right: 18,
-    bottom: -18,
-    height: 58,
+    right: -38,
+    top: 34,
+    bottom: 34,
+    width: 84,
     borderRadius: theme.borderRadius.pill,
     backgroundColor: theme.colors.glowEmerald,
-    opacity: 0.52,
+    opacity: 0.35,
   },
 
   topRow: {
@@ -420,49 +224,29 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.tiny,
+    lineHeight: 14,
     fontWeight: theme.fontWeight.black,
   },
 
-  recommendationPill: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  timeChip: {
+    minHeight: 30,
+    paddingHorizontal: 9,
     borderRadius: theme.borderRadius.pill,
-    borderWidth: 1,
-  },
-
-  recommendationPillTop: {
-    backgroundColor: theme.badge.bgGold,
-    borderColor: theme.badge.borderGold,
-  },
-
-  recommendationPillStrong: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     backgroundColor: theme.badge.bgEmerald,
+    borderWidth: 1,
     borderColor: theme.badge.borderEmerald,
   },
 
-  recommendationPillGood: {
-    backgroundColor: theme.badge.bgNeutral,
-    borderColor: theme.badge.borderNeutral,
-  },
-
-  recommendationPillText: {
+  timeChipText: {
+    color: theme.badge.textEmerald,
     fontSize: theme.fontSize.tiny,
     fontWeight: theme.fontWeight.black,
   },
 
-  recommendationPillTextTop: {
-    color: theme.badge.textGold,
-  },
-
-  recommendationPillTextStrong: {
-    color: theme.badge.textEmerald,
-  },
-
-  recommendationPillTextGood: {
-    color: theme.badge.textNeutral,
-  },
-
-  mainRow: {
+  matchRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -476,12 +260,12 @@ const styles = StyleSheet.create({
   },
 
   crestShell: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
+    width: 58,
+    height: 58,
+    borderRadius: 19,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.04)",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.24)" : "rgba(255,255,255,0.04)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
   },
@@ -495,51 +279,85 @@ const styles = StyleSheet.create({
   },
 
   centerCol: {
-    width: 104,
+    width: 96,
+    alignItems: "center",
+    gap: 7,
+  },
+
+  dateText: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.25,
+  },
+
+  kickoffBox: {
+    minWidth: 74,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.24)" : "rgba(255,255,255,0.045)",
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+  },
+
+  kickoffTime: {
+    color: theme.colors.textPrimary,
+    fontSize: 16,
+    lineHeight: 19,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.1,
+  },
+
+  kickoffLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: theme.fontWeight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+
+  vsPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.borderRadius.pill,
+    backgroundColor: theme.badge.bgNeutral,
+    borderWidth: 1,
+    borderColor: theme.badge.borderNeutral,
+  },
+
+  vsText: {
+    color: theme.colors.textMuted,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.5,
+  },
+
+  locationRow: {
+    minHeight: 28,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-
-  vsLine: {
-    width: 34,
-    height: 2,
-    borderRadius: theme.borderRadius.pill,
-    backgroundColor: theme.colors.borderStrong,
-  },
-
-  kickoffPill: {
-    minHeight: 34,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: theme.borderRadius.pill,
     backgroundColor: Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  kickoffText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    fontWeight: theme.fontWeight.black,
-    textAlign: "center",
-  },
-
-  sublabel: {
-    color: theme.colors.textMuted,
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: theme.fontWeight.bold,
-    textAlign: "center",
   },
 
   location: {
+    flex: 1,
     color: theme.colors.textSecondary,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 15,
     fontWeight: theme.fontWeight.bold,
-    textAlign: "center",
   },
 
   actionsRow: {
@@ -548,20 +366,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  primaryButton: {
-    flex: 1.15,
-  },
-
-  secondaryButton: {
+  actionButton: {
     flex: 1,
+    minWidth: 0,
   },
 
   followPill: {
-    minHeight: 36,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    minHeight: 40,
+    paddingHorizontal: 10,
+    borderRadius: theme.borderRadius.button,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 5,
     backgroundColor: Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
