@@ -1,13 +1,7 @@
+import crypto from "node:crypto";
+
 import { env, hasFtnConfig } from "../../lib/env.js";
 import { getPreferredTeamName } from "./teamAliases.js";
-
-/**
- * FTN strategy for now:
- * - Use FTN API only to find the correct event page slug/path
- * - Monetisation is done with the affiliate query param ?aff=yournextaway
- * - Do NOT guess event ids for public URLs
- * - Do NOT use marketplace/search fallback when we can build the exact match page
- */
 
 const FTN_FETCH_TIMEOUT_MS = 7000;
 const FTN_BASE_PUBLIC_URL = "https://www.footballticketnet.com";
@@ -19,9 +13,7 @@ function clean(value) {
 }
 
 function stripAccents(value) {
-  return clean(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  return clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 function normalizeName(value) {
@@ -29,34 +21,23 @@ function normalizeName(value) {
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9\s-]/g, " ")
-    .replace(/\bfc\b/g, " ")
-    .replace(/\bcf\b/g, " ")
-    .replace(/\bac\b/g, " ")
-    .replace(/\bafc\b/g, " ")
-    .replace(/\bsc\b/g, " ")
-    .replace(/\bsk\b/g, " ")
-    .replace(/\bclub\b/g, " ")
-    .replace(/\bthe\b/g, " ")
+    .replace(/\b(fc|cf|ac|afc|sc|sk|club|the)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function slugify(value) {
-  return stripAccents(value)
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9\s-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\s/g, "-");
 }
 
 function safeDate(value) {
   const raw = clean(value);
   if (!raw) return null;
-
   const d = new Date(raw);
   return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function formatDdMmYyyy(date) {
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getUTCFullYear());
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 function toUtcDayStart(date) {
@@ -67,21 +48,6 @@ function absDays(a, b) {
   return Math.floor(Math.abs(toUtcDayStart(a) - toUtcDayStart(b)) / 86400000);
 }
 
-function buildFtnHash({ username, action, timestamp, secret, eventId = "" }) {
-  const payload = eventId
-    ? `${username}-${action}-${eventId}-${timestamp}-${secret}`
-    : `${username}-${action}-${timestamp}-${secret}`;
-
-  return crypto.subtle
-    ? null
-    : null;
-}
-
-/**
- * Node has crypto built in. Keep it local here so this file stays self-contained.
- */
-import crypto from "node:crypto";
-
 function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
@@ -91,7 +57,6 @@ function buildListEventsUrl(input) {
   const secret = clean(env.ftnAffiliateSecret);
   const action = "list_events";
   const timestamp = Math.floor(Date.now() / 1000);
-
   const hash = sha256(`${username}-${action}-${timestamp}-${secret}`);
 
   const url = new URL(clean(env.ftnBaseUrl) || `${FTN_BASE_PUBLIC_URL}/api`);
@@ -103,10 +68,10 @@ function buildListEventsUrl(input) {
   const kickoff = safeDate(input.kickoffIso);
   if (kickoff) {
     const from = new Date(kickoff);
-    from.setUTCDate(from.getUTCDate() - 2);
+    from.setUTCDate(from.getUTCDate() - 3);
 
     const to = new Date(kickoff);
-    to.setUTCDate(to.getUTCDate() + 2);
+    to.setUTCDate(to.getUTCDate() + 3);
 
     url.searchParams.set("from_date", formatDdMmYyyy(from));
     url.searchParams.set("to_date", formatDdMmYyyy(to));
@@ -121,13 +86,6 @@ function buildListEventsUrl(input) {
   return url.toString();
 }
 
-function formatDdMmYyyy(date) {
-  const dd = String(date.getUTCDate()).padStart(2, "0");
-  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const yyyy = String(date.getUTCFullYear());
-  return `${dd}-${mm}-${yyyy}`;
-}
-
 async function fetchText(url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FTN_FETCH_TIMEOUT_MS);
@@ -136,25 +94,17 @@ async function fetchText(url) {
     const res = await fetch(url, {
       method: "GET",
       signal: controller.signal,
-      headers: {
-        Accept: "application/json,text/plain,*/*",
-      },
+      headers: { Accept: "application/json,text/plain,*/*" },
     });
-
-    const body = await res.text().catch(() => "");
 
     return {
       ok: res.ok,
       status: res.status,
-      body,
+      body: await res.text().catch(() => ""),
     };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      return {
-        ok: false,
-        status: 408,
-        body: "",
-      };
+      return { ok: false, status: 408, body: "" };
     }
     throw error;
   } finally {
@@ -172,21 +122,21 @@ function parseJsonSafe(body) {
 
 function extractEvents(payload) {
   if (!payload) return [];
-
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload.events)) return payload.events;
   if (Array.isArray(payload.data)) return payload.data;
   if (Array.isArray(payload.items)) return payload.items;
-
+  if (Array.isArray(payload.result)) return payload.result;
+  if (Array.isArray(payload.results)) return payload.results;
   return [];
 }
 
 function eventId(ev) {
-  return clean(ev?.event_id ?? ev?.id);
+  return clean(ev?.event_id ?? ev?.eventId ?? ev?.id);
 }
 
 function eventName(ev) {
-  return clean(ev?.event_name ?? ev?.name ?? ev?.title);
+  return clean(ev?.event_name ?? ev?.eventName ?? ev?.name ?? ev?.title);
 }
 
 function eventDate(ev) {
@@ -194,11 +144,11 @@ function eventDate(ev) {
 }
 
 function eventHomeName(ev) {
-  return clean(ev?.home_team_name ?? ev?.homeTeamName ?? ev?.home_team ?? ev?.home);
+  return clean(ev?.home_team_name ?? ev?.homeTeamName ?? ev?.home_team ?? ev?.home?.name ?? ev?.home);
 }
 
 function eventAwayName(ev) {
-  return clean(ev?.away_team_name ?? ev?.awayTeamName ?? ev?.away_team ?? ev?.away);
+  return clean(ev?.away_team_name ?? ev?.awayTeamName ?? ev?.away_team ?? ev?.away?.name ?? ev?.away);
 }
 
 function eventLeagueName(ev) {
@@ -206,12 +156,22 @@ function eventLeagueName(ev) {
 }
 
 function eventUrl(ev) {
-  return clean(ev?.event_url ?? ev?.url ?? ev?.link);
+  return clean(ev?.event_url ?? ev?.eventUrl ?? ev?.url ?? ev?.link ?? ev?.pageUrl ?? ev?.publicUrl);
+}
+
+function isSafeFtnUrl(value) {
+  try {
+    const url = new URL(value.startsWith("http") ? value : `${FTN_BASE_PUBLIC_URL}${value}`);
+    const host = url.hostname.toLowerCase();
+    return host === "footballticketnet.com" || host === "www.footballticketnet.com";
+  } catch {
+    return false;
+  }
 }
 
 function appendAffiliate(urlValue) {
   const raw = clean(urlValue);
-  if (!raw) return "";
+  if (!raw || !isSafeFtnUrl(raw)) return "";
 
   try {
     const url = new URL(raw.startsWith("http") ? raw : `${FTN_BASE_PUBLIC_URL}${raw}`);
@@ -222,23 +182,13 @@ function appendAffiliate(urlValue) {
   }
 }
 
-function buildPublicEventUrlFromSlugParts(input) {
-  const leagueSlug = slugify(input.leagueName || "football-tickets");
-  const homeSlug = slugify(getPreferredTeamName(input.homeName));
-  const awaySlug = slugify(getPreferredTeamName(input.awayName));
-
-  if (!homeSlug || !awaySlug) return "";
-
-  return `${FTN_BASE_PUBLIC_URL}/${leagueSlug}/${homeSlug}-vs-${awaySlug}`;
-}
-
 function scoreNameMatch(candidate, target) {
   const c = normalizeName(candidate);
   const t = normalizeName(target);
 
   if (!c || !t) return 0;
   if (c === t) return 100;
-  if (c.includes(t) || t.includes(c)) return 80;
+  if (c.includes(t) || t.includes(c)) return 82;
 
   const cTokens = new Set(c.split(" ").filter(Boolean));
   const tTokens = t.split(" ").filter(Boolean);
@@ -250,57 +200,49 @@ function scoreNameMatch(candidate, target) {
     if (cTokens.has(token)) matched += 1;
   }
 
-  return Math.round((matched / tTokens.length) * 70);
+  return Math.round((matched / tTokens.length) * 72);
 }
 
 function scoreEvent(ev, input) {
-  let score = 0;
+  const name = eventName(ev);
+  const home = eventHomeName(ev);
+  const away = eventAwayName(ev);
 
-  const homeScore = scoreNameMatch(eventHomeName(ev) || eventName(ev), input.homeName);
-  const awayScore = scoreNameMatch(eventAwayName(ev) || eventName(ev), input.awayName);
-  const titleHomeScore = scoreNameMatch(eventName(ev), input.homeName);
-  const titleAwayScore = scoreNameMatch(eventName(ev), input.awayName);
-
-  const bestHome = Math.max(homeScore, titleHomeScore);
-  const bestAway = Math.max(awayScore, titleAwayScore);
+  const bestHome = Math.max(scoreNameMatch(home || name, input.homeName), scoreNameMatch(name, input.homeName));
+  const bestAway = Math.max(scoreNameMatch(away || name, input.awayName), scoreNameMatch(name, input.awayName));
 
   if (bestHome < 70 || bestAway < 70) return -1000;
 
-  score += bestHome + bestAway;
+  let score = bestHome + bestAway;
 
   const kickoff = safeDate(input.kickoffIso);
   const evDt = safeDate(eventDate(ev));
 
   if (kickoff && evDt) {
     const diff = absDays(kickoff, evDt);
-    if (diff === 0) score += 40;
-    else if (diff === 1) score += 20;
-    else if (diff === 2) score += 5;
+    if (diff === 0) score += 45;
+    else if (diff === 1) score += 25;
+    else if (diff <= 3) score += 10;
     else return -1000;
   }
 
   const league = normalizeName(input.leagueName);
   const evLeague = normalizeName(eventLeagueName(ev));
-  if (league && evLeague && (league.includes(evLeague) || evLeague.includes(league))) {
-    score += 15;
-  }
+  if (league && evLeague && (league.includes(evLeague) || evLeague.includes(league))) score += 15;
 
-  if (eventUrl(ev)) score += 10;
+  if (eventUrl(ev)) score += 20;
   if (eventId(ev)) score += 5;
 
   return score;
 }
 
 function pickBestEvent(events, input) {
-  const scored = events
-    .map((ev) => ({
-      ev,
-      score: scoreEvent(ev, input),
-    }))
-    .filter((x) => x.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  return scored[0] ?? null;
+  return (
+    events
+      .map((ev) => ({ ev, score: scoreEvent(ev, input) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)[0] ?? null
+  );
 }
 
 export async function resolveFtnCandidate(input) {
@@ -312,107 +254,48 @@ export async function resolveFtnCandidate(input) {
   const homeName = clean(getPreferredTeamName(input.homeName));
   const awayName = clean(getPreferredTeamName(input.awayName));
   const kickoffIso = clean(input.kickoffIso);
+  const leagueName = clean(input.leagueName);
 
   if (!homeName || !awayName || !kickoffIso) {
-    console.log("[FTN] skipped: missing required input", {
-      homeName,
-      awayName,
-      kickoffIso,
+    console.log("[FTN] skipped: missing required input", { homeName, awayName, kickoffIso });
+    return null;
+  }
+
+  const apiUrl = buildListEventsUrl({ homeName, awayName, kickoffIso, leagueName });
+  const res = await fetchText(apiUrl);
+
+  if (!res.ok) {
+    console.log("[FTN] list_events failed; no guessed fallback returned", {
+      status: res.status,
+      body: res.body.slice(0, 500),
     });
     return null;
   }
 
-  const apiUrl = buildListEventsUrl({
-    homeName,
-    awayName,
-    kickoffIso,
-    leagueName: clean(input.leagueName),
-  });
-
-  const res = await fetchText(apiUrl);
-
-  if (!res.ok) {
-    console.log("[FTN] list_events failed", {
-      status: res.status,
-      url: apiUrl,
-      body: res.body.slice(0, 500),
-    });
-
-    const fallbackUrl = appendAffiliate(
-      buildPublicEventUrlFromSlugParts({
-        homeName,
-        awayName,
-        leagueName: clean(input.leagueName) || "italian-serie-a",
-      })
-    );
-
-    if (!fallbackUrl) return null;
-
-    return {
-      provider: "footballticketnet",
-      exact: false,
-      score: 20,
-      rawScore: 20,
-      url: fallbackUrl,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "search_fallback",
-      urlQuality: "listing",
-    };
-  }
-
   const parsed = parseJsonSafe(res.body);
   const events = extractEvents(parsed);
-
-  const best = pickBestEvent(events, {
-    homeName,
-    awayName,
-    kickoffIso,
-    leagueName: clean(input.leagueName),
-  });
+  const best = pickBestEvent(events, { homeName, awayName, kickoffIso, leagueName });
 
   if (!best) {
-    const fallbackUrl = appendAffiliate(
-      buildPublicEventUrlFromSlugParts({
-        homeName,
-        awayName,
-        leagueName: clean(input.leagueName) || "italian-serie-a",
-      })
-    );
-
-    if (!fallbackUrl) return null;
-
-    console.log("[FTN] no strong API match, using slug fallback", {
-      fallbackUrl,
+    console.log("[FTN] no API event match; no guessed fallback returned", {
       homeName,
       awayName,
-      leagueName: clean(input.leagueName),
+      leagueName,
+      eventsChecked: events.length,
     });
-
-    return {
-      provider: "footballticketnet",
-      exact: false,
-      score: 24,
-      rawScore: 24,
-      url: fallbackUrl,
-      title: `Tickets: ${homeName} vs ${awayName}`,
-      priceText: null,
-      reason: "partial_match",
-      urlQuality: "listing",
-    };
+    return null;
   }
 
-  const directEventUrl =
-    appendAffiliate(eventUrl(best.ev)) ||
-    appendAffiliate(
-      buildPublicEventUrlFromSlugParts({
-        homeName,
-        awayName,
-        leagueName: clean(input.leagueName) || "italian-serie-a",
-      })
-    );
+  const directEventUrl = appendAffiliate(eventUrl(best.ev));
 
-  if (!directEventUrl) return null;
+  if (!directEventUrl) {
+    console.log("[FTN] matched event but no safe public URL returned", {
+      id: eventId(best.ev) || null,
+      name: eventName(best.ev) || null,
+      rawUrl: eventUrl(best.ev) || null,
+    });
+    return null;
+  }
 
   console.log("[FTN] matched event", {
     id: eventId(best.ev) || null,
@@ -424,13 +307,13 @@ export async function resolveFtnCandidate(input) {
 
   return {
     provider: "footballticketnet",
-    exact: best.score >= 180,
+    exact: best.score >= 185,
     score: best.score,
     rawScore: best.score,
     url: directEventUrl,
-    title: `Tickets: ${homeName} vs ${awayName}`,
+    title: eventName(best.ev) || `Tickets: ${homeName} vs ${awayName}`,
     priceText: null,
-    reason: best.score >= 180 ? "exact_event" : "partial_match",
-    urlQuality: "listing",
+    reason: best.score >= 185 ? "exact_event" : "partial_match",
+    urlQuality: "event",
   };
 }
