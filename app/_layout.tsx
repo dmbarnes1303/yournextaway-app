@@ -59,6 +59,7 @@ export default function RootLayout() {
 
     const unsubscribe = registerReturnModalHandler((itemId, click) => {
       if (!mountedRef.current) return;
+
       setModalItemId(String(itemId ?? "").trim() || null);
       setModalClick(click ?? null);
     });
@@ -82,7 +83,7 @@ export default function RootLayout() {
 
       closePartnerModal();
 
-      if (request && mountedRef.current) {
+      if (request && !request.hasProof && mountedRef.current) {
         setProofRequest(request);
       }
     } catch {
