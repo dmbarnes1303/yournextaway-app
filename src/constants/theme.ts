@@ -1,187 +1,170 @@
 // src/constants/theme.ts
 
 /**
- * YourNextAway Theme (V3 — Emerald / Gold Premium Travel Sport, 2026)
+ * YourNextAway Theme (V4 — Locked Launch System)
  *
- * Design system rules:
- * - Dark-first product shell
- * - Premium football-travel identity aligned to the new logo
- * - Emerald is the primary action colour
- * - Gold is the premium / highlight / occasion colour
- * - Blue is removed from the core brand system
- * - Surfaces should feel rich, sharp and controlled — not generic glass
- * - Matte dark foundations, with selective glow and badge accents
+ * Source of truth: YourNextAway logo
+ *
+ * Principles:
+ * - Matte black foundation
+ * - Emerald = action / alive / travel momentum
+ * - Gold = premium / highlight / standout moments
+ * - No random colour usage in screens
+ * - Surfaces must feel sharp, not washed-out glass
  */
 
 export const theme = {
   colors: {
     // ------------------------------------------------------------------
-    // Core backgrounds
+    // Base
     // ------------------------------------------------------------------
     bgBase: "#050505",
-    bgSurface: "#0B0F14",
-    bgElevated: "#11161C",
-    bgPressed: "#171D24",
+    bgSurface: "#0A0E12",
+    bgElevated: "#10161C",
+    bgPressed: "#161D24",
 
-    // Section / branded dark tints
-    bgBrandDeep: "#07110B",
-    bgBrandElevated: "#0D1811",
-    bgGoldDeep: "#171308",
+    // Brand-tinted surfaces
+    bgBrand: "#0B1A12",
+    bgBrandElevated: "#10261A",
+    bgGold: "#171308",
 
     // Overlays
-    overlay: "rgba(5,7,8,0.72)",
-    overlayStrong: "rgba(4,5,6,0.84)",
-    overlayLight: "rgba(9,11,12,0.56)",
+    overlay: "rgba(0,0,0,0.55)",
+    overlayStrong: "rgba(0,0,0,0.75)",
+    overlaySoft: "rgba(0,0,0,0.35)",
 
     // ------------------------------------------------------------------
     // Text
     // ------------------------------------------------------------------
     textPrimary: "#F5F7F6",
-    textSecondary: "#B7C0B8",
-    textMuted: "#7C867D",
-    textOnBrand: "#041008",
-    textOnGold: "#171308",
+    textSecondary: "#AEB8AF",
+    textMuted: "#6F7A72",
+
+    textOnBrand: "#031008",
+    textOnGold: "#1A1406",
 
     // ------------------------------------------------------------------
     // Brand
     // ------------------------------------------------------------------
-    accentGreen: "#22C55E",
-    accentGreenStrong: "#16A34A",
-    accentGreenSoft: "#86EFAC",
+    emerald: "#22C55E",
+    emeraldStrong: "#16A34A",
+    emeraldSoft: "#86EFAC",
 
-    accentGold: "#FACC15",
-    accentGoldStrong: "#EAB308",
-    accentGoldSoft: "#FDE68A",
+    gold: "#FACC15",
+    goldStrong: "#EAB308",
+    goldSoft: "#FDE68A",
 
-    accentNeutral: "#D9E1DA",
+    neutral: "#D6DDD7",
 
-    // Branded tints
-    tintGreenDeep: "#0B1D12",
-    tintGreenSoft: "#153222",
-    tintGoldDeep: "#221A07",
-    tintGoldSoft: "#3A2C0B",
-    tintNeutralDeep: "#0F1311",
-    tintNeutralSoft: "#1A211C",
+    // ------------------------------------------------------------------
+    // Borders
+    // ------------------------------------------------------------------
+    borderSubtle: "rgba(255,255,255,0.06)",
+    borderStrong: "rgba(255,255,255,0.12)",
+
+    borderEmerald: "rgba(34,197,94,0.28)",
+    borderGold: "rgba(250,204,21,0.28)",
+
+    // ------------------------------------------------------------------
+    // Glow (STRICT USAGE)
+    // ------------------------------------------------------------------
+    glowEmerald: "rgba(34,197,94,0.18)",
+    glowGold: "rgba(250,204,21,0.16)",
 
     // ------------------------------------------------------------------
     // Semantic
     // ------------------------------------------------------------------
     success: "#22C55E",
-    info: "#38BDF8",
     warning: "#FACC15",
     error: "#E05252",
-
-    // ------------------------------------------------------------------
-    // Borders / dividers
-    // ------------------------------------------------------------------
-    borderSubtle: "rgba(245,247,246,0.08)",
-    borderStrong: "rgba(245,247,246,0.14)",
-    dividerSubtle: "rgba(245,247,246,0.07)",
-
-    borderGreenSoft: "rgba(34,197,94,0.22)",
-    borderGreenStrong: "rgba(34,197,94,0.38)",
-    borderGoldSoft: "rgba(250,204,21,0.22)",
-    borderGoldStrong: "rgba(250,204,21,0.36)",
-
-    glowGreen: "rgba(34,197,94,0.16)",
-    glowGold: "rgba(250,204,21,0.16)",
-
-    // ------------------------------------------------------------------
-    // Backwards-compatible aliases
-    // ------------------------------------------------------------------
-    background: "#050505",
-    backgroundSecondary: "#0B0F14",
-
-    text: "#F5F7F6",
-    textTertiary: "#7C867D",
-
-    primary: "#22C55E",
-    primaryDark: "rgba(34,197,94,0.78)",
-    primaryLight: "rgba(134,239,172,0.96)",
-
-    accent: "#FACC15",
-
-    border: "rgba(245,247,246,0.08)",
-    divider: "rgba(245,247,246,0.07)",
   },
 
   /**
-   * Legacy "glass" tokens.
-   * Keep these for backwards compatibility while screens are migrated.
-   * Target feel: controlled matte translucency, not washed-out blur.
+   * Glass system — controlled, not washed out
    */
   glass: {
-    border: "rgba(245,247,246,0.10)",
-    iosBg: {
-      subtle: "rgba(255,255,255,0.035)",
-      default: "rgba(255,255,255,0.05)",
-      strong: "rgba(255,255,255,0.07)",
+    border: "rgba(255,255,255,0.08)",
+
+    bg: {
+      subtle: "rgba(255,255,255,0.025)",
+      default: "rgba(255,255,255,0.04)",
+      strong: "rgba(255,255,255,0.06)",
     },
-    androidBg: {
-      subtle: "rgba(0,0,0,0.18)",
-      default: "rgba(0,0,0,0.24)",
-      strong: "rgba(0,0,0,0.3)",
+
+    android: {
+      subtle: "rgba(0,0,0,0.25)",
+      default: "rgba(0,0,0,0.35)",
+      strong: "rgba(0,0,0,0.45)",
     },
   },
 
   /**
-   * New badge / surface tokens for the updated visual system.
+   * Surfaces (used everywhere instead of random rgba)
    */
   surfaces: {
-    card: "#0B0F14",
-    cardElevated: "#11161C",
-    cardPressed: "#171D24",
-    cardBrand: "#0D1811",
-    cardGold: "#171308",
+    base: "#0A0E12",
+    elevated: "#10161C",
+    brand: "#0B1A12",
+    gold: "#171308",
   },
 
+  /**
+   * Gradients (use sparingly)
+   */
   gradients: {
-    green: ["#16A34A", "#22C55E", "#86EFAC"] as const,
-    gold: ["#CA8A04", "#EAB308", "#FACC15"] as const,
-    dark: ["#050505", "#0B0F14", "#11161C"] as const,
-    brand: ["#07110B", "#0D1811", "#11161C"] as const,
+    emerald: ["#16A34A", "#22C55E"] as const,
+    gold: ["#CA8A04", "#FACC15"] as const,
+    dark: ["#050505", "#0A0E12"] as const,
   },
 
+  /**
+   * Badge system
+   */
   badge: {
-    bgGreen: "rgba(34,197,94,0.12)",
+    bgEmerald: "rgba(34,197,94,0.12)",
     bgGold: "rgba(250,204,21,0.12)",
-    bgNeutral: "rgba(255,255,255,0.05)",
+    bgNeutral: "rgba(255,255,255,0.04)",
 
-    borderGreen: "rgba(34,197,94,0.26)",
+    borderEmerald: "rgba(34,197,94,0.28)",
     borderGold: "rgba(250,204,21,0.28)",
     borderNeutral: "rgba(255,255,255,0.10)",
 
-    textGreen: "#86EFAC",
+    textEmerald: "#86EFAC",
     textGold: "#FDE68A",
     textNeutral: "#D6DDD7",
   },
 
+  /**
+   * Shadows — subtle only
+   */
   shadow: {
-    greenGlow: {
-      shadowColor: "#22C55E",
-      shadowOpacity: 0.18,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 8,
-    },
-    goldGlow: {
-      shadowColor: "#FACC15",
-      shadowOpacity: 0.16,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 8,
-    },
     soft: {
-      shadowColor: "#000000",
-      shadowOpacity: 0.24,
+      shadowColor: "#000",
+      shadowOpacity: 0.25,
       shadowRadius: 14,
       shadowOffset: { width: 0, height: 6 },
       elevation: 6,
     },
+
+    emeraldGlow: {
+      shadowColor: "#22C55E",
+      shadowOpacity: 0.18,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 8,
+    },
+
+    goldGlow: {
+      shadowColor: "#FACC15",
+      shadowOpacity: 0.16,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 8,
+    },
   },
 
   // ------------------------------------------------------------------
-  // Strict layout scales
+  // Layout system
   // ------------------------------------------------------------------
   spacing: {
     xxs: 4,
@@ -191,23 +174,14 @@ export const theme = {
     lg: 20,
     xl: 24,
     xxl: 32,
-    xxxl: 40,
   },
 
   borderRadius: {
+    card: 20,
     button: 14,
     input: 14,
-    card: 18,
-    sheet: 24,
-    badge: 12,
-    pill: 9999,
-
-    // Backwards-compatible keys
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 24,
-    full: 9999,
+    pill: 999,
+    sheet: 26,
   },
 
   fontSize: {
@@ -215,17 +189,8 @@ export const theme = {
     h1: 24,
     h2: 20,
     body: 16,
-    meta: 14,
-    tiny: 12,
-
-    // Backwards-compatible keys
-    xs: 12,
-    sm: 14,
-    md: 16,
-    lg: 18,
-    xl: 24,
-    xxl: 32,
-    xxxl: 40,
+    meta: 13,
+    tiny: 11,
   },
 
   fontWeight: {
