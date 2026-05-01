@@ -6,7 +6,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 
 import Background from "@/src/components/Background";
 import EmptyState from "@/src/components/EmptyState";
-import GlassCard from "@/src/components/GlassCard";
 
 import { theme } from "@/src/constants/theme";
 
@@ -159,14 +158,6 @@ export default function FixturesScreen() {
     ? "Selected fixtures for a stacked football trip."
     : subtitleText;
 
-  const derivedSummaryTitle = comboMode
-    ? `${visibleRows.length} selected match${visibleRows.length === 1 ? "" : "es"}`
-    : matchesSummaryTitle;
-
-  const derivedSummaryLine = comboMode
-    ? `${headerDateLine} • Combo view`
-    : matchesSummaryLine || helperLineText;
-
   const goMatch = useCallback(
     (id: string, ctx?: { leagueId?: number | null; season?: number | null }) => {
       const fid = cleanString(id);
@@ -224,62 +215,40 @@ export default function FixturesScreen() {
 
   const hasRows = visibleRows.length > 0;
   const showInitialLoading = loading && !hasRows;
-  const showInlineRefresh = backgroundLoading && hasRows;
   const showHardError = !!error && !hasRows;
   const showEmpty = !loading && !error && !hasRows;
 
   const headerComponent = useMemo(
     () => (
       <View style={styles.headerWrap}>
-        <GlassCard variant="glass" level="default" style={styles.headerCard} padding={14}>
-          <FixturesHeader
-            query={query}
-            setQuery={setQuery}
-            stripDays={stripDays}
-            isRange={isRange}
-            selectedDay={selectedDay}
-            onTapStripDate={onTapStripDate}
-            openCalendar={openCalendar}
-            allLeagues={allLeagues}
-            selectedLeagueIds={selectedLeagueIds}
-            selectedLeagues={selectedLeagues}
-            toggleLeague={toggleLeague}
-            selectSingleLeague={selectSingleLeague}
-            selectAllLeagues={selectAllLeagues}
-            clearLeagues={clearLeagues}
-            resetToFeatured={resetToFeatured}
-            competitionSummaryText={competitionSummaryText}
-            titleText={derivedTitleText}
-            subtitleText={derivedSubtitleText}
-            helperLineText={helperLineText}
-            headerDateLine={headerDateLine}
-            loading={loading && !hasRows}
-            backgroundLoading={backgroundLoading}
-            loadedLeagueCount={loadedLeagueCount}
-            totalLeagueCount={totalLeagueCount}
-            error={error}
-            filteredCount={visibleRows.length}
-          />
-        </GlassCard>
-
-        {!showInitialLoading && !showHardError ? (
-          <View style={styles.summaryRow}>
-            <GlassCard variant="brand" level="default" style={styles.summaryCard} padding={13}>
-              <View style={styles.summaryTopRow}>
-                <View style={styles.summaryCopy}>
-                  <Text style={styles.summaryTitle}>{derivedSummaryTitle}</Text>
-                  <Text style={styles.summaryText}>{derivedSummaryLine}</Text>
-                </View>
-
-                {showInlineRefresh ? (
-                  <View style={styles.summaryLivePill}>
-                    <ActivityIndicator size="small" color={theme.colors.emeraldSoft} />
-                  </View>
-                ) : null}
-              </View>
-            </GlassCard>
-          </View>
-        ) : null}
+        <FixturesHeader
+          query={query}
+          setQuery={setQuery}
+          stripDays={stripDays}
+          isRange={isRange}
+          selectedDay={selectedDay}
+          onTapStripDate={onTapStripDate}
+          openCalendar={openCalendar}
+          allLeagues={allLeagues}
+          selectedLeagueIds={selectedLeagueIds}
+          selectedLeagues={selectedLeagues}
+          toggleLeague={toggleLeague}
+          selectSingleLeague={selectSingleLeague}
+          selectAllLeagues={selectAllLeagues}
+          clearLeagues={clearLeagues}
+          resetToFeatured={resetToFeatured}
+          competitionSummaryText={competitionSummaryText}
+          titleText={derivedTitleText}
+          subtitleText={derivedSubtitleText}
+          helperLineText={helperLineText}
+          headerDateLine={headerDateLine}
+          loading={loading && !hasRows}
+          backgroundLoading={backgroundLoading}
+          loadedLeagueCount={loadedLeagueCount}
+          totalLeagueCount={totalLeagueCount}
+          error={error}
+          filteredCount={visibleRows.length}
+        />
       </View>
     ),
     [
@@ -310,11 +279,6 @@ export default function FixturesScreen() {
       totalLeagueCount,
       error,
       visibleRows.length,
-      showInitialLoading,
-      showHardError,
-      derivedSummaryTitle,
-      derivedSummaryLine,
-      showInlineRefresh,
     ]
   );
 
@@ -322,7 +286,7 @@ export default function FixturesScreen() {
     if (showInitialLoading) {
       return (
         <View style={[styles.content, styles.listWrap]}>
-          <GlassCard variant="brand" level="default" style={styles.loadingCard}>
+          <View style={styles.loadingCard}>
             <View style={styles.center}>
               <Text style={styles.loadingEyebrow}>Finding matches</Text>
               <ActivityIndicator color={theme.colors.gold} />
@@ -331,7 +295,7 @@ export default function FixturesScreen() {
                 Starting with Europe and the major leagues so matches appear faster.
               </Text>
             </View>
-          </GlassCard>
+          </View>
         </View>
       );
     }
@@ -339,13 +303,13 @@ export default function FixturesScreen() {
     if (showHardError) {
       return (
         <View style={[styles.content, styles.listWrap]}>
-          <GlassCard variant="gold" level="default" style={styles.stateCard}>
+          <View style={styles.stateCard}>
             <EmptyState
               title="Fixtures unavailable"
               message={error ?? "Failed to load fixtures."}
               iconName="alert-circle"
             />
-          </GlassCard>
+          </View>
         </View>
       );
     }
@@ -353,7 +317,7 @@ export default function FixturesScreen() {
     if (showEmpty) {
       return (
         <View style={[styles.content, styles.listWrap]}>
-          <GlassCard variant="glass" level="default" style={styles.stateCard}>
+          <View style={styles.stateCard}>
             <EmptyState
               title={comboMode ? "No combo fixtures found" : "No matches found"}
               message={
@@ -363,7 +327,7 @@ export default function FixturesScreen() {
               }
               iconName={comboMode ? "git-compare" : "search"}
             />
-          </GlassCard>
+          </View>
         </View>
       );
     }
@@ -467,8 +431,9 @@ const styles = StyleSheet.create({
   },
 
   headerWrap: {
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: 2,
-    gap: 12,
+    paddingBottom: 12,
   },
 
   content: {
@@ -479,65 +444,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  headerCard: {
-    marginHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.sheet,
-  },
-
-  summaryRow: {
-    paddingHorizontal: theme.spacing.lg,
-  },
-
-  summaryCard: {
-    gap: 4,
-    borderRadius: 20,
-  },
-
-  summaryTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  summaryCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 4,
-  },
-
-  summaryTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.body,
-    lineHeight: 20,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  summaryText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  summaryLivePill: {
-    width: 34,
-    height: 34,
-    borderRadius: theme.borderRadius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.badge.bgEmerald,
-    borderWidth: 1,
-    borderColor: theme.badge.borderEmerald,
-  },
-
   loadingCard: {
     borderRadius: 22,
     padding: 18,
+    backgroundColor: theme.colors.bgBrand,
+    borderWidth: 1,
+    borderColor: theme.colors.borderEmerald,
   },
 
   stateCard: {
     borderRadius: 22,
     padding: 12,
+    backgroundColor: theme.colors.bgSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
   },
 
   center: {
