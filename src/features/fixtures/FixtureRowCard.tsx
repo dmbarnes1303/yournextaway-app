@@ -195,9 +195,7 @@ function scoreFixture(item: RankedFixtureRow): number {
   if (hasRivalryBoost(home, away)) s += 26;
 
   const dt = item?.fixture?.date ? new Date(item.fixture.date) : null;
-  if (dt && !Number.isNaN(dt.getTime())) {
-    s += kickoffTimingScore(dt);
-  }
+  if (dt && !Number.isNaN(dt.getTime())) s += kickoffTimingScore(dt);
 
   if (home && away) {
     const longNames = (home.length >= 8 ? 1 : 0) + (away.length >= 8 ? 1 : 0);
@@ -215,24 +213,9 @@ function getRecommendationTone(item: RankedFixtureRow): RecommendationTone {
 }
 
 function getRecommendationCopy(tone: RecommendationTone) {
-  if (tone === "top") {
-    return {
-      label: "Top Pick",
-      sublabel: "Best travel angle",
-    };
-  }
-
-  if (tone === "strong") {
-    return {
-      label: "Strong Pick",
-      sublabel: "Great weekend option",
-    };
-  }
-
-  return {
-    label: "Good Option",
-    sublabel: "Worth a closer look",
-  };
+  if (tone === "top") return { label: "Top Pick", sublabel: "Best travel angle" };
+  if (tone === "strong") return { label: "Strong Pick", sublabel: "Great weekend option" };
+  return { label: "Good Option", sublabel: "Worth a closer look" };
 }
 
 function getLocationLine(item: RankedFixtureRow) {
@@ -270,8 +253,9 @@ function Row({
 
   return (
     <View style={styles.wrap}>
-      <GlassCard style={styles.card}>
-        <View style={styles.glow} pointerEvents="none" />
+      <GlassCard variant="glass" level="default" style={styles.card} padding={15}>
+        <View style={styles.topGlow} pointerEvents="none" />
+        <View style={styles.bottomGlow} pointerEvents="none" />
 
         <View style={styles.topRow}>
           <View style={styles.leagueRow}>
@@ -309,13 +293,16 @@ function Row({
 
         <View style={styles.mainRow}>
           <View style={styles.teamCol}>
-            <TeamCrest name={home} logo={item?.teams?.home?.logo} />
+            <View style={styles.crestShell}>
+              <TeamCrest name={home} logo={item?.teams?.home?.logo} />
+            </View>
             <Text style={styles.teamName} numberOfLines={2}>
               {home}
             </Text>
           </View>
 
           <View style={styles.centerCol}>
+            <View style={styles.vsLine} />
             <View style={styles.kickoffPill}>
               <Text style={styles.kickoffText}>{kickoff.primary}</Text>
             </View>
@@ -323,7 +310,9 @@ function Row({
           </View>
 
           <View style={styles.teamCol}>
-            <TeamCrest name={away} logo={item?.teams?.away?.logo} />
+            <View style={styles.crestShell}>
+              <TeamCrest name={away} logo={item?.teams?.away?.logo} />
+            </View>
             <Text style={styles.teamName} numberOfLines={2}>
               {away}
             </Text>
@@ -349,7 +338,15 @@ function Row({
             style={styles.secondaryButton}
           />
 
-          <Pressable onPress={onToggleFollow} style={styles.followPill}>
+          <Pressable
+            onPress={onToggleFollow}
+            style={({ pressed }) => [
+              styles.followPill,
+              isFollowed && styles.followPillActive,
+              pressed && styles.pressed,
+            ]}
+            hitSlop={8}
+          >
             <Text style={[styles.followText, isFollowed && styles.followTextActive]}>
               {isFollowed ? "Following" : "Follow"}
             </Text>
@@ -371,24 +368,31 @@ const styles = StyleSheet.create({
   card: {
     position: "relative",
     overflow: "hidden",
-    padding: 15,
     borderRadius: 24,
-    borderWidth: 1,
-    borderColor:
-      Platform.OS === "android" ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.05)",
-    backgroundColor:
-      Platform.OS === "android" ? "rgba(7,10,12,0.56)" : "rgba(255,255,255,0.035)",
     gap: 14,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
   },
 
-  glow: {
+  topGlow: {
+    position: "absolute",
+    left: -40,
+    right: -40,
+    top: -80,
+    height: 120,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.025)",
+  },
+
+  bottomGlow: {
     position: "absolute",
     left: 18,
     right: 18,
-    bottom: -14,
-    height: 52,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,210,106,0.07)",
+    bottom: -18,
+    height: 58,
+    borderRadius: theme.borderRadius.pill,
+    backgroundColor: theme.colors.glowEmerald,
+    opacity: 0.52,
   },
 
   topRow: {
@@ -409,52 +413,53 @@ const styles = StyleSheet.create({
   leagueLogo: {
     width: 20,
     height: 20,
+    resizeMode: "contain",
   },
 
   leagueText: {
     flexShrink: 1,
     color: theme.colors.textSecondary,
-    fontSize: 11,
+    fontSize: theme.fontSize.tiny,
     fontWeight: theme.fontWeight.black,
   },
 
   recommendationPill: {
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
     borderWidth: 1,
   },
 
   recommendationPillTop: {
-    backgroundColor: "rgba(245,204,87,0.10)",
-    borderColor: "rgba(245,204,87,0.18)",
+    backgroundColor: theme.badge.bgGold,
+    borderColor: theme.badge.borderGold,
   },
 
   recommendationPillStrong: {
-    backgroundColor: "rgba(34,197,94,0.10)",
-    borderColor: "rgba(104,241,138,0.18)",
+    backgroundColor: theme.badge.bgEmerald,
+    borderColor: theme.badge.borderEmerald,
   },
 
   recommendationPillGood: {
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: theme.badge.bgNeutral,
+    borderColor: theme.badge.borderNeutral,
   },
 
   recommendationPillText: {
-    fontSize: 11,
+    fontSize: theme.fontSize.tiny,
     fontWeight: theme.fontWeight.black,
   },
 
   recommendationPillTextTop: {
-    color: "#F5CC57",
+    color: theme.badge.textGold,
   },
 
   recommendationPillTextStrong: {
-    color: "#8EF2A5",
+    color: theme.badge.textEmerald,
   },
 
   recommendationPillTextGood: {
-    color: "rgba(255,255,255,0.88)",
+    color: theme.badge.textNeutral,
   },
 
   mainRow: {
@@ -466,12 +471,25 @@ const styles = StyleSheet.create({
   teamCol: {
     flex: 1,
     alignItems: "center",
-    gap: 6,
+    gap: 7,
+    minWidth: 0,
+  },
+
+  crestShell: {
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
   },
 
   teamName: {
-    color: theme.colors.text,
+    color: theme.colors.textPrimary,
     fontSize: 14,
+    lineHeight: 18,
     fontWeight: theme.fontWeight.black,
     textAlign: "center",
   },
@@ -479,38 +497,48 @@ const styles = StyleSheet.create({
   centerCol: {
     width: 104,
     alignItems: "center",
-    gap: 5,
+    gap: 6,
+  },
+
+  vsLine: {
+    width: 34,
+    height: 2,
+    borderRadius: theme.borderRadius.pill,
+    backgroundColor: theme.colors.borderStrong,
   },
 
   kickoffPill: {
     minHeight: 34,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: theme.borderRadius.pill,
+    backgroundColor: Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: theme.colors.borderSubtle,
     alignItems: "center",
     justifyContent: "center",
   },
 
   kickoffText: {
     color: theme.colors.textSecondary,
-    fontSize: 11,
+    fontSize: theme.fontSize.tiny,
     fontWeight: theme.fontWeight.black,
     textAlign: "center",
   },
 
   sublabel: {
-    color: "rgba(255,255,255,0.68)",
+    color: theme.colors.textMuted,
     fontSize: 10,
+    lineHeight: 13,
     fontWeight: theme.fontWeight.bold,
     textAlign: "center",
   },
 
   location: {
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
     fontSize: 12,
+    lineHeight: 17,
+    fontWeight: theme.fontWeight.bold,
     textAlign: "center",
   },
 
@@ -534,18 +562,28 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
+    borderColor: theme.colors.borderSubtle,
+  },
+
+  followPillActive: {
+    backgroundColor: theme.badge.bgEmerald,
+    borderColor: theme.badge.borderEmerald,
   },
 
   followText: {
     color: theme.colors.textSecondary,
-    fontSize: 11,
+    fontSize: theme.fontSize.tiny,
     fontWeight: theme.fontWeight.black,
   },
 
   followTextActive: {
-    color: "#8EF2A5",
+    color: theme.badge.textEmerald,
+  },
+
+  pressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.985 }],
   },
 });
