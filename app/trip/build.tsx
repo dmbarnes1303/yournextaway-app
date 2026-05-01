@@ -166,8 +166,31 @@ function defaultTripWindowFromFixtureDate(iso: string | null): {
   };
 }
 
-function normalizeIsoInput(value: string): string {
+function normalizeDdMmYyyyInput(value: string): string {
   return value.replace(/[^\d-]/g, "").slice(0, 10);
+}
+
+function isoToDdMmYyyy(iso?: string | null): string {
+  const s = cleanText(iso);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+function ddMmYyyyToIso(value: string): string | null {
+  const s = cleanText(value);
+  const m = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!m) return null;
+
+  const iso = `${m[3]}-${m[2]}-${m[1]}`;
+  const d = parseIsoToDate(iso);
+  if (!d) return null;
+
+  const roundTrip = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+
+  return roundTrip === iso ? iso : null;
 }
 
 function daysBetweenIso(aIso: string, bIso: string): number | null {
@@ -175,6 +198,15 @@ function daysBetweenIso(aIso: string, bIso: string): number | null {
   const b = parseIsoToDate(bIso);
   if (!a || !b) return null;
   return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function ordinal(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n}st`;
+  if (mod10 === 2 && mod100 !== 12) return `${n}nd`;
+  if (mod10 === 3 && mod100 !== 13) return `${n}rd`;
+  return `${n}th`;
 }
 
 function formatFriendlyIso(iso?: string | null): string {
@@ -186,6 +218,16 @@ function formatFriendlyIso(iso?: string | null): string {
     day: "2-digit",
     month: "short",
   });
+}
+
+function formatLongTripDate(iso?: string | null): string {
+  const d = parseIsoToDate(iso);
+  if (!d) return "TBC";
+
+  const weekday = d.toLocaleDateString("en-GB", { weekday: "long" });
+  const month = d.toLocaleDateString("en-GB", { month: "long" });
+
+  return `${weekday} ${ordinal(d.getDate())} ${month}`;
 }
 
 function safeUri(u: unknown): string | null {
@@ -440,8 +482,6 @@ export default function TripBuildScreen() {
   const isEditing = !!params.tripId;
   const isPrefilledFlow = !!params.fixtureId && !isEditing;
 
-  // Critical: route dates from Fixtures are search/filter dates, not the trip booking window.
-  // Only honour route dates when editing an existing trip.
   const hasExplicitRouteDates =
     isEditing && (isIsoDateOnly(params.from) || isIsoDateOnly(params.to));
 
@@ -473,6 +513,10 @@ export default function TripBuildScreen() {
 
   const [startIso, setStartIso] = useState(routeWindow.from);
   const [endIso, setEndIso] = useState(routeWindow.to);
+  const [startInput, setStartInput] = useState(isoToDdMmYyyy(routeWindow.from));
+  const [endInput, setEndInput] = useState(isoToDdMmYyyy(routeWindow.to));
+  const [datesOpen, setDatesOpen] = useState(false);
+
   const [notes, setNotes] = useState("");
   const [showNotes, setShowNotes] = useState(false);
   const [hasManualDateOverride, setHasManualDateOverride] = useState<boolean>(
@@ -507,6 +551,13 @@ export default function TripBuildScreen() {
     () => validSeasonOrNull(params.season) ?? selectedLeague.season ?? DEFAULT_SEASON,
     [params.season, selectedLeague]
   );
+
+  const setTripDates = useCallback((nextStart: string, nextEnd: string) => {
+    setStartIso(nextStart);
+    setEndIso(nextEnd);
+    setStartInput(isoToDdMmYyyy(nextStart));
+    setEndInput(isoToDdMmYyyy(nextEnd));
+  }, []);
 
   const setNotesIfEmpty = useCallback((text: string) => {
     const t = cleanText(text);
@@ -558,8 +609,7 @@ export default function TripBuildScreen() {
         setNotes(t.notes ?? "");
 
         if (hasExplicitRouteDates) {
-          setStartIso(routeWindow.from);
-          setEndIso(routeWindow.to);
+          setTripDates(routeWindow.from, routeWindow.to);
           setHasManualDateOverride(true);
         }
 
@@ -585,8 +635,7 @@ export default function TripBuildScreen() {
             const d0 = fixtureDateOnly(fx);
             const derived = defaultTripWindowFromFixtureDate(d0);
 
-            if (derived.start) setStartIso(derived.start);
-            if (derived.end) setEndIso(derived.end);
+            if (derived.start && derived.end) setTripDates(derived.start, derived.end);
             setHasManualDateOverride(false);
           }
         } else {
@@ -594,8 +643,7 @@ export default function TripBuildScreen() {
           setPlaceholderTbcIds(new Set());
 
           if (!hasExplicitRouteDates) {
-            setStartIso(t.startDate);
-            setEndIso(t.endDate);
+            setTripDates(t.startDate, t.endDate);
             setHasManualDateOverride(true);
           }
         }
@@ -615,7 +663,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [params.tripId, params.season, routeWindow, hasExplicitRouteDates]);
+  }, [params.tripId, params.season, routeWindow, hasExplicitRouteDates, setTripDates]);
 
   useEffect(() => {
     if (!isPrefilledFlow || !params.fixtureId) return;
@@ -638,8 +686,7 @@ export default function TripBuildScreen() {
         const d0 = fixtureDateOnly(r);
         const derived = defaultTripWindowFromFixtureDate(d0);
 
-        if (derived.start) setStartIso(derived.start);
-        if (derived.end) setEndIso(derived.end);
+        if (derived.start && derived.end) setTripDates(derived.start, derived.end);
 
         setHasManualDateOverride(false);
 
@@ -663,7 +710,14 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [params.fixtureId, isPrefilledFlow, params.cityArea, setNotesIfEmpty, params.season]);
+  }, [
+    params.fixtureId,
+    isPrefilledFlow,
+    params.cityArea,
+    setNotesIfEmpty,
+    params.season,
+    setTripDates,
+  ]);
 
   useEffect(() => {
     if (isPrefilledFlow) return;
@@ -742,11 +796,16 @@ export default function TripBuildScreen() {
     const d0 = fixtureDateOnly(selectedFixture);
     const derived = defaultTripWindowFromFixtureDate(d0);
 
-    if (derived.start) setStartIso(derived.start);
-    if (derived.end) setEndIso(derived.end);
+    if (derived.start && derived.end) setTripDates(derived.start, derived.end);
 
     if (isEditing) setSetAsPrimaryOnSave(false);
-  }, [selectedFixture, hasManualDateOverride, hasExplicitRouteDates, isEditing]);
+  }, [
+    selectedFixture,
+    hasManualDateOverride,
+    hasExplicitRouteDates,
+    isEditing,
+    setTripDates,
+  ]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -767,7 +826,7 @@ export default function TripBuildScreen() {
 
   const validateDateOrder = useCallback((): string | null => {
     if (!isIsoDateOnly(startIso) || !isIsoDateOnly(endIso)) {
-      return "Trip dates must be in YYYY-MM-DD format.";
+      return "Trip dates must be entered as DD-MM-YYYY.";
     }
 
     const a = parseIsoToDate(startIso);
@@ -780,13 +839,25 @@ export default function TripBuildScreen() {
   }, [startIso, endIso]);
 
   const onChangeStartDate = useCallback((value: string) => {
-    setHasManualDateOverride(true);
-    setStartIso(normalizeIsoInput(value));
+    const next = normalizeDdMmYyyyInput(value);
+    setStartInput(next);
+
+    const iso = ddMmYyyyToIso(next);
+    if (iso) {
+      setHasManualDateOverride(true);
+      setStartIso(iso);
+    }
   }, []);
 
   const onChangeEndDate = useCallback((value: string) => {
-    setHasManualDateOverride(true);
-    setEndIso(normalizeIsoInput(value));
+    const next = normalizeDdMmYyyyInput(value);
+    setEndInput(next);
+
+    const iso = ddMmYyyyToIso(next);
+    if (iso) {
+      setHasManualDateOverride(true);
+      setEndIso(iso);
+    }
   }, []);
 
   const onResetToFixtureWindow = useCallback(() => {
@@ -795,12 +866,11 @@ export default function TripBuildScreen() {
     const d0 = fixtureDateOnly(selectedFixture);
     const derived = defaultTripWindowFromFixtureDate(d0);
 
-    if (derived.start) setStartIso(derived.start);
-    if (derived.end) setEndIso(derived.end);
+    if (derived.start && derived.end) setTripDates(derived.start, derived.end);
 
     setHasManualDateOverride(false);
     setError(null);
-  }, [selectedFixture]);
+  }, [selectedFixture, setTripDates]);
 
   const selectedTitle = useMemo(() => {
     const h = cleanText(selectedFixture?.teams?.home?.name) || "Home";
@@ -1233,14 +1303,23 @@ export default function TripBuildScreen() {
                     <Text style={styles.sectionTitle}>Trip dates</Text>
                     <Text style={styles.sectionHint}>
                       Default is 1 day before the match to 1 day after. Edit these dates before
-                      adding flights and hotels.
+                      adding flights and hotels if needed.
                     </Text>
                   </View>
                 </View>
 
+                <View style={styles.tripDateHero}>
+                  <Text style={styles.tripDateHeroText}>
+                    {formatLongTripDate(startIso)} → {formatLongTripDate(endIso)}
+                  </Text>
+                  <Text style={styles.tripLengthText}>
+                    {tripLength ? tripLength : "Enter valid dates"}
+                  </Text>
+                </View>
+
                 <View style={styles.dateSummaryRow}>
                   <View style={styles.dateSummaryBox}>
-                    <Text style={styles.dateSummaryLabel}>From</Text>
+                    <Text style={styles.dateSummaryLabel}>Arrive</Text>
                     <Text style={styles.dateSummaryValue}>{formatFriendlyIso(startIso)}</Text>
                   </View>
 
@@ -1249,49 +1328,67 @@ export default function TripBuildScreen() {
                   </View>
 
                   <View style={styles.dateSummaryBox}>
-                    <Text style={styles.dateSummaryLabel}>To</Text>
+                    <Text style={styles.dateSummaryLabel}>Leave</Text>
                     <Text style={styles.dateSummaryValue}>{formatFriendlyIso(endIso)}</Text>
                   </View>
                 </View>
 
-                <Text style={styles.tripLengthText}>
-                  {tripLength ? `Trip length: ${tripLength}` : "Enter valid dates"}
-                </Text>
-
-                <View style={styles.dateInputsRow}>
-                  <View style={styles.dateField}>
-                    <Text style={styles.dateFieldLabel}>Start date</Text>
-                    <TextInput
-                      value={startIso}
-                      onChangeText={onChangeStartDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.textSecondary}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="numbers-and-punctuation"
-                      style={styles.dateInput}
+                <View style={styles.dateActionRow}>
+                  <Pressable
+                    onPress={() => setDatesOpen((prev) => !prev)}
+                    style={({ pressed }) => [styles.editDateBtn, pressed && styles.pressed]}
+                  >
+                    <Ionicons
+                      name={datesOpen ? "chevron-up" : "create-outline"}
+                      size={14}
+                      color={theme.colors.text}
                     />
-                  </View>
+                    <Text style={styles.editDateBtnText}>
+                      {datesOpen ? "Done editing" : "Edit dates"}
+                    </Text>
+                  </Pressable>
 
-                  <View style={styles.dateField}>
-                    <Text style={styles.dateFieldLabel}>End date</Text>
-                    <TextInput
-                      value={endIso}
-                      onChangeText={onChangeEndDate}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={theme.colors.textSecondary}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="numbers-and-punctuation"
-                      style={styles.dateInput}
-                    />
-                  </View>
+                  <Pressable onPress={onResetToFixtureWindow} style={styles.resetDateBtn}>
+                    <Ionicons name="refresh" size={14} color={theme.colors.textSecondary} />
+                    <Text style={styles.resetDateBtnText}>Reset default</Text>
+                  </Pressable>
                 </View>
 
-                <Pressable onPress={onResetToFixtureWindow} style={styles.resetDateBtn}>
-                  <Ionicons name="refresh" size={14} color={theme.colors.text} />
-                  <Text style={styles.resetDateBtnText}>Reset to default match window</Text>
-                </Pressable>
+                {datesOpen ? (
+                  <View style={styles.dateEditPanel}>
+                    <Text style={styles.dateEditHint}>Use DD-MM-YYYY.</Text>
+
+                    <View style={styles.dateInputsRow}>
+                      <View style={styles.dateField}>
+                        <Text style={styles.dateFieldLabel}>Start date</Text>
+                        <TextInput
+                          value={startInput}
+                          onChangeText={onChangeStartDate}
+                          placeholder="02-05-2026"
+                          placeholderTextColor={theme.colors.textSecondary}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          keyboardType="numbers-and-punctuation"
+                          style={styles.dateInput}
+                        />
+                      </View>
+
+                      <View style={styles.dateField}>
+                        <Text style={styles.dateFieldLabel}>End date</Text>
+                        <TextInput
+                          value={endInput}
+                          onChangeText={onChangeEndDate}
+                          placeholder="04-05-2026"
+                          placeholderTextColor={theme.colors.textSecondary}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          keyboardType="numbers-and-punctuation"
+                          style={styles.dateInput}
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
               </GlassCard>
 
               <GlassCard level="default" style={styles.sectionCard}>
@@ -1368,8 +1465,9 @@ export default function TripBuildScreen() {
                                 const d0 = fixtureDateOnly(r);
                                 const derived = defaultTripWindowFromFixtureDate(d0);
 
-                                if (derived.start) setStartIso(derived.start);
-                                if (derived.end) setEndIso(derived.end);
+                                if (derived.start && derived.end) {
+                                  setTripDates(derived.start, derived.end);
+                                }
                               }
                             }}
                             style={({ pressed }) => [styles.nearbyCard, pressed && styles.pressed]}
@@ -1549,8 +1647,9 @@ export default function TripBuildScreen() {
                           const d0 = fixtureDateOnly(r);
                           const derived = defaultTripWindowFromFixtureDate(d0);
 
-                          if (derived.start) setStartIso(derived.start);
-                          if (derived.end) setEndIso(derived.end);
+                          if (derived.start && derived.end) {
+                            setTripDates(derived.start, derived.end);
+                          }
                         }
                       }}
                       style={({ pressed }) => [
@@ -1854,6 +1953,23 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  tripDateHero: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(75,158,57,0.24)",
+    backgroundColor: "rgba(75,158,57,0.08)",
+    paddingVertical: 13,
+    paddingHorizontal: 13,
+    gap: 5,
+  },
+
+  tripDateHeroText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: "900",
+  },
+
   dateSummaryRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1893,6 +2009,46 @@ const styles = StyleSheet.create({
   tripLengthText: {
     color: theme.colors.textSecondary,
     fontWeight: "900",
+    fontSize: 12,
+  },
+
+  dateActionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
+  },
+
+  editDateBtn: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(75,158,57,0.34)",
+    backgroundColor: "rgba(75,158,57,0.12)",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+
+  editDateBtnText: {
+    color: theme.colors.text,
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  dateEditPanel: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.09)",
+    backgroundColor: "rgba(0,0,0,0.16)",
+    padding: 12,
+    gap: 10,
+  },
+
+  dateEditHint: {
+    color: theme.colors.textSecondary,
+    fontWeight: "800",
     fontSize: 12,
   },
 
@@ -1936,7 +2092,7 @@ const styles = StyleSheet.create({
   },
 
   resetDateBtnText: {
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
     fontWeight: "900",
     fontSize: 12,
   },
