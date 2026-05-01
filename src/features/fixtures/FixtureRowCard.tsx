@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import GlassCard from "@/src/components/GlassCard";
 import Button from "@/src/components/Button";
 import { theme } from "@/src/constants/theme";
 import { getFixtureBackdrop } from "@/src/constants/visualAssets";
@@ -69,136 +68,129 @@ function Row({
     countryName,
   });
 
-  return (
-    <View style={styles.wrap}>
-      <GlassCard variant="glass" level="default" style={styles.card} padding={0}>
-        {backdrop ? (
-          <ImageBackground
-            source={{ uri: backdrop }}
-            style={styles.bg}
-            imageStyle={styles.bgImg}
-            resizeMode="cover"
-          >
-            <View style={styles.bgOverlay} />
-            <View style={styles.bottomShade} />
-          </ImageBackground>
-        ) : (
-          <View style={styles.fallbackBg} />
-        )}
+  const content = (
+    <>
+      <View style={styles.bgOverlay} />
+      <View style={styles.topFade} />
+      <View style={styles.bottomFade} />
 
-        <View style={styles.inner}>
-          <View style={styles.topRow}>
-            <View style={styles.leagueRow}>
-              {leagueLogo ? (
-                <Image
-                  source={{ uri: leagueLogo }}
-                  style={styles.leagueLogo}
-                  resizeMode="contain"
-                />
-              ) : null}
-
-              {countryCode ? <LeagueFlag code={countryCode} size="sm" /> : null}
-
-              <Text style={styles.leagueText} numberOfLines={1}>
-                {leagueName}
-              </Text>
-            </View>
-
-            <View style={styles.timeChip}>
-              <Ionicons
-                name="time-outline"
-                size={13}
-                color={theme.colors.emeraldSoft}
+      <View style={styles.inner}>
+        <View style={styles.topRow}>
+          <View style={styles.leagueRow}>
+            {leagueLogo ? (
+              <Image
+                source={{ uri: leagueLogo }}
+                style={styles.leagueLogo}
+                resizeMode="contain"
               />
-              <Text style={styles.timeChipText} numberOfLines={1}>
+            ) : null}
+
+            {countryCode ? <LeagueFlag code={countryCode} size="sm" /> : null}
+
+            <Text style={styles.leagueText} numberOfLines={1}>
+              {leagueName}
+            </Text>
+          </View>
+
+          <View style={styles.timeChip}>
+            <Ionicons name="time-outline" size={13} color={theme.colors.emeraldSoft} />
+            <Text style={styles.timeChipText} numberOfLines={1}>
+              {kickoff.time}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.matchRow}>
+          <View style={styles.teamCol}>
+            <TeamCrest name={home} logo={item?.teams?.home?.logo} />
+            <Text style={styles.teamName} numberOfLines={2}>
+              {home}
+            </Text>
+          </View>
+
+          <View style={styles.centerCol}>
+            <Text style={styles.dateText} numberOfLines={1}>
+              {kickoff.date}
+            </Text>
+
+            <View style={styles.kickoffBox}>
+              <Text style={styles.kickoffTime} numberOfLines={1}>
                 {kickoff.time}
               </Text>
             </View>
+
+            <Text style={styles.vsText}>VS</Text>
           </View>
 
-          <View style={styles.matchRow}>
-            <View style={styles.teamCol}>
-              <TeamCrest name={home} logo={item?.teams?.home?.logo} />
-              <Text style={styles.teamName} numberOfLines={2}>
-                {home}
-              </Text>
-            </View>
-
-            <View style={styles.centerCol}>
-              <Text style={styles.dateText} numberOfLines={1}>
-                {kickoff.date}
-              </Text>
-
-              <View style={styles.kickoffBox}>
-                <Text style={styles.kickoffTime} numberOfLines={1}>
-                  {kickoff.time}
-                </Text>
-              </View>
-
-              <Text style={styles.vsText}>VS</Text>
-            </View>
-
-            <View style={styles.teamCol}>
-              <TeamCrest name={away} logo={item?.teams?.away?.logo} />
-              <Text style={styles.teamName} numberOfLines={2}>
-                {away}
-              </Text>
-            </View>
-          </View>
-
-          {locationLine ? (
-            <View style={styles.locationRow}>
-              <Ionicons
-                name="location-outline"
-                size={14}
-                color={theme.colors.textMuted}
-              />
-              <Text style={styles.location} numberOfLines={1}>
-                {locationLine}
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={styles.actionsRow}>
-            <Button
-              label="Start trip"
-              onPress={() => onPressBuildTrip(fixtureId, routeCtx)}
-              tone="primary"
-              size="sm"
-              style={styles.primary}
-              glow
-            />
-
-            <Button
-              label="Details"
-              onPress={() => onPressMatch(fixtureId, routeCtx)}
-              tone="secondary"
-              size="sm"
-              style={styles.secondary}
-            />
-
-            <Pressable
-              onPress={onToggleFollow}
-              style={({ pressed }) => [
-                styles.follow,
-                isFollowed && styles.followActive,
-                pressed && styles.pressed,
-              ]}
-              hitSlop={8}
-            >
-              <Ionicons
-                name={isFollowed ? "notifications" : "notifications-outline"}
-                size={16}
-                color={
-                  isFollowed
-                    ? theme.badge.textEmerald
-                    : theme.colors.textSecondary
-                }
-              />
-            </Pressable>
+          <View style={styles.teamCol}>
+            <TeamCrest name={away} logo={item?.teams?.away?.logo} />
+            <Text style={styles.teamName} numberOfLines={2}>
+              {away}
+            </Text>
           </View>
         </View>
-      </GlassCard>
+
+        {locationLine ? (
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={14} color={theme.colors.textMuted} />
+            <Text style={styles.location} numberOfLines={1}>
+              {locationLine}
+            </Text>
+          </View>
+        ) : null}
+
+        <View style={styles.actionsRow}>
+          <Button
+            label="Start trip"
+            onPress={() => onPressBuildTrip(fixtureId, routeCtx)}
+            tone="primary"
+            size="sm"
+            style={styles.primary}
+            glow
+          />
+
+          <Button
+            label="Details"
+            onPress={() => onPressMatch(fixtureId, routeCtx)}
+            tone="secondary"
+            size="sm"
+            style={styles.secondary}
+          />
+
+          <Pressable
+            onPress={onToggleFollow}
+            style={({ pressed }) => [
+              styles.follow,
+              isFollowed && styles.followActive,
+              pressed && styles.pressed,
+            ]}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={isFollowed ? "notifications" : "notifications-outline"}
+              size={16}
+              color={isFollowed ? theme.badge.textEmerald : theme.colors.textSecondary}
+            />
+          </Pressable>
+        </View>
+      </View>
+    </>
+  );
+
+  return (
+    <View style={styles.wrap}>
+      {backdrop ? (
+        <ImageBackground
+          source={{ uri: backdrop }}
+          style={styles.card}
+          imageStyle={styles.cardImage}
+          resizeMode="cover"
+        >
+          {content}
+        </ImageBackground>
+      ) : (
+        <View style={[styles.card, styles.fallbackCard]}>{content}</View>
+      )}
     </View>
   );
 }
@@ -212,36 +204,44 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    borderRadius: 24,
+    position: "relative",
     overflow: "hidden",
+    borderRadius: 24,
+    borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
   },
 
-  bg: {
-    ...StyleSheet.absoluteFillObject,
+  cardImage: {
+    borderRadius: 24,
+    opacity: 0.82,
   },
 
-  bgImg: {
-    opacity: 0.46,
+  fallbackCard: {
+    backgroundColor: theme.colors.bgSurface,
   },
 
   bgOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.52)",
+    backgroundColor: "rgba(0,0,0,0.56)",
   },
 
-  bottomShade: {
+  topFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 92,
+    backgroundColor: "rgba(0,0,0,0.28)",
+  },
+
+  bottomFade: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: "50%",
-    backgroundColor: "rgba(0,0,0,0.24)",
-  },
-
-  fallbackBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: theme.colors.bgSurface,
+    height: 118,
+    backgroundColor: "rgba(0,0,0,0.42)",
   },
 
   inner: {
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(0,0,0,0.34)",
+    backgroundColor: "rgba(0,0,0,0.42)",
   },
 
   kickoffTime: {
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(0,0,0,0.26)",
+    backgroundColor: "rgba(0,0,0,0.36)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
   },
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(0,0,0,0.24)",
+    backgroundColor: "rgba(0,0,0,0.34)",
   },
 
   followActive: {
