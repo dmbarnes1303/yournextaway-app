@@ -1,3 +1,4 @@
+// app/(tabs)/fixtures.tsx
 import React, { useCallback, useMemo } from "react";
 import { View, StyleSheet, FlatList, ActivityIndicator, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -8,7 +9,6 @@ import EmptyState from "@/src/components/EmptyState";
 import GlassCard from "@/src/components/GlassCard";
 
 import { theme } from "@/src/constants/theme";
-import { getLeagueBackdropUrl } from "@/src/constants/visualAssets";
 
 import { tomorrowIsoUtc, DAYS_AHEAD, addDaysIsoUtc } from "@/src/features/fixtures/date";
 import { resolveTripForFixture } from "@/src/features/fixtures/helpers";
@@ -68,31 +68,20 @@ function buildCanonicalTripStartParams(args: {
 
   return {
     fixtureId: cleanString(args.fixtureId),
-    ...(cleanString(args.from) ? { from: cleanString(args.from) } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
-    ...(cleanString(args.to) ? { to: cleanString(args.to) } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
+    ...(cleanString(args.from)
+      ? { from: cleanString(args.from) }
+      : fallbackWindow.from
+        ? { from: fallbackWindow.from }
+        : {}),
+    ...(cleanString(args.to)
+      ? { to: cleanString(args.to) }
+      : fallbackWindow.to
+        ? { to: fallbackWindow.to }
+        : {}),
     ...(cleanString(args.leagueId) ? { leagueId: cleanString(args.leagueId) } : {}),
     ...(cleanString(args.season) ? { season: cleanString(args.season) } : {}),
     ...(cleanString(args.city) ? { city: cleanString(args.city) } : {}),
   };
-}
-
-function Surface({
-  children,
-  tone = "neutral",
-}: {
-  children: React.ReactNode;
-  tone?: "brand" | "gold" | "neutral";
-}) {
-  return (
-    <GlassCard
-      variant={tone === "gold" ? "gold" : tone === "brand" ? "brand" : "glass"}
-      level="default"
-      style={styles.surface}
-      padding={12}
-    >
-      {children}
-    </GlassCard>
-  );
 }
 
 export default function FixturesScreen() {
@@ -104,18 +93,26 @@ export default function FixturesScreen() {
     isRange,
     stripDays,
     selectedDay,
+
+    allLeagues,
     selectedLeagueIds,
     selectedLeagues,
     toggleLeague,
     selectSingleLeague,
+    selectAllLeagues,
+    clearLeagues,
     resetToFeatured,
+    competitionSummaryText,
+
     query,
     setQuery,
+
     followedIdSet,
     loading,
     error,
     filtered,
     onToggleFollowFromRow,
+
     calendarOpen,
     openCalendar,
     closeCalendar,
@@ -130,11 +127,15 @@ export default function FixturesScreen() {
     onCalendarTapDay,
     applyCalendar,
     clearCalendarRange,
+
     onTapStripDate,
+
     titleText,
     subtitleText,
     helperLineText,
     headerDateLine,
+    matchesSummaryTitle,
+    matchesSummaryLine,
     monthLabel,
   } = useFixturesScreenData();
 
@@ -150,17 +151,18 @@ export default function FixturesScreen() {
     return filtered.filter((item) => comboIdSet.has(String(item?.fixture?.id ?? "")));
   }, [filtered, comboMode, comboIdSet]);
 
-  const selectedLeagueBackdrop = useMemo(() => {
-    if (selectedLeagueIds.length === 1) return getLeagueBackdropUrl(selectedLeagueIds[0]);
-    return getLeagueBackdropUrl(39);
-  }, [selectedLeagueIds]);
-
   const derivedTitleText = comboMode ? comboTitle || "Multi-match trip" : titleText;
-  const derivedSubtitleText = comboMode ? "Selected fixtures for a stacked football trip." : subtitleText;
-  const derivedHelperLineText = comboMode
-    ? `${visibleRows.length} selected fixture${visibleRows.length === 1 ? "" : "s"} • open one to build the trip around it`
-    : helperLineText;
-  const derivedHeaderDateLine = comboMode ? `${headerDateLine} • combo view` : headerDateLine;
+  const derivedSubtitleText = comboMode
+    ? "Selected fixtures for a stacked football trip."
+    : subtitleText;
+
+  const derivedSummaryTitle = comboMode
+    ? `${visibleRows.length} selected match${visibleRows.length === 1 ? "" : "es"}`
+    : matchesSummaryTitle;
+
+  const derivedSummaryLine = comboMode
+    ? `${headerDateLine} • Combo view`
+    : matchesSummaryLine || helperLineText;
 
   const goMatch = useCallback(
     (id: string, ctx?: { leagueId?: number | null; season?: number | null }) => {
@@ -184,12 +186,18 @@ export default function FixturesScreen() {
   const goTripOrBuild = useCallback(
     (
       fixtureId: string,
-      ctx?: { leagueId?: number | null; season?: number | null; city?: string | null; kickoffIso?: string | null }
+      ctx?: {
+        leagueId?: number | null;
+        season?: number | null;
+        city?: string | null;
+        kickoffIso?: string | null;
+      }
     ) => {
       const fid = cleanString(fixtureId);
       if (!fid) return;
 
       const existingTripId = resolveTripForFixture(fid);
+
       if (existingTripId) {
         router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as never);
         return;
@@ -220,7 +228,7 @@ export default function FixturesScreen() {
   const headerComponent = useMemo(
     () => (
       <View style={styles.headerWrap}>
-        <Surface tone={comboMode ? "gold" : "brand"}>
+        <GlassCard variant="glass" level="default" style={styles.headerCard} padding={14}>
           <FixturesHeader
             query={query}
             setQuery={setQuery}
@@ -229,44 +237,45 @@ export default function FixturesScreen() {
             selectedDay={selectedDay}
             onTapStripDate={onTapStripDate}
             openCalendar={openCalendar}
+            allLeagues={allLeagues}
             selectedLeagueIds={selectedLeagueIds}
             selectedLeagues={selectedLeagues}
             toggleLeague={toggleLeague}
             selectSingleLeague={selectSingleLeague}
+            selectAllLeagues={selectAllLeagues}
+            clearLeagues={clearLeagues}
             resetToFeatured={resetToFeatured}
+            competitionSummaryText={competitionSummaryText}
+            titleText={derivedTitleText}
+            subtitleText={derivedSubtitleText}
+            helperLineText={helperLineText}
+            headerDateLine={headerDateLine}
+            loading={showInlineRefresh}
+            error={error}
+            filteredCount={visibleRows.length}
           />
-        </Surface>
+        </GlassCard>
 
-        <View style={styles.contextWrap}>
-          <Text style={styles.pageTitle}>{derivedTitleText}</Text>
-          <Text style={styles.pageSubtitle}>{derivedSubtitleText}</Text>
-          <Text style={styles.pageMeta}>{derivedHeaderDateLine}</Text>
-        </View>
+        {!showInitialLoading && !showHardError ? (
+          <View style={styles.summaryRow}>
+            <GlassCard variant="brand" level="default" style={styles.summaryCard} padding={13}>
+              <Text style={styles.summaryTitle}>{derivedSummaryTitle}</Text>
+              <Text style={styles.summaryText}>{derivedSummaryLine}</Text>
+            </GlassCard>
+          </View>
+        ) : null}
 
         {showInlineRefresh ? (
           <View style={styles.refreshRow}>
             <GlassCard variant="glass" level="default" style={styles.refreshCard}>
               <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-              <Text style={styles.refreshText}>Refreshing live fixtures…</Text>
-            </GlassCard>
-          </View>
-        ) : null}
-
-        {!showInitialLoading && !showHardError ? (
-          <View style={styles.summaryRow}>
-            <GlassCard variant={comboMode ? "gold" : "brand"} level="default" style={styles.summaryCard}>
-              <Text style={styles.summaryEyebrow}>{comboMode ? "Combo mode" : "Live fixture pool"}</Text>
-              <Text style={styles.summaryTitle}>
-                {visibleRows.length} fixture{visibleRows.length === 1 ? "" : "s"} in view
-              </Text>
-              <Text style={styles.summaryText}>{derivedHelperLineText}</Text>
+              <Text style={styles.refreshText}>Updating matches…</Text>
             </GlassCard>
           </View>
         ) : null}
       </View>
     ),
     [
-      comboMode,
       query,
       setQuery,
       stripDays,
@@ -274,19 +283,26 @@ export default function FixturesScreen() {
       selectedDay,
       onTapStripDate,
       openCalendar,
+      allLeagues,
       selectedLeagueIds,
       selectedLeagues,
       toggleLeague,
       selectSingleLeague,
+      selectAllLeagues,
+      clearLeagues,
       resetToFeatured,
+      competitionSummaryText,
       derivedTitleText,
       derivedSubtitleText,
-      derivedHeaderDateLine,
-      derivedHelperLineText,
+      helperLineText,
+      headerDateLine,
       showInlineRefresh,
+      error,
+      visibleRows.length,
       showInitialLoading,
       showHardError,
-      visibleRows.length,
+      derivedSummaryTitle,
+      derivedSummaryLine,
     ]
   );
 
@@ -296,11 +312,11 @@ export default function FixturesScreen() {
         <View style={[styles.content, styles.listWrap]}>
           <GlassCard variant="brand" level="default" style={styles.loadingCard}>
             <View style={styles.center}>
-              <Text style={styles.loadingEyebrow}>Live scan</Text>
+              <Text style={styles.loadingEyebrow}>Finding matches</Text>
               <ActivityIndicator color={theme.colors.gold} />
               <Text style={styles.loadingTitle}>Loading fixtures</Text>
               <Text style={styles.loadingText}>
-                Pulling the strongest current match options from the selected range.
+                Checking the selected dates and competitions.
               </Text>
             </View>
           </GlassCard>
@@ -312,7 +328,11 @@ export default function FixturesScreen() {
       return (
         <View style={[styles.content, styles.listWrap]}>
           <GlassCard variant="gold" level="default" style={styles.stateCard}>
-            <EmptyState title="Fixtures unavailable" message={error ?? "Failed to load fixtures."} iconName="alert-circle" />
+            <EmptyState
+              title="Fixtures unavailable"
+              message={error ?? "Failed to load fixtures."}
+              iconName="alert-circle"
+            />
           </GlassCard>
         </View>
       );
@@ -326,8 +346,8 @@ export default function FixturesScreen() {
               title={comboMode ? "No combo fixtures found" : "No matches found"}
               message={
                 comboMode
-                  ? "This stacked trip no longer matches the current fixture view. Widen the date range or reopen it from Discover."
-                  : "Try another date, another league, or a wider range."
+                  ? "This saved trip view no longer matches the current filters. Widen the dates or reopen it from Discover."
+                  : "Try another date, search term, or competition."
               }
               iconName={comboMode ? "git-compare" : "search"}
             />
@@ -343,10 +363,12 @@ export default function FixturesScreen() {
     ({ item, index }: { item: RankedFixtureRow; index: number }) => {
       const fixtureId = String(item?.fixture?.id ?? "");
       const isFollowed = fixtureId ? followedIdSet.has(fixtureId) : false;
+
       const leagueId = item?.league?.id ?? null;
-      const season = typeof (item?.league as { season?: unknown } | undefined)?.season === "number"
-        ? (item.league as { season: number }).season
-        : null;
+      const season =
+        typeof (item?.league as { season?: unknown } | undefined)?.season === "number"
+          ? (item.league as { season: number }).season
+          : null;
       const city = cleanString(item?.fixture?.venue?.city);
       const kickoffIso = cleanString(item?.fixture?.date);
 
@@ -374,16 +396,19 @@ export default function FixturesScreen() {
 
   return (
     <Background
-      imageUrl={selectedLeagueBackdrop}
-      overlayOpacity={0.58}
-      topShadeOpacity={0.28}
-      bottomShadeOpacity={0.58}
-      centerShadeOpacity={0.08}
+      mode="solid"
+      solidColor={theme.colors.bgBase}
+      overlayOpacity={0.42}
+      topShadeOpacity={0.22}
+      bottomShadeOpacity={0.46}
+      centerShadeOpacity={0.06}
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <FlatList
           data={showHardError || showInitialLoading || showEmpty ? [] : visibleRows}
-          keyExtractor={(item, index) => `${item?.league?.id ?? "L"}-${item?.fixture?.id ?? `row-${index}`}`}
+          keyExtractor={(item, index) =>
+            `${item?.league?.id ?? "L"}-${item?.fixture?.id ?? `row-${index}`}`
+          }
           renderItem={renderRow}
           ListHeaderComponent={headerComponent}
           ListEmptyComponent={emptyComponent}
@@ -421,66 +446,59 @@ export default function FixturesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  flatListContent: { paddingBottom: theme.spacing.xl },
-  headerWrap: { paddingTop: 2, gap: 12 },
-  content: { paddingHorizontal: theme.spacing.lg },
-  listWrap: { gap: 12 },
-  surface: {
+  container: {
+    flex: 1,
+  },
+
+  flatListContent: {
+    paddingBottom: theme.spacing.xl,
+  },
+
+  headerWrap: {
+    paddingTop: 2,
+    gap: 12,
+  },
+
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+
+  listWrap: {
+    gap: 12,
+  },
+
+  headerCard: {
     marginHorizontal: theme.spacing.lg,
     borderRadius: theme.borderRadius.sheet,
   },
-  contextWrap: {
+
+  summaryRow: {
     paddingHorizontal: theme.spacing.lg,
-    gap: 4,
   },
-  pageTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.h1,
-    lineHeight: 29,
-    fontWeight: theme.fontWeight.black,
-  },
-  pageSubtitle: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.meta,
-    lineHeight: 18,
-    fontWeight: theme.fontWeight.bold,
-  },
-  pageMeta: {
-    color: theme.colors.textMuted,
-    fontSize: theme.fontSize.tiny,
-    lineHeight: 15,
-    fontWeight: theme.fontWeight.black,
-    textTransform: "uppercase",
-    letterSpacing: 0.45,
-  },
-  summaryRow: { paddingHorizontal: theme.spacing.lg },
+
   summaryCard: {
-    gap: 6,
-    borderRadius: 22,
-    padding: 15,
+    gap: 4,
+    borderRadius: 20,
   },
-  summaryEyebrow: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    lineHeight: 14,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.35,
-    textTransform: "uppercase",
-  },
+
   summaryTitle: {
     color: theme.colors.textPrimary,
     fontSize: theme.fontSize.body,
     lineHeight: 20,
     fontWeight: theme.fontWeight.black,
   },
+
   summaryText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
     fontWeight: theme.fontWeight.bold,
   },
-  refreshRow: { paddingHorizontal: theme.spacing.lg },
+
+  refreshRow: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+
   refreshCard: {
     borderRadius: 18,
     paddingHorizontal: 12,
@@ -489,25 +507,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+
   refreshText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: theme.fontWeight.bold,
   },
+
   loadingCard: {
     borderRadius: 22,
     padding: 18,
   },
+
   stateCard: {
     borderRadius: 22,
     padding: 12,
   },
+
   center: {
     paddingVertical: 14,
     alignItems: "center",
     gap: 10,
   },
+
   loadingEyebrow: {
     color: theme.colors.emeraldSoft,
     fontSize: theme.fontSize.tiny,
@@ -516,12 +539,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.65,
     textTransform: "uppercase",
   },
+
   loadingTitle: {
     color: theme.colors.textPrimary,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: theme.fontWeight.black,
   },
+
   loadingText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
@@ -530,5 +555,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 280,
   },
-  footerSpace: { height: 8 },
+
+  footerSpace: {
+    height: 8,
+  },
 });
