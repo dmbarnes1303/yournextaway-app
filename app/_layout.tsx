@@ -6,6 +6,7 @@ import preferencesStore from "@/src/state/preferences";
 import identity from "@/src/services/identity";
 
 import PartnerReturnModal from "@/src/components/PartnerReturnModal";
+import BookingProofModal from "@/src/components/BookingProofModal";
 
 import {
   bootstrapPartnerReturnPrompt,
@@ -15,19 +16,36 @@ import {
   dismissPartnerReturn,
 } from "@/src/services/partnerReturnBootstrap";
 
-import { confirmBookedAndOfferProof } from "@/src/services/bookingProof";
+import {
+  requestBookingProofFlow,
+  consumeBookingProofRequest,
+  completeBookingProofFlow,
+} from "@/src/services/bookingProof";
+
+import { attachTicketProof } from "@/src/services/ticketAttachment";
 import type { LastPartnerClick } from "@/src/services/partnerClicks";
 
 export default function RootLayout() {
+  // ===== Partner return modal =====
   const [modalItemId, setModalItemId] = useState<string | null>(null);
   const [modalClick, setModalClick] = useState<LastPartnerClick | null>(null);
 
+  // ===== Booking proof modal =====
+  const [proofVisible, setProofVisible] = useState(false);
+  const [proofItemId, setProofItemId] = useState<string | null>(null);
+  const [proofMode, setProofMode] = useState<"offer" | "success" | "info">("offer");
+
   const mountedRef = useRef(false);
 
-  function closeModal() {
+  function closePartnerModal() {
     if (!mountedRef.current) return;
     setModalItemId(null);
     setModalClick(null);
+  }
+
+  function closeProofModal() {
+    setProofVisible(false);
+    setProofItemId(null);
   }
 
   useEffect(() => {
@@ -36,9 +54,7 @@ export default function RootLayout() {
     try {
       const { setupErrorLogging } = require("@/src/utils/errorLogger");
       setupErrorLogging();
-    } catch (error) {
-      console.warn("Logger init failed", error);
-    }
+    } catch {}
 
     identity.ensureIdentity().catch(() => null);
     preferencesStore.load().catch(() => null);
@@ -53,23 +69,28 @@ export default function RootLayout() {
 
     return () => {
       mountedRef.current = false;
-
       try {
-        if (typeof unsubscribe === "function") {
-          unsubscribe();
-        }
-      } catch {
-        // ignore cleanup failure
-      }
+        if (typeof unsubscribe === "function") unsubscribe();
+      } catch {}
     };
   }, []);
 
+  // ===== Handle booking confirmation =====
   async function handleBooked(itemId: string) {
     try {
       await markItemBooked(itemId);
-      await confirmBookedAndOfferProof(itemId);
+
+      // Trigger proof flow (no UI here)
+      await requestBookingProofFlow(itemId);
+
+      const request = consumeBookingProofRequest();
+      if (request) {
+        setProofItemId(request.itemId);
+        setProofMode(request.mode);
+        setProofVisible(true);
+      }
     } finally {
-      closeModal();
+      closePartnerModal();
     }
   }
 
@@ -77,21 +98,40 @@ export default function RootLayout() {
     try {
       await markItemNotBooked(itemId);
     } finally {
-      closeModal();
+      closePartnerModal();
     }
   }
 
   async function handleNotNow(itemId?: string | null) {
     if (!itemId) {
-      closeModal();
+      closePartnerModal();
       return;
     }
 
     try {
       await dismissPartnerReturn(itemId);
     } finally {
-      closeModal();
+      closePartnerModal();
     }
+  }
+
+  // ===== Proof modal actions =====
+  async function handleAddProof() {
+    if (!proofItemId) return;
+
+    const success = await attachTicketProof(proofItemId);
+
+    if (success) {
+      setProofMode("success");
+      completeBookingProofFlow();
+    } else {
+      closeProofModal();
+    }
+  }
+
+  function handleSkipProof() {
+    completeBookingProofFlow();
+    closeProofModal();
   }
 
   return (
@@ -105,6 +145,7 @@ export default function RootLayout() {
         <Stack.Screen name="team/[teamKey]" />
       </Stack>
 
+      {/* ===== Partner return modal ===== */}
       <PartnerReturnModal
         visible={Boolean(modalItemId)}
         itemId={modalItemId}
@@ -112,6 +153,26 @@ export default function RootLayout() {
         onBooked={handleBooked}
         onNotBooked={handleNotBooked}
         onNotNow={handleNotNow}
+      />
+
+      {/* ===== Booking proof modal ===== */}
+      <BookingProofModal
+        visible={proofVisible}
+        mode={proofMode}
+        title={
+          proofMode === "success"
+            ? "Proof added"
+            : "Saved in Wallet"
+        }
+        message={
+          proofMode === "success"
+            ? "Your booking proof is now stored in Wallet."
+            : "Add booking proof (PDF or screenshot) for offline access?"
+        }
+        confirmLabel={proofMode === "success" ? undefined : "Add proof"}
+        cancelLabel={proofMode === "success" ? "Done" : "Not now"}
+        onConfirm={proofMode === "success" ? undefined : handleAddProof}
+        onCancel={proofMode === "success" ? closeProofModal : handleSkipProof}
       />
     </ProProvider>
   );
