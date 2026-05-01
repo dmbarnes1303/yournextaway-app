@@ -39,7 +39,6 @@ const CITY_COUNTRY_CODE: Record<string, string> = {
   newcastle: "ENG",
   glasgow: "SCO",
   edinburgh: "SCO",
-
   madrid: "ES",
   barcelona: "ES",
   seville: "ES",
@@ -48,7 +47,6 @@ const CITY_COUNTRY_CODE: Record<string, string> = {
   bilbao: "ES",
   villarreal: "ES",
   "san sebastian": "ES",
-
   milan: "IT",
   milano: "IT",
   rome: "IT",
@@ -59,7 +57,6 @@ const CITY_COUNTRY_CODE: Record<string, string> = {
   napoli: "IT",
   florence: "IT",
   firenze: "IT",
-
   munich: "DE",
   münchen: "DE",
   dortmund: "DE",
@@ -67,91 +64,66 @@ const CITY_COUNTRY_CODE: Record<string, string> = {
   leipzig: "DE",
   leverkusen: "DE",
   frankfurt: "DE",
-
   paris: "FR",
   marseille: "FR",
   lyon: "FR",
   lille: "FR",
   monaco: "FR",
-
   amsterdam: "NL",
   rotterdam: "NL",
   eindhoven: "NL",
   almere: "NL",
-
   lisbon: "PT",
   lisboa: "PT",
   porto: "PT",
-
   istanbul: "TR",
   trabzon: "TR",
-
   brussels: "BE",
   bruges: "BE",
   brugge: "BE",
   anderlecht: "BE",
-
   vienna: "AT",
   wien: "AT",
   salzburg: "AT",
-
   zurich: "CH",
   zürich: "CH",
   basel: "CH",
   bern: "CH",
-
   athens: "GR",
   piraeus: "GR",
   thessaloniki: "GR",
-
   dublin: "IE",
-
   copenhagen: "DK",
   københavn: "DK",
-
   warsaw: "PL",
   poznan: "PL",
   krakow: "PL",
-
   prague: "CZ",
   praha: "CZ",
-
   zagreb: "HR",
   split: "HR",
-
   belgrade: "RS",
   beograd: "RS",
-
   budapest: "HU",
-
   bucharest: "RO",
   bucuresti: "RO",
-
   sofia: "BG",
   "stara zagora": "BG",
-
   bratislava: "SK",
   skalica: "SK",
-
   ljubljana: "SI",
   maribor: "SI",
-
   nicosia: "CY",
-
   sarajevo: "BA",
   banja: "BA",
-
   stockholm: "SE",
   malmo: "SE",
   malmö: "SE",
-
   oslo: "NO",
   bodo: "NO",
   bodø: "NO",
-
   helsinki: "FI",
   turku: "FI",
-
   reykjavik: "IS",
 };
 
@@ -177,19 +149,12 @@ function getLocationLine(item: RankedFixtureRow): string {
 
 function resolveVenueCountryCode(item: RankedFixtureRow): string | null {
   const city = normalise(item?.fixture?.venue?.city);
-
   if (!city) return null;
 
-  if (CITY_COUNTRY_CODE[city]) {
-    return CITY_COUNTRY_CODE[city];
-  }
+  if (CITY_COUNTRY_CODE[city]) return CITY_COUNTRY_CODE[city];
 
-  const cityParts = city.split(" ");
-
-  for (const part of cityParts) {
-    if (CITY_COUNTRY_CODE[part]) {
-      return CITY_COUNTRY_CODE[part];
-    }
+  for (const part of city.split(" ")) {
+    if (CITY_COUNTRY_CODE[part]) return CITY_COUNTRY_CODE[part];
   }
 
   return null;
@@ -238,11 +203,11 @@ function Row({
   const content = (
     <>
       <View style={styles.bgOverlay} />
-      <View style={styles.topFade} />
-      <View style={styles.bottomFade} />
+      <View style={styles.vignetteTop} />
+      <View style={styles.vignetteBottom} />
 
       <View style={styles.inner}>
-        <View style={styles.topRow}>
+        <View style={styles.headerRow}>
           <View style={styles.leagueRow}>
             {leagueLogo ? (
               <Image
@@ -275,6 +240,10 @@ function Row({
           </View>
         </View>
 
+        <Text style={styles.dateText} numberOfLines={1}>
+          {kickoff.date}
+        </Text>
+
         <View style={styles.matchRow}>
           <View style={styles.teamCol}>
             <TeamCrest name={home} logo={item?.teams?.home?.logo} />
@@ -283,14 +252,8 @@ function Row({
             </Text>
           </View>
 
-          <View style={styles.centerCol}>
-            <Text style={styles.dateText} numberOfLines={1}>
-              {kickoff.date}
-            </Text>
-
-            <View style={styles.vsPlate}>
-              <Text style={styles.vsText}>VS</Text>
-            </View>
+          <View style={styles.vsPlate}>
+            <Text style={styles.vsText}>VS</Text>
           </View>
 
           <View style={styles.teamCol}>
@@ -393,7 +356,7 @@ const styles = StyleSheet.create({
 
   cardImage: {
     borderRadius: 24,
-    opacity: 0.82,
+    opacity: 0.78,
   },
 
   fallbackCard: {
@@ -402,36 +365,37 @@ const styles = StyleSheet.create({
 
   bgOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.56)",
+    backgroundColor: "rgba(0,0,0,0.53)",
   },
 
-  topFade: {
+  vignetteTop: {
     position: "absolute",
     left: 0,
     right: 0,
     top: 0,
-    height: 92,
-    backgroundColor: "rgba(0,0,0,0.28)",
+    height: 72,
+    backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  bottomFade: {
+  vignetteBottom: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: 118,
-    backgroundColor: "rgba(0,0,0,0.42)",
+    height: 92,
+    backgroundColor: "rgba(0,0,0,0.24)",
   },
 
   inner: {
     padding: 14,
-    gap: 12,
+    gap: 11,
   },
 
-  topRow: {
+  headerRow: {
+    minHeight: 31,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 10,
   },
 
@@ -452,7 +416,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.black,
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 15,
   },
 
   europeFlagWrap: {
@@ -461,11 +426,11 @@ const styles = StyleSheet.create({
   },
 
   timeChip: {
+    minHeight: 31,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderRadius: theme.borderRadius.pill,
     backgroundColor: theme.badge.bgEmerald,
     borderWidth: 1,
@@ -474,14 +439,24 @@ const styles = StyleSheet.create({
 
   timeChipText: {
     color: theme.badge.textEmerald,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: theme.fontWeight.black,
+  },
+
+  dateText: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.black,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
 
   matchRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
 
   teamCol: {
@@ -499,20 +474,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  centerCol: {
-    width: 84,
-    alignItems: "center",
-    gap: 8,
-  },
-
-  dateText: {
-    color: theme.colors.textMuted,
-    fontSize: 10,
-    fontWeight: theme.fontWeight.black,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
-
   vsPlate: {
     minWidth: 42,
     paddingHorizontal: 10,
@@ -521,7 +482,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(0,0,0,0.36)",
+    backgroundColor: "rgba(0,0,0,0.30)",
   },
 
   vsText: {
@@ -532,14 +493,14 @@ const styles = StyleSheet.create({
   },
 
   locationRow: {
-    minHeight: 30,
+    minHeight: 31,
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 15,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "rgba(0,0,0,0.36)",
+    backgroundColor: "rgba(0,0,0,0.28)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
   },
@@ -571,7 +532,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(0,0,0,0.34)",
+    backgroundColor: "rgba(0,0,0,0.26)",
   },
 
   followActive: {
