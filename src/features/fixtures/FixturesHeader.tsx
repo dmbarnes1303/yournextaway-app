@@ -41,6 +41,9 @@ type Props = {
   helperLineText?: string;
   headerDateLine?: string;
   loading?: boolean;
+  backgroundLoading?: boolean;
+  loadedLeagueCount?: number;
+  totalLeagueCount?: number;
   error?: string | null;
   filteredCount?: number;
 };
@@ -64,9 +67,10 @@ export default function FixturesHeader({
   competitionSummaryText,
   titleText,
   subtitleText,
-  helperLineText,
-  headerDateLine,
   loading = false,
+  backgroundLoading = false,
+  loadedLeagueCount = 0,
+  totalLeagueCount = 0,
   error = null,
   filteredCount,
 }: Props) {
@@ -81,92 +85,108 @@ export default function FixturesHeader({
 
   const visibleLeagues = allLeagues.length > 0 ? allLeagues : selectedLeagues;
 
+  const loadingLine = useMemo(() => {
+    if (backgroundLoading && totalLeagueCount > 0) {
+      return `Loading more competitions • ${Math.min(loadedLeagueCount, totalLeagueCount)}/${totalLeagueCount}`;
+    }
+
+    if (loading) return "Finding priority fixtures";
+
+    return null;
+  }, [backgroundLoading, loadedLeagueCount, loading, totalLeagueCount]);
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.titleBlock}>
-        <Text style={styles.title}>{titleText || "Fixtures"}</Text>
-        <Text style={styles.subtitle}>
-          {subtitleText || "Find matches by date, competition or destination."}
-        </Text>
+      <View style={styles.hero}>
+        <View style={styles.heroCopy}>
+          <Text style={styles.eyebrow}>Match explorer</Text>
+          <Text style={styles.title}>{titleText || "Fixtures"}</Text>
+          <Text style={styles.subtitle}>
+            {subtitleText || "Find matches by date, competition or destination."}
+          </Text>
+        </View>
 
-        {loading ? (
-          <View style={styles.statusPill}>
-            <Text style={styles.statusPillText}>Updating matches</Text>
+        {loadingLine ? (
+          <View style={styles.livePill}>
+            <View style={styles.liveDot} />
+            <Text style={styles.livePillText} numberOfLines={1}>
+              {loadingLine}
+            </Text>
           </View>
         ) : null}
 
-        {!loading && error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {!loading && !backgroundLoading && error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : null}
       </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleWrap}>
-            <Text style={styles.sectionLabel}>Dates</Text>
-            <Text style={styles.sectionHint}>
-              {isRange ? "Date range active" : "Swipe for more dates"}
-            </Text>
-          </View>
+      <View style={styles.dateHeader}>
+        <View style={styles.sectionTitleWrap}>
+          <Text style={styles.sectionLabel}>Dates</Text>
+          <Text style={styles.sectionHint}>
+            {isRange ? "Range active" : "Swipe for more dates"}
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={openCalendar}
+          style={({ pressed }) => [styles.rangeButton, pressed && styles.pressedLite]}
+          hitSlop={10}
+        >
+          <Ionicons name="calendar-outline" size={14} color={theme.badge.textGold} />
+          <Text style={styles.rangeButtonText}>Date range</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.dateStripShell}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rowScroll}
+        >
+          {stripDays.map((d) => {
+            const active = !isRange && d.iso === selectedDay;
+
+            return (
+              <Pressable
+                key={d.iso}
+                onPress={() => onTapStripDate(d.iso)}
+                style={({ pressed }) => [
+                  styles.datePill,
+                  active && styles.datePillActive,
+                  pressed && styles.pressedCard,
+                ]}
+                android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+              >
+                <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
+                <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
+                  {d.bottom}
+                </Text>
+              </Pressable>
+            );
+          })}
 
           <Pressable
             onPress={openCalendar}
-            style={({ pressed }) => [styles.rangeButton, pressed && styles.pressedLite]}
-            hitSlop={10}
+            style={({ pressed }) => [styles.datePillGhost, pressed && styles.pressedCard]}
+            android_ripple={{ color: "rgba(255,255,255,0.06)" }}
           >
-            <Ionicons name="calendar-outline" size={14} color={theme.badge.textGold} />
-            <Text style={styles.rangeButtonText}>Date range</Text>
+            <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
+            <Text style={styles.dateGhostText}>Range</Text>
           </Pressable>
-        </View>
+        </ScrollView>
 
-        <View style={styles.dateStripShell}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.rowScroll}
-          >
-            {stripDays.map((d) => {
-              const active = !isRange && d.iso === selectedDay;
-
-              return (
-                <Pressable
-                  key={d.iso}
-                  onPress={() => onTapStripDate(d.iso)}
-                  style={({ pressed }) => [
-                    styles.datePill,
-                    active && styles.datePillActive,
-                    pressed && styles.pressedCard,
-                  ]}
-                  android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                >
-                  <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
-                  <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
-                    {d.bottom}
-                  </Text>
-                </Pressable>
-              );
-            })}
-
-            <Pressable
-              onPress={openCalendar}
-              style={({ pressed }) => [styles.datePillGhost, pressed && styles.pressedCard]}
-              android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-            >
-              <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
-              <Text style={styles.dateGhostText}>Range</Text>
-            </Pressable>
-          </ScrollView>
-
-          <View pointerEvents="none" style={styles.scrollFadeRight} />
-        </View>
+        <View pointerEvents="none" style={styles.scrollFadeRight} />
       </View>
 
-      <View style={styles.section}>
+      <View style={styles.controlsRow}>
         <Pressable
           onPress={() => setCompetitionsOpen((v) => !v)}
           style={({ pressed }) => [styles.competitionSelector, pressed && styles.pressedCard]}
           android_ripple={{ color: "rgba(255,255,255,0.06)" }}
         >
           <View style={styles.competitionTextWrap}>
-            <Text style={styles.sectionLabel}>Competitions</Text>
+            <Text style={styles.controlLabel}>Competitions</Text>
             <Text style={styles.competitionSummary} numberOfLines={1}>
               {competitionSummaryText ||
                 (hasSelectedLeagues
@@ -189,104 +209,102 @@ export default function FixturesHeader({
           </View>
         </Pressable>
 
-        {competitionsOpen ? (
-          <GlassCard variant="glass" level="default" style={styles.competitionPanel} padding={12}>
-            <View style={styles.quickActions}>
-              <Pressable
-                onPress={selectAllLeagues || resetToFeatured}
-                style={({ pressed }) => [
-                  styles.quickAction,
-                  !hasSelectedLeagues && styles.quickActionActive,
-                  pressed && styles.pressedLite,
+        <View style={styles.searchBlock}>
+          <Input
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search team, stadium or city"
+            leftIcon="search"
+            variant="default"
+            allowClear
+          />
+        </View>
+      </View>
+
+      {competitionsOpen ? (
+        <GlassCard variant="glass" level="default" style={styles.competitionPanel} padding={12}>
+          <View style={styles.quickActions}>
+            <Pressable
+              onPress={selectAllLeagues || resetToFeatured}
+              style={({ pressed }) => [
+                styles.quickAction,
+                !hasSelectedLeagues && styles.quickActionActive,
+                pressed && styles.pressedLite,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.quickActionText,
+                  !hasSelectedLeagues && styles.quickActionTextActive,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.quickActionText,
-                    !hasSelectedLeagues && styles.quickActionTextActive,
+                All competitions
+              </Text>
+            </Pressable>
+
+            {hasSelectedLeagues ? (
+              <Pressable
+                onPress={clearLeagues || resetToFeatured}
+                style={({ pressed }) => [styles.quickActionMuted, pressed && styles.pressedLite]}
+              >
+                <Text style={styles.quickActionMutedText}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          <ScrollView
+            style={styles.competitionList}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator={false}
+          >
+            {visibleLeagues.map((league) => {
+              const active = selectedLeagueSet.has(league.leagueId);
+
+              return (
+                <Pressable
+                  key={`${league.leagueId}-${league.slug}`}
+                  onPress={() => toggleLeague(league.leagueId)}
+                  onLongPress={() => selectSingleLeague(league.leagueId)}
+                  style={({ pressed }) => [
+                    styles.competitionRow,
+                    active && styles.competitionRowActive,
+                    pressed && styles.pressedLite,
                   ]}
                 >
-                  All competitions
-                </Text>
-              </Pressable>
+                  <View style={styles.leagueIdentity}>
+                    <LeagueLogo logo={league.logo} size="sm" />
+                    <LeagueFlag code={league.countryCode} size="sm" />
+                  </View>
 
-              {hasSelectedLeagues ? (
-                <Pressable
-                  onPress={clearLeagues || resetToFeatured}
-                  style={({ pressed }) => [styles.quickActionMuted, pressed && styles.pressedLite]}
-                >
-                  <Text style={styles.quickActionMutedText}>Clear</Text>
+                  <View style={styles.leagueCopy}>
+                    <Text style={styles.leagueText} numberOfLines={1}>
+                      {league.label}
+                    </Text>
+                    <Text style={styles.leagueCountry} numberOfLines={1}>
+                      {league.country}
+                    </Text>
+                  </View>
+
+                  <Ionicons
+                    name={active ? "checkmark-circle" : "add-circle-outline"}
+                    size={19}
+                    color={active ? theme.colors.emeraldSoft : theme.colors.textMuted}
+                  />
                 </Pressable>
-              ) : null}
-            </View>
+              );
+            })}
+          </ScrollView>
 
-            <ScrollView
-              style={styles.competitionList}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-            >
-              {visibleLeagues.map((league) => {
-                const active = selectedLeagueSet.has(league.leagueId);
+          <Text style={styles.competitionHelp}>
+            Tap to add or remove. Long-press a competition to view only that one.
+          </Text>
+        </GlassCard>
+      ) : null}
 
-                return (
-                  <Pressable
-                    key={`${league.leagueId}-${league.slug}`}
-                    onPress={() => toggleLeague(league.leagueId)}
-                    onLongPress={() => selectSingleLeague(league.leagueId)}
-                    style={({ pressed }) => [
-                      styles.competitionRow,
-                      active && styles.competitionRowActive,
-                      pressed && styles.pressedLite,
-                    ]}
-                  >
-                    <View style={styles.leagueIdentity}>
-                      <LeagueLogo logo={league.logo} size="sm" />
-                      <LeagueFlag code={league.countryCode} size="sm" />
-                    </View>
-
-                    <View style={styles.leagueCopy}>
-                      <Text style={styles.leagueText} numberOfLines={1}>
-                        {league.label}
-                      </Text>
-                      <Text style={styles.leagueCountry} numberOfLines={1}>
-                        {league.country}
-                      </Text>
-                    </View>
-
-                    <Ionicons
-                      name={active ? "checkmark-circle" : "add-circle-outline"}
-                      size={19}
-                      color={active ? theme.colors.emeraldSoft : theme.colors.textMuted}
-                    />
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            <Text style={styles.competitionHelp}>
-              Tap to add or remove. Long-press a competition to view only that one.
-            </Text>
-          </GlassCard>
-        ) : null}
-      </View>
-
-      <View style={styles.searchBlock}>
-        <Input
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search team, stadium or city"
-          leftIcon="search"
-          variant="default"
-          allowClear
-        />
-      </View>
-
-      {typeof filteredCount === "number" || helperLineText || headerDateLine ? (
+      {typeof filteredCount === "number" ? (
         <View style={styles.contextLine}>
-          <Text style={styles.contextText} numberOfLines={2}>
-            {typeof filteredCount === "number"
-              ? `${filteredCount} match${filteredCount === 1 ? "" : "es"} shown`
-              : helperLineText || headerDateLine}
+          <Text style={styles.contextText} numberOfLines={1}>
+            {filteredCount} match{filteredCount === 1 ? "" : "es"} shown
           </Text>
         </View>
       ) : null}
@@ -296,11 +314,24 @@ export default function FixturesHeader({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 16,
+    gap: 14,
   },
 
-  titleBlock: {
-    gap: 6,
+  hero: {
+    gap: 8,
+  },
+
+  heroCopy: {
+    gap: 5,
+  },
+
+  eyebrow: {
+    color: theme.colors.emeraldSoft,
+    fontSize: theme.fontSize.tiny,
+    lineHeight: 14,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
 
   title: {
@@ -308,7 +339,7 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.hero,
     lineHeight: 34,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: -0.25,
+    letterSpacing: -0.35,
   },
 
   subtitle: {
@@ -319,18 +350,28 @@ const styles = StyleSheet.create({
     maxWidth: "94%",
   },
 
-  statusPill: {
+  livePill: {
     alignSelf: "flex-start",
-    marginTop: 4,
+    minHeight: 28,
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: theme.borderRadius.pill,
     backgroundColor: theme.badge.bgEmerald,
     borderWidth: 1,
     borderColor: theme.badge.borderEmerald,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
   },
 
-  statusPillText: {
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 99,
+    backgroundColor: theme.colors.emeraldSoft,
+  },
+
+  livePillText: {
     color: theme.badge.textEmerald,
     fontSize: theme.fontSize.tiny,
     fontWeight: theme.fontWeight.black,
@@ -343,11 +384,7 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  section: {
-    gap: 10,
-  },
-
-  sectionHeader: {
+  dateHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
@@ -412,11 +449,12 @@ const styles = StyleSheet.create({
   },
 
   datePill: {
-    minWidth: 76,
+    minWidth: 78,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 17,
-    backgroundColor: Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
+    borderRadius: 18,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
     alignItems: "center",
@@ -452,10 +490,11 @@ const styles = StyleSheet.create({
   },
 
   datePillGhost: {
-    minHeight: 56,
+    minHeight: 58,
     paddingHorizontal: 14,
-    borderRadius: 17,
-    backgroundColor: Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
+    borderRadius: 18,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
     borderStyle: "dashed",
     borderColor: theme.colors.borderStrong,
@@ -471,12 +510,17 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
   },
 
+  controlsRow: {
+    gap: 10,
+  },
+
   competitionSelector: {
     minHeight: 58,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 18,
-    backgroundColor: Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
     flexDirection: "row",
@@ -489,6 +533,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 3,
+  },
+
+  controlLabel: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.black,
   },
 
   competitionSummary: {
@@ -519,6 +569,10 @@ const styles = StyleSheet.create({
     color: theme.badge.textEmerald,
     fontSize: theme.fontSize.tiny,
     fontWeight: theme.fontWeight.black,
+  },
+
+  searchBlock: {
+    marginTop: 0,
   },
 
   competitionPanel: {
@@ -565,7 +619,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
   },
@@ -632,12 +687,8 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  searchBlock: {
-    marginTop: -2,
-  },
-
   contextLine: {
-    marginTop: -4,
+    marginTop: -2,
   },
 
   contextText: {
