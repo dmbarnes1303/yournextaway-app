@@ -42,17 +42,28 @@ export type ResolveTicketArgs = {
 
 const REQUEST_TIMEOUT_MS = 20000;
 
+const APPROVED_PROVIDERS = ["footballticketnet", "sportsevents365"] as const;
+
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
 }
 
 function normalizeProvider(provider: unknown): string {
-  return clean(provider).toLowerCase();
+  return clean(provider)
+    .toLowerCase()
+    .replace(/^www\./, "")
+    .replace(/\.com$/, "")
+    .replace(/[\s_-]+/g, "");
 }
 
 function isSe365(provider: unknown): boolean {
   const p = normalizeProvider(provider);
-  return p === "sportsevents365" || p === "se365";
+  return (
+    p === "sportsevents365" ||
+    p === "sportsevents" ||
+    p === "se365" ||
+    p === "sports365"
+  );
 }
 
 function isFtn(provider: unknown): boolean {
@@ -60,8 +71,8 @@ function isFtn(provider: unknown): boolean {
   return (
     p === "footballticketnet" ||
     p === "footballticketsnet" ||
-    p === "footballticketnet.com" ||
-    p === "footballticketsnet.com" ||
+    p === "footballticket" ||
+    p === "footballtickets" ||
     p === "ftn"
   );
 }
@@ -70,6 +81,11 @@ function canonicalizeProvider(provider: unknown): string {
   if (isSe365(provider)) return "sportsevents365";
   if (isFtn(provider)) return "footballticketnet";
   return clean(provider);
+}
+
+function isApprovedProvider(provider: unknown): boolean {
+  const canonical = canonicalizeProvider(provider);
+  return APPROVED_PROVIDERS.includes(canonical as any);
 }
 
 function safeJsonParse<T>(value: string): T | null {
@@ -84,8 +100,10 @@ function safeUrl(value: unknown): string | null {
   const raw = clean(value);
   if (!raw) return null;
 
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
   try {
-    const parsed = new URL(raw);
+    const parsed = new URL(withProtocol);
     if (!/^https?:$/i.test(parsed.protocol)) return null;
     return parsed.toString();
   } catch {
@@ -94,7 +112,7 @@ function safeUrl(value: unknown): string | null {
 }
 
 function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
-  const normalizedBase = clean(base);
+  const normalizedBase = clean(base).replace(/\/+$/, "");
   const homeName = clean(args.homeName);
   const awayName = clean(args.awayName);
   const kickoffIso = clean(args.kickoffIso);
@@ -105,6 +123,8 @@ function buildResolveUrl(base: string, args: ResolveTicketArgs): string | null {
     homeName,
     awayName,
     kickoffIso,
+    includeProviders: "footballticketnet,sportsevents365",
+    includeAllProviders: "1",
     _ts: String(Date.now()),
   });
 
@@ -176,9 +196,10 @@ function normalizeOption(input: unknown): TicketResolutionOption | null {
   const provider = canonicalizeProvider(obj.provider);
   const url = safeUrl(obj.url);
   const title = clean(obj.title);
-  const score = normalizeScore(obj.score);
+  const score = normalizeScore(obj.score) ?? 0;
 
-  if (!provider || !url || !title || score == null) return null;
+  if (!provider || !url || !title) return null;
+  if (!isApprovedProvider(provider)) return null;
 
   return {
     provider,
@@ -193,19 +214,44 @@ function normalizeOption(input: unknown): TicketResolutionOption | null {
   };
 }
 
+function extractCandidateOptions(input: any): unknown[] {
+  const out: unknown[] = [];
+
+  if (!input || typeof input !== "object") return out;
+
+  if (Array.isArray(input.options)) out.push(...input.options);
+  if (Array.isArray(input.results)) out.push(...input.results);
+  if (Array.isArray(input.providerResults)) out.push(...input.providerResults);
+  if (Array.isArray(input.ticketOptions)) out.push(...input.ticketOptions);
+
+  const providers = input.providers;
+  if (providers && typeof providers === "object" && !Array.isArray(providers)) {
+    for (const [provider, value] of Object.entries(providers)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          out.push({ ...(typeof item === "object" && item ? item : {}), provider });
+        }
+      } else if (value && typeof value === "object") {
+        out.push({ ...(value as Record<string, unknown>), provider });
+      }
+    }
+  }
+
+  return out;
+}
+
 function getReasonRank(reason: TicketResolutionOption["reason"]): number {
   if (reason === "exact_event") return 3;
   if (reason === "partial_match") return 2;
-  if (reason === "search_fallback") return 1;
-  return 0;
+  return 1;
 }
 
 function getUrlQualityRank(urlQuality?: TicketUrlQuality): number {
   const q = normalizeUrlQuality(urlQuality);
   if (q === "event") return 4;
   if (q === "listing") return 3;
-  if (q === "search") return 1;
-  return 0;
+  if (q === "search") return 2;
+  return 1;
 }
 
 function providerTieBreak(provider: string): number {
@@ -231,14 +277,9 @@ function compareOptions(a: TicketResolutionOption, b: TicketResolutionOption): n
   const aPrice = parsePriceAmount(a.priceText);
   const bPrice = parsePriceAmount(b.priceText);
 
-  if (aPrice != null && bPrice != null && aPrice !== bPrice) {
-    return aPrice - bPrice;
-  }
-
-  const aHasPrice = aPrice != null;
-  const bHasPrice = bPrice != null;
-  if (aHasPrice && !bHasPrice) return -1;
-  if (!aHasPrice && bHasPrice) return 1;
+  if (aPrice != null && bPrice != null && aPrice !== bPrice) return aPrice - bPrice;
+  if (aPrice != null && bPrice == null) return -1;
+  if (aPrice == null && bPrice != null) return 1;
 
   const aTie = providerTieBreak(a.provider);
   const bTie = providerTieBreak(b.provider);
@@ -251,16 +292,12 @@ function dedupeAndSortOptions(options: TicketResolutionOption[]): TicketResoluti
   const byKey = new Map<string, TicketResolutionOption>();
 
   for (const option of options) {
-    const key = `${normalizeProvider(option.provider)}|${option.url}`;
+    const provider = canonicalizeProvider(option.provider);
+    const key = `${provider}|${option.url}`;
     const existing = byKey.get(key);
 
-    if (!existing) {
-      byKey.set(key, option);
-      continue;
-    }
-
-    if (compareOptions(option, existing) < 0) {
-      byKey.set(key, option);
+    if (!existing || compareOptions(option, existing) < 0) {
+      byKey.set(key, { ...option, provider });
     }
   }
 
@@ -268,16 +305,18 @@ function dedupeAndSortOptions(options: TicketResolutionOption[]): TicketResoluti
 }
 
 function normalizeCheckedProviders(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+  const rawProviders = Array.isArray(value) ? value : [];
 
   const seen = new Set<string>();
   const out: string[] = [];
 
-  for (const entry of value) {
+  for (const entry of rawProviders) {
     const next = canonicalizeProvider(entry);
-    if (!next) continue;
+    if (!next || !isApprovedProvider(next)) continue;
+
     const key = next.toLowerCase();
     if (seen.has(key)) continue;
+
     seen.add(key);
     out.push(next);
   }
@@ -285,111 +324,78 @@ function normalizeCheckedProviders(value: unknown): string[] {
   return out;
 }
 
-function hasUsablePrimaryFields(args: {
-  provider: string | null;
-  url: string | null;
-  title: string | null;
-}): boolean {
-  return Boolean(args.provider && args.url && args.title);
-}
-
 function isUsableOption(option: TicketResolutionOption | null | undefined): boolean {
   if (!option) return false;
   if (!option.provider || !option.url || !option.title) return false;
-
-  const urlQuality = normalizeUrlQuality(option.urlQuality);
-
-  if (isSe365(option.provider) || isFtn(option.provider)) {
-    return (
-      urlQuality === "event" ||
-      urlQuality === "listing" ||
-      urlQuality === "search" ||
-      urlQuality === "unknown"
-    );
-  }
-
-  return false;
+  return isApprovedProvider(option.provider);
 }
 
-function isUsablePrimary(args: {
-  provider: string | null;
-  url: string | null;
-  title: string | null;
-  urlQuality: TicketUrlQuality;
-}): boolean {
-  if (!hasUsablePrimaryFields(args)) return false;
+function normalizeResolutionResult(input: TicketResolutionResult | null): TicketResolutionResult | null {
+  if (!input || typeof input !== "object") return null;
 
-  if (isSe365(args.provider) || isFtn(args.provider)) {
-    return (
-      args.urlQuality === "event" ||
-      args.urlQuality === "listing" ||
-      args.urlQuality === "search" ||
-      args.urlQuality === "unknown"
-    );
-  }
-
-  return false;
-}
-
-function normalizeResolutionResult(
-  input: TicketResolutionResult | null
-): TicketResolutionResult | null {
-  if (!input) return null;
+  const rawOptions = extractCandidateOptions(input);
 
   const normalizedOptions = dedupeAndSortOptions(
-    Array.isArray(input.options)
-      ? input.options
-          .map((x) => normalizeOption(x))
-          .filter((x): x is TicketResolutionOption => x !== null)
-      : []
+    rawOptions
+      .map((x) => normalizeOption(x))
+      .filter((x): x is TicketResolutionOption => x !== null)
+      .filter(isUsableOption)
   );
 
-  const fallbackTop = normalizedOptions[0] ?? null;
-
-  const provider = canonicalizeProvider(clean(input.provider) || fallbackTop?.provider || null);
-  const url = safeUrl(input.url) || fallbackTop?.url || null;
-  const title = clean(input.title) || fallbackTop?.title || null;
-  const priceText = clean(input.priceText) || fallbackTop?.priceText || null;
-
-  const score = normalizeScore(input.score) ?? fallbackTop?.score ?? null;
-  const rawScore = normalizeScore(input.rawScore) ?? fallbackTop?.rawScore ?? null;
-
-  const exact =
-    typeof input.exact === "boolean" ? input.exact : Boolean(fallbackTop?.exact);
-
-  const topLevelReason = normalizeTopLevelReason(
-    input.reason,
-    Boolean(provider),
-    normalizedOptions.length > 0
-  );
-
-  const topLevelUrlQuality = normalizeUrlQuality(input.urlQuality ?? fallbackTop?.urlQuality);
-
-  const hasUsablePrimary = isUsablePrimary({
-    provider,
-    url,
-    title,
-    urlQuality: topLevelUrlQuality,
+  const topLevelOption = normalizeOption({
+    provider: input.provider,
+    exact: input.exact,
+    score: input.score,
+    rawScore: input.rawScore,
+    url: input.url,
+    title: input.title,
+    priceText: input.priceText,
+    reason: input.reason,
+    urlQuality: input.urlQuality,
   });
 
-  const hasUsableOptions = normalizedOptions.some((option) => isUsableOption(option));
+  const allOptions = dedupeAndSortOptions(
+    [topLevelOption, ...normalizedOptions].filter(
+      (x): x is TicketResolutionOption => x !== null && isUsableOption(x)
+    )
+  );
+
+  const fallbackTop = allOptions[0] ?? null;
+
+  const provider = fallbackTop?.provider ?? canonicalizeProvider(input.provider) ?? null;
+  const url = fallbackTop?.url ?? safeUrl(input.url) ?? null;
+  const title = fallbackTop?.title ?? clean(input.title) || null;
+  const priceText = fallbackTop?.priceText ?? clean(input.priceText) || null;
+  const score = fallbackTop?.score ?? normalizeScore(input.score);
+  const rawScore = fallbackTop?.rawScore ?? normalizeScore(input.rawScore);
+  const exact = fallbackTop?.exact ?? Boolean(input.exact);
+  const urlQuality = normalizeUrlQuality(fallbackTop?.urlQuality ?? input.urlQuality);
+
+  const checkedProviders = normalizeCheckedProviders(input.checkedProviders);
+  const checkedProviderSet = new Set(checkedProviders);
+
+  for (const option of allOptions) {
+    checkedProviderSet.add(option.provider);
+  }
+
+  const finalCheckedProviders = Array.from(checkedProviderSet);
+
+  const ok = allOptions.length > 0;
 
   return {
-    ok: hasUsablePrimary || hasUsableOptions,
-    provider,
+    ok,
+    provider: ok ? provider : null,
     exact,
-    score,
-    rawScore,
-    url,
-    title,
-    priceText,
-    reason: topLevelReason,
-    urlQuality: topLevelUrlQuality,
-    checkedProviders: normalizeCheckedProviders(input.checkedProviders),
-    options: normalizedOptions,
-    error:
-      clean(input.error) ||
-      (!hasUsablePrimary && normalizedOptions.length === 0 ? "not_found" : undefined),
+    score: ok ? score ?? null : null,
+    rawScore: ok ? rawScore ?? null : null,
+    url: ok ? url : null,
+    title: ok ? title : null,
+    priceText: ok ? priceText : null,
+    reason: normalizeTopLevelReason(input.reason, Boolean(provider), ok),
+    urlQuality,
+    checkedProviders: finalCheckedProviders,
+    options: allOptions,
+    error: clean(input.error) || (!ok ? "not_found" : undefined),
   };
 }
 
@@ -416,15 +422,11 @@ export async function resolveTicketForFixture(
 ): Promise<TicketResolutionResult | null> {
   const base = clean(getBackendBaseUrl());
 
-  if (!base) {
-    return makeErrorResult("missing_backend_url");
-  }
+  if (!base) return makeErrorResult("missing_backend_url");
 
   const url = buildResolveUrl(base, args);
 
-  if (!url) {
-    return makeErrorResult("invalid_resolve_args");
-  }
+  if (!url) return makeErrorResult("invalid_resolve_args");
 
   const controller =
     typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -454,7 +456,6 @@ export async function resolveTicketForFixture(
     if (!res.ok) {
       return {
         ...normalized,
-        ok: normalized.ok,
         error: normalized.error || `http_${res.status}`,
       };
     }
@@ -463,9 +464,7 @@ export async function resolveTicketForFixture(
   } catch (error: any) {
     const name = String(error?.name ?? "");
 
-    if (name === "AbortError") {
-      return makeErrorResult("timeout");
-    }
+    if (name === "AbortError") return makeErrorResult("timeout");
 
     return makeErrorResult("network_error");
   } finally {
