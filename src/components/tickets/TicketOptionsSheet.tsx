@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import {
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +14,10 @@ import {
   providerLabel,
   providerShort,
 } from "@/src/features/tripDetail/helpers";
+import {
+  getPartnerLogoUrl,
+  getPartnerOrNull,
+} from "@/src/constants/partners";
 
 import type { TicketResolutionOption } from "@/src/services/ticketResolver";
 
@@ -28,6 +33,10 @@ type Props = {
   onOpenOfficial?: (() => void) | null;
 };
 
+const APP_GREEN = theme.colors.primary;
+const APP_GREEN_SOFT = "rgba(34,197,94,0.18)";
+const APP_GREEN_BORDER = "rgba(34,197,94,0.38)";
+
 function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -36,30 +45,35 @@ function priceLabel(option: TicketResolutionOption): string {
   return clean(option.priceText) || "View live price";
 }
 
-function providerTone(provider?: string | null) {
-  const raw = clean(provider).toLowerCase();
-
-  if (raw === "footballticketnet" || raw === "ftn") {
-    return {
-      borderColor: "rgba(134,239,172,0.28)",
-      bg: "rgba(34,197,94,0.11)",
-      text: theme.colors.emeraldSoft,
-    };
-  }
-
-  if (raw === "sportsevents365" || raw === "se365") {
-    return {
-      borderColor: "rgba(134,239,172,0.28)",
-      bg: "rgba(34,197,94,0.11)",
-      text: theme.colors.emeraldSoft,
-    };
-  }
-
+function resolveProvider(input?: string | null) {
+  const partner = getPartnerOrNull(input);
   return {
-    borderColor: "rgba(255,255,255,0.12)",
-    bg: "rgba(255,255,255,0.05)",
-    text: theme.colors.textSecondary,
+    name: clean(partner?.display?.name) || providerLabel(input),
+    short: clean(partner?.display?.badgeText) || providerShort(input),
+    logoUrl: getPartnerLogoUrl(input),
   };
+}
+
+function ProviderLogo({
+  logoUrl,
+  fallback,
+}: {
+  logoUrl?: string | null;
+  fallback: string;
+}) {
+  if (logoUrl) {
+    return (
+      <View style={styles.providerLogoWrap}>
+        <Image source={{ uri: logoUrl }} style={styles.providerLogo} resizeMode="contain" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.providerFallback}>
+      <Text style={styles.providerFallbackText}>{fallback}</Text>
+    </View>
+  );
 }
 
 function OptionCard({
@@ -71,9 +85,7 @@ function OptionCard({
   onPress: () => void;
   highlight?: boolean;
 }) {
-  const provider = providerLabel(option.provider);
-  const short = providerShort(option.provider);
-  const tone = providerTone(option.provider);
+  const provider = resolveProvider(option.provider);
 
   return (
     <View style={[styles.optionCard, highlight && styles.optionCardHighlight]}>
@@ -85,23 +97,11 @@ function OptionCard({
 
       <View style={styles.optionTopRow}>
         <View style={styles.providerRow}>
-          <View
-            style={[
-              styles.providerBadge,
-              {
-                borderColor: tone.borderColor,
-                backgroundColor: tone.bg,
-              },
-            ]}
-          >
-            <Text style={[styles.providerBadgeText, { color: tone.text }]}>
-              {short}
-            </Text>
-          </View>
+          <ProviderLogo logoUrl={provider.logoUrl} fallback={provider.short} />
 
           <View style={styles.providerCopy}>
             <Text style={styles.providerName} numberOfLines={1}>
-              {provider}
+              {provider.name}
             </Text>
             <Text style={styles.providerSub} numberOfLines={1}>
               Partner ticket route
@@ -120,10 +120,7 @@ function OptionCard({
 
       <Pressable
         onPress={onPress}
-        style={({ pressed }) => [
-          styles.ticketButton,
-          pressed && styles.pressed,
-        ]}
+        style={({ pressed }) => [styles.ticketButton, pressed && styles.pressed]}
       >
         <Text style={styles.ticketButtonText}>View tickets</Text>
         <Text style={styles.ticketButtonArrow}>→</Text>
@@ -176,7 +173,8 @@ export default function TicketOptionsSheet({
     };
   }, [strongOptions, weakOptions]);
 
-  const subtitleText = clean(subtitle) || (total > 1 ? "Best ticket routes first" : "Ticket route found");
+  const subtitleText =
+    clean(subtitle) || (total > 1 ? "Best ticket routes first" : "Ticket route found");
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -200,11 +198,7 @@ export default function TicketOptionsSheet({
             showsVerticalScrollIndicator={false}
           >
             {primary ? (
-              <OptionCard
-                option={primary}
-                onPress={() => onSelect(primary)}
-                highlight
-              />
+              <OptionCard option={primary} onPress={() => onSelect(primary)} highlight />
             ) : (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>No ticket routes found</Text>
@@ -231,10 +225,7 @@ export default function TicketOptionsSheet({
 
           <View style={styles.footer}>
             <Pressable
-              style={({ pressed }) => [
-                styles.compareButton,
-                pressed && styles.pressed,
-              ]}
+              style={({ pressed }) => [styles.compareButton, pressed && styles.pressed]}
               onPress={onCompareAll}
             >
               <Text style={styles.compareButtonText}>Compare all ticket routes</Text>
@@ -242,10 +233,7 @@ export default function TicketOptionsSheet({
 
             {onOpenOfficial ? (
               <Pressable
-                style={({ pressed }) => [
-                  styles.officialButton,
-                  pressed && styles.pressed,
-                ]}
+                style={({ pressed }) => [styles.officialButton, pressed && styles.pressed]}
                 onPress={onOpenOfficial}
               >
                 <Text style={styles.officialButtonText}>Official club site</Text>
@@ -269,7 +257,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.68)",
+    backgroundColor: "rgba(0,0,0,0.70)",
   },
 
   backdrop: {
@@ -304,7 +292,7 @@ const styles = StyleSheet.create({
   },
 
   eyebrow: {
-    color: theme.colors.emeraldSoft,
+    color: APP_GREEN,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
@@ -354,8 +342,8 @@ const styles = StyleSheet.create({
   },
 
   optionCardHighlight: {
-    borderColor: "rgba(34,197,94,0.42)",
-    backgroundColor: "rgba(34,197,94,0.08)",
+    borderColor: APP_GREEN_BORDER,
+    backgroundColor: "rgba(34,197,94,0.07)",
   },
 
   bestTag: {
@@ -363,13 +351,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.14)",
+    backgroundColor: APP_GREEN_SOFT,
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.28)",
+    borderColor: APP_GREEN_BORDER,
   },
 
   bestTagText: {
-    color: theme.colors.emeraldSoft,
+    color: APP_GREEN,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.4,
@@ -391,16 +379,36 @@ const styles = StyleSheet.create({
     gap: 11,
   },
 
-  providerBadge: {
-    width: 48,
-    height: 48,
+  providerLogoWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
+  },
+
+  providerLogo: {
+    width: 44,
+    height: 44,
+  },
+
+  providerFallback: {
+    width: 52,
+    height: 52,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: APP_GREEN_SOFT,
     borderWidth: 1,
+    borderColor: APP_GREEN_BORDER,
   },
 
-  providerBadgeText: {
+  providerFallbackText: {
+    color: APP_GREEN,
     fontSize: 12,
     fontWeight: "900",
   },
@@ -426,7 +434,7 @@ const styles = StyleSheet.create({
 
   priceText: {
     maxWidth: 126,
-    color: theme.colors.emeraldSoft,
+    color: APP_GREEN,
     fontSize: 14,
     fontWeight: "900",
     textAlign: "right",
@@ -442,7 +450,7 @@ const styles = StyleSheet.create({
   ticketButton: {
     minHeight: 52,
     borderRadius: 17,
-    backgroundColor: theme.colors.emeraldSoft,
+    backgroundColor: APP_GREEN,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -503,7 +511,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(34,197,94,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.24)",
+    borderColor: APP_GREEN_BORDER,
   },
 
   compareButtonText: {
