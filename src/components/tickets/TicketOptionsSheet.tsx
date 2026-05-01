@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import {
   Modal,
-  View,
-  Text,
-  StyleSheet,
   Pressable,
   ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 import { theme } from "@/src/constants/theme";
@@ -33,8 +33,7 @@ function clean(value: unknown): string {
 }
 
 function priceLabel(option: TicketResolutionOption): string {
-  const price = clean(option.priceText);
-  return price || "View live price";
+  return clean(option.priceText) || "View live price";
 }
 
 function providerTone(provider?: string | null) {
@@ -42,24 +41,24 @@ function providerTone(provider?: string | null) {
 
   if (raw === "footballticketnet" || raw === "ftn") {
     return {
-      borderColor: "rgba(120,170,255,0.35)",
-      bg: "rgba(120,170,255,0.14)",
-      text: "#DCE6FF",
+      borderColor: "rgba(134,239,172,0.28)",
+      bg: "rgba(34,197,94,0.11)",
+      text: theme.colors.emeraldSoft,
     };
   }
 
   if (raw === "sportsevents365" || raw === "se365") {
     return {
-      borderColor: "rgba(87,162,56,0.35)",
-      bg: "rgba(87,162,56,0.14)",
-      text: "#D9F2C8",
+      borderColor: "rgba(134,239,172,0.28)",
+      bg: "rgba(34,197,94,0.11)",
+      text: theme.colors.emeraldSoft,
     };
   }
 
   return {
-    borderColor: "rgba(255,255,255,0.14)",
-    bg: "rgba(255,255,255,0.06)",
-    text: theme.colors.text,
+    borderColor: "rgba(255,255,255,0.12)",
+    bg: "rgba(255,255,255,0.05)",
+    text: theme.colors.textSecondary,
   };
 }
 
@@ -77,52 +76,61 @@ function OptionCard({
   const tone = providerTone(option.provider);
 
   return (
-    <Pressable
-      style={[
-        styles.optionCard,
-        highlight && styles.optionCardHighlight,
-      ]}
-      onPress={onPress}
-    >
-      {highlight && (
+    <View style={[styles.optionCard, highlight && styles.optionCardHighlight]}>
+      {highlight ? (
         <View style={styles.bestTag}>
-          <Text style={styles.bestTagText}>Best option</Text>
+          <Text style={styles.bestTagText}>Best route</Text>
         </View>
-      )}
+      ) : null}
 
-      <View style={styles.topRow}>
-        <View style={styles.providerWrap}>
+      <View style={styles.optionTopRow}>
+        <View style={styles.providerRow}>
           <View
             style={[
-              styles.providerPill,
+              styles.providerBadge,
               {
                 borderColor: tone.borderColor,
                 backgroundColor: tone.bg,
               },
             ]}
           >
-            <Text style={[styles.providerPillText, { color: tone.text }]}>
+            <Text style={[styles.providerBadgeText, { color: tone.text }]}>
               {short}
             </Text>
           </View>
 
-          <View style={styles.providerText}>
-            <Text style={styles.provider}>{provider}</Text>
-            <Text style={styles.providerSub}>Secure via partner</Text>
+          <View style={styles.providerCopy}>
+            <Text style={styles.providerName} numberOfLines={1}>
+              {provider}
+            </Text>
+            <Text style={styles.providerSub} numberOfLines={1}>
+              Partner ticket route
+            </Text>
           </View>
         </View>
 
-        <Text style={styles.price}>{priceLabel(option)}</Text>
+        <Text style={styles.priceText} numberOfLines={1}>
+          {priceLabel(option)}
+        </Text>
       </View>
 
-      <Text style={styles.meta} numberOfLines={1}>
+      <Text style={styles.ticketTitle} numberOfLines={2}>
         {clean(option.title) || "Match tickets"}
       </Text>
 
-      <View style={styles.ctaRow}>
-        <Text style={styles.cta}>View tickets →</Text>
-      </View>
-    </Pressable>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.ticketButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Text style={styles.ticketButtonText}>View tickets</Text>
+        <Text style={styles.ticketButtonArrow}>→</Text>
+      </Pressable>
+
+      <Text style={styles.partnerNote}>Opens partner site</Text>
+    </View>
   );
 }
 
@@ -137,16 +145,16 @@ export default function TicketOptionsSheet({
   onCompareAll,
   onOpenOfficial,
 }: Props) {
-  const { primary, rest } = useMemo(() => {
+  const { primary, rest, total } = useMemo(() => {
     const strong = Array.isArray(strongOptions) ? strongOptions : [];
     const weak = Array.isArray(weakOptions) ? weakOptions : [];
 
     const combined = [...strong, ...weak];
 
     const seen = new Set<string>();
-    const deduped = combined.filter((o) => {
-      const key = `${clean(o.provider)}|${clean(o.url)}`;
-      if (!key || seen.has(key)) return false;
+    const deduped = combined.filter((option) => {
+      const key = `${clean(option.provider).toLowerCase()}|${clean(option.url)}`;
+      if (!clean(option.provider) || !clean(option.url) || seen.has(key)) return false;
       seen.add(key);
       return true;
     });
@@ -164,8 +172,11 @@ export default function TicketOptionsSheet({
     return {
       primary: sorted[0] || null,
       rest: sorted.slice(1, 6),
+      total: sorted.length,
     };
   }, [strongOptions, weakOptions]);
+
+  const subtitleText = clean(subtitle) || (total > 1 ? "Best ticket routes first" : "Ticket route found");
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -175,52 +186,76 @@ export default function TicketOptionsSheet({
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
-          <Text style={styles.title}>{matchLabel}</Text>
-
-          <Text style={styles.subtitle}>
-            {clean(subtitle) || "Choose where to get tickets"}
-          </Text>
+          <View style={styles.header}>
+            <Text style={styles.eyebrow}>Ticket options</Text>
+            <Text style={styles.title} numberOfLines={2}>
+              {matchLabel}
+            </Text>
+            <Text style={styles.subtitle}>{subtitleText}</Text>
+          </View>
 
           <ScrollView
             style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {primary && (
+            {primary ? (
               <OptionCard
                 option={primary}
                 onPress={() => onSelect(primary)}
                 highlight
               />
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyTitle}>No ticket routes found</Text>
+                <Text style={styles.emptyText}>
+                  Try the match details page or check again later.
+                </Text>
+              </View>
             )}
 
-            {rest.length > 0 && (
+            {rest.length > 0 ? (
               <>
-                <Text style={styles.sectionLabel}>More options</Text>
+                <Text style={styles.sectionLabel}>More routes</Text>
 
-                {rest.map((option, i) => (
+                {rest.map((option, index) => (
                   <OptionCard
-                    key={`${option.provider}-${option.url}-${i}`}
+                    key={`${option.provider}-${option.url}-${index}`}
                     option={option}
                     onPress={() => onSelect(option)}
                   />
                 ))}
               </>
-            )}
+            ) : null}
           </ScrollView>
 
           <View style={styles.footer}>
-            <Pressable style={styles.primaryBtn} onPress={onCompareAll}>
-              <Text style={styles.primaryBtnText}>Compare all ticket routes</Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.compareButton,
+                pressed && styles.pressed,
+              ]}
+              onPress={onCompareAll}
+            >
+              <Text style={styles.compareButtonText}>Compare all ticket routes</Text>
             </Pressable>
 
-            {onOpenOfficial && (
-              <Pressable style={styles.secondaryBtn} onPress={onOpenOfficial}>
-                <Text style={styles.secondaryBtnText}>Official club site</Text>
+            {onOpenOfficial ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.officialButton,
+                  pressed && styles.pressed,
+                ]}
+                onPress={onOpenOfficial}
+              >
+                <Text style={styles.officialButtonText}>Official club site</Text>
               </Pressable>
-            )}
+            ) : null}
 
-            <Pressable onPress={onClose}>
+            <Pressable
+              style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+              onPress={onClose}
+            >
               <Text style={styles.closeText}>Close</Text>
             </Pressable>
           </View>
@@ -234,7 +269,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "rgba(0,0,0,0.68)",
   },
 
   backdrop: {
@@ -242,13 +277,17 @@ const styles = StyleSheet.create({
   },
 
   sheet: {
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    backgroundColor: "#0B1020",
-    paddingHorizontal: 18,
+    maxHeight: "84%",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    backgroundColor: "rgba(7,12,12,0.98)",
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 20,
-    maxHeight: "82%",
   },
 
   handle: {
@@ -257,23 +296,38 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.18)",
-    marginBottom: 14,
+    marginBottom: 16,
+  },
+
+  header: {
+    gap: 6,
+  },
+
+  eyebrow: {
+    color: theme.colors.emeraldSoft,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
 
   title: {
-    fontSize: 20,
+    color: theme.colors.textPrimary,
+    fontSize: 25,
+    lineHeight: 30,
     fontWeight: "900",
-    color: theme.colors.text,
+    letterSpacing: -0.55,
   },
 
   subtitle: {
-    marginTop: 6,
-    fontSize: 13,
     color: theme.colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: "800",
   },
 
   scroll: {
-    marginTop: 16,
+    marginTop: 18,
   },
 
   scrollContent: {
@@ -282,100 +336,159 @@ const styles = StyleSheet.create({
   },
 
   sectionLabel: {
-    marginTop: 8,
-    fontSize: 11,
-    fontWeight: "900",
+    marginTop: 4,
     color: theme.colors.textMuted,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.9,
     textTransform: "uppercase",
   },
 
   optionCard: {
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    padding: 16,
+    borderRadius: 24,
+    backgroundColor: "rgba(0,0,0,0.26)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    gap: 10,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 12,
   },
 
   optionCardHighlight: {
-    borderColor: "rgba(0,255,136,0.35)",
-    backgroundColor: "rgba(0,255,136,0.08)",
+    borderColor: "rgba(34,197,94,0.42)",
+    backgroundColor: "rgba(34,197,94,0.08)",
   },
 
   bestTag: {
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(0,255,136,0.18)",
-    marginBottom: 4,
+    backgroundColor: "rgba(34,197,94,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.28)",
   },
 
   bestTagText: {
+    color: theme.colors.emeraldSoft,
     fontSize: 10,
     fontWeight: "900",
-    color: "#9CFFB8",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
 
-  topRow: {
+  optionTopRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    gap: 12,
   },
 
-  providerWrap: {
-    flexDirection: "row",
-    gap: 10,
+  providerRow: {
     flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
   },
 
-  providerPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+  providerBadge: {
+    width: 48,
+    height: 48,
     borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
   },
 
-  providerPillText: {
-    fontSize: 11,
+  providerBadgeText: {
+    fontSize: 12,
     fontWeight: "900",
   },
 
-  providerText: {
+  providerCopy: {
     flex: 1,
+    minWidth: 0,
   },
 
-  provider: {
-    fontSize: 15,
+  providerName: {
+    color: theme.colors.textPrimary,
+    fontSize: 17,
     fontWeight: "900",
-    color: theme.colors.text,
+    letterSpacing: -0.25,
   },
 
   providerSub: {
-    fontSize: 12,
+    marginTop: 3,
     color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: "800",
   },
 
-  price: {
+  priceText: {
+    maxWidth: 126,
+    color: theme.colors.emeraldSoft,
+    fontSize: 14,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+
+  ticketTitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
+
+  ticketButton: {
+    minHeight: 52,
+    borderRadius: 17,
+    backgroundColor: theme.colors.emeraldSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  ticketButtonText: {
+    color: "#031007",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  ticketButtonArrow: {
+    color: "#031007",
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: -1,
+  },
+
+  partnerNote: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+
+  emptyCard: {
+    padding: 18,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.24)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  emptyTitle: {
+    color: theme.colors.textPrimary,
     fontSize: 16,
     fontWeight: "900",
-    color: theme.colors.accent,
   },
 
-  meta: {
-    fontSize: 12,
+  emptyText: {
+    marginTop: 6,
     color: theme.colors.textSecondary,
-  },
-
-  ctaRow: {
-    alignItems: "flex-end",
-  },
-
-  cta: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: theme.colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "800",
   },
 
   footer: {
@@ -383,35 +496,52 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  primaryBtn: {
-    backgroundColor: theme.colors.accent,
-    paddingVertical: 14,
-    borderRadius: 12,
+  compareButton: {
+    minHeight: 52,
+    borderRadius: 17,
     alignItems: "center",
-  },
-
-  primaryBtnText: {
-    fontWeight: "900",
-    color: "#000",
-  },
-
-  secondaryBtn: {
+    justifyContent: "center",
+    backgroundColor: "rgba(34,197,94,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
+    borderColor: "rgba(134,239,172,0.24)",
   },
 
-  secondaryBtnText: {
-    color: theme.colors.text,
-    fontWeight: "800",
+  compareButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  officialButton: {
+    minHeight: 50,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.20)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+  },
+
+  officialButtonText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  closeButton: {
+    minHeight: 42,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   closeText: {
-    textAlign: "center",
     color: theme.colors.textMuted,
-    fontWeight: "800",
-    marginTop: 6,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  pressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.995 }],
   },
 });
