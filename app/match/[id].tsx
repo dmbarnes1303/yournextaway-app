@@ -45,7 +45,6 @@ const CITY_COUNTRY_CODE: Record<string, string> = {
   newcastle: "ENG",
   glasgow: "SCO",
   edinburgh: "SCO",
-
   madrid: "ES",
   barcelona: "ES",
   seville: "ES",
@@ -54,7 +53,6 @@ const CITY_COUNTRY_CODE: Record<string, string> = {
   bilbao: "ES",
   villarreal: "ES",
   "san sebastian": "ES",
-
   milan: "IT",
   milano: "IT",
   rome: "IT",
@@ -65,7 +63,6 @@ const CITY_COUNTRY_CODE: Record<string, string> = {
   napoli: "IT",
   florence: "IT",
   firenze: "IT",
-
   munich: "DE",
   münchen: "DE",
   dortmund: "DE",
@@ -73,91 +70,66 @@ const CITY_COUNTRY_CODE: Record<string, string> = {
   leipzig: "DE",
   leverkusen: "DE",
   frankfurt: "DE",
-
   paris: "FR",
   marseille: "FR",
   lyon: "FR",
   lille: "FR",
   monaco: "FR",
-
   amsterdam: "NL",
   rotterdam: "NL",
   eindhoven: "NL",
   almere: "NL",
-
   lisbon: "PT",
   lisboa: "PT",
   porto: "PT",
-
   istanbul: "TR",
   trabzon: "TR",
-
   brussels: "BE",
   bruges: "BE",
   brugge: "BE",
   anderlecht: "BE",
-
   vienna: "AT",
   wien: "AT",
   salzburg: "AT",
-
   zurich: "CH",
   zürich: "CH",
   basel: "CH",
   bern: "CH",
-
   athens: "GR",
   piraeus: "GR",
   thessaloniki: "GR",
-
   dublin: "IE",
-
   copenhagen: "DK",
   københavn: "DK",
-
   warsaw: "PL",
   poznan: "PL",
   krakow: "PL",
-
   prague: "CZ",
   praha: "CZ",
-
   zagreb: "HR",
   split: "HR",
-
   belgrade: "RS",
   beograd: "RS",
-
   budapest: "HU",
-
   bucharest: "RO",
   bucuresti: "RO",
-
   sofia: "BG",
   "stara zagora": "BG",
-
   bratislava: "SK",
   skalica: "SK",
-
   ljubljana: "SI",
   maribor: "SI",
-
   nicosia: "CY",
-
   sarajevo: "BA",
   banja: "BA",
-
   stockholm: "SE",
   malmo: "SE",
   malmö: "SE",
-
   oslo: "NO",
   bodo: "NO",
   bodø: "NO",
-
   helsinki: "FI",
   turku: "FI",
-
   reykjavik: "IS",
 };
 
@@ -169,7 +141,6 @@ const CITY_TIME_ZONE: Record<string, string> = {
   newcastle: "Europe/London",
   glasgow: "Europe/London",
   edinburgh: "Europe/London",
-
   madrid: "Europe/Madrid",
   barcelona: "Europe/Madrid",
   seville: "Europe/Madrid",
@@ -178,7 +149,6 @@ const CITY_TIME_ZONE: Record<string, string> = {
   bilbao: "Europe/Madrid",
   villarreal: "Europe/Madrid",
   "san sebastian": "Europe/Madrid",
-
   milan: "Europe/Rome",
   milano: "Europe/Rome",
   rome: "Europe/Rome",
@@ -189,7 +159,6 @@ const CITY_TIME_ZONE: Record<string, string> = {
   napoli: "Europe/Rome",
   florence: "Europe/Rome",
   firenze: "Europe/Rome",
-
   munich: "Europe/Berlin",
   münchen: "Europe/Berlin",
   dortmund: "Europe/Berlin",
@@ -197,91 +166,66 @@ const CITY_TIME_ZONE: Record<string, string> = {
   leipzig: "Europe/Berlin",
   leverkusen: "Europe/Berlin",
   frankfurt: "Europe/Berlin",
-
   paris: "Europe/Paris",
   marseille: "Europe/Paris",
   lyon: "Europe/Paris",
   lille: "Europe/Paris",
   monaco: "Europe/Monaco",
-
   amsterdam: "Europe/Amsterdam",
   rotterdam: "Europe/Amsterdam",
   eindhoven: "Europe/Amsterdam",
   almere: "Europe/Amsterdam",
-
   lisbon: "Europe/Lisbon",
   lisboa: "Europe/Lisbon",
   porto: "Europe/Lisbon",
-
   istanbul: "Europe/Istanbul",
   trabzon: "Europe/Istanbul",
-
   brussels: "Europe/Brussels",
   bruges: "Europe/Brussels",
   brugge: "Europe/Brussels",
   anderlecht: "Europe/Brussels",
-
   vienna: "Europe/Vienna",
   wien: "Europe/Vienna",
   salzburg: "Europe/Vienna",
-
   zurich: "Europe/Zurich",
   zürich: "Europe/Zurich",
   basel: "Europe/Zurich",
   bern: "Europe/Zurich",
-
   athens: "Europe/Athens",
   piraeus: "Europe/Athens",
   thessaloniki: "Europe/Athens",
-
   dublin: "Europe/Dublin",
-
   copenhagen: "Europe/Copenhagen",
   københavn: "Europe/Copenhagen",
-
   warsaw: "Europe/Warsaw",
   poznan: "Europe/Warsaw",
   krakow: "Europe/Warsaw",
-
   prague: "Europe/Prague",
   praha: "Europe/Prague",
-
   zagreb: "Europe/Zagreb",
   split: "Europe/Zagreb",
-
   belgrade: "Europe/Belgrade",
   beograd: "Europe/Belgrade",
-
   budapest: "Europe/Budapest",
-
   bucharest: "Europe/Bucharest",
   bucuresti: "Europe/Bucharest",
-
   sofia: "Europe/Sofia",
   "stara zagora": "Europe/Sofia",
-
   bratislava: "Europe/Bratislava",
   skalica: "Europe/Bratislava",
-
   ljubljana: "Europe/Ljubljana",
   maribor: "Europe/Ljubljana",
-
   nicosia: "Asia/Nicosia",
-
   sarajevo: "Europe/Sarajevo",
   banja: "Europe/Sarajevo",
-
   stockholm: "Europe/Stockholm",
   malmo: "Europe/Stockholm",
   malmö: "Europe/Stockholm",
-
   oslo: "Europe/Oslo",
   bodo: "Europe/Oslo",
   bodø: "Europe/Oslo",
-
   helsinki: "Europe/Helsinki",
   turku: "Europe/Helsinki",
-
   reykjavik: "Atlantic/Reykjavik",
 };
 
@@ -328,10 +272,7 @@ function inferTripWindowFromKickoff(kickoffIso?: string | null): {
     end.getDate()
   ).padStart(2, "0")}`;
 
-  return {
-    from: dateOnly,
-    to: toIso,
-  };
+  return { from: dateOnly, to: toIso };
 }
 
 function buildCanonicalTripBuildParams(args: {
@@ -394,7 +335,6 @@ function formatKickoffLocal(iso?: string | null, city?: string | null) {
     return {
       date: "Date TBC",
       time: "TBC",
-      label: "Local kickoff TBC",
       timeZone: resolveCityTimeZone(city),
     };
   }
@@ -404,7 +344,6 @@ function formatKickoffLocal(iso?: string | null, city?: string | null) {
     return {
       date: "Date TBC",
       time: "TBC",
-      label: "Local kickoff TBC",
       timeZone: resolveCityTimeZone(city),
     };
   }
@@ -425,14 +364,19 @@ function formatKickoffLocal(iso?: string | null, city?: string | null) {
     timeZone,
   });
 
-  const timeZoneLabel = timeZone.split("/").pop()?.replace(/_/g, " ") || "local time";
+  return { date, time, timeZone };
+}
 
-  return {
-    date,
-    time,
-    label: `${timeZoneLabel} local time`,
-    timeZone,
-  };
+function formatRoundOrStage(round?: string | null): string {
+  const value = clean(round);
+  if (!value) return "";
+
+  return value
+    .replace(/\bRegular Season\b/gi, "Matchday")
+    .replace(/\bRound\b/gi, "Round")
+    .replace(/\s*-\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function formatStatus(status?: { short?: string | null; long?: string | null }) {
@@ -589,7 +533,7 @@ export default function MatchScreen() {
   const effectiveLeagueCountry = clean((fixture?.league as any)?.country);
   const effectiveSeason =
     routeSeason || clean((fixture?.league as { season?: unknown } | undefined)?.season);
-  const effectiveRound = clean(fixture?.league?.round);
+  const effectiveRound = formatRoundOrStage(fixture?.league?.round);
 
   const leagueIdNumber = Number(effectiveLeagueId);
   const isEuropeanCompetition =
@@ -692,11 +636,7 @@ export default function MatchScreen() {
 
   if (!fixtureId) {
     return (
-      <Background
-        mode="solid"
-        solidColor={theme.colors.bgBase}
-        overlayOpacity={0.3}
-      >
+      <Background mode="solid" solidColor={theme.colors.bgBase} overlayOpacity={0.3}>
         <SafeAreaView style={styles.safe}>
           <EmptyState title="Match not found" />
         </SafeAreaView>
@@ -740,7 +680,6 @@ export default function MatchScreen() {
 
         <View style={styles.dateRow}>
           <Text style={styles.dateText}>{kickoff.date}</Text>
-          <Text style={styles.localTimeText}>{kickoff.label}</Text>
         </View>
 
         <View style={styles.teamsRow}>
@@ -822,16 +761,8 @@ export default function MatchScreen() {
             <View style={styles.infoGrid}>
               <InfoPill icon="calendar-outline" label="Date" value={kickoff.date} />
               <InfoPill icon="time-outline" label="Kickoff" value={`${kickoff.time} local`} />
-              <InfoPill
-                icon="trophy-outline"
-                label="Competition"
-                value={effectiveLeagueName}
-              />
-              <InfoPill
-                icon="flag-outline"
-                label="Status"
-                value={formatStatus(fixture?.fixture?.status)}
-              />
+              <InfoPill icon="trophy-outline" label="Competition" value={effectiveLeagueName} />
+              <InfoPill icon="flag-outline" label="Status" value={formatStatus(fixture?.fixture?.status)} />
             </View>
 
             {effectiveRound ? (
@@ -899,11 +830,7 @@ export default function MatchScreen() {
               />
 
               {stadium?.airport ? (
-                <LocalBasicsCard
-                  icon="airplane-outline"
-                  label="Nearest airport"
-                  value={stadium.airport}
-                />
+                <LocalBasicsCard icon="airplane-outline" label="Nearest airport" value={stadium.airport} />
               ) : (
                 <LocalBasicsCard
                   icon="airplane-outline"
@@ -931,11 +858,7 @@ export default function MatchScreen() {
               )}
 
               {Array.isArray(stadium?.stayAreas) && stadium.stayAreas.length > 0 ? (
-                <LocalBasicsCard
-                  icon="bed-outline"
-                  label="Best area to stay"
-                  value={stadium.stayAreas[0].area}
-                />
+                <LocalBasicsCard icon="bed-outline" label="Best area to stay" value={stadium.stayAreas[0].area} />
               ) : (
                 <LocalBasicsCard
                   icon="bed-outline"
@@ -959,9 +882,7 @@ export default function MatchScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-  },
+  safe: { flex: 1 },
 
   header: {
     paddingHorizontal: theme.spacing.lg,
@@ -1103,12 +1024,6 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.black,
     textTransform: "uppercase",
     letterSpacing: 0.4,
-  },
-
-  localTimeText: {
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.bold,
   },
 
   teamsRow: {
