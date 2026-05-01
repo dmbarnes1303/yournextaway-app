@@ -8,6 +8,7 @@ import {
   ViewStyle,
 } from "react-native";
 import { BlurView } from "expo-blur";
+
 import { theme } from "@/src/constants/theme";
 
 type GlassLevel = "subtle" | "default" | "strong";
@@ -38,44 +39,34 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function alpha(hex: string, a: number) {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${clamp(a, 0, 1)})`;
-}
-
 function levelFromIntensity(intensity?: number): GlassLevel {
-  const i = typeof intensity === "number" ? intensity : null;
-  if (i == null) return "default";
-  if (i < 18) return "subtle";
-  if (i < 32) return "default";
+  if (typeof intensity !== "number") return "default";
+  if (intensity < 18) return "subtle";
+  if (intensity < 32) return "default";
   return "strong";
 }
 
-function getBackgroundColor(variant: Variant, level: GlassLevel) {
+function getBackgroundColor(variant: Variant, level: GlassLevel): string {
   if (variant === "brand") {
-    if (level === "subtle") return theme.colors.bgBrandDeep;
+    if (level === "subtle") return theme.colors.bgBrand;
     if (level === "strong") return theme.colors.bgBrandElevated;
-    return theme.colors.bgBrandElevated;
+    return theme.colors.bgBrand;
   }
 
   if (variant === "gold") {
-    if (level === "subtle") return alpha(theme.colors.bgGoldDeep, 0.78);
-    if (level === "strong") return alpha(theme.colors.bgGoldDeep, 0.94);
-    return alpha(theme.colors.bgGoldDeep, 0.88);
+    if (level === "subtle") return "rgba(23,19,8,0.76)";
+    if (level === "strong") return "rgba(23,19,8,0.94)";
+    return "rgba(23,19,8,0.86)";
   }
 
   if (variant === "glass") {
-    if (level === "subtle") return alpha(theme.colors.bgSurface, 0.34);
-    if (level === "strong") return alpha(theme.colors.bgSurface, 0.18);
-    return alpha(theme.colors.bgSurface, 0.24);
+    if (Platform.OS === "android") return theme.glass.android[level];
+    return theme.glass.bg[level];
   }
 
   if (level === "subtle") return theme.colors.bgSurface;
   if (level === "strong") return theme.colors.bgElevated;
-  return theme.colors.bgElevated;
+  return theme.surfaces.elevated;
 }
 
 function getBorderColor(
@@ -85,39 +76,19 @@ function getBorderColor(
 ): string {
   if (override) return override;
 
-  if (variant === "brand") {
-    return level === "strong"
-      ? theme.colors.borderGreenStrong
-      : theme.colors.borderGreenSoft;
-  }
-
-  if (variant === "gold") {
-    return level === "strong"
-      ? theme.colors.borderGoldStrong
-      : theme.colors.borderGoldSoft;
-  }
+  if (variant === "brand") return theme.colors.borderEmerald;
+  if (variant === "gold") return theme.colors.borderGold;
 
   if (variant === "glass") {
-    return theme.glass.border;
+    return level === "strong" ? theme.colors.borderStrong : theme.glass.border;
   }
 
-  return theme.colors.borderSubtle;
-}
-
-function getBorderWidth(variant: Variant) {
-  if (variant === "matte") return 1;
-  return 1;
+  return level === "strong" ? theme.colors.borderStrong : theme.colors.borderSubtle;
 }
 
 function getShadowStyle(variant: Variant, level: GlassLevel) {
-  if (variant === "brand" && level === "strong") {
-    return theme.shadow.greenGlow;
-  }
-
-  if (variant === "gold" && level === "strong") {
-    return theme.shadow.goldGlow;
-  }
-
+  if (variant === "brand" && level === "strong") return theme.shadow.emeraldGlow;
+  if (variant === "gold" && level === "strong") return theme.shadow.goldGlow;
   return theme.shadow.soft;
 }
 
@@ -125,19 +96,16 @@ export default function GlassCard({
   children,
   style,
 
-  // legacy
   strength,
   noPadding,
   intensity,
   androidFallbackColor,
 
-  // preferred
   level,
   variant,
   disableBlur,
   forceBlur,
 
-  // misc
   borderColor,
   padding,
 }: Props) {
@@ -152,21 +120,15 @@ export default function GlassCard({
     return resolvedLevel === "strong" ? "brand" : "matte";
   }, [variant, resolvedLevel]);
 
-  const isBlurCapable = Platform.OS === "ios" || Platform.OS === "web";
-
   const legacyIntensity = typeof intensity === "number" ? intensity : null;
-  const eligibleByLegacy = legacyIntensity != null && legacyIntensity >= 45;
+  const isBlurCapable = Platform.OS === "ios" || Platform.OS === "web";
 
   const shouldBlur =
     isBlurCapable &&
     !disableBlur &&
     (forceBlur === true ||
-      (resolvedVariant === "glass" &&
-        (resolvedLevel === "strong" || eligibleByLegacy)));
-
-  const backgroundColor = getBackgroundColor(resolvedVariant, resolvedLevel);
-  const resolvedBorder = getBorderColor(resolvedVariant, resolvedLevel, borderColor);
-  const resolvedBorderWidth = getBorderWidth(resolvedVariant);
+      resolvedVariant === "glass" ||
+      (legacyIntensity != null && legacyIntensity >= 45));
 
   const resolvedPadding =
     noPadding ? 0 : typeof padding === "number" ? padding : theme.spacing.md;
@@ -174,23 +136,25 @@ export default function GlassCard({
   const blurIntensity = useMemo(() => {
     if (!shouldBlur) return 0;
     if (legacyIntensity != null) return clamp(legacyIntensity, 1, 100);
-    return resolvedLevel === "subtle" ? 18 : resolvedLevel === "default" ? 26 : 36;
+    if (resolvedLevel === "subtle") return 18;
+    if (resolvedLevel === "strong") return 38;
+    return 28;
   }, [shouldBlur, legacyIntensity, resolvedLevel]);
 
-  const shadowStyle = getShadowStyle(resolvedVariant, resolvedLevel);
+  const backgroundColor =
+    Platform.OS === "android" && androidFallbackColor
+      ? androidFallbackColor
+      : getBackgroundColor(resolvedVariant, resolvedLevel);
 
   const baseStyle: any[] = [
     styles.base,
     {
       padding: resolvedPadding,
       backgroundColor,
-      borderColor: resolvedBorder,
-      borderWidth: resolvedBorderWidth,
+      borderColor: getBorderColor(resolvedVariant, resolvedLevel, borderColor),
+      borderWidth: 1,
     },
-    shadowStyle,
-    Platform.OS === "android" && androidFallbackColor
-      ? { backgroundColor: androidFallbackColor }
-      : null,
+    getShadowStyle(resolvedVariant, resolvedLevel),
     style,
   ];
 
