@@ -12,6 +12,7 @@ import {
   type BackgroundSpec,
   isBackgroundSpec,
 } from "@/src/constants/backgrounds";
+import { theme } from "@/src/constants/theme";
 
 type Props = {
   imageSource?: BackgroundSource;
@@ -39,9 +40,7 @@ function resolveImageSource(
     return trimmed ? { uri: trimmed } : null;
   }
 
-  if (isBackgroundSpec(imageSource)) {
-    return null;
-  }
+  if (isBackgroundSpec(imageSource)) return null;
 
   return imageSource as ImageSourcePropType;
 }
@@ -51,16 +50,39 @@ function getSpec(source?: BackgroundSource): BackgroundSpec | null {
   return isBackgroundSpec(source) ? source : null;
 }
 
+function clampOpacity(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function rgbaBlack(alpha: number): string {
+  return `rgba(0,0,0,${clampOpacity(alpha)})`;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const value = String(hex || "").replace("#", "").trim();
+
+  if (!/^[0-9a-fA-F]{6}$/.test(value)) {
+    return rgbaBlack(alpha);
+  }
+
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+
+  return `rgba(${r},${g},${b},${clampOpacity(alpha)})`;
+}
+
 export default function Background({
   imageSource,
   imageUrl,
   children,
   mode = "image",
-  solidColor = "#07090B",
-  overlayOpacity = 0.5,
-  topShadeOpacity = 0.16,
-  centerShadeOpacity = 0.06,
-  bottomShadeOpacity = 0.22,
+  solidColor = theme.colors.bgBase,
+  overlayOpacity = 0.54,
+  topShadeOpacity = 0.22,
+  centerShadeOpacity = 0.08,
+  bottomShadeOpacity = 0.48,
 }: Props) {
   const resolvedSource = useMemo(
     () => resolveImageSource(imageSource, imageUrl),
@@ -70,100 +92,74 @@ export default function Background({
   const spec = useMemo(() => getSpec(imageSource), [imageSource]);
 
   const resolvedSolidColor = spec?.colors?.[0] || solidColor;
-  const resolvedTopShadeOpacity =
-    spec?.topTintOpacity ?? topShadeOpacity;
-  const resolvedBottomShadeOpacity =
-    spec?.bottomShadeOpacity ?? bottomShadeOpacity;
-  const resolvedCenterShadeOpacity = centerShadeOpacity;
-  const vignetteOpacity = spec?.vignetteOpacity ?? 0.1;
 
-  const sideTintColor = spec?.sideTintColor ?? null;
-  const sideTintOpacity = spec?.sideTintOpacity ?? 0;
+  const resolvedTopShadeOpacity = spec?.topTintOpacity ?? topShadeOpacity;
+  const resolvedBottomShadeOpacity = spec?.bottomShadeOpacity ?? bottomShadeOpacity;
+  const resolvedCenterShadeOpacity = centerShadeOpacity;
+  const vignetteOpacity = spec?.vignetteOpacity ?? 0.18;
+
+  const sideTintColor = spec?.sideTintColor ?? theme.colors.emerald;
+  const sideTintOpacity = spec?.sideTintOpacity ?? 0.04;
   const sideTintSide = spec?.sideTintSide ?? "both";
+
+  const topShadeColor = spec?.topTintColor
+    ? hexToRgba(spec.topTintColor, resolvedTopShadeOpacity)
+    : rgbaBlack(resolvedTopShadeOpacity);
+
+  const bottomShadeColor = rgbaBlack(resolvedBottomShadeOpacity);
+  const centerShadeColor = rgbaBlack(resolvedCenterShadeOpacity);
+  const baseOverlayColor = rgbaBlack(overlayOpacity);
+  const vignetteColor = rgbaBlack(vignetteOpacity);
 
   if (mode === "solid" || (!resolvedSource && !spec)) {
     return (
       <View style={[styles.container, { backgroundColor: resolvedSolidColor }]}>
-        {children}
+        <View pointerEvents="none" style={styles.launchTint} />
+        <View pointerEvents="none" style={[styles.bottomShade, { backgroundColor: bottomShadeColor }]} />
+        <View style={styles.content}>{children}</View>
       </View>
     );
   }
 
   if (!resolvedSource && spec) {
     return (
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor: spec.colors[0],
-          },
-        ]}
-      >
+      <View style={[styles.container, { backgroundColor: spec.colors[0] }]}>
         <View
           pointerEvents="none"
           style={[
             styles.gradientLayer,
             {
               backgroundColor: spec.colors[1],
-              opacity: 0.34,
+              opacity: 0.28,
             },
           ]}
         />
+
         <View
           pointerEvents="none"
           style={[
             styles.bottomGradientLayer,
             {
               backgroundColor: spec.colors[2],
-              opacity: 0.42,
+              opacity: 0.36,
             },
           ]}
         />
 
-        <View
-          pointerEvents="none"
-          style={[
-            styles.baseOverlay,
-            { backgroundColor: `rgba(0,0,0,${overlayOpacity})` },
-          ]}
-        />
+        <View pointerEvents="none" style={[styles.baseOverlay, { backgroundColor: baseOverlayColor }]} />
+
+        <View pointerEvents="none" style={styles.launchTint} />
 
         {resolvedTopShadeOpacity > 0 ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.topShade,
-              {
-                backgroundColor: spec.topTintColor
-                  ? hexToRgba(spec.topTintColor, resolvedTopShadeOpacity)
-                  : `rgba(0,0,0,${resolvedTopShadeOpacity})`,
-              },
-            ]}
-          />
+          <View pointerEvents="none" style={[styles.topShade, { backgroundColor: topShadeColor }]} />
         ) : null}
 
         {resolvedCenterShadeOpacity > 0 ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.centerShade,
-              {
-                backgroundColor: `rgba(0,0,0,${resolvedCenterShadeOpacity})`,
-              },
-            ]}
-          />
+          <View pointerEvents="none" style={[styles.centerShade, { backgroundColor: centerShadeColor }]} />
         ) : null}
 
         {resolvedBottomShadeOpacity > 0 ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.bottomShade,
-              {
-                backgroundColor: `rgba(0,0,0,${resolvedBottomShadeOpacity})`,
-              },
-            ]}
-          />
+          <View pointerEvents="none" style={[styles.bottomShade, { backgroundColor: bottomShadeColor }]} />
         ) : null}
 
         {sideTintColor && sideTintOpacity > 0 ? (
@@ -173,9 +169,7 @@ export default function Background({
                 pointerEvents="none"
                 style={[
                   styles.leftSideTint,
-                  {
-                    backgroundColor: hexToRgba(sideTintColor, sideTintOpacity),
-                  },
+                  { backgroundColor: hexToRgba(sideTintColor, sideTintOpacity) },
                 ]}
               />
             )}
@@ -185,9 +179,7 @@ export default function Background({
                 pointerEvents="none"
                 style={[
                   styles.rightSideTint,
-                  {
-                    backgroundColor: hexToRgba(sideTintColor, sideTintOpacity),
-                  },
+                  { backgroundColor: hexToRgba(sideTintColor, sideTintOpacity) },
                 ]}
               />
             )}
@@ -195,15 +187,7 @@ export default function Background({
         ) : null}
 
         {vignetteOpacity > 0 ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.vignette,
-              {
-                backgroundColor: `rgba(0,0,0,${vignetteOpacity})`,
-              },
-            ]}
-          />
+          <View pointerEvents="none" style={[styles.vignette, { backgroundColor: vignetteColor }]} />
         ) : null}
 
         <View style={styles.content}>{children}</View>
@@ -213,50 +197,20 @@ export default function Background({
 
   return (
     <ImageBackground source={resolvedSource!} style={styles.container} resizeMode="cover">
-      <View
-        pointerEvents="none"
-        style={[
-          styles.baseOverlay,
-          { backgroundColor: `rgba(0,0,0,${overlayOpacity})` },
-        ]}
-      />
+      <View pointerEvents="none" style={[styles.baseOverlay, { backgroundColor: baseOverlayColor }]} />
+
+      <View pointerEvents="none" style={styles.launchTint} />
 
       {resolvedTopShadeOpacity > 0 ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.topShade,
-            {
-              backgroundColor: spec?.topTintColor
-                ? hexToRgba(spec.topTintColor, resolvedTopShadeOpacity)
-                : `rgba(0,0,0,${resolvedTopShadeOpacity})`,
-            },
-          ]}
-        />
+        <View pointerEvents="none" style={[styles.topShade, { backgroundColor: topShadeColor }]} />
       ) : null}
 
       {resolvedCenterShadeOpacity > 0 ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.centerShade,
-            {
-              backgroundColor: `rgba(0,0,0,${resolvedCenterShadeOpacity})`,
-            },
-          ]}
-        />
+        <View pointerEvents="none" style={[styles.centerShade, { backgroundColor: centerShadeColor }]} />
       ) : null}
 
       {resolvedBottomShadeOpacity > 0 ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.bottomShade,
-            {
-              backgroundColor: `rgba(0,0,0,${resolvedBottomShadeOpacity})`,
-            },
-          ]}
-        />
+        <View pointerEvents="none" style={[styles.bottomShade, { backgroundColor: bottomShadeColor }]} />
       ) : null}
 
       {sideTintColor && sideTintOpacity > 0 ? (
@@ -266,9 +220,7 @@ export default function Background({
               pointerEvents="none"
               style={[
                 styles.leftSideTint,
-                {
-                  backgroundColor: hexToRgba(sideTintColor, sideTintOpacity),
-                },
+                { backgroundColor: hexToRgba(sideTintColor, sideTintOpacity) },
               ]}
             />
           )}
@@ -278,9 +230,7 @@ export default function Background({
               pointerEvents="none"
               style={[
                 styles.rightSideTint,
-                {
-                  backgroundColor: hexToRgba(sideTintColor, sideTintOpacity),
-                },
+                { backgroundColor: hexToRgba(sideTintColor, sideTintOpacity) },
               ]}
             />
           )}
@@ -288,15 +238,7 @@ export default function Background({
       ) : null}
 
       {vignetteOpacity > 0 ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.vignette,
-            {
-              backgroundColor: `rgba(0,0,0,${vignetteOpacity})`,
-            },
-          ]}
-        />
+        <View pointerEvents="none" style={[styles.vignette, { backgroundColor: vignetteColor }]} />
       ) : null}
 
       <View style={styles.content}>{children}</View>
@@ -304,22 +246,10 @@ export default function Background({
   );
 }
 
-function hexToRgba(hex: string, alpha: number): string {
-  const value = String(hex || "").replace("#", "").trim();
-  if (!/^[0-9a-fA-F]{6}$/.test(value)) {
-    return `rgba(0,0,0,${alpha})`;
-  }
-
-  const r = parseInt(value.slice(0, 2), 16);
-  const g = parseInt(value.slice(2, 4), 16);
-  const b = parseInt(value.slice(4, 6), 16);
-
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: theme.colors.bgBase,
   },
 
   gradientLayer: {
@@ -331,11 +261,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    top: "35%",
+    top: "34%",
   },
 
   baseOverlay: {
     ...StyleSheet.absoluteFillObject,
+  },
+
+  launchTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(34,197,94,0.018)",
   },
 
   topShade: {
@@ -343,7 +278,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: "34%",
+    height: "32%",
   },
 
   centerShade: {
@@ -351,7 +286,7 @@ const styles = StyleSheet.create({
     top: "24%",
     left: 0,
     right: 0,
-    height: "28%",
+    height: "30%",
   },
 
   bottomShade: {
@@ -359,7 +294,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: "42%",
+    height: "52%",
   },
 
   leftSideTint: {
@@ -367,7 +302,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    width: "36%",
+    width: "38%",
   },
 
   rightSideTint: {
@@ -375,7 +310,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     right: 0,
-    width: "36%",
+    width: "38%",
   },
 
   vignette: {
