@@ -1,11 +1,19 @@
-import { Alert } from "react-native";
-
 import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem } from "@/src/core/savedItemTypes";
-import { attachTicketProof } from "@/src/services/ticketAttachment";
 import { writeJson } from "@/src/state/persist";
 
 const LAST_BOOKED_KEY = "yna_last_booked_v2";
+
+export type BookingProofRequestMode = "offer" | "success" | "info";
+
+export type BookingProofRequest = {
+  itemId: string;
+  tripId: string;
+  title: string;
+  mode: BookingProofRequestMode;
+};
+
+let pendingProofRequest: BookingProofRequest | null = null;
 
 function cleanString(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -17,12 +25,12 @@ async function ensureSavedItemsLoaded() {
   try {
     await savedItemsStore.load();
   } catch {
-    // silent
+    // Best effort only.
   }
 }
 
 function getAttachmentCount(item?: SavedItem | null): number {
-  return Array.isArray(item?.attachments) ? item!.attachments.length : 0;
+  return Array.isArray(item?.attachments) ? item.attachments.length : 0;
 }
 
 async function persistLastBooked(item?: SavedItem | null) {
@@ -38,60 +46,63 @@ async function persistLastBooked(item?: SavedItem | null) {
       at: Date.now(),
     });
   } catch {
-    // best-effort only
+    // Best effort only.
   }
 }
 
 /**
- * Called immediately after user marks an item as booked.
+ * Called after user marks an item as booked.
  *
  * Truth model:
- * - "booked" = user-confirmed (not app verified)
- * - proof is optional but strengthens wallet credibility
+ * - booked = user-confirmed
+ * - proof = optional wallet evidence
+ * - no native Alert UI belongs in this service
  */
-export async function confirmBookedAndOfferProof(itemId: string) {
+export async function requestBookingProofFlow(itemId: string): Promise<BookingProofRequest | null> {
   const id = cleanString(itemId);
-  if (!id) return;
+  if (!id) return null;
 
   await ensureSavedItemsLoaded();
 
   const item = savedItemsStore.getById(id) ?? null;
-  if (!item || item.status !== "booked") return;
+  if (!item || item.status !== "booked") return null;
 
   await persistLastBooked(item);
 
   const title = cleanString(item.title) || "Booking";
+  const tripId = cleanString(item.tripId);
   const attachmentCount = getAttachmentCount(item);
 
-  // Already has proof → simple confirmation
-  if (attachmentCount > 0) {
-    Alert.alert(
-      "Saved in Wallet",
-      `"${title}" is marked as booked and stored in your Wallet.`
-    );
-    return;
-  }
+  if (!tripId) return null;
 
-  // Offer proof
-  Alert.alert(
-    "Saved in Wallet",
-    `"${title}" is marked as booked.\n\nAdd booking proof (PDF or screenshot) for offline access?`,
-    [
-      { text: "Not now", style: "cancel" },
-      {
-        text: "Add proof",
-        onPress: async () => {
-          const success = await attachTicketProof(id);
+  pendingProofRequest = {
+    itemId: id,
+    tripId,
+    title,
+    mode: attachmentCount > 0 ? "info" : "offer",
+  };
 
-          if (success) {
-            Alert.alert(
-              "Proof added",
-              "Your booking proof is now stored in Wallet."
-            );
-          }
-        },
-      },
-    ],
-    { cancelable: true }
-  );
+  return pendingProofRequest;
+}
+
+export function consumeBookingProofRequest(): BookingProofRequest | null {
+  const request = pendingProofRequest;
+  pendingProofRequest = null;
+  return request;
+}
+
+export function peekBookingProofRequest(): BookingProofRequest | null {
+  return pendingProofRequest;
+}
+
+export function completeBookingProofFlow() {
+  pendingProofRequest = null;
+}
+
+/**
+ * Backwards-compatible name for older callers.
+ * Do not show UI here.
+ */
+export async function confirmBookedAndOfferProof(itemId: string): Promise<BookingProofRequest | null> {
+  return requestBookingProofFlow(itemId);
 }
