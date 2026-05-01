@@ -48,18 +48,129 @@ export const COUNTRY_VISUALS: Record<string, VisualAsset> = {
   IS: { backdrop: flag("iceland") },
 };
 
-export function getFixtureBackdrop(params: {
-  leagueId?: number | null;
+const DOMESTIC_LEAGUE_COUNTRY_CODE: Record<number, string> = {
+  39: "ENG",
+  140: "ES",
+  135: "IT",
+  78: "DE",
+  61: "FR",
+  88: "NL",
+  94: "PT",
+  179: "SCO",
+  203: "TR",
+  144: "BE",
+  218: "AT",
+  207: "CH",
+  197: "GR",
+  357: "IE",
+  119: "DK",
+  106: "PL",
+  345: "CZ",
+  210: "HR",
+  286: "RS",
+  271: "HU",
+  283: "RO",
+  172: "BG",
+  332: "SK",
+  373: "SI",
+  318: "CY",
+  315: "BA",
+  113: "SE",
+  103: "NO",
+  244: "FI",
+  164: "IS",
+};
+
+const COUNTRY_NAME_TO_CODE: Record<string, string> = {
+  england: "ENG",
+  spain: "ES",
+  italy: "IT",
+  germany: "DE",
+  france: "FR",
+  netherlands: "NL",
+  holland: "NL",
+  portugal: "PT",
+  scotland: "SCO",
+  turkey: "TR",
+  belgium: "BE",
+  austria: "AT",
+  switzerland: "CH",
+  greece: "GR",
+  ireland: "IE",
+  "republic of ireland": "IE",
+  denmark: "DK",
+  poland: "PL",
+  czech: "CZ",
+  czechia: "CZ",
+  "czech republic": "CZ",
+  croatia: "HR",
+  serbia: "RS",
+  hungary: "HU",
+  romania: "RO",
+  bulgaria: "BG",
+  slovakia: "SK",
+  slovenia: "SI",
+  cyprus: "CY",
+  bosnia: "BA",
+  "bosnia and herzegovina": "BA",
+  sweden: "SE",
+  norway: "NO",
+  finland: "FI",
+  iceland: "IS",
+};
+
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function normaliseName(value: unknown): string {
+  return clean(value)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveCountryCode(params: {
+  leagueId?: number | string | null;
   countryCode?: string | null;
+  countryName?: string | null;
 }): string | null {
-  const leagueId =
-    typeof params.leagueId === "number" ? params.leagueId : Number(params.leagueId);
+  const rawCode = clean(params.countryCode).toUpperCase();
+
+  if (rawCode && COUNTRY_VISUALS[rawCode]) {
+    return rawCode;
+  }
+
+  const leagueId = Number(params.leagueId);
+
+  if (Number.isFinite(leagueId) && DOMESTIC_LEAGUE_COUNTRY_CODE[leagueId]) {
+    return DOMESTIC_LEAGUE_COUNTRY_CODE[leagueId];
+  }
+
+  const countryName = normaliseName(params.countryName);
+
+  if (countryName && COUNTRY_NAME_TO_CODE[countryName]) {
+    return COUNTRY_NAME_TO_CODE[countryName];
+  }
+
+  return null;
+}
+
+export function getFixtureBackdrop(params: {
+  leagueId?: number | string | null;
+  countryCode?: string | null;
+  countryName?: string | null;
+}): string | null {
+  const leagueId = Number(params.leagueId);
 
   if (Number.isFinite(leagueId) && COMPETITION_VISUALS[leagueId]) {
     return COMPETITION_VISUALS[leagueId].backdrop;
   }
 
-  const countryCode = String(params.countryCode ?? "").trim().toUpperCase();
+  const countryCode = resolveCountryCode(params);
 
   if (countryCode && COUNTRY_VISUALS[countryCode]) {
     return COUNTRY_VISUALS[countryCode].backdrop;
@@ -68,7 +179,14 @@ export function getFixtureBackdrop(params: {
   return null;
 }
 
-export function getCountryBackdrop(code?: string | null): string | null {
-  const countryCode = String(code ?? "").trim().toUpperCase();
-  return COUNTRY_VISUALS[countryCode]?.backdrop ?? null;
+export function getCountryBackdrop(
+  code?: string | null,
+  countryName?: string | null
+): string | null {
+  const countryCode = resolveCountryCode({
+    countryCode: code,
+    countryName,
+  });
+
+  return countryCode ? COUNTRY_VISUALS[countryCode]?.backdrop ?? null : null;
 }
