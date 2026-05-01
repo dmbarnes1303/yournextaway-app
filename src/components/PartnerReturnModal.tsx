@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -9,7 +10,10 @@ import {
 } from "react-native";
 
 import { theme } from "@/src/constants/theme";
-import { getPartnerOrNull } from "@/src/constants/partners";
+import {
+  getPartnerLogoUrl,
+  getPartnerOrNull,
+} from "@/src/constants/partners";
 import type { LastPartnerClick } from "@/src/services/partnerClicks";
 
 type Props = {
@@ -22,6 +26,10 @@ type Props = {
 };
 
 type LoadingState = "booked" | "notBooked" | "notNow" | null;
+
+const APP_GREEN = theme.colors.primary;
+const APP_GREEN_SOFT = "rgba(34,197,94,0.18)";
+const APP_GREEN_BORDER = "rgba(34,197,94,0.38)";
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -51,6 +59,28 @@ function savedItemLabel(type?: string | null): string {
   return "Booking route";
 }
 
+function PartnerLogo({
+  logoUrl,
+  fallback,
+}: {
+  logoUrl?: string | null;
+  fallback: string;
+}) {
+  if (logoUrl) {
+    return (
+      <View style={styles.partnerLogoWrap}>
+        <Image source={{ uri: logoUrl }} style={styles.partnerLogo} resizeMode="contain" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.partnerBadge}>
+      <Text style={styles.partnerBadgeText}>{fallback}</Text>
+    </View>
+  );
+}
+
 export default function PartnerReturnModal({
   visible,
   itemId,
@@ -68,12 +98,17 @@ export default function PartnerReturnModal({
   const partnerMeta = useMemo(() => {
     const partner = click?.partnerId ? getPartnerOrNull(click.partnerId) : null;
     const partnerName = clean(partner?.display?.name);
+    const badgeText = clean(partner?.display?.badgeText);
+    const logoUrl = getPartnerLogoUrl(click?.partnerId ?? null);
     const domain = shortDomain(click?.url);
+    const typeLabel = savedItemLabel(click?.savedItemType);
 
     return {
       partnerName: partnerName || "Partner site",
+      badgeText: badgeText || typeLabel.slice(0, 2).toUpperCase(),
+      logoUrl,
       domain,
-      typeLabel: savedItemLabel(click?.savedItemType),
+      typeLabel,
     };
   }, [click]);
 
@@ -124,11 +159,7 @@ export default function PartnerReturnModal({
           <Text style={styles.title}>Did you complete the booking?</Text>
 
           <View style={styles.partnerCard}>
-            <View style={styles.partnerBadge}>
-              <Text style={styles.partnerBadgeText}>
-                {partnerMeta.typeLabel.slice(0, 2).toUpperCase()}
-              </Text>
-            </View>
+            <PartnerLogo logoUrl={partnerMeta.logoUrl} fallback={partnerMeta.badgeText} />
 
             <View style={styles.partnerCopy}>
               <Text style={styles.partnerName} numberOfLines={1}>
@@ -148,7 +179,7 @@ export default function PartnerReturnModal({
 
           {busy ? (
             <View style={styles.loadingBox}>
-              <ActivityIndicator color={theme.colors.emeraldSoft} />
+              <ActivityIndicator color={APP_GREEN} />
               <Text style={styles.loadingText}>Saving your choice…</Text>
             </View>
           ) : (
@@ -179,7 +210,10 @@ export default function PartnerReturnModal({
           )}
 
           {!busy ? (
-            <Pressable style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]} onPress={handleDismiss}>
+            <Pressable
+              style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+              onPress={handleDismiss}
+            >
               <Text style={styles.closeText}>Close</Text>
             </Pressable>
           ) : null}
@@ -223,7 +257,7 @@ const styles = StyleSheet.create({
   },
 
   eyebrow: {
-    color: theme.colors.emeraldSoft,
+    color: APP_GREEN,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1,
@@ -241,7 +275,7 @@ const styles = StyleSheet.create({
 
   partnerCard: {
     marginTop: 16,
-    minHeight: 72,
+    minHeight: 76,
     borderRadius: 22,
     padding: 14,
     flexDirection: "row",
@@ -252,19 +286,36 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.08)",
   },
 
+  partnerLogoWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
+  },
+
+  partnerLogo: {
+    width: 44,
+    height: 44,
+  },
+
   partnerBadge: {
-    width: 46,
-    height: 46,
+    width: 52,
+    height: 52,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(34,197,94,0.10)",
+    backgroundColor: APP_GREEN_SOFT,
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.24)",
+    borderColor: APP_GREEN_BORDER,
   },
 
   partnerBadgeText: {
-    color: theme.colors.emeraldSoft,
+    color: APP_GREEN,
     fontSize: 12,
     fontWeight: "900",
   },
@@ -325,7 +376,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: theme.colors.emeraldSoft,
+    backgroundColor: APP_GREEN,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.16)",
   },
