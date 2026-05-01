@@ -48,9 +48,32 @@ import {
 import type { RankedFixtureRow } from "@/src/features/fixtures/types";
 
 const DEFAULT_FETCH_CONCURRENCY = 4;
+const BACKGROUND_FETCH_CONCURRENCY = 3;
+
+const INITIAL_FAST_LEAGUE_IDS = new Set<number>([
+  2,
+  3,
+  848,
+  39,
+  140,
+  135,
+  78,
+  61,
+]);
 
 const DEFAULT_PRIORITY_LEAGUE_IDS = new Set<number>([
-  39, 140, 135, 78, 61, 88, 94, 203, 179, 2, 3, 848,
+  2,
+  3,
+  848,
+  39,
+  140,
+  135,
+  78,
+  61,
+  88,
+  94,
+  203,
+  179,
 ]);
 
 async function mapLimit<T, R>(
@@ -68,7 +91,7 @@ async function mapLimit<T, R>(
     }
   }
 
-  const n = Math.max(1, Math.min(limit, items.length));
+  const n = Math.max(1, Math.min(limit, items.length || 1));
   await Promise.all(Array.from({ length: n }).map(worker));
   return results;
 }
@@ -96,6 +119,18 @@ function dedupeByFixtureId(rows: RankedFixtureRow[]): RankedFixtureRow[] {
   }
 
   return Array.from(out.values());
+}
+
+function splitPriorityLeagues(leagues: LeagueOption[]) {
+  const priority: LeagueOption[] = [];
+  const background: LeagueOption[] = [];
+
+  for (const league of leagues) {
+    if (INITIAL_FAST_LEAGUE_IDS.has(league.leagueId)) priority.push(league);
+    else background.push(league);
+  }
+
+  return { priority, background };
 }
 
 function getCompetitionSummary(args: {
@@ -270,6 +305,8 @@ export function useFixturesScreenData() {
     return allLeagues;
   }, [selectedLeagues, allLeagues]);
 
+  const stagedLoadingEnabled = selectedLeagueIds.length === 0 && fetchLeagues.length > 8;
+
   const competitionSummaryText = useMemo(
     () =>
       getCompetitionSummary({
@@ -349,6 +386,8 @@ export function useFixturesScreenData() {
   }, [followed]);
 
   const [loading, setLoading] = useState(false);
+  const [backgroundLoading, setBackgroundLoading] = useState(false);
+  const [loadedLeagueCount, setLoadedLeagueCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<RankedFixtureRow[]>([]);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -363,20 +402,106 @@ export function useFixturesScreenData() {
     return fetchLeagues.map((l) => `${l.leagueId}:${l.season}`).join("|");
   }, [fetchLeagues]);
 
+  const rankRows = useCallback(
+    (inputRows: RankedFixtureRow[]): RankedFixtureRow[] => {
+      const cleanRows = dedupeByFixtureId(inputRows).filter((r) => r?.fixture?.id != null);
+
+      if (discoverCategory) {
+        const scored = buildDiscoverScores(cleanRows);
+
+        return dedupeByFixtureId(
+          scored
+            .map((item) => ({
+              fixture: item.fixture,
+              reasons: item.reasons,
+              discoverScore: discoverScoreForCategory(discoverCategory, item, discoverContext),
+              kickoffIso: String(item.fixture?.fixture?.date ?? ""),
+            }))
+            .sort((a, b) => {
+              if (b.discoverScore !== a.discoverScore) return b.discoverScore - a.discoverScore;
+              return a.kickoffIso.localeCompare(b.kickoffIso);
+            })
+            .map((x) => ({
+              ...(x.fixture as RankedFixtureRow),
+              discoverReasons: x.reasons,
+            }))
+        );
+      }
+
+      if (topPicksMode) {
+        return [...cleanRows].sort((a, b) => {
+          const sa = baseFixtureScore(a);
+          const sb = baseFixtureScore(b);
+          if (sb !== sa) return sb - sa;
+          return String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""));
+        });
+      }
+
+      return [...cleanRows].sort((a, b) =>
+        String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""))
+      );
+    },
+    [discoverCategory, discoverContext, topPicksMode]
+  );
+
+  const fetchLeagueRows = useCallback(
+    async (leagues: LeagueOption[]) => {
+      if (leagues.length === 0) return [] as RankedFixtureRow[];
+
+      const batches = await mapLimit(leagues, DEFAULT_FETCH_CONCURRENCY, async (l) => {
+        const res = await getFixtures({
+          league: l.leagueId,
+          season: l.season,
+          from: fetchFrom,
+          to: fetchTo,
+        });
+        return Array.isArray(res) ? res : [];
+      });
+
+      return batches.flat().filter((r) => r?.fixture?.id != null) as RankedFixtureRow[];
+    },
+    [fetchFrom, fetchTo]
+  );
+
   useEffect(() => {
     let cancelled = false;
     const requestId = activeRequestRef.current + 1;
     activeRequestRef.current = requestId;
 
     async function run() {
-      const hasExistingRows = rows.length > 0;
-
       setLoading(true);
+      setBackgroundLoading(false);
+      setLoadedLeagueCount(0);
       setError(null);
-      if (!hasExistingRows) setExpandedKey(null);
+      setExpandedKey(null);
+      setRows([]);
 
       try {
-        const batches = await mapLimit(fetchLeagues, DEFAULT_FETCH_CONCURRENCY, async (l) => {
+        if (!stagedLoadingEnabled) {
+          const allRows = await fetchLeagueRows(fetchLeagues);
+
+          if (cancelled || activeRequestRef.current !== requestId) return;
+
+          setRows(rankRows(allRows));
+          setLoadedLeagueCount(fetchLeagues.length);
+          return;
+        }
+
+        const { priority, background } = splitPriorityLeagues(fetchLeagues);
+
+        const priorityRows = await fetchLeagueRows(priority);
+
+        if (cancelled || activeRequestRef.current !== requestId) return;
+
+        setRows(rankRows(priorityRows));
+        setLoadedLeagueCount(priority.length);
+        setLoading(false);
+
+        if (background.length === 0) return;
+
+        setBackgroundLoading(true);
+
+        const backgroundBatches = await mapLimit(background, BACKGROUND_FETCH_CONCURRENCY, async (l) => {
           const res = await getFixtures({
             league: l.leagueId,
             season: l.season,
@@ -388,55 +513,20 @@ export function useFixturesScreenData() {
 
         if (cancelled || activeRequestRef.current !== requestId) return;
 
-        const flat = batches.flat().filter((r) => r?.fixture?.id != null);
+        const backgroundRows = backgroundBatches
+          .flat()
+          .filter((r) => r?.fixture?.id != null) as RankedFixtureRow[];
 
-        if (discoverCategory) {
-          const scored = buildDiscoverScores(flat);
-
-          const ranked = dedupeByFixtureId(
-            scored
-              .map((item) => ({
-                fixture: item.fixture,
-                reasons: item.reasons,
-                discoverScore: discoverScoreForCategory(discoverCategory, item, discoverContext),
-                kickoffIso: String(item.fixture?.fixture?.date ?? ""),
-              }))
-              .sort((a, b) => {
-                if (b.discoverScore !== a.discoverScore) return b.discoverScore - a.discoverScore;
-                return a.kickoffIso.localeCompare(b.kickoffIso);
-              })
-              .map((x) => ({
-                ...(x.fixture as RankedFixtureRow),
-                discoverReasons: x.reasons,
-              }))
-          );
-
-          setRows(ranked);
-          return;
-        }
-
-        const ranked = dedupeByFixtureId(flat as RankedFixtureRow[]);
-
-        if (topPicksMode) {
-          ranked.sort((a, b) => {
-            const sa = baseFixtureScore(a);
-            const sb = baseFixtureScore(b);
-            if (sb !== sa) return sb - sa;
-            return String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""));
-          });
-        } else {
-          ranked.sort((a, b) =>
-            String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""))
-          );
-        }
-
-        setRows(ranked);
+        setRows(rankRows([...priorityRows, ...backgroundRows]));
+        setLoadedLeagueCount(priority.length + background.length);
       } catch (e: any) {
         if (cancelled || activeRequestRef.current !== requestId) return;
-        if (rows.length === 0) setError(e?.message ?? "Failed to load fixtures.");
-        else setError(null);
+        setError(e?.message ?? "Failed to load fixtures.");
       } finally {
-        if (!cancelled && activeRequestRef.current === requestId) setLoading(false);
+        if (!cancelled && activeRequestRef.current === requestId) {
+          setLoading(false);
+          setBackgroundLoading(false);
+        }
       }
     }
 
@@ -448,12 +538,11 @@ export function useFixturesScreenData() {
   }, [
     fetchLeagueKey,
     fetchLeagues,
+    fetchLeagueRows,
     fetchFrom,
     fetchTo,
-    topPicksMode,
-    discoverCategory,
-    discoverContext,
-    rows.length,
+    rankRows,
+    stagedLoadingEnabled,
   ]);
 
   const filtered = useMemo(() => {
@@ -699,6 +788,9 @@ export function useFixturesScreenData() {
 
     followedIdSet,
     loading,
+    backgroundLoading,
+    loadedLeagueCount,
+    totalLeagueCount: fetchLeagues.length,
     error,
     rows,
     filtered,
@@ -732,4 +824,4 @@ export function useFixturesScreenData() {
     matchesSummaryLine,
     monthLabel,
   };
-    }
+}
