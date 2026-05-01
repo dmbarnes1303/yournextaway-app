@@ -33,12 +33,15 @@ type Props = {
 
 function alpha(hex: string, a: number) {
   const h = String(hex || "").replace("#", "");
-  if (!/^[0-9a-fA-F]{6}$/.test(h)) return `rgba(255,255,255,${Math.max(0, Math.min(1, a))})`;
+  const clamped = Math.max(0, Math.min(1, a));
+
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) {
+    return `rgba(255,255,255,${clamped})`;
+  }
 
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
-  const clamped = Math.max(0, Math.min(1, a));
 
   return `rgba(${r},${g},${b},${clamped})`;
 }
@@ -91,12 +94,12 @@ function getToneStyles(tone: Tone) {
 function sizeCfg(size: Size) {
   switch (size) {
     case "sm":
-      return { minHeight: 40, px: 14, fontSize: 13, slot: 24 };
+      return { minHeight: 40, px: 12, fontSize: 13 };
     case "lg":
-      return { minHeight: 54, px: 18, fontSize: 17, slot: 30 };
+      return { minHeight: 54, px: 18, fontSize: 17 };
     case "md":
     default:
-      return { minHeight: 48, px: 16, fontSize: 15, slot: 28 };
+      return { minHeight: 48, px: 16, fontSize: 15 };
   }
 }
 
@@ -130,7 +133,7 @@ export default function Button({
     children ?? (
       <Text
         numberOfLines={1}
-        ellipsizeMode="tail"
+        ellipsizeMode="clip"
         style={[
           styles.text,
           {
@@ -173,9 +176,9 @@ export default function Button({
         <ActivityIndicator color={cfg.spinner} />
       ) : (
         <View style={styles.row}>
-          <View style={[styles.slot, { width: s.slot }]}>{leftSlot ?? null}</View>
+          {leftSlot ? <View style={styles.slot}>{leftSlot}</View> : null}
           <View style={styles.center}>{content}</View>
-          <View style={[styles.slot, { width: s.slot }]}>{rightSlot ?? null}</View>
+          {rightSlot ? <View style={styles.slot}>{rightSlot}</View> : null}
         </View>
       )}
     </Pressable>
@@ -208,7 +211,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     minWidth: 0,
+    gap: 7,
   },
 
   slot: {
@@ -217,15 +222,14 @@ const styles = StyleSheet.create({
   },
 
   center: {
-    flex: 1,
     minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
   },
 
   text: {
-    fontWeight: theme.fontWeight.bold,
-    letterSpacing: 0.2,
+    fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.1,
     textAlign: "center",
   },
 
