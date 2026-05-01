@@ -1,19 +1,16 @@
 import savedItemsStore from "@/src/state/savedItems";
 import type { SavedItem } from "@/src/core/savedItemTypes";
+import { attachTicketProof } from "@/src/services/ticketAttachment";
 import { writeJson } from "@/src/state/persist";
 
 const LAST_BOOKED_KEY = "yna_last_booked_v2";
-
-export type BookingProofRequestMode = "offer" | "success" | "info";
 
 export type BookingProofRequest = {
   itemId: string;
   tripId: string;
   title: string;
-  mode: BookingProofRequestMode;
+  hasProof: boolean;
 };
-
-let pendingProofRequest: BookingProofRequest | null = null;
 
 function cleanString(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -25,7 +22,7 @@ async function ensureSavedItemsLoaded() {
   try {
     await savedItemsStore.load();
   } catch {
-    // Best effort only.
+    // silent
   }
 }
 
@@ -46,19 +43,13 @@ async function persistLastBooked(item?: SavedItem | null) {
       at: Date.now(),
     });
   } catch {
-    // Best effort only.
+    // best-effort only
   }
 }
 
-/**
- * Called after user marks an item as booked.
- *
- * Truth model:
- * - booked = user-confirmed
- * - proof = optional wallet evidence
- * - no native Alert UI belongs in this service
- */
-export async function requestBookingProofFlow(itemId: string): Promise<BookingProofRequest | null> {
+export async function requestBookingProofFlow(
+  itemId: string
+): Promise<BookingProofRequest | null> {
   const id = cleanString(itemId);
   if (!id) return null;
 
@@ -69,40 +60,22 @@ export async function requestBookingProofFlow(itemId: string): Promise<BookingPr
 
   await persistLastBooked(item);
 
-  const title = cleanString(item.title) || "Booking";
-  const tripId = cleanString(item.tripId);
-  const attachmentCount = getAttachmentCount(item);
-
-  if (!tripId) return null;
-
-  pendingProofRequest = {
-    itemId: id,
-    tripId,
-    title,
-    mode: attachmentCount > 0 ? "info" : "offer",
+  return {
+    itemId: item.id,
+    tripId: cleanString(item.tripId),
+    title: cleanString(item.title) || "Booking",
+    hasProof: getAttachmentCount(item) > 0,
   };
-
-  return pendingProofRequest;
 }
 
-export function consumeBookingProofRequest(): BookingProofRequest | null {
-  const request = pendingProofRequest;
-  pendingProofRequest = null;
-  return request;
-}
+export async function addBookingProof(itemId: string): Promise<boolean> {
+  const id = cleanString(itemId);
+  if (!id) return false;
 
-export function peekBookingProofRequest(): BookingProofRequest | null {
-  return pendingProofRequest;
-}
+  await ensureSavedItemsLoaded();
 
-export function completeBookingProofFlow() {
-  pendingProofRequest = null;
-}
+  const item = savedItemsStore.getById(id) ?? null;
+  if (!item || item.status !== "booked") return false;
 
-/**
- * Backwards-compatible name for older callers.
- * Do not show UI here.
- */
-export async function confirmBookedAndOfferProof(itemId: string): Promise<BookingProofRequest | null> {
-  return requestBookingProofFlow(itemId);
+  return await attachTicketProof(id);
 }
