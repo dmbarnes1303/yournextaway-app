@@ -27,11 +27,11 @@ type Props = {
   onPressBuildTrip: (id: string, ctx?: FixtureRouteCtx) => void;
 };
 
-function clean(v: unknown) {
-  return String(v ?? "").trim();
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
 }
 
-function getLocationLine(item: RankedFixtureRow) {
+function getLocationLine(item: RankedFixtureRow): string {
   const city = clean(item?.fixture?.venue?.city);
   const venue = clean(item?.fixture?.venue?.name);
   return [city, venue].filter(Boolean).join(" • ");
@@ -51,8 +51,9 @@ function Row({
 
   const leagueId = item?.league?.id ?? null;
   const leagueName = clean(item?.league?.name) || "Competition";
-  const leagueLogo = (item?.league as any)?.logo;
-  const countryCode = (item?.league as any)?.countryCode;
+  const leagueLogo = (item?.league as any)?.logo ?? null;
+  const countryCode = (item?.league as any)?.countryCode ?? null;
+  const countryName = (item?.league as any)?.country ?? null;
 
   const kickoff = kickoffPresentation(item, new Set());
   const locationLine = getLocationLine(item);
@@ -65,6 +66,7 @@ function Row({
   const backdrop = getFixtureBackdrop({
     leagueId,
     countryCode,
+    countryName,
   });
 
   return (
@@ -88,7 +90,11 @@ function Row({
           <View style={styles.topRow}>
             <View style={styles.leagueRow}>
               {leagueLogo ? (
-                <Image source={{ uri: leagueLogo }} style={styles.leagueLogo} resizeMode="contain" />
+                <Image
+                  source={{ uri: leagueLogo }}
+                  style={styles.leagueLogo}
+                  resizeMode="contain"
+                />
               ) : null}
 
               {countryCode ? <LeagueFlag code={countryCode} size="sm" /> : null}
@@ -99,7 +105,11 @@ function Row({
             </View>
 
             <View style={styles.timeChip}>
-              <Ionicons name="time-outline" size={13} color={theme.colors.emeraldSoft} />
+              <Ionicons
+                name="time-outline"
+                size={13}
+                color={theme.colors.emeraldSoft}
+              />
               <Text style={styles.timeChipText} numberOfLines={1}>
                 {kickoff.time}
               </Text>
@@ -138,7 +148,11 @@ function Row({
 
           {locationLine ? (
             <View style={styles.locationRow}>
-              <Ionicons name="location-outline" size={14} color={theme.colors.textMuted} />
+              <Ionicons
+                name="location-outline"
+                size={14}
+                color={theme.colors.textMuted}
+              />
               <Text style={styles.location} numberOfLines={1}>
                 {locationLine}
               </Text>
@@ -175,7 +189,11 @@ function Row({
               <Ionicons
                 name={isFollowed ? "notifications" : "notifications-outline"}
                 size={16}
-                color={isFollowed ? theme.badge.textEmerald : theme.colors.textSecondary}
+                color={
+                  isFollowed
+                    ? theme.badge.textEmerald
+                    : theme.colors.textSecondary
+                }
               />
             </Pressable>
           </View>
@@ -204,12 +222,12 @@ const styles = StyleSheet.create({
   },
 
   bgImg: {
-    opacity: 0.34,
+    opacity: 0.46,
   },
 
   bgOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.66)",
+    backgroundColor: "rgba(0,0,0,0.52)",
   },
 
   bottomShade: {
@@ -217,8 +235,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: "46%",
-    backgroundColor: "rgba(0,0,0,0.28)",
+    height: "50%",
+    backgroundColor: "rgba(0,0,0,0.24)",
   },
 
   fallbackBg: {
