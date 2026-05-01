@@ -28,8 +28,6 @@ type Props = {
 type LoadingState = "booked" | "notBooked" | "notNow" | null;
 
 const APP_GREEN = theme.colors.primary;
-const APP_GREEN_SOFT = "rgba(34,197,94,0.18)";
-const APP_GREEN_BORDER = "rgba(34,197,94,0.38)";
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -172,10 +170,13 @@ export default function PartnerReturnModal({
             </View>
           </View>
 
-          <Text style={styles.body}>
-            Be honest here. This only updates your trip tracker and Wallet. It does not verify the
-            booking unless you add proof later.
-          </Text>
+          <View style={styles.truthBox}>
+            <Text style={styles.truthTitle}>Keep the trip tracker honest</Text>
+            <Text style={styles.truthText}>
+              Only mark this as booked if you actually completed the booking on the partner site.
+              You can add proof next for offline Wallet access.
+            </Text>
+          </View>
 
           {busy ? (
             <View style={styles.loadingBox}>
@@ -227,7 +228,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.72)",
+    backgroundColor: "rgba(0,0,0,0.74)",
   },
 
   backdropPress: {
@@ -259,6 +260,7 @@ const styles = StyleSheet.create({
   eyebrow: {
     color: APP_GREEN,
     fontSize: 10,
+    lineHeight: 13,
     fontWeight: "900",
     letterSpacing: 1,
     textTransform: "uppercase",
@@ -306,12 +308,12 @@ const styles = StyleSheet.create({
   partnerBadge: {
     width: 52,
     height: 52,
-    borderRadius: 999,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: APP_GREEN_SOFT,
+    backgroundColor: "rgba(34,197,94,0.12)",
     borderWidth: 1,
-    borderColor: APP_GREEN_BORDER,
+    borderColor: "rgba(34,197,94,0.34)",
   },
 
   partnerBadgeText: {
@@ -339,11 +341,26 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  body: {
+  truthBox: {
     marginTop: 14,
-    color: theme.colors.textSecondary,
+    padding: 14,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+
+  truthTitle: {
+    color: theme.colors.textPrimary,
     fontSize: 14,
-    lineHeight: 20,
+    fontWeight: "900",
+  },
+
+  truthText: {
+    marginTop: 6,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
     fontWeight: "800",
   },
 
