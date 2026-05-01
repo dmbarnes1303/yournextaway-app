@@ -17,23 +17,17 @@ import {
 } from "@/src/services/partnerReturnBootstrap";
 
 import {
+  addBookingProof,
   requestBookingProofFlow,
-  consumeBookingProofRequest,
-  completeBookingProofFlow,
+  type BookingProofRequest,
 } from "@/src/services/bookingProof";
 
-import { attachTicketProof } from "@/src/services/ticketAttachment";
 import type { LastPartnerClick } from "@/src/services/partnerClicks";
 
 export default function RootLayout() {
-  // ===== Partner return modal =====
   const [modalItemId, setModalItemId] = useState<string | null>(null);
   const [modalClick, setModalClick] = useState<LastPartnerClick | null>(null);
-
-  // ===== Booking proof modal =====
-  const [proofVisible, setProofVisible] = useState(false);
-  const [proofItemId, setProofItemId] = useState<string | null>(null);
-  const [proofMode, setProofMode] = useState<"offer" | "success" | "info">("offer");
+  const [proofRequest, setProofRequest] = useState<BookingProofRequest | null>(null);
 
   const mountedRef = useRef(false);
 
@@ -44,8 +38,8 @@ export default function RootLayout() {
   }
 
   function closeProofModal() {
-    setProofVisible(false);
-    setProofItemId(null);
+    if (!mountedRef.current) return;
+    setProofRequest(null);
   }
 
   useEffect(() => {
@@ -54,7 +48,9 @@ export default function RootLayout() {
     try {
       const { setupErrorLogging } = require("@/src/utils/errorLogger");
       setupErrorLogging();
-    } catch {}
+    } catch (error) {
+      console.warn("Logger init failed", error);
+    }
 
     identity.ensureIdentity().catch(() => null);
     preferencesStore.load().catch(() => null);
@@ -69,27 +65,27 @@ export default function RootLayout() {
 
     return () => {
       mountedRef.current = false;
+
       try {
         if (typeof unsubscribe === "function") unsubscribe();
-      } catch {}
+      } catch {
+        // ignore cleanup failure
+      }
     };
   }, []);
 
-  // ===== Handle booking confirmation =====
   async function handleBooked(itemId: string) {
     try {
       await markItemBooked(itemId);
 
-      // Trigger proof flow (no UI here)
-      await requestBookingProofFlow(itemId);
+      const request = await requestBookingProofFlow(itemId);
 
-      const request = consumeBookingProofRequest();
-      if (request) {
-        setProofItemId(request.itemId);
-        setProofMode(request.mode);
-        setProofVisible(true);
+      closePartnerModal();
+
+      if (request && mountedRef.current) {
+        setProofRequest(request);
       }
-    } finally {
+    } catch {
       closePartnerModal();
     }
   }
@@ -115,23 +111,12 @@ export default function RootLayout() {
     }
   }
 
-  // ===== Proof modal actions =====
-  async function handleAddProof() {
-    if (!proofItemId) return;
-
-    const success = await attachTicketProof(proofItemId);
-
-    if (success) {
-      setProofMode("success");
-      completeBookingProofFlow();
-    } else {
+  async function handleAddProof(itemId: string) {
+    try {
+      await addBookingProof(itemId);
+    } finally {
       closeProofModal();
     }
-  }
-
-  function handleSkipProof() {
-    completeBookingProofFlow();
-    closeProofModal();
   }
 
   return (
@@ -145,7 +130,6 @@ export default function RootLayout() {
         <Stack.Screen name="team/[teamKey]" />
       </Stack>
 
-      {/* ===== Partner return modal ===== */}
       <PartnerReturnModal
         visible={Boolean(modalItemId)}
         itemId={modalItemId}
@@ -155,24 +139,11 @@ export default function RootLayout() {
         onNotNow={handleNotNow}
       />
 
-      {/* ===== Booking proof modal ===== */}
       <BookingProofModal
-        visible={proofVisible}
-        mode={proofMode}
-        title={
-          proofMode === "success"
-            ? "Proof added"
-            : "Saved in Wallet"
-        }
-        message={
-          proofMode === "success"
-            ? "Your booking proof is now stored in Wallet."
-            : "Add booking proof (PDF or screenshot) for offline access?"
-        }
-        confirmLabel={proofMode === "success" ? undefined : "Add proof"}
-        cancelLabel={proofMode === "success" ? "Done" : "Not now"}
-        onConfirm={proofMode === "success" ? undefined : handleAddProof}
-        onCancel={proofMode === "success" ? closeProofModal : handleSkipProof}
+        visible={Boolean(proofRequest)}
+        request={proofRequest}
+        onAddProof={handleAddProof}
+        onNotNow={closeProofModal}
       />
     </ProProvider>
   );
