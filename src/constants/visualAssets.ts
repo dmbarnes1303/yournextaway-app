@@ -4,6 +4,12 @@ export type VisualAsset = {
   backdrop: string;
 };
 
+export type CountryVisual = {
+  code: string;
+  flagUrl: string;
+  backdrop: string;
+};
+
 const FLAG_BASE =
   "https://raw.githubusercontent.com/dmbarnes1303/yournextaway-app/main/assets/flags";
 
@@ -140,9 +146,7 @@ function resolveCountryCode(params: {
 }): string | null {
   const rawCode = clean(params.countryCode).toUpperCase();
 
-  if (rawCode && COUNTRY_VISUALS[rawCode]) {
-    return rawCode;
-  }
+  if (rawCode && COUNTRY_VISUALS[rawCode]) return rawCode;
 
   const leagueId = Number(params.leagueId);
 
@@ -189,4 +193,20 @@ export function getCountryBackdrop(
   });
 
   return countryCode ? COUNTRY_VISUALS[countryCode]?.backdrop ?? null : null;
+}
+
+export function getCountryVisual(country?: string | null): CountryVisual {
+  const countryCode = resolveCountryCode({
+    countryCode: country,
+    countryName: country,
+  });
+
+  const safeCode = countryCode && COUNTRY_VISUALS[countryCode] ? countryCode : "ENG";
+  const backdrop = COUNTRY_VISUALS[safeCode]?.backdrop ?? COUNTRY_VISUALS.ENG.backdrop;
+
+  return {
+    code: safeCode,
+    flagUrl: backdrop,
+    backdrop,
+  };
 }
