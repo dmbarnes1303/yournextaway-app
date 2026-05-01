@@ -87,7 +87,7 @@ export default function FixturesHeader({
 
   const loadingLine = useMemo(() => {
     if (backgroundLoading && totalLeagueCount > 0) {
-      return `Loading more competitions • ${Math.min(loadedLeagueCount, totalLeagueCount)}/${totalLeagueCount}`;
+      return `Adding leagues ${Math.min(loadedLeagueCount, totalLeagueCount)}/${totalLeagueCount}`;
     }
 
     if (loading) return "Finding priority fixtures";
@@ -95,15 +95,31 @@ export default function FixturesHeader({
     return null;
   }, [backgroundLoading, loadedLeagueCount, loading, totalLeagueCount]);
 
+  const countText =
+    typeof filteredCount === "number"
+      ? `${filteredCount} match${filteredCount === 1 ? "" : "es"}`
+      : "Matches";
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.hero}>
-        <View style={styles.heroCopy}>
-          <Text style={styles.eyebrow}>Match explorer</Text>
-          <Text style={styles.title}>{titleText || "Fixtures"}</Text>
-          <Text style={styles.subtitle}>
-            {subtitleText || "Find matches by date, competition or destination."}
-          </Text>
+      <View style={styles.heroPanel}>
+        <View pointerEvents="none" style={styles.heroGlowOne} />
+        <View pointerEvents="none" style={styles.heroGlowTwo} />
+
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroCopy}>
+            <Text style={styles.title}>{titleText || "Fixtures"}</Text>
+            <Text style={styles.subtitle}>
+              {subtitleText || "Find matches by date, competition or destination."}
+            </Text>
+          </View>
+
+          <View style={styles.countPill}>
+            <Text style={styles.countNumber}>{countText.split(" ")[0]}</Text>
+            <Text style={styles.countLabel}>
+              {filteredCount === 1 ? "match" : "matches"}
+            </Text>
+          </View>
         </View>
 
         {loadingLine ? (
@@ -118,106 +134,106 @@ export default function FixturesHeader({
         {!loading && !backgroundLoading && error ? (
           <Text style={styles.errorText}>{error}</Text>
         ) : null}
-      </View>
 
-      <View style={styles.dateHeader}>
-        <View style={styles.sectionTitleWrap}>
-          <Text style={styles.sectionLabel}>Dates</Text>
-          <Text style={styles.sectionHint}>
-            {isRange ? "Range active" : "Swipe for more dates"}
-          </Text>
-        </View>
-
-        <Pressable
-          onPress={openCalendar}
-          style={({ pressed }) => [styles.rangeButton, pressed && styles.pressedLite]}
-          hitSlop={10}
-        >
-          <Ionicons name="calendar-outline" size={14} color={theme.badge.textGold} />
-          <Text style={styles.rangeButtonText}>Date range</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.dateStripShell}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.rowScroll}
-        >
-          {stripDays.map((d) => {
-            const active = !isRange && d.iso === selectedDay;
-
-            return (
-              <Pressable
-                key={d.iso}
-                onPress={() => onTapStripDate(d.iso)}
-                style={({ pressed }) => [
-                  styles.datePill,
-                  active && styles.datePillActive,
-                  pressed && styles.pressedCard,
-                ]}
-                android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-              >
-                <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
-                <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
-                  {d.bottom}
-                </Text>
-              </Pressable>
-            );
-          })}
-
-          <Pressable
-            onPress={openCalendar}
-            style={({ pressed }) => [styles.datePillGhost, pressed && styles.pressedCard]}
-            android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-          >
-            <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
-            <Text style={styles.dateGhostText}>Range</Text>
-          </Pressable>
-        </ScrollView>
-
-        <View pointerEvents="none" style={styles.scrollFadeRight} />
-      </View>
-
-      <View style={styles.controlsRow}>
-        <Pressable
-          onPress={() => setCompetitionsOpen((v) => !v)}
-          style={({ pressed }) => [styles.competitionSelector, pressed && styles.pressedCard]}
-          android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-        >
-          <View style={styles.competitionTextWrap}>
-            <Text style={styles.controlLabel}>Competitions</Text>
-            <Text style={styles.competitionSummary} numberOfLines={1}>
-              {competitionSummaryText ||
-                (hasSelectedLeagues
-                  ? `${selectedLeagueIds.length} selected`
-                  : `All ${visibleLeagues.length} competitions`)}
+        <View style={styles.dateHeroRow}>
+          <View>
+            <Text style={styles.sectionLabel}>Dates</Text>
+            <Text style={styles.sectionHint}>
+              {isRange ? "Range active" : "Tap a day or use range"}
             </Text>
           </View>
 
-          <View style={styles.competitionRight}>
-            {hasSelectedLeagues ? (
-              <View style={styles.selectedCountPill}>
-                <Text style={styles.selectedCountText}>{selectedLeagueIds.length}</Text>
-              </View>
-            ) : null}
-            <Ionicons
-              name={competitionsOpen ? "chevron-up" : "chevron-down"}
-              size={18}
-              color={theme.colors.textSecondary}
+          <Pressable
+            onPress={openCalendar}
+            style={({ pressed }) => [styles.rangeButton, pressed && styles.pressedLite]}
+            hitSlop={10}
+          >
+            <Ionicons name="calendar-outline" size={14} color={theme.badge.textGold} />
+            <Text style={styles.rangeButtonText}>Date range</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.dateStripShell}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.rowScroll}
+          >
+            {stripDays.map((d) => {
+              const active = !isRange && d.iso === selectedDay;
+
+              return (
+                <Pressable
+                  key={d.iso}
+                  onPress={() => onTapStripDate(d.iso)}
+                  style={({ pressed }) => [
+                    styles.datePill,
+                    active && styles.datePillActive,
+                    pressed && styles.pressedCard,
+                  ]}
+                  android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                >
+                  <Text style={[styles.dateTop, active && styles.dateTopActive]}>{d.top}</Text>
+                  <Text style={[styles.dateBottom, active && styles.dateBottomActive]}>
+                    {d.bottom}
+                  </Text>
+                </Pressable>
+              );
+            })}
+
+            <Pressable
+              onPress={openCalendar}
+              style={({ pressed }) => [styles.datePillGhost, pressed && styles.pressedCard]}
+              android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+            >
+              <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
+              <Text style={styles.dateGhostText}>More</Text>
+            </Pressable>
+          </ScrollView>
+
+          <View pointerEvents="none" style={styles.scrollFadeRight} />
+        </View>
+
+        <View style={styles.controlsRow}>
+          <Pressable
+            onPress={() => setCompetitionsOpen((v) => !v)}
+            style={({ pressed }) => [styles.competitionSelector, pressed && styles.pressedCard]}
+            android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+          >
+            <View style={styles.competitionTextWrap}>
+              <Text style={styles.controlLabel}>Competitions</Text>
+              <Text style={styles.competitionSummary} numberOfLines={1}>
+                {competitionSummaryText ||
+                  (hasSelectedLeagues
+                    ? `${selectedLeagueIds.length} selected`
+                    : `All ${visibleLeagues.length} competitions`)}
+              </Text>
+            </View>
+
+            <View style={styles.competitionRight}>
+              {hasSelectedLeagues ? (
+                <View style={styles.selectedCountPill}>
+                  <Text style={styles.selectedCountText}>{selectedLeagueIds.length}</Text>
+                </View>
+              ) : null}
+              <Ionicons
+                name={competitionsOpen ? "chevron-up" : "chevron-down"}
+                size={18}
+                color={theme.colors.textSecondary}
+              />
+            </View>
+          </Pressable>
+
+          <View style={styles.searchBlock}>
+            <Input
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search team, stadium or city"
+              leftIcon="search"
+              variant="default"
+              allowClear
             />
           </View>
-        </Pressable>
-
-        <View style={styles.searchBlock}>
-          <Input
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search team, stadium or city"
-            leftIcon="search"
-            variant="default"
-            allowClear
-          />
         </View>
       </View>
 
@@ -300,46 +316,67 @@ export default function FixturesHeader({
           </Text>
         </GlassCard>
       ) : null}
-
-      {typeof filteredCount === "number" ? (
-        <View style={styles.contextLine}>
-          <Text style={styles.contextText} numberOfLines={1}>
-            {filteredCount} match{filteredCount === 1 ? "" : "es"} shown
-          </Text>
-        </View>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
+    gap: 12,
+  },
+
+  heroPanel: {
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
+    padding: 16,
     gap: 14,
   },
 
-  hero: {
-    gap: 8,
+  heroGlowOne: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 999,
+    right: -72,
+    top: -86,
+    backgroundColor: theme.colors.glowEmerald,
+    opacity: 0.62,
+  },
+
+  heroGlowTwo: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 999,
+    left: -76,
+    bottom: -88,
+    backgroundColor: theme.colors.glowGold,
+    opacity: 0.24,
+  },
+
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
   },
 
   heroCopy: {
-    gap: 5,
-  },
-
-  eyebrow: {
-    color: theme.colors.emeraldSoft,
-    fontSize: theme.fontSize.tiny,
-    lineHeight: 14,
-    fontWeight: theme.fontWeight.black,
-    letterSpacing: 0.8,
-    textTransform: "uppercase",
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
   },
 
   title: {
     color: theme.colors.textPrimary,
     fontSize: theme.fontSize.hero,
-    lineHeight: 34,
+    lineHeight: 36,
     fontWeight: theme.fontWeight.black,
-    letterSpacing: -0.35,
+    letterSpacing: -0.45,
   },
 
   subtitle: {
@@ -347,7 +384,35 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.meta,
     lineHeight: 19,
     fontWeight: theme.fontWeight.bold,
-    maxWidth: "94%",
+    maxWidth: "96%",
+  },
+
+  countPill: {
+    minWidth: 74,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.badge.bgEmerald,
+    borderWidth: 1,
+    borderColor: theme.badge.borderEmerald,
+  },
+
+  countNumber: {
+    color: theme.colors.textPrimary,
+    fontSize: 18,
+    lineHeight: 21,
+    fontWeight: theme.fontWeight.black,
+  },
+
+  countLabel: {
+    color: theme.badge.textEmerald,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: theme.fontWeight.black,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
   },
 
   livePill: {
@@ -384,16 +449,11 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  dateHeader: {
+  dateHeroRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-  },
-
-  sectionTitleWrap: {
-    flex: 1,
-    gap: 3,
   },
 
   sectionLabel: {
@@ -408,6 +468,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontWeight: theme.fontWeight.bold,
+    marginTop: 3,
   },
 
   rangeButton: {
@@ -454,7 +515,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
     backgroundColor:
-      Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
+      Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
     alignItems: "center",
@@ -515,12 +576,11 @@ const styles = StyleSheet.create({
   },
 
   competitionSelector: {
-    minHeight: 58,
+    minHeight: 56,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 18,
-    backgroundColor:
-      Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
+    backgroundColor: "rgba(0,0,0,0.30)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
     flexDirection: "row",
@@ -684,17 +744,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: theme.fontSize.tiny,
     lineHeight: 15,
-    fontWeight: theme.fontWeight.bold,
-  },
-
-  contextLine: {
-    marginTop: -2,
-  },
-
-  contextText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
     fontWeight: theme.fontWeight.bold,
   },
 
