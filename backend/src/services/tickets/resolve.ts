@@ -25,7 +25,7 @@ type CandidateAssessment = {
   exact: boolean;
 };
 
-const RESOLVER_VERSION = "resolve_v4_se365_partner_host";
+const RESOLVER_VERSION = "resolve_v5_keep_all_providers_se365_visible";
 
 const PROVIDERS = [
   { id: "footballticketnet", fn: resolveFtnCandidate },
@@ -33,12 +33,11 @@ const PROVIDERS = [
 ] as const;
 
 const CACHE = new Map<string, CacheEntry>();
-
 const CACHE_TTL_MS = 1000 * 60 * 10;
 
 const PROVIDER_TIMEOUTS_MS: Record<TicketProviderId, number> = {
   footballticketnet: 9000,
-  sportsevents365: 16000,
+  sportsevents365: 18000,
 };
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
@@ -109,12 +108,7 @@ function deleteCache(key: string): void {
 function shouldCacheResolution(value: TicketResolution): boolean {
   if (!value.ok) return false;
   if (!clean(value.url)) return false;
-
-  const urlQuality = normalize(value.urlQuality);
-  const reason = normalize(value.reason);
-
-  if (urlQuality === "search") return false;
-  if (reason === "search_fallback") return false;
+  if (!Array.isArray(value.options) || value.options.length === 0) return false;
 
   return true;
 }
@@ -213,7 +207,7 @@ function detectUrlQuality(
     if (path.includes("/event") || path.includes("/events")) return "event";
     if (path.includes("/ticket") || path.includes("/tickets")) return "event";
 
-    return "unknown";
+    return "listing";
   } catch {
     return "unknown";
   }
@@ -293,8 +287,8 @@ function assessCandidate(candidate: TicketCandidate): CandidateAssessment {
     return {
       urlQuality: "listing",
       usableTier: "direct",
-      normalizedReason,
-      exact: false,
+      normalizedReason: candidate.reason === "exact_event" ? "exact_event" : "partial_match",
+      exact: Boolean(candidate.exact),
     };
   }
 
@@ -405,6 +399,8 @@ async function runProvider(
     acceptedReason: sanitized?.reason ?? null,
     rawUrlQuality: value?.urlQuality ?? null,
     acceptedUrlQuality: sanitized?.urlQuality ?? null,
+    rawPriceText: value?.priceText ?? null,
+    acceptedPriceText: sanitized?.priceText ?? null,
   });
 
   return sanitized;
@@ -436,9 +432,7 @@ function compareCandidates(a: TicketCandidate, b: TicketCandidate): number {
   if (aa.exact && !bb.exact) return -1;
   if (!aa.exact && bb.exact) return 1;
 
-  if (aPrice != null && bPrice != null && aPrice !== bPrice) {
-    return aPrice - bPrice;
-  }
+  if (aPrice != null && bPrice != null && aPrice !== bPrice) return aPrice - bPrice;
 
   const aHasPrice = hasPriceText(a);
   const bHasPrice = hasPriceText(b);
@@ -467,18 +461,12 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
   for (const candidate of candidates) {
     const normalizedCandidate = normalizeCandidate(candidate);
-    const key = [
-      normalize(normalizedCandidate.provider),
-      normalize(normalizedCandidate.url),
-    ].join("|");
+    const key = [normalize(normalizedCandidate.provider), normalize(normalizedCandidate.url)].join(
+      "|"
+    );
 
     const existing = map.get(key);
-    if (!existing) {
-      map.set(key, normalizedCandidate);
-      continue;
-    }
-
-    if (compareCandidates(normalizedCandidate, existing) < 0) {
+    if (!existing || compareCandidates(normalizedCandidate, existing) < 0) {
       map.set(key, normalizedCandidate);
     }
   }
@@ -535,9 +523,7 @@ function buildResolution(
   };
 }
 
-export async function resolveTicket(
-  input: TicketResolveInput
-): Promise<TicketResolution> {
+export async function resolveTicket(input: TicketResolveInput): Promise<TicketResolution> {
   const cacheKey = buildCacheKey(input);
   const debugNoCache = Boolean((input as { debugNoCache?: unknown }).debugNoCache);
 
@@ -554,6 +540,7 @@ export async function resolveTicket(
         url: cached.url,
         urlQuality: cached.urlQuality ?? null,
         optionCount: cached.options.length,
+        providers: cached.options.map((option) => option.provider),
       });
       return cached;
     }
@@ -605,6 +592,7 @@ export async function resolveTicket(
     url: result.url,
     urlQuality: result.urlQuality ?? null,
     optionCount: result.options.length,
+    providers: result.options.map((option) => option.provider),
     options: result.options.map((option) => ({
       provider: option.provider,
       reason: option.reason,
@@ -625,6 +613,7 @@ export async function resolveTicket(
         url: result.url,
         urlQuality: result.urlQuality ?? null,
         optionCount: result.options.length,
+        providers: result.options.map((option) => option.provider),
       });
     } else {
       deleteCache(cacheKey);
