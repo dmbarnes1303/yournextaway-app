@@ -25,7 +25,7 @@ type CandidateAssessment = {
   exact: boolean;
 };
 
-const RESOLVER_VERSION = "resolve_v5_force_se365_basic_flow";
+const RESOLVER_VERSION = "resolve_v6_dual_provider_debug_no_cache";
 
 const PROVIDERS = [
   { id: "footballticketnet", fn: resolveFtnCandidate },
@@ -34,13 +34,11 @@ const PROVIDERS = [
 
 const CACHE = new Map<string, CacheEntry>();
 
-// Keep cache effectively off while SE365 is being debugged.
-// Once SE365 is stable, change this back to 1000 * 60 * 10.
 const CACHE_TTL_MS = 0;
 
 const PROVIDER_TIMEOUTS_MS: Record<TicketProviderId, number> = {
   footballticketnet: 9000,
-  sportsevents365: 20000,
+  sportsevents365: 22000,
 };
 
 const PROVIDER_PRIORITY: Record<TicketProviderId, number> = {
@@ -149,7 +147,7 @@ function parsePriceAmount(priceText?: string | null): number | null {
   const raw = clean(priceText);
   if (!raw) return null;
 
-  const match = raw.match(/(\d{1,3}(?:[,\d]{0,})(?:\.\d{1,2})?)/);
+  const match = raw.match(/(\d{1,6}(?:[,\d]*)(?:\.\d{1,2})?)/);
   if (!match) return null;
 
   const value = Number(match[1].replace(/,/g, ""));
@@ -380,6 +378,7 @@ async function withTimeout<T>(
         clearTimeout(timer);
 
         console.log(`[tickets] ${provider} error`, {
+          provider,
           timeoutMs,
           message: error instanceof Error ? error.message : String(error),
         });
@@ -416,6 +415,8 @@ async function runProvider(
     acceptedUrlQuality: sanitized?.urlQuality ?? null,
     rawPriceText: value?.priceText ?? null,
     acceptedPriceText: sanitized?.priceText ?? null,
+    rawScore: value?.score ?? null,
+    acceptedScore: sanitized?.score ?? null,
   });
 
   return sanitized;
@@ -447,9 +448,7 @@ function compareCandidates(a: TicketCandidate, b: TicketCandidate): number {
   if (aa.exact && !bb.exact) return -1;
   if (!aa.exact && bb.exact) return 1;
 
-  if (aPrice != null && bPrice != null && aPrice !== bPrice) {
-    return aPrice - bPrice;
-  }
+  if (aPrice != null && bPrice != null && aPrice !== bPrice) return aPrice - bPrice;
 
   const aHasPrice = hasPriceText(a);
   const bHasPrice = hasPriceText(b);
@@ -478,18 +477,11 @@ function dedupeCandidates(candidates: TicketCandidate[]): TicketCandidate[] {
 
   for (const candidate of candidates) {
     const normalizedCandidate = normalizeCandidate(candidate);
-    const key = [
-      normalize(normalizedCandidate.provider),
-      normalize(normalizedCandidate.url),
-    ].join("|");
+    const key = `${normalize(normalizedCandidate.provider)}|${normalize(normalizedCandidate.url)}`;
 
     const existing = map.get(key);
-    if (!existing) {
-      map.set(key, normalizedCandidate);
-      continue;
-    }
 
-    if (compareCandidates(normalizedCandidate, existing) < 0) {
+    if (!existing || compareCandidates(normalizedCandidate, existing) < 0) {
       map.set(key, normalizedCandidate);
     }
   }
@@ -513,10 +505,6 @@ function toOption(candidate: TicketCandidate) {
   };
 }
 
-function pickPrimary(candidates: TicketCandidate[]): TicketCandidate {
-  return [...candidates].sort(compareCandidates)[0];
-}
-
 function buildResolution(
   candidates: TicketCandidate[],
   checkedProviders: TicketResolution["checkedProviders"]
@@ -527,7 +515,7 @@ function buildResolution(
     return buildNotFound(checkedProviders);
   }
 
-  const primary = pickPrimary(deduped);
+  const primary = deduped[0];
   const primaryAssessment = assessCandidate(primary);
 
   return {
@@ -645,28 +633,10 @@ export async function resolveTicket(
   if (!debugNoCache) {
     if (shouldCacheResolution(result)) {
       setCache(cacheKey, result);
-      console.log("[tickets] cache set", {
-        cacheKey,
-        resolverVersion: RESOLVER_VERSION,
-        provider: result.provider,
-        reason: result.reason,
-        url: result.url,
-        urlQuality: result.urlQuality ?? null,
-        optionCount: result.options.length,
-      });
     } else {
       deleteCache(cacheKey);
-      console.log("[tickets] cache skipped", {
-        cacheKey,
-        resolverVersion: RESOLVER_VERSION,
-        provider: result.provider,
-        reason: result.reason,
-        url: result.url,
-        urlQuality: result.urlQuality ?? null,
-        optionCount: result.options.length,
-      });
     }
   }
 
   return result;
-              }
+}
