@@ -192,7 +192,6 @@ function shortDateLabel(value?: string | null) {
     weekday: "short",
     day: "numeric",
     month: "short",
-    year: "numeric",
   });
 }
 
@@ -344,7 +343,7 @@ export default function TripScreen() {
     if (ticketsState !== "booked") {
       return {
         key: "tickets",
-        eyebrow: "FIRST MOVE",
+        eyebrow: "First move",
         title:
           ticketsState === "pending" || ticketsState === "saved"
             ? "Finish your ticket choice"
@@ -373,7 +372,7 @@ export default function TripScreen() {
     if (hotelState !== "booked") {
       return {
         key: "stay",
-        eyebrow: "NEXT STEP",
+        eyebrow: "Next step",
         title: "Choose where to stay",
         detail: data.cityName
           ? `Find stays in ${data.cityName} for your saved trip dates.`
@@ -386,7 +385,7 @@ export default function TripScreen() {
     if (flightState !== "booked") {
       return {
         key: "travel",
-        eyebrow: "TRAVEL",
+        eyebrow: "Travel",
         title: "Add your route",
         detail: "Check flights or travel before the trip becomes awkward or expensive.",
         cta:
@@ -400,7 +399,7 @@ export default function TripScreen() {
     if (thingsState !== "booked") {
       return {
         key: "things",
-        eyebrow: "CITY BREAK",
+        eyebrow: "City break",
         title: "Add plans around the match",
         detail: "Turn the trip into more than just ninety minutes.",
         cta: "Add city plans",
@@ -410,7 +409,7 @@ export default function TripScreen() {
 
     return {
       key: "wallet",
-      eyebrow: "READY",
+      eyebrow: "Ready",
       title: "Keep everything in Wallet",
       detail: "Tickets, stay and travel are in place. Store proof and booking details together.",
       cta: "Open Wallet",
@@ -435,7 +434,7 @@ export default function TripScreen() {
         key: "city",
         title: `${cityGuide.name || data.cityName} City Guide`,
         detail: "Stay areas, food, transport and city-break basics",
-        badge: "CITY",
+        badge: "City",
         onPress: () => {
           router.push({
             pathname: "/city/key/[cityKey]",
@@ -450,7 +449,7 @@ export default function TripScreen() {
         key: "home",
         title: `${homeTeam.name} Team Guide`,
         detail: "Club, stadium and matchday context",
-        badge: "HOME",
+        badge: "Home",
         onPress: () => {
           router.push({
             pathname: "/team/[teamKey]",
@@ -551,7 +550,7 @@ export default function TripScreen() {
         />
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.loadingShell}>
-            <ActivityIndicator color="#86EFAC" />
+            <ActivityIndicator color={theme.colors.emeraldSoft} />
             <Text style={styles.loadingText}>Loading trip…</Text>
           </View>
         </SafeAreaView>
@@ -591,15 +590,15 @@ export default function TripScreen() {
           />
 
           <View style={styles.brandStrip}>
-            <Text style={styles.brandStripText}>PLAN • FLY • STAY • WATCH</Text>
+            <Text style={styles.brandStripText}>Plan • Fly • Stay • Watch</Text>
           </View>
 
           <View style={styles.tripSummaryCard}>
-            <View style={styles.tripSummaryGlow} />
+            <View style={styles.summaryGlow} />
 
             <View style={styles.tripSummaryTop}>
               <View style={styles.tripSummaryCopy}>
-                <Text style={styles.tripSummaryKicker}>TRIP HUB</Text>
+                <Text style={styles.cardEyebrow}>Trip hub</Text>
                 <Text style={styles.tripSummaryTitle}>
                   {data.cityName ? `${data.cityName} Trip` : "Your Trip"}
                 </Text>
@@ -637,7 +636,7 @@ export default function TripScreen() {
           <View style={styles.primaryActionCard}>
             <View style={styles.primaryActionGlow} />
 
-            <Text style={styles.primaryActionEyebrow}>{primaryAction.eyebrow}</Text>
+            <Text style={styles.actionEyebrow}>{primaryAction.eyebrow}</Text>
             <Text style={styles.primaryActionTitle}>{primaryAction.title}</Text>
             <Text style={styles.primaryActionDetail}>{primaryAction.detail}</Text>
 
@@ -656,10 +655,10 @@ export default function TripScreen() {
 
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionEyebrow}>BUILD SEQUENCE</Text>
+              <Text style={styles.cardEyebrow}>Build sequence</Text>
               <Text style={styles.sectionTitle}>Trip checklist</Text>
               <Text style={styles.sectionSub}>
-                Work through the essentials in order. Tickets first, then stay, travel and plans.
+                Tickets first, then stay, travel and plans.
               </Text>
             </View>
 
@@ -669,12 +668,18 @@ export default function TripScreen() {
                 const started = row.state === "saved" || row.state === "pending";
 
                 return (
-                  <Pressable key={row.key} style={styles.itineraryRow} onPress={row.onPress}>
+                  <Pressable
+                    key={row.key}
+                    style={({ pressed }) => [styles.itineraryRow, pressed && styles.pressed]}
+                    onPress={row.onPress}
+                  >
                     <StepIcon label={row.icon} />
 
                     <View style={styles.itineraryCopy}>
                       <Text style={styles.itineraryTitle}>{row.label}</Text>
-                      <Text style={styles.itineraryDetail}>{row.detail}</Text>
+                      <Text style={styles.itineraryDetail} numberOfLines={2}>
+                        {row.detail}
+                      </Text>
                     </View>
 
                     <View
@@ -707,16 +712,20 @@ export default function TripScreen() {
           {guideRows.length > 0 ? (
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionEyebrow}>LOCAL INTELLIGENCE</Text>
+                <Text style={styles.cardEyebrow}>Local intelligence</Text>
                 <Text style={styles.sectionTitle}>Guides for this trip</Text>
                 <Text style={styles.sectionSub}>
-                  Destination-first planning. City context and home-team matchday basics only.
+                  City context and home-team matchday basics only.
                 </Text>
               </View>
 
               <View style={styles.guideGrid}>
                 {guideRows.map((row) => (
-                  <Pressable key={row.key} style={styles.guideCard} onPress={row.onPress}>
+                  <Pressable
+                    key={row.key}
+                    style={({ pressed }) => [styles.guideCard, pressed && styles.pressed]}
+                    onPress={row.onPress}
+                  >
                     <View style={styles.guideBadge}>
                       <Text style={styles.guideBadgeText}>{row.badge}</Text>
                     </View>
@@ -732,13 +741,13 @@ export default function TripScreen() {
           ) : null}
 
           <GlassCard level="subtle" style={styles.walletCard}>
-            <Text style={styles.walletKicker}>OFFLINE READY</Text>
+            <Text style={styles.cardEyebrow}>Offline ready</Text>
             <Text style={styles.walletTitle}>Wallet</Text>
             <Text style={styles.walletSub}>
               {workspace.booked.length} booked • {workspace.pending.length} pending
             </Text>
 
-            <Pressable style={styles.walletButton} onPress={controller.onViewWallet}>
+            <Pressable style={({ pressed }) => [styles.walletButton, pressed && styles.pressed]} onPress={controller.onViewWallet}>
               <Text style={styles.walletButtonText}>Open Wallet</Text>
             </Pressable>
           </GlassCard>
@@ -776,7 +785,7 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: 92,
     paddingHorizontal: 20,
-    gap: 18,
+    gap: 16,
   },
 
   pressed: {
@@ -792,7 +801,7 @@ const styles = StyleSheet.create({
   },
 
   loadingText: {
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontWeight: "900",
   },
 
@@ -801,114 +810,115 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.58)",
+    backgroundColor: "rgba(0,0,0,0.46)",
     borderWidth: 1,
-    borderColor: "rgba(212,175,55,0.34)",
+    borderColor: "rgba(34,197,94,0.26)",
   },
 
   brandStripText: {
-    color: "#FDE68A",
+    color: theme.colors.emeraldSoft,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.15,
+    textTransform: "uppercase",
   },
 
   tripSummaryCard: {
     overflow: "hidden",
-    padding: 20,
-    borderRadius: 29,
-    backgroundColor: "rgba(9,18,18,0.94)",
+    padding: 18,
+    borderRadius: 28,
+    backgroundColor: "rgba(7,12,12,0.94)",
     borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.24)",
-    shadowColor: "#22C55E",
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 12 },
+    borderColor: theme.colors.borderSubtle,
   },
 
-  tripSummaryGlow: {
+  summaryGlow: {
     position: "absolute",
-    top: -92,
-    right: -76,
-    width: 190,
-    height: 190,
+    top: -88,
+    right: -70,
+    width: 180,
+    height: 180,
     borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.13)",
+    backgroundColor: "rgba(34,197,94,0.12)",
   },
 
   tripSummaryTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 18,
+    gap: 16,
   },
 
   tripSummaryCopy: {
     flex: 1,
+    minWidth: 0,
   },
 
-  tripSummaryKicker: {
-    color: "#86EFAC",
+  cardEyebrow: {
+    color: theme.colors.emeraldSoft,
     fontSize: 10,
+    lineHeight: 13,
     fontWeight: "900",
-    letterSpacing: 1.25,
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
 
   tripSummaryTitle: {
     marginTop: 7,
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontSize: 24,
+    lineHeight: 29,
     fontWeight: "900",
     letterSpacing: -0.45,
   },
 
   tripSummaryDates: {
     marginTop: 8,
-    color: "rgba(245,247,246,0.78)",
-    fontSize: 14,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
     fontWeight: "800",
-    lineHeight: 19,
+    lineHeight: 18,
   },
 
   tripSummaryNights: {
     marginTop: 5,
-    color: "rgba(245,247,246,0.56)",
+    color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: "900",
   },
 
   tripMedallion: {
-    width: 66,
-    height: 66,
+    width: 64,
+    height: 64,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(34,197,94,0.11)",
-    borderWidth: 2,
-    borderColor: "rgba(134,239,172,0.42)",
+    backgroundColor: "rgba(34,197,94,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(134,239,172,0.32)",
   },
 
   tripMedallionText: {
-    color: "#86EFAC",
+    color: theme.colors.emeraldSoft,
     fontSize: 17,
     fontWeight: "900",
   },
 
   tripMedallionSub: {
     marginTop: 1,
-    color: "rgba(245,247,246,0.54)",
+    color: theme.colors.textMuted,
     fontSize: 9,
     fontWeight: "900",
     textTransform: "uppercase",
   },
 
   tripStatsRow: {
-    marginTop: 18,
+    marginTop: 16,
     flexDirection: "row",
     gap: 10,
   },
 
   tripStatPill: {
-    minWidth: 96,
+    minWidth: 94,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 16,
@@ -928,20 +938,20 @@ const styles = StyleSheet.create({
   },
 
   tripStatValue: {
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontSize: 15,
     fontWeight: "900",
   },
 
   tripStatValueSmall: {
     marginTop: 3,
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontSize: 12,
     fontWeight: "900",
   },
 
   tripStatLabel: {
-    color: "rgba(245,247,246,0.58)",
+    color: theme.colors.textMuted,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 0.4,
@@ -950,29 +960,25 @@ const styles = StyleSheet.create({
 
   progressTrack: {
     marginTop: 14,
-    height: 9,
+    height: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.08)",
     overflow: "hidden",
   },
 
   progressFill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#22C55E",
+    backgroundColor: theme.colors.emeraldSoft,
   },
 
   primaryActionCard: {
     overflow: "hidden",
-    padding: 22,
-    borderRadius: 30,
-    backgroundColor: "rgba(2,18,10,0.94)",
+    padding: 20,
+    borderRadius: 28,
+    backgroundColor: "rgba(8,16,13,0.94)",
     borderWidth: 1,
-    borderColor: "rgba(212,175,55,0.28)",
-    shadowColor: "#D4AF37",
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 12 },
+    borderColor: "rgba(34,197,94,0.20)",
   },
 
   primaryActionGlow: {
@@ -982,46 +988,44 @@ const styles = StyleSheet.create({
     width: 190,
     height: 190,
     borderRadius: 999,
-    backgroundColor: "rgba(212,175,55,0.13)",
+    backgroundColor: "rgba(34,197,94,0.10)",
   },
 
-  primaryActionEyebrow: {
-    color: "#FDE68A",
+  actionEyebrow: {
+    color: theme.colors.emeraldSoft,
     fontSize: 11,
+    lineHeight: 14,
     fontWeight: "900",
-    letterSpacing: 1.35,
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
   },
 
   primaryActionTitle: {
     marginTop: 9,
-    color: "#FFFFFF",
-    fontSize: 25,
-    lineHeight: 30,
+    color: theme.colors.textPrimary,
+    fontSize: 24,
+    lineHeight: 29,
     fontWeight: "900",
     letterSpacing: -0.5,
   },
 
   primaryActionDetail: {
     marginTop: 10,
-    color: "rgba(245,247,246,0.72)",
+    color: theme.colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "800",
   },
 
   primaryActionButton: {
-    marginTop: 20,
-    minHeight: 58,
-    borderRadius: 19,
+    marginTop: 18,
+    minHeight: 56,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#22C55E",
+    backgroundColor: theme.colors.emeraldSoft,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
-    shadowColor: "#22C55E",
-    shadowOpacity: 0.24,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
+    borderColor: "rgba(255,255,255,0.16)",
   },
 
   primaryActionButtonDisabled: {
@@ -1039,31 +1043,25 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 18,
     borderRadius: 28,
-    backgroundColor: "rgba(9,18,18,0.91)",
+    backgroundColor: "rgba(7,12,12,0.92)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: theme.colors.borderSubtle,
   },
 
   sectionHeaderRow: {
     gap: 5,
   },
 
-  sectionEyebrow: {
-    color: "#86EFAC",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-
   sectionTitle: {
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontSize: 24,
+    lineHeight: 29,
     fontWeight: "900",
     letterSpacing: -0.45,
   },
 
   sectionSub: {
-    color: "rgba(245,247,246,0.58)",
+    color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "800",
@@ -1074,34 +1072,34 @@ const styles = StyleSheet.create({
   },
 
   itineraryRow: {
-    minHeight: 82,
+    minHeight: 78,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 12,
     borderRadius: 22,
     backgroundColor: "rgba(0,0,0,0.24)",
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.12)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   stepIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 15,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(212,175,55,0.12)",
+    backgroundColor: "rgba(34,197,94,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(212,175,55,0.28)",
+    borderColor: "rgba(134,239,172,0.24)",
   },
 
   stepIconText: {
-    color: "#FDE68A",
-    fontSize: 13,
+    color: theme.colors.emeraldSoft,
+    fontSize: 12,
     fontWeight: "900",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
 
   itineraryCopy: {
@@ -1110,14 +1108,14 @@ const styles = StyleSheet.create({
   },
 
   itineraryTitle: {
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontSize: 17,
     fontWeight: "900",
   },
 
   itineraryDetail: {
     marginTop: 4,
-    color: "rgba(245,247,246,0.62)",
+    color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "800",
@@ -1138,26 +1136,26 @@ const styles = StyleSheet.create({
   },
 
   statusPillStarted: {
-    backgroundColor: "rgba(250,204,21,0.10)",
-    borderColor: "rgba(250,204,21,0.25)",
+    backgroundColor: "rgba(212,175,55,0.10)",
+    borderColor: "rgba(212,175,55,0.22)",
   },
 
   itineraryStatus: {
-    color: "rgba(245,247,246,0.58)",
+    color: theme.colors.textMuted,
     fontSize: 11,
     fontWeight: "900",
   },
 
   statusConfirmed: {
-    color: "#86EFAC",
+    color: theme.colors.emeraldSoft,
   },
 
   statusStarted: {
-    color: "#FDE68A",
+    color: theme.colors.goldSoft,
   },
 
   chevron: {
-    color: "rgba(255,255,255,0.58)",
+    color: theme.colors.textMuted,
     fontSize: 24,
     marginTop: -2,
   },
@@ -1167,11 +1165,11 @@ const styles = StyleSheet.create({
   },
 
   guideCard: {
-    padding: 18,
-    borderRadius: 24,
+    padding: 17,
+    borderRadius: 23,
     backgroundColor: "rgba(0,0,0,0.24)",
     borderWidth: 1,
-    borderColor: "rgba(212,175,55,0.20)",
+    borderColor: "rgba(255,255,255,0.08)",
   },
 
   guideBadge: {
@@ -1179,21 +1177,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(212,175,55,0.13)",
+    backgroundColor: "rgba(34,197,94,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(212,175,55,0.30)",
+    borderColor: "rgba(134,239,172,0.24)",
   },
 
   guideBadgeText: {
-    color: "#FDE68A",
+    color: theme.colors.emeraldSoft,
     fontSize: 10,
     fontWeight: "900",
-    letterSpacing: 0.8,
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
   },
 
   guideTitle: {
     marginTop: 12,
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontSize: 18,
     fontWeight: "900",
     letterSpacing: -0.2,
@@ -1201,7 +1200,7 @@ const styles = StyleSheet.create({
 
   guideDetail: {
     marginTop: 5,
-    color: "rgba(245,247,246,0.64)",
+    color: theme.colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "800",
@@ -1209,29 +1208,22 @@ const styles = StyleSheet.create({
 
   guideCta: {
     marginTop: 14,
-    color: "#86EFAC",
+    color: theme.colors.emeraldSoft,
     fontSize: 13,
     fontWeight: "900",
   },
 
   walletCard: {
-    padding: 21,
+    padding: 20,
     borderRadius: 28,
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.18)",
-    backgroundColor: "rgba(9,18,18,0.92)",
-  },
-
-  walletKicker: {
-    color: "#FDE68A",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.2,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: "rgba(7,12,12,0.92)",
   },
 
   walletTitle: {
     marginTop: 7,
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontSize: 24,
     fontWeight: "900",
     letterSpacing: -0.4,
@@ -1250,13 +1242,13 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(34,197,94,0.14)",
+    backgroundColor: "rgba(34,197,94,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(134,239,172,0.26)",
+    borderColor: "rgba(134,239,172,0.22)",
   },
 
   walletButtonText: {
-    color: "#FFFFFF",
+    color: theme.colors.textPrimary,
     fontWeight: "900",
   },
 });
