@@ -109,6 +109,9 @@ export default function FixturesScreen() {
 
     followedIdSet,
     loading,
+    backgroundLoading,
+    loadedLeagueCount,
+    totalLeagueCount,
     error,
     filtered,
     onToggleFollowFromRow,
@@ -221,7 +224,7 @@ export default function FixturesScreen() {
 
   const hasRows = visibleRows.length > 0;
   const showInitialLoading = loading && !hasRows;
-  const showInlineRefresh = loading && hasRows;
+  const showInlineRefresh = backgroundLoading && hasRows;
   const showHardError = !!error && !hasRows;
   const showEmpty = !loading && !error && !hasRows;
 
@@ -250,7 +253,10 @@ export default function FixturesScreen() {
             subtitleText={derivedSubtitleText}
             helperLineText={helperLineText}
             headerDateLine={headerDateLine}
-            loading={showInlineRefresh}
+            loading={loading && !hasRows}
+            backgroundLoading={backgroundLoading}
+            loadedLeagueCount={loadedLeagueCount}
+            totalLeagueCount={totalLeagueCount}
             error={error}
             filteredCount={visibleRows.length}
           />
@@ -259,17 +265,18 @@ export default function FixturesScreen() {
         {!showInitialLoading && !showHardError ? (
           <View style={styles.summaryRow}>
             <GlassCard variant="brand" level="default" style={styles.summaryCard} padding={13}>
-              <Text style={styles.summaryTitle}>{derivedSummaryTitle}</Text>
-              <Text style={styles.summaryText}>{derivedSummaryLine}</Text>
-            </GlassCard>
-          </View>
-        ) : null}
+              <View style={styles.summaryTopRow}>
+                <View style={styles.summaryCopy}>
+                  <Text style={styles.summaryTitle}>{derivedSummaryTitle}</Text>
+                  <Text style={styles.summaryText}>{derivedSummaryLine}</Text>
+                </View>
 
-        {showInlineRefresh ? (
-          <View style={styles.refreshRow}>
-            <GlassCard variant="glass" level="default" style={styles.refreshCard}>
-              <ActivityIndicator size="small" color={theme.colors.textSecondary} />
-              <Text style={styles.refreshText}>Updating matches…</Text>
+                {showInlineRefresh ? (
+                  <View style={styles.summaryLivePill}>
+                    <ActivityIndicator size="small" color={theme.colors.emeraldSoft} />
+                  </View>
+                ) : null}
+              </View>
             </GlassCard>
           </View>
         ) : null}
@@ -296,13 +303,18 @@ export default function FixturesScreen() {
       derivedSubtitleText,
       helperLineText,
       headerDateLine,
-      showInlineRefresh,
+      loading,
+      hasRows,
+      backgroundLoading,
+      loadedLeagueCount,
+      totalLeagueCount,
       error,
       visibleRows.length,
       showInitialLoading,
       showHardError,
       derivedSummaryTitle,
       derivedSummaryLine,
+      showInlineRefresh,
     ]
   );
 
@@ -314,9 +326,9 @@ export default function FixturesScreen() {
             <View style={styles.center}>
               <Text style={styles.loadingEyebrow}>Finding matches</Text>
               <ActivityIndicator color={theme.colors.gold} />
-              <Text style={styles.loadingTitle}>Loading fixtures</Text>
+              <Text style={styles.loadingTitle}>Loading priority fixtures</Text>
               <Text style={styles.loadingText}>
-                Checking the selected dates and competitions.
+                Starting with Europe and the major leagues so matches appear faster.
               </Text>
             </View>
           </GlassCard>
@@ -481,6 +493,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
 
+  summaryTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  summaryCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+
   summaryTitle: {
     color: theme.colors.textPrimary,
     fontSize: theme.fontSize.body,
@@ -495,24 +519,15 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  refreshRow: {
-    paddingHorizontal: theme.spacing.lg,
-  },
-
-  refreshCard: {
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
+  summaryLivePill: {
+    width: 34,
+    height: 34,
+    borderRadius: theme.borderRadius.pill,
     alignItems: "center",
-    gap: 8,
-  },
-
-  refreshText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: theme.fontWeight.bold,
+    justifyContent: "center",
+    backgroundColor: theme.badge.bgEmerald,
+    borderWidth: 1,
+    borderColor: theme.badge.borderEmerald,
   },
 
   loadingCard: {
@@ -553,7 +568,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
     textAlign: "center",
-    maxWidth: 280,
+    maxWidth: 300,
   },
 
   footerSpace: {
