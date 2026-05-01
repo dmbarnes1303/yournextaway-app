@@ -32,6 +32,7 @@ export type PartnerCapabilityFlags = {
 export type PartnerDisplay = {
   name: string;
   badgeText: string;
+  logoUrl?: string;
 };
 
 export type PartnerDefinition = {
@@ -48,6 +49,11 @@ export type PartnerDefinition = {
   baseUrl: string;
   trackedConfigKey?: keyof typeof AffiliateConfig;
 };
+
+const PARTNER_LOGO_BASE =
+  "https://raw.githubusercontent.com/dmbarnes1303/yournextaway-app/main/assets/partners";
+
+const partnerLogo = (fileName: string) => `${PARTNER_LOGO_BASE}/${fileName}.png`;
 
 function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -77,7 +83,11 @@ export const AffiliateConfig = {
 export const PARTNER_REGISTRY = [
   {
     id: "sportsevents365",
-    display: { name: "SportsEvents365", badgeText: "SE365" },
+    display: {
+      name: "SportsEvents365",
+      badgeText: "SE365",
+      logoUrl: partnerLogo("sportsevents365"),
+    },
     category: "tickets",
     primaryCategory: "tickets",
     categories: ["tickets"] as const,
@@ -91,7 +101,11 @@ export const PARTNER_REGISTRY = [
   },
   {
     id: "footballticketnet",
-    display: { name: "FootballTicketNet", badgeText: "FTN" },
+    display: {
+      name: "FootballTicketNet",
+      badgeText: "FTN",
+      logoUrl: partnerLogo("footballticketnet"),
+    },
     category: "tickets",
     primaryCategory: "tickets",
     categories: ["tickets"] as const,
@@ -164,9 +178,7 @@ export const PARTNER_REGISTRY_BY_ID: Readonly<Record<PartnerId, PartnerDefinitio
 export const PARTNER_ALIAS_INDEX: Readonly<Record<string, PartnerId>> = Object.freeze(
   PARTNER_REGISTRY.reduce((acc, partner) => {
     const keys = unique([partner.id, partner.display.name, ...partner.aliases]).map(normalizeKey);
-    for (const key of keys) {
-      acc[key] = partner.id;
-    }
+    for (const key of keys) acc[key] = partner.id;
     return acc;
   }, {} as Record<string, PartnerId>)
 );
@@ -195,9 +207,7 @@ export function isPartnerId(input: string | null | undefined): input is PartnerI
 
 export function getCanonicalPartnerId(input: PartnerId | string): PartnerId {
   const canonical = canonicalizePartnerId(input);
-  if (!canonical) {
-    throw new Error(`Unknown canonical partner id: ${clean(input)}`);
-  }
+  if (!canonical) throw new Error(`Unknown canonical partner id: ${clean(input)}`);
   return canonical;
 }
 
@@ -208,10 +218,16 @@ export function getPartnerOrNull(input: PartnerId | string | null | undefined): 
 
 export function getPartner(input: PartnerId | string): PartnerDefinition {
   const partner = getPartnerOrNull(input);
-  if (!partner) {
-    throw new Error(`Unknown partner id: ${clean(input)}`);
-  }
+  if (!partner) throw new Error(`Unknown partner id: ${clean(input)}`);
   return partner;
+}
+
+export function getPartnerLogoUrl(input: PartnerId | string | null | undefined): string | null {
+  return clean(getPartnerOrNull(input)?.display?.logoUrl) || null;
+}
+
+export function getPartnerBadgeText(input: PartnerId | string | null | undefined): string {
+  return clean(getPartnerOrNull(input)?.display?.badgeText) || "YN";
 }
 
 export function mustGetPartnerById(input: PartnerId | string): PartnerDefinition {
@@ -249,8 +265,7 @@ export function getTrackedConfigValue(input: PartnerId | string | null | undefin
   const partner = getPartnerOrNull(input);
   if (!partner?.trackedConfigKey) return null;
   const value = AffiliateConfig[partner.trackedConfigKey];
-  const cleaned = clean(value);
-  return cleaned || null;
+  return clean(value) || null;
 }
 
 export function isTier1MonetisedPartner(input: PartnerId | string | null | undefined): boolean {
