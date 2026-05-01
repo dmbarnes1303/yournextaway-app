@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  ImageBackground,
   Platform,
   Pressable,
   ScrollView,
@@ -21,6 +22,7 @@ import EmptyState from "@/src/components/EmptyState";
 
 import { getBackground } from "@/src/constants/backgrounds";
 import { theme } from "@/src/constants/theme";
+import { getFixtureBackdrop } from "@/src/constants/visualAssets";
 
 import {
   getFixtures,
@@ -437,7 +439,11 @@ export default function TripBuildScreen() {
 
   const isEditing = !!params.tripId;
   const isPrefilledFlow = !!params.fixtureId && !isEditing;
-  const hasExplicitRouteDates = isIsoDateOnly(params.from) || isIsoDateOnly(params.to);
+
+  // Critical: route dates from Fixtures are search/filter dates, not the trip booking window.
+  // Only honour route dates when editing an existing trip.
+  const hasExplicitRouteDates =
+    isEditing && (isIsoDateOnly(params.from) || isIsoDateOnly(params.to));
 
   const [loading, setLoading] = useState(false);
   const [prefillLoading, setPrefillLoading] = useState(false);
@@ -457,13 +463,13 @@ export default function TripBuildScreen() {
   const defaultWindow = useMemo(() => getRollingWindowIso({ days: WINDOW_DAYS }), []);
 
   const routeWindow = useMemo<RollingWindowIso>(() => {
-    if (!isIsoDateOnly(params.from) && !isIsoDateOnly(params.to)) return defaultWindow;
+    if (!hasExplicitRouteDates) return defaultWindow;
 
     const fromSeed = isIsoDateOnly(params.from) ? String(params.from) : defaultWindow.from;
     const toSeed = isIsoDateOnly(params.to) ? String(params.to) : defaultWindow.to;
 
     return normalizeWindowIso({ from: fromSeed, to: toSeed }, WINDOW_DAYS);
-  }, [params.from, params.to, defaultWindow]);
+  }, [params.from, params.to, defaultWindow, hasExplicitRouteDates]);
 
   const [startIso, setStartIso] = useState(routeWindow.from);
   const [endIso, setEndIso] = useState(routeWindow.to);
@@ -629,19 +635,13 @@ export default function TripBuildScreen() {
         const ids = await computePlaceholderIdsForFixture(r, params.season);
         if (!cancelled) setPlaceholderTbcIds(ids);
 
-        if (hasExplicitRouteDates) {
-          setStartIso(routeWindow.from);
-          setEndIso(routeWindow.to);
-          setHasManualDateOverride(true);
-        } else {
-          const d0 = fixtureDateOnly(r);
-          const derived = defaultTripWindowFromFixtureDate(d0);
+        const d0 = fixtureDateOnly(r);
+        const derived = defaultTripWindowFromFixtureDate(d0);
 
-          if (derived.start) setStartIso(derived.start);
-          if (derived.end) setEndIso(derived.end);
+        if (derived.start) setStartIso(derived.start);
+        if (derived.end) setEndIso(derived.end);
 
-          setHasManualDateOverride(false);
-        }
+        setHasManualDateOverride(false);
 
         if (params.cityArea) setNotesIfEmpty(`Stay area: ${params.cityArea}`);
 
@@ -663,15 +663,7 @@ export default function TripBuildScreen() {
     return () => {
       cancelled = true;
     };
-  }, [
-    params.fixtureId,
-    isPrefilledFlow,
-    params.cityArea,
-    setNotesIfEmpty,
-    params.season,
-    routeWindow,
-    hasExplicitRouteDates,
-  ]);
+  }, [params.fixtureId, isPrefilledFlow, params.cityArea, setNotesIfEmpty, params.season]);
 
   useEffect(() => {
     if (isPrefilledFlow) return;
@@ -853,6 +845,13 @@ export default function TripBuildScreen() {
   );
 
   const selectedFixtureId = useMemo(() => fixtureIdStr(selectedFixture), [selectedFixture]);
+
+  const selectedBackdrop = useMemo(() => {
+    return getFixtureBackdrop({
+      leagueId: selectedFixture?.league?.id ?? params.leagueId,
+      countryName: selectedFixture?.league?.country ?? null,
+    });
+  }, [selectedFixture, params.leagueId]);
 
   const tripLength = useMemo(() => {
     const d = daysBetweenIso(startIso, endIso);
@@ -1098,83 +1097,135 @@ export default function TripBuildScreen() {
 
           {!prefillLoading && selectedFixture ? (
             <>
-              <GlassCard level="default" style={styles.matchCard}>
-                <View style={styles.cardHeaderRow}>
-                  <Text style={styles.eyebrow}>Selected match</Text>
+              {selectedBackdrop ? (
+                <ImageBackground
+                  source={{ uri: selectedBackdrop }}
+                  style={styles.matchCard}
+                  imageStyle={styles.matchCardImage}
+                  resizeMode="cover"
+                >
+                  <View style={styles.matchOverlay} />
+                  <View style={styles.matchContent}>
+                    <View style={styles.cardHeaderRow}>
+                      <Text style={styles.eyebrow}>Selected match</Text>
 
-                  {weekendHint(selectedFixture?.fixture?.date) ? (
-                    <View style={styles.softBadge}>
-                      <Text style={styles.softBadgeText}>
-                        {weekendHint(selectedFixture?.fixture?.date)}
+                      {weekendHint(selectedFixture?.fixture?.date) ? (
+                        <View style={styles.softBadge}>
+                          <Text style={styles.softBadgeText}>
+                            {weekendHint(selectedFixture?.fixture?.date)}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.matchMainRow}>
+                      <View style={styles.crestStack}>
+                        {selectedHomeLogo ? (
+                          <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
+                        ) : (
+                          <View style={styles.crestFallback} />
+                        )}
+
+                        {selectedAwayLogo ? (
+                          <Image
+                            source={{ uri: selectedAwayLogo }}
+                            style={[styles.crest, styles.crestOverlap]}
+                          />
+                        ) : (
+                          <View style={[styles.crestFallback, styles.crestOverlap]} />
+                        )}
+                      </View>
+
+                      <View style={styles.matchCopy}>
+                        <Text style={styles.matchTitle} numberOfLines={2}>
+                          {selectedTitle}
+                        </Text>
+                        <Text style={styles.matchMeta}>{selectedKickLine}</Text>
+                        <Text style={styles.matchMeta}>{selectedVenueLine}</Text>
+                        <Text style={styles.matchMeta}>{selectedCompetitionLine}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.badgeRow}>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          selectedCertainty === "confirmed"
+                            ? styles.badgeConfirmed
+                            : styles.badgeTbc,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.statusBadgeText,
+                            selectedCertainty === "confirmed"
+                              ? styles.badgeTextConfirmed
+                              : styles.badgeTextTbc,
+                          ]}
+                        >
+                          {certaintyLabel(selectedCertainty)}
+                        </Text>
+                      </View>
+
+                      {isEditing ? (
+                        <View style={styles.statusBadge}>
+                          <Text style={styles.statusBadgeText}>
+                            {isAlreadyInTrip ? "Already in trip" : "Ready to add"}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {editTrip && existingPrimaryId && selectedFixtureId === existingPrimaryId ? (
+                        <View style={styles.statusBadge}>
+                          <Text style={styles.statusBadgeText}>Main match</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                </ImageBackground>
+              ) : (
+                <GlassCard level="default" style={styles.matchCardFallback}>
+                  <View style={styles.cardHeaderRow}>
+                    <Text style={styles.eyebrow}>Selected match</Text>
+
+                    {weekendHint(selectedFixture?.fixture?.date) ? (
+                      <View style={styles.softBadge}>
+                        <Text style={styles.softBadgeText}>
+                          {weekendHint(selectedFixture?.fixture?.date)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.matchMainRow}>
+                    <View style={styles.crestStack}>
+                      {selectedHomeLogo ? (
+                        <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
+                      ) : (
+                        <View style={styles.crestFallback} />
+                      )}
+
+                      {selectedAwayLogo ? (
+                        <Image
+                          source={{ uri: selectedAwayLogo }}
+                          style={[styles.crest, styles.crestOverlap]}
+                        />
+                      ) : (
+                        <View style={[styles.crestFallback, styles.crestOverlap]} />
+                      )}
+                    </View>
+
+                    <View style={styles.matchCopy}>
+                      <Text style={styles.matchTitle} numberOfLines={2}>
+                        {selectedTitle}
                       </Text>
+                      <Text style={styles.matchMeta}>{selectedKickLine}</Text>
+                      <Text style={styles.matchMeta}>{selectedVenueLine}</Text>
+                      <Text style={styles.matchMeta}>{selectedCompetitionLine}</Text>
                     </View>
-                  ) : null}
-                </View>
-
-                <View style={styles.matchMainRow}>
-                  <View style={styles.crestStack}>
-                    {selectedHomeLogo ? (
-                      <Image source={{ uri: selectedHomeLogo }} style={styles.crest} />
-                    ) : (
-                      <View style={styles.crestFallback} />
-                    )}
-
-                    {selectedAwayLogo ? (
-                      <Image
-                        source={{ uri: selectedAwayLogo }}
-                        style={[styles.crest, styles.crestOverlap]}
-                      />
-                    ) : (
-                      <View style={[styles.crestFallback, styles.crestOverlap]} />
-                    )}
                   </View>
-
-                  <View style={styles.matchCopy}>
-                    <Text style={styles.matchTitle} numberOfLines={2}>
-                      {selectedTitle}
-                    </Text>
-                    <Text style={styles.matchMeta}>{selectedKickLine}</Text>
-                    <Text style={styles.matchMeta}>{selectedVenueLine}</Text>
-                    <Text style={styles.matchMeta}>{selectedCompetitionLine}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.badgeRow}>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      selectedCertainty === "confirmed"
-                        ? styles.badgeConfirmed
-                        : styles.badgeTbc,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.statusBadgeText,
-                        selectedCertainty === "confirmed"
-                          ? styles.badgeTextConfirmed
-                          : styles.badgeTextTbc,
-                      ]}
-                    >
-                      {certaintyLabel(selectedCertainty)}
-                    </Text>
-                  </View>
-
-                  {isEditing ? (
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusBadgeText}>
-                        {isAlreadyInTrip ? "Already in trip" : "Ready to add"}
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  {editTrip && existingPrimaryId && selectedFixtureId === existingPrimaryId ? (
-                    <View style={styles.statusBadge}>
-                      <Text style={styles.statusBadgeText}>Main match</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </GlassCard>
+                </GlassCard>
+              )}
 
               <GlassCard level="default" style={styles.sectionCard}>
                 <View style={styles.cardHeaderRow}>
@@ -1650,6 +1701,29 @@ const styles = StyleSheet.create({
 
   matchCard: {
     borderRadius: 28,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
+  },
+
+  matchCardImage: {
+    borderRadius: 28,
+    opacity: 0.86,
+  },
+
+  matchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.58)",
+  },
+
+  matchContent: {
+    padding: 16,
+    gap: 14,
+  },
+
+  matchCardFallback: {
+    borderRadius: 28,
     padding: 16,
     gap: 14,
   },
@@ -1717,7 +1791,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.24)",
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
@@ -1731,7 +1805,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: "rgba(0,0,0,0.18)",
+    backgroundColor: "rgba(0,0,0,0.24)",
     paddingVertical: 7,
     paddingHorizontal: 10,
     borderRadius: 999,
@@ -1745,7 +1819,7 @@ const styles = StyleSheet.create({
 
   badgeTbc: {
     borderColor: "rgba(255,200,0,0.22)",
-    backgroundColor: "rgba(255,200,0,0.06)",
+    backgroundColor: "rgba(255,200,0,0.08)",
   },
 
   badgeTextTbc: {
@@ -1754,7 +1828,7 @@ const styles = StyleSheet.create({
 
   badgeConfirmed: {
     borderColor: "rgba(75,158,57,0.35)",
-    backgroundColor: "rgba(75,158,57,0.10)",
+    backgroundColor: "rgba(75,158,57,0.14)",
   },
 
   badgeTextConfirmed: {
@@ -1876,7 +1950,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.10)",
-    backgroundColor: Platform.OS === "android" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
