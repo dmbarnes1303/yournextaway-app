@@ -14,7 +14,12 @@ import Button from "@/src/components/Button";
 import { theme } from "@/src/constants/theme";
 import { getFixtureBackdrop } from "@/src/constants/visualAssets";
 
-import { LeagueFlag, TeamCrest, kickoffPresentation } from "./helpers";
+import {
+  LeagueFlag,
+  TeamCrest,
+  kickoffPresentation,
+  isEuropeanCompetitionLeagueId,
+} from "./helpers";
 import type { RankedFixtureRow, FixtureRouteCtx } from "./types";
 
 type Props = {
@@ -26,14 +31,168 @@ type Props = {
   onPressBuildTrip: (id: string, ctx?: FixtureRouteCtx) => void;
 };
 
+const CITY_COUNTRY_CODE: Record<string, string> = {
+  london: "ENG",
+  manchester: "ENG",
+  liverpool: "ENG",
+  birmingham: "ENG",
+  newcastle: "ENG",
+  glasgow: "SCO",
+  edinburgh: "SCO",
+
+  madrid: "ES",
+  barcelona: "ES",
+  seville: "ES",
+  sevilla: "ES",
+  valencia: "ES",
+  bilbao: "ES",
+  villarreal: "ES",
+  "san sebastian": "ES",
+
+  milan: "IT",
+  milano: "IT",
+  rome: "IT",
+  roma: "IT",
+  turin: "IT",
+  torino: "IT",
+  naples: "IT",
+  napoli: "IT",
+  florence: "IT",
+  firenze: "IT",
+
+  munich: "DE",
+  münchen: "DE",
+  dortmund: "DE",
+  berlin: "DE",
+  leipzig: "DE",
+  leverkusen: "DE",
+  frankfurt: "DE",
+
+  paris: "FR",
+  marseille: "FR",
+  lyon: "FR",
+  lille: "FR",
+  monaco: "FR",
+
+  amsterdam: "NL",
+  rotterdam: "NL",
+  eindhoven: "NL",
+  almere: "NL",
+
+  lisbon: "PT",
+  lisboa: "PT",
+  porto: "PT",
+
+  istanbul: "TR",
+  trabzon: "TR",
+
+  brussels: "BE",
+  bruges: "BE",
+  brugge: "BE",
+  anderlecht: "BE",
+
+  vienna: "AT",
+  wien: "AT",
+  salzburg: "AT",
+
+  zurich: "CH",
+  zürich: "CH",
+  basel: "CH",
+  bern: "CH",
+
+  athens: "GR",
+  piraeus: "GR",
+  thessaloniki: "GR",
+
+  dublin: "IE",
+
+  copenhagen: "DK",
+  københavn: "DK",
+
+  warsaw: "PL",
+  poznan: "PL",
+  krakow: "PL",
+
+  prague: "CZ",
+  praha: "CZ",
+
+  zagreb: "HR",
+  split: "HR",
+
+  belgrade: "RS",
+  beograd: "RS",
+
+  budapest: "HU",
+
+  bucharest: "RO",
+  bucuresti: "RO",
+
+  sofia: "BG",
+  "stara zagora": "BG",
+
+  bratislava: "SK",
+  skalica: "SK",
+
+  ljubljana: "SI",
+  maribor: "SI",
+
+  nicosia: "CY",
+
+  sarajevo: "BA",
+  banja: "BA",
+
+  stockholm: "SE",
+  malmo: "SE",
+  malmö: "SE",
+
+  oslo: "NO",
+  bodo: "NO",
+  bodø: "NO",
+
+  helsinki: "FI",
+  turku: "FI",
+
+  reykjavik: "IS",
+};
+
 function clean(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function normalise(value: unknown): string {
+  return clean(value)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9À-ÿ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getLocationLine(item: RankedFixtureRow): string {
   const city = clean(item?.fixture?.venue?.city);
   const venue = clean(item?.fixture?.venue?.name);
   return [city, venue].filter(Boolean).join(" • ");
+}
+
+function resolveVenueCountryCode(item: RankedFixtureRow): string | null {
+  const city = normalise(item?.fixture?.venue?.city);
+
+  if (!city) return null;
+
+  if (CITY_COUNTRY_CODE[city]) {
+    return CITY_COUNTRY_CODE[city];
+  }
+
+  const cityParts = city.split(" ");
+
+  for (const part of cityParts) {
+    if (CITY_COUNTRY_CODE[part]) {
+      return CITY_COUNTRY_CODE[part];
+    }
+  }
+
+  return null;
 }
 
 function Row({
@@ -53,6 +212,14 @@ function Row({
   const leagueLogo = (item?.league as any)?.logo ?? null;
   const countryCode = (item?.league as any)?.countryCode ?? null;
   const countryName = (item?.league as any)?.country ?? null;
+
+  const isEuropeanCompetition = isEuropeanCompetitionLeagueId(
+    leagueId == null ? null : Number(leagueId)
+  );
+
+  const headerCountryCode = isEuropeanCompetition
+    ? resolveVenueCountryCode(item) ?? countryCode
+    : null;
 
   const kickoff = kickoffPresentation(item, new Set());
   const locationLine = getLocationLine(item);
@@ -85,15 +252,23 @@ function Row({
               />
             ) : null}
 
-            {countryCode ? <LeagueFlag code={countryCode} size="sm" /> : null}
-
             <Text style={styles.leagueText} numberOfLines={1}>
               {leagueName}
             </Text>
+
+            {headerCountryCode ? (
+              <View style={styles.europeFlagWrap}>
+                <LeagueFlag code={headerCountryCode} size="sm" />
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.timeChip}>
-            <Ionicons name="time-outline" size={13} color={theme.colors.emeraldSoft} />
+            <Ionicons
+              name="time-outline"
+              size={13}
+              color={theme.colors.emeraldSoft}
+            />
             <Text style={styles.timeChipText} numberOfLines={1}>
               {kickoff.time}
             </Text>
@@ -113,13 +288,9 @@ function Row({
               {kickoff.date}
             </Text>
 
-            <View style={styles.kickoffBox}>
-              <Text style={styles.kickoffTime} numberOfLines={1}>
-                {kickoff.time}
-              </Text>
+            <View style={styles.vsPlate}>
+              <Text style={styles.vsText}>VS</Text>
             </View>
-
-            <Text style={styles.vsText}>VS</Text>
           </View>
 
           <View style={styles.teamCol}>
@@ -132,7 +303,11 @@ function Row({
 
         {locationLine ? (
           <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={14} color={theme.colors.textMuted} />
+            <Ionicons
+              name="location-outline"
+              size={14}
+              color={theme.colors.textMuted}
+            />
             <Text style={styles.location} numberOfLines={1}>
               {locationLine}
             </Text>
@@ -169,7 +344,11 @@ function Row({
             <Ionicons
               name={isFollowed ? "notifications" : "notifications-outline"}
               size={16}
-              color={isFollowed ? theme.badge.textEmerald : theme.colors.textSecondary}
+              color={
+                isFollowed
+                  ? theme.badge.textEmerald
+                  : theme.colors.textSecondary
+              }
             />
           </Pressable>
         </View>
@@ -260,7 +439,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    gap: 6,
+    gap: 7,
     alignItems: "center",
   },
 
@@ -270,10 +449,15 @@ const styles = StyleSheet.create({
   },
 
   leagueText: {
-    flex: 1,
+    flexShrink: 1,
     color: theme.colors.textSecondary,
     fontWeight: theme.fontWeight.black,
     fontSize: 11,
+  },
+
+  europeFlagWrap: {
+    marginLeft: 2,
+    opacity: 0.96,
   },
 
   timeChip: {
@@ -318,7 +502,7 @@ const styles = StyleSheet.create({
   centerCol: {
     width: 84,
     alignItems: "center",
-    gap: 6,
+    gap: 8,
   },
 
   dateText: {
@@ -329,27 +513,22 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  kickoffBox: {
-    minWidth: 72,
+  vsPlate: {
+    minWidth: 42,
     paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 16,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.pill,
     alignItems: "center",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(0,0,0,0.42)",
-  },
-
-  kickoffTime: {
-    color: theme.colors.textPrimary,
-    fontSize: 18,
-    fontWeight: theme.fontWeight.black,
+    backgroundColor: "rgba(0,0,0,0.36)",
   },
 
   vsText: {
     color: theme.colors.textMuted,
     fontSize: 10,
     fontWeight: theme.fontWeight.black,
+    letterSpacing: 0.4,
   },
 
   locationRow: {
