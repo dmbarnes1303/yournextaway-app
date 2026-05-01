@@ -22,7 +22,7 @@ async function ensureSavedItemsLoaded() {
   try {
     await savedItemsStore.load();
   } catch {
-    // silent
+    // best-effort only
   }
 }
 
