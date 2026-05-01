@@ -12,31 +12,31 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+
 import { theme } from "@/src/constants/theme";
 
 type Props = TextInputProps & {
   label?: string;
   hint?: string;
   error?: string;
-
   leftIcon?: keyof typeof Ionicons.glyphMap;
   rightIcon?: keyof typeof Ionicons.glyphMap;
-
   onPressRight?: () => void;
-
   containerStyle?: StyleProp<ViewStyle>;
   inputWrapStyle?: StyleProp<ViewStyle>;
-
   variant?: "default" | "compact";
   allowClear?: boolean;
 };
 
 function alpha(hex: string, a: number) {
-  const h = hex.replace("#", "");
+  const h = String(hex || "").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return `rgba(255,255,255,${Math.max(0, Math.min(1, a))})`;
+
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
   const clamped = Math.max(0, Math.min(1, a));
+
   return `rgba(${r},${g},${b},${clamped})`;
 }
 
@@ -66,15 +66,11 @@ export default function Input({
 
   const borderColor = useMemo(() => {
     if (error) return alpha(theme.colors.error, 0.45);
-    if (focused) return alpha(theme.colors.accentGreen, 0.45);
+    if (focused) return alpha(theme.colors.emerald, 0.45);
     return theme.colors.borderSubtle;
   }, [error, focused]);
 
-  const bg = useMemo(() => {
-    // Matte, premium surface with slight lift
-    return "rgba(255,255,255,0.04)";
-  }, []);
-
+  const backgroundColor = Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default;
   const phColor = placeholderTextColor ?? theme.colors.textMuted;
 
   return (
@@ -85,8 +81,8 @@ export default function Input({
         style={[
           styles.inputWrap,
           isCompact && styles.inputWrapCompact,
-          { backgroundColor: bg, borderColor },
-          !editable && { opacity: 0.7 },
+          { backgroundColor, borderColor },
+          !editable && styles.disabled,
           inputWrapStyle,
         ]}
       >
@@ -116,18 +112,17 @@ export default function Input({
             setFocused(false);
             rest.onBlur?.(e);
           }}
-          selectionColor={alpha(theme.colors.accentGreen, 0.7)}
+          selectionColor={alpha(theme.colors.emerald, 0.7)}
           autoCapitalize={rest.autoCapitalize ?? "none"}
           autoCorrect={rest.autoCorrect ?? false}
           {...rest}
         />
 
-        {/* Right side */}
         {showClear ? (
           <Pressable
             onPress={() => onChangeText?.("")}
             hitSlop={10}
-            style={({ pressed }) => [styles.iconRightBtn, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [styles.iconRightBtn, pressed && styles.pressed]}
             accessibilityRole="button"
           >
             <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
@@ -139,8 +134,8 @@ export default function Input({
             hitSlop={10}
             style={({ pressed }) => [
               styles.iconRightBtn,
-              pressed && onPressRight ? { opacity: 0.8 } : null,
-              !onPressRight ? { opacity: 0.6 } : null,
+              pressed && onPressRight ? styles.pressed : null,
+              !onPressRight ? styles.disabledIcon : null,
             ]}
             accessibilityRole="button"
           >
@@ -157,9 +152,7 @@ export default function Input({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    width: "100%",
-  },
+  container: { width: "100%" },
 
   label: {
     color: theme.colors.textSecondary,
@@ -178,9 +171,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
 
-  inputWrapCompact: {
-    minHeight: 44,
-  },
+  inputWrapCompact: { minHeight: 44 },
 
   iconLeft: {
     width: 28,
@@ -197,14 +188,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
 
-  inputCompact: {
-    fontSize: theme.fontSize.meta,
-  },
+  inputCompact: { fontSize: theme.fontSize.meta },
 
   iconRightBtn: {
     width: 34,
     height: 34,
-    borderRadius: 999,
+    borderRadius: theme.borderRadius.pill,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -228,4 +217,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: theme.fontWeight.medium,
   },
+
+  disabled: { opacity: 0.7 },
+  disabledIcon: { opacity: 0.6 },
+  pressed: { opacity: 0.8 },
 });
