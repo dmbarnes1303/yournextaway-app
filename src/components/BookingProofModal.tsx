@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -26,6 +26,17 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function bookingTypeLabel(title?: string | null): string {
+  const value = clean(title).toLowerCase();
+
+  if (value.includes("ticket")) return "Ticket proof";
+  if (value.includes("hotel") || value.includes("stay")) return "Stay proof";
+  if (value.includes("flight") || value.includes("travel")) return "Travel proof";
+  if (value.includes("insurance")) return "Insurance proof";
+
+  return "Booking proof";
+}
+
 export default function BookingProofModal({
   visible,
   request,
@@ -38,11 +49,15 @@ export default function BookingProofModal({
     if (!visible) setLoading(null);
   }, [visible]);
 
-  const busy = loading !== null;
   const itemId = clean(request?.itemId);
+  const title = clean(request?.title) || "Booking";
+  const proofType = useMemo(() => bookingTypeLabel(title), [title]);
+
+  const busy = loading !== null;
+  const canAct = Boolean(itemId) && !busy;
 
   const handleAddProof = useCallback(async () => {
-    if (!itemId || busy) return;
+    if (!canAct) return;
 
     setLoading("proof");
 
@@ -51,7 +66,7 @@ export default function BookingProofModal({
     } finally {
       setLoading(null);
     }
-  }, [busy, itemId, onAddProof]);
+  }, [canAct, itemId, onAddProof]);
 
   const handleNotNow = useCallback(async () => {
     if (busy) return;
@@ -59,7 +74,7 @@ export default function BookingProofModal({
     setLoading("notNow");
 
     try {
-      onNotNow();
+      await Promise.resolve(onNotNow());
     } finally {
       setLoading(null);
     }
@@ -73,33 +88,47 @@ export default function BookingProofModal({
         <View style={styles.card}>
           <View style={styles.handle} />
 
-          <Text style={styles.eyebrow}>Saved to Wallet</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.walletIcon}>
+              <Text style={styles.walletIconText}>✓</Text>
+            </View>
 
-          <Text style={styles.title}>Add booking proof?</Text>
+            <View style={styles.headerCopy}>
+              <Text style={styles.eyebrow}>Saved to Wallet</Text>
+              <Text style={styles.title}>Add proof for offline access?</Text>
+            </View>
+          </View>
 
           <View style={styles.bookingCard}>
-            <Text style={styles.bookingLabel}>Booked item</Text>
+            <Text style={styles.bookingLabel}>{proofType}</Text>
             <Text style={styles.bookingTitle} numberOfLines={2}>
-              {clean(request?.title) || "Booking"}
+              {title}
+            </Text>
+            <Text style={styles.bookingMeta}>
+              Store a PDF or screenshot so the booking is easy to find on the trip.
             </Text>
           </View>
 
           <Text style={styles.body}>
-            Your trip now shows this as booked. Add a PDF or screenshot so you can access the proof offline in Wallet.
+            Booked means user-confirmed. Adding proof makes Wallet more useful, but it still does
+            not automatically verify the booking.
           </Text>
 
           {busy ? (
             <View style={styles.loadingBox}>
               <ActivityIndicator color={APP_GREEN} />
-              <Text style={styles.loadingText}>Saving…</Text>
+              <Text style={styles.loadingText}>
+                {loading === "proof" ? "Opening proof picker…" : "Saving…"}
+              </Text>
             </View>
           ) : (
             <View style={styles.actions}>
               <Pressable
                 style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
                 onPress={handleAddProof}
+                disabled={!canAct}
               >
-                <Text style={styles.primaryButtonText}>Add proof</Text>
+                <Text style={styles.primaryButtonText}>Add proof now</Text>
               </Pressable>
 
               <Pressable
@@ -120,7 +149,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.72)",
+    backgroundColor: "rgba(0,0,0,0.74)",
   },
 
   backdropPress: {
@@ -146,12 +175,41 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 999,
     backgroundColor: "rgba(255,255,255,0.18)",
-    marginBottom: 16,
+    marginBottom: 18,
+  },
+
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 13,
+  },
+
+  walletIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(34,197,94,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.34)",
+  },
+
+  walletIconText: {
+    color: APP_GREEN,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
   },
 
   eyebrow: {
     color: APP_GREEN,
     fontSize: 10,
+    lineHeight: 13,
     fontWeight: "900",
     letterSpacing: 1,
     textTransform: "uppercase",
@@ -167,7 +225,7 @@ const styles = StyleSheet.create({
   },
 
   bookingCard: {
-    marginTop: 16,
+    marginTop: 18,
     borderRadius: 22,
     padding: 15,
     backgroundColor: "rgba(0,0,0,0.26)",
@@ -184,11 +242,19 @@ const styles = StyleSheet.create({
   },
 
   bookingTitle: {
-    marginTop: 6,
+    marginTop: 7,
     color: theme.colors.textPrimary,
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: "900",
+  },
+
+  bookingMeta: {
+    marginTop: 7,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "800",
   },
 
   body: {
