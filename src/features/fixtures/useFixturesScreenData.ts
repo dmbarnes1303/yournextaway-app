@@ -1,5 +1,5 @@
+// src/features/fixtures/useFixturesScreenData.ts
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
 import {
@@ -47,8 +47,6 @@ import {
 } from "@/src/features/fixtures/helpers";
 import type { RankedFixtureRow } from "@/src/features/fixtures/types";
 
-const MAX_MULTI_LEAGUES = 10;
-const DEFAULT_FETCH_LEAGUE_LIMIT = 12;
 const DEFAULT_FETCH_CONCURRENCY = 4;
 
 const DEFAULT_PRIORITY_LEAGUE_IDS = new Set<number>([
@@ -76,18 +74,15 @@ async function mapLimit<T, R>(
 }
 
 function sortLeagueDefaults(leagues: LeagueOption[]): LeagueOption[] {
-  const decorated = leagues.map((league, index) => {
-    let score = 0;
-
-    if (DEFAULT_PRIORITY_LEAGUE_IDS.has(league.leagueId)) score += 100;
-    if (league.homeVisible) score += 18;
-    if (league.featured) score += 12;
-    if (league.browseRegion === "featured-europe") score += 8;
-
-    return { league, index, score };
-  });
-
-  return decorated
+  return leagues
+    .map((league, index) => {
+      let score = 0;
+      if (DEFAULT_PRIORITY_LEAGUE_IDS.has(league.leagueId)) score += 100;
+      if (league.homeVisible) score += 18;
+      if (league.featured) score += 12;
+      if (league.browseRegion === "featured-europe") score += 8;
+      return { league, index, score };
+    })
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((item) => item.league);
 }
@@ -97,11 +92,26 @@ function dedupeByFixtureId(rows: RankedFixtureRow[]): RankedFixtureRow[] {
 
   for (const row of rows) {
     const id = row?.fixture?.id != null ? String(row.fixture.id) : "";
-    if (!id) continue;
-    if (!out.has(id)) out.set(id, row);
+    if (id && !out.has(id)) out.set(id, row);
   }
 
   return Array.from(out.values());
+}
+
+function getCompetitionSummary(args: {
+  selectedLeagueIds: number[];
+  selectedLeagues: LeagueOption[];
+  fetchLeagues: LeagueOption[];
+}) {
+  if (args.selectedLeagueIds.length === 0) {
+    return `All ${args.fetchLeagues.length} competitions`;
+  }
+
+  if (args.selectedLeagueIds.length === 1) {
+    return leagueScopeSubtitle(args.selectedLeagues);
+  }
+
+  return `${args.selectedLeagueIds.length} competitions selected`;
 }
 
 export function useFixturesScreenData() {
@@ -124,10 +134,7 @@ export function useFixturesScreenData() {
   const routeFrom = useMemo(() => coerceString(rawFrom), [rawFrom]);
   const routeTo = useMemo(() => coerceString(rawTo), [rawTo]);
 
-  const discoverCategory = useMemo(
-    () => parseDiscoverCategory(rawDiscover),
-    [rawDiscover]
-  );
+  const discoverCategory = useMemo(() => parseDiscoverCategory(rawDiscover), [rawDiscover]);
 
   const discoverContext = useMemo(
     () =>
@@ -178,14 +185,8 @@ export function useFixturesScreenData() {
         : null;
 
     if (a && b && a !== b) return normalizeRange(a, b);
-
-    if (topPicksMode && !a && !b) {
-      return { from: defaultTopFrom, to: defaultTopTo };
-    }
-
-    if (!topPicksMode && !a && !b) {
-      return defaultBrowseRange;
-    }
+    if (topPicksMode && !a && !b) return { from: defaultTopFrom, to: defaultTopTo };
+    if (!topPicksMode && !a && !b) return defaultBrowseRange;
 
     return null;
   }, [
@@ -212,28 +213,25 @@ export function useFixturesScreenData() {
       const prevTo = prev?.to ?? null;
       const nextFrom = initialRange?.from ?? null;
       const nextTo = initialRange?.to ?? null;
-
       if (prevFrom === nextFrom && prevTo === nextTo) return prev;
       return initialRange;
     });
   }, [initialRange]);
 
-  const effectiveRange = useMemo(() => {
-    return range
-      ? normalizeRange(range.from, range.to)
-      : { from: selectedDay, to: selectedDay };
-  }, [range, selectedDay]);
-
-  const isRange = useMemo(
-    () => effectiveRange.from !== effectiveRange.to,
-    [effectiveRange]
+  const effectiveRange = useMemo(
+    () => (range ? normalizeRange(range.from, range.to) : { from: selectedDay, to: selectedDay }),
+    [range, selectedDay]
   );
+
+  const isRange = useMemo(() => effectiveRange.from !== effectiveRange.to, [effectiveRange]);
 
   const stripDays = useMemo(() => {
     const start = clampIsoToWindow(selectedDay, minIso, maxIso);
+
     return Array.from({ length: STRIP_DAYS }).map((_, i) => {
       const iso = addDaysIsoUtc(start, i);
       const d = new Date(`${iso}T00:00:00.000Z`);
+
       return {
         iso,
         top: d.toLocaleDateString("en-GB", { weekday: "short" }),
@@ -251,36 +249,38 @@ export function useFixturesScreenData() {
   });
 
   useEffect(() => {
-    const nextIds =
-      routeLeagueId && Number.isFinite(routeLeagueId) ? [routeLeagueId] : [];
+    const nextIds = routeLeagueId && Number.isFinite(routeLeagueId) ? [routeLeagueId] : [];
 
     setSelectedLeagueIds((prev) => {
-      if (prev.length === nextIds.length && prev.every((v, i) => v === nextIds[i])) {
-        return prev;
-      }
+      if (prev.length === nextIds.length && prev.every((v, i) => v === nextIds[i])) return prev;
       return nextIds;
     });
   }, [routeLeagueId]);
 
+  const allLeagues = useMemo(() => sortLeagueDefaults(LEAGUES), []);
+
   const selectedLeagues = useMemo(() => {
     if (selectedLeagueIds.length === 0) return [] as LeagueOption[];
     const set = new Set(selectedLeagueIds);
-    return LEAGUES.filter((l) => set.has(l.leagueId));
-  }, [selectedLeagueIds]);
-
-  const defaultFetchLeagues = useMemo(() => {
-    return sortLeagueDefaults(LEAGUES).slice(0, DEFAULT_FETCH_LEAGUE_LIMIT);
-  }, []);
+    return allLeagues.filter((l) => set.has(l.leagueId));
+  }, [selectedLeagueIds, allLeagues]);
 
   const fetchLeagues = useMemo(() => {
     if (selectedLeagues.length > 0) return selectedLeagues;
-    return defaultFetchLeagues;
-  }, [selectedLeagues, defaultFetchLeagues]);
+    return allLeagues;
+  }, [selectedLeagues, allLeagues]);
 
-  const leagueSubtitle = useMemo(() => {
-    if (selectedLeagues.length > 0) return leagueScopeSubtitle(selectedLeagues);
-    return `Top ${fetchLeagues.length} competitions`;
-  }, [selectedLeagues, fetchLeagues]);
+  const competitionSummaryText = useMemo(
+    () =>
+      getCompetitionSummary({
+        selectedLeagueIds,
+        selectedLeagues,
+        fetchLeagues,
+      }),
+    [selectedLeagueIds, selectedLeagues, fetchLeagues]
+  );
+
+  const leagueSubtitle = useMemo(() => competitionSummaryText, [competitionSummaryText]);
 
   const [activeRegion, setActiveRegion] =
     useState<LeagueBrowseRegion>("featured-europe");
@@ -292,8 +292,11 @@ export function useFixturesScreenData() {
       nordics: [],
     };
 
-    LEAGUES.forEach((league) => {
-      if (!league.browseRegion) return;
+    allLeagues.forEach((league) => {
+      if (!league.browseRegion) {
+        out["featured-europe"].push(league);
+        return;
+      }
       out[league.browseRegion].push(league);
     });
 
@@ -304,22 +307,12 @@ export function useFixturesScreenData() {
     });
 
     return out;
-  }, []);
+  }, [allLeagues]);
 
   const toggleLeague = useCallback((leagueId: number) => {
     setSelectedLeagueIds((prev) => {
       const has = prev.includes(leagueId);
-
       if (has) return prev.filter((x) => x !== leagueId);
-
-      if (prev.length >= MAX_MULTI_LEAGUES) {
-        Alert.alert(
-          "Max leagues reached",
-          `You can select up to ${MAX_MULTI_LEAGUES} leagues at once.`
-        );
-        return prev;
-      }
-
       return [...prev, leagueId];
     });
   }, []);
@@ -329,6 +322,14 @@ export function useFixturesScreenData() {
   }, []);
 
   const resetToFeatured = useCallback(() => {
+    setSelectedLeagueIds([]);
+  }, []);
+
+  const selectAllLeagues = useCallback(() => {
+    setSelectedLeagueIds([]);
+  }, []);
+
+  const clearLeagues = useCallback(() => {
     setSelectedLeagueIds([]);
   }, []);
 
@@ -372,9 +373,7 @@ export function useFixturesScreenData() {
 
       setLoading(true);
       setError(null);
-      if (!hasExistingRows) {
-        setExpandedKey(null);
-      }
+      if (!hasExistingRows) setExpandedKey(null);
 
       try {
         const batches = await mapLimit(fetchLeagues, DEFAULT_FETCH_CONCURRENCY, async (l) => {
@@ -399,17 +398,11 @@ export function useFixturesScreenData() {
               .map((item) => ({
                 fixture: item.fixture,
                 reasons: item.reasons,
-                discoverScore: discoverScoreForCategory(
-                  discoverCategory,
-                  item,
-                  discoverContext
-                ),
+                discoverScore: discoverScoreForCategory(discoverCategory, item, discoverContext),
                 kickoffIso: String(item.fixture?.fixture?.date ?? ""),
               }))
               .sort((a, b) => {
-                if (b.discoverScore !== a.discoverScore) {
-                  return b.discoverScore - a.discoverScore;
-                }
+                if (b.discoverScore !== a.discoverScore) return b.discoverScore - a.discoverScore;
                 return a.kickoffIso.localeCompare(b.kickoffIso);
               })
               .map((x) => ({
@@ -429,30 +422,21 @@ export function useFixturesScreenData() {
             const sa = baseFixtureScore(a);
             const sb = baseFixtureScore(b);
             if (sb !== sa) return sb - sa;
-            const da = String(a?.fixture?.date ?? "");
-            const db = String(b?.fixture?.date ?? "");
-            return da.localeCompare(db);
+            return String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""));
           });
         } else {
-          ranked.sort((a, b) => {
-            const da = String(a?.fixture?.date ?? "");
-            const db = String(b?.fixture?.date ?? "");
-            return da.localeCompare(db);
-          });
+          ranked.sort((a, b) =>
+            String(a?.fixture?.date ?? "").localeCompare(String(b?.fixture?.date ?? ""))
+          );
         }
 
         setRows(ranked);
       } catch (e: any) {
         if (cancelled || activeRequestRef.current !== requestId) return;
-        if (rows.length === 0) {
-          setError(e?.message ?? "Failed to load fixtures.");
-        } else {
-          setError(null);
-        }
+        if (rows.length === 0) setError(e?.message ?? "Failed to load fixtures.");
+        else setError(null);
       } finally {
-        if (!cancelled && activeRequestRef.current === requestId) {
-          setLoading(false);
-        }
+        if (!cancelled && activeRequestRef.current === requestId) setLoading(false);
       }
     }
 
@@ -486,6 +470,8 @@ export function useFixturesScreenData() {
         norm(r?.teams?.home?.name).includes(qNorm) ||
         norm(r?.teams?.away?.name).includes(qNorm) ||
         norm(r?.fixture?.venue?.city).includes(qNorm) ||
+        norm(r?.fixture?.venue?.name).includes(qNorm) ||
+        norm(r?.league?.name).includes(qNorm) ||
         norm((r?.league as any)?.country).includes(qNorm)
       );
     });
@@ -496,27 +482,16 @@ export function useFixturesScreenData() {
       const fixtureId = r?.fixture?.id != null ? String(r.fixture.id) : "";
       if (!fixtureId) return;
 
-      const leagueId = r?.league?.id != null ? Number(r.league.id) : 0;
-      const season = (r as any)?.league?.season != null ? Number((r as any).league.season) : 0;
-
-      const homeTeamId = r?.teams?.home?.id != null ? Number(r.teams.home.id) : 0;
-      const awayTeamId = r?.teams?.away?.id != null ? Number(r.teams.away.id) : 0;
-
-      const homeName = r?.teams?.home?.name != null ? String(r.teams.home.name) : null;
-      const awayName = r?.teams?.away?.name != null ? String(r.teams.away.name) : null;
-      const leagueName = r?.league?.name != null ? String(r.league.name) : null;
-      const round = r?.league?.round != null ? String(r.league.round) : null;
-
       toggleFollow({
         fixtureId,
-        leagueId,
-        season,
-        homeTeamId,
-        awayTeamId,
-        homeName,
-        awayName,
-        leagueName,
-        round,
+        leagueId: r?.league?.id != null ? Number(r.league.id) : 0,
+        season: (r as any)?.league?.season != null ? Number((r as any).league.season) : 0,
+        homeTeamId: r?.teams?.home?.id != null ? Number(r.teams.home.id) : 0,
+        awayTeamId: r?.teams?.away?.id != null ? Number(r.teams.away.id) : 0,
+        homeName: r?.teams?.home?.name != null ? String(r.teams.home.name) : null,
+        awayName: r?.teams?.away?.name != null ? String(r.teams.away.name) : null,
+        leagueName: r?.league?.name != null ? String(r.league.name) : null,
+        round: r?.league?.round != null ? String(r.league.round) : null,
         kickoffIso: kickoffIsoOrNull(r),
         venue: r?.fixture?.venue?.name != null ? String(r.fixture.venue.name) : null,
         city: r?.fixture?.venue?.city != null ? String(r.fixture.venue.city) : null,
@@ -528,9 +503,11 @@ export function useFixturesScreenData() {
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const [calMonthYear, setCalMonthYear] = useState(() => {
-    const base =
-      parseIsoToUtcParts(selectedDay) ??
-      parseIsoToUtcParts(minIso) ?? { y: 2026, m0: 0, d: 1 };
+    const base = parseIsoToUtcParts(selectedDay) ?? parseIsoToUtcParts(minIso) ?? {
+      y: 2026,
+      m0: 0,
+      d: 1,
+    };
 
     return { y: base.y, m0: base.m0 };
   });
@@ -580,18 +557,12 @@ export function useFixturesScreenData() {
   }, []);
 
   const calInRange = useCallback(
-    (iso: string) => {
-      if (!iso) return false;
-      return iso >= calNorm.from && iso <= calNorm.to;
-    },
+    (iso: string) => !!iso && iso >= calNorm.from && iso <= calNorm.to,
     [calNorm]
   );
 
   const calIsEdge = useCallback(
-    (iso: string) => {
-      if (!iso) return false;
-      return iso === calNorm.from || iso === calNorm.to;
-    },
+    (iso: string) => !!iso && (iso === calNorm.from || iso === calNorm.to),
     [calNorm]
   );
 
@@ -645,26 +616,21 @@ export function useFixturesScreenData() {
 
   const titleText = useMemo(() => {
     if (discoverCategory) return DISCOVER_CATEGORY_META[discoverCategory].title;
-    return topPicksMode ? "Top Picks" : "Fixtures";
-  }, [discoverCategory, topPicksMode]);
+    return "Fixtures";
+  }, [discoverCategory]);
 
   const subtitleText = useMemo(() => {
     if (discoverCategory) return DISCOVER_CATEGORY_META[discoverCategory].subtitle;
-    return leagueSubtitle;
-  }, [discoverCategory, leagueSubtitle]);
+    return "Find matches by date, competition or destination.";
+  }, [discoverCategory]);
 
   const helperLineText = useMemo(() => {
     const readableFrom = formatFixtureDateDisplay(effectiveRange.from);
     const readableTo = formatFixtureDateDisplay(effectiveRange.to);
+    const datePart = isRange ? `${readableFrom} → ${readableTo}` : readableFrom;
 
     if (discoverCategory) {
       const base = DISCOVER_CATEGORY_META[discoverCategory].helper;
-      const datePart = isRange ? `${readableFrom} → ${readableTo}` : readableFrom;
-      const scopePart =
-        selectedLeagueIds.length > 0
-          ? `${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
-          : `${fetchLeagues.length} competitions`;
-
       const extras: string[] = [];
 
       if (discoverContext?.tripLength) {
@@ -674,43 +640,35 @@ export function useFixturesScreenData() {
         if (discoverContext.tripLength === "3") extras.push("3 nights");
       }
 
-      if (discoverContext?.vibes?.length) {
-        extras.push(discoverContext.vibes.join(", "));
-      }
+      if (discoverContext?.vibes?.length) extras.push(discoverContext.vibes.join(", "));
+      if (discoverContext?.origin) extras.push(`From ${discoverContext.origin}`);
 
-      if (discoverContext?.origin) {
-        extras.push(`From ${discoverContext.origin}`);
-      }
-
-      return [base, datePart, scopePart, ...extras].join(" • ");
+      return [base, datePart, competitionSummaryText, ...extras].join(" • ");
     }
 
-    return `${
-      isRange ? `Range • ${readableFrom} → ${readableTo}` : `Day • ${readableFrom}`
-    }${
-      selectedLeagueIds.length > 0
-        ? ` • ${selectedLeagueIds.length}/${MAX_MULTI_LEAGUES} leagues`
-        : ` • ${fetchLeagues.length} competitions`
-    }${topPicksMode ? " • Sorted by rating" : ""}`;
+    return `${datePart} • ${competitionSummaryText}`;
   }, [
     discoverCategory,
     isRange,
     effectiveRange,
-    selectedLeagueIds.length,
-    topPicksMode,
     discoverContext,
-    fetchLeagues.length,
+    competitionSummaryText,
   ]);
 
   const headerDateLine = useMemo(() => {
-    if (!isRange) {
-      return formatFixtureDateDisplay(effectiveRange.from);
-    }
-
+    if (!isRange) return formatFixtureDateDisplay(effectiveRange.from);
     return `${formatFixtureDateDisplay(effectiveRange.from)} → ${formatFixtureDateDisplay(
       effectiveRange.to
     )}`;
   }, [isRange, effectiveRange]);
+
+  const matchesSummaryTitle = useMemo(() => {
+    return `${filtered.length} match${filtered.length === 1 ? "" : "es"} found`;
+  }, [filtered.length]);
+
+  const matchesSummaryLine = useMemo(() => {
+    return `${headerDateLine} • ${competitionSummaryText}`;
+  }, [headerDateLine, competitionSummaryText]);
 
   return {
     discoverCategory,
@@ -723,6 +681,7 @@ export function useFixturesScreenData() {
     isRange,
     stripDays,
 
+    allLeagues,
     selectedLeagueIds,
     selectedLeagues,
     activeRegion,
@@ -730,7 +689,10 @@ export function useFixturesScreenData() {
     leaguesByRegion,
     toggleLeague,
     selectSingleLeague,
+    selectAllLeagues,
+    clearLeagues,
     resetToFeatured,
+    competitionSummaryText,
 
     query,
     setQuery,
@@ -766,6 +728,8 @@ export function useFixturesScreenData() {
     subtitleText,
     helperLineText,
     headerDateLine,
+    matchesSummaryTitle,
+    matchesSummaryLine,
     monthLabel,
   };
-      }
+    }
