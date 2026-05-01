@@ -10,6 +10,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
+
 import { theme } from "@/src/constants/theme";
 
 type Tone = "primary" | "secondary" | "ghost" | "danger" | "gold";
@@ -19,28 +20,26 @@ type Props = {
   label?: string;
   children?: React.ReactNode;
   onPress?: () => void;
-
   tone?: Tone;
   size?: Size;
-
   loading?: boolean;
   disabled?: boolean;
-
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
-
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
-
   glow?: boolean;
 };
 
 function alpha(hex: string, a: number) {
-  const h = hex.replace("#", "");
+  const h = String(hex || "").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return `rgba(255,255,255,${Math.max(0, Math.min(1, a))})`;
+
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
   const b = parseInt(h.slice(4, 6), 16);
   const clamped = Math.max(0, Math.min(1, a));
+
   return `rgba(${r},${g},${b},${clamped})`;
 }
 
@@ -48,16 +47,16 @@ function getToneStyles(tone: Tone) {
   switch (tone) {
     case "primary":
       return {
-        bg: theme.colors.accentGreen,
-        border: theme.colors.borderGreenStrong,
+        bg: theme.colors.emerald,
+        border: theme.colors.borderEmerald,
         text: theme.colors.textOnBrand,
         spinner: theme.colors.textOnBrand,
       };
 
     case "gold":
       return {
-        bg: theme.colors.accentGold,
-        border: theme.colors.borderGoldStrong,
+        bg: theme.colors.gold,
+        border: theme.colors.borderGold,
         text: theme.colors.textOnGold,
         spinner: theme.colors.textOnGold,
       };
@@ -65,7 +64,7 @@ function getToneStyles(tone: Tone) {
     case "secondary":
       return {
         bg: theme.colors.bgElevated,
-        border: theme.colors.borderSubtle,
+        border: theme.colors.borderStrong,
         text: theme.colors.textPrimary,
         spinner: theme.colors.textPrimary,
       };
@@ -92,29 +91,12 @@ function getToneStyles(tone: Tone) {
 function sizeCfg(size: Size) {
   switch (size) {
     case "sm":
-      return {
-        minHeight: 40,
-        px: 14,
-        fontSize: 13,
-        slot: 24,
-      };
-
+      return { minHeight: 40, px: 14, fontSize: 13, slot: 24 };
     case "lg":
-      return {
-        minHeight: 54,
-        px: 18,
-        fontSize: 17,
-        slot: 30,
-      };
-
+      return { minHeight: 54, px: 18, fontSize: 17, slot: 30 };
     case "md":
     default:
-      return {
-        minHeight: 48,
-        px: 16,
-        fontSize: 15,
-        slot: 28,
-      };
+      return { minHeight: 48, px: 16, fontSize: 15, slot: 28 };
   }
 }
 
@@ -139,7 +121,7 @@ export default function Button({
 
   const glowStyle =
     glow && tone === "primary"
-      ? theme.shadow.greenGlow
+      ? theme.shadow.emeraldGlow
       : glow && tone === "gold"
         ? theme.shadow.goldGlow
         : null;
@@ -191,15 +173,9 @@ export default function Button({
         <ActivityIndicator color={cfg.spinner} />
       ) : (
         <View style={styles.row}>
-          <View style={[styles.slot, { width: s.slot }]}>
-            {leftSlot ?? null}
-          </View>
-
+          <View style={[styles.slot, { width: s.slot }]}>{leftSlot ?? null}</View>
           <View style={styles.center}>{content}</View>
-
-          <View style={[styles.slot, { width: s.slot }]}>
-            {rightSlot ?? null}
-          </View>
+          <View style={[styles.slot, { width: s.slot }]}>{rightSlot ?? null}</View>
         </View>
       )}
     </Pressable>
@@ -214,11 +190,11 @@ const styles = StyleSheet.create({
   },
 
   primarySurface: {
-    backgroundColor: theme.colors.accentGreen,
+    backgroundColor: theme.colors.emerald,
   },
 
   goldSurface: {
-    backgroundColor: theme.colors.accentGold,
+    backgroundColor: theme.colors.gold,
   },
 
   secondarySurface: {
