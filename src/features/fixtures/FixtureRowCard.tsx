@@ -29,6 +29,10 @@ function getLocationLine(item: RankedFixtureRow) {
   return [city, venue].filter(Boolean).join(" • ");
 }
 
+function getCountry(item: RankedFixtureRow) {
+  return clean((item?.league as any)?.country);
+}
+
 function Row({
   item,
   isFollowed,
@@ -41,9 +45,10 @@ function Row({
   const home = clean(item?.teams?.home?.name) || "Home";
   const away = clean(item?.teams?.away?.name) || "Away";
 
-  const leagueName = clean(item?.league?.name);
+  const leagueName = clean(item?.league?.name) || "Competition";
   const leagueLogo = (item?.league as any)?.logo;
   const countryCode = (item?.league as any)?.countryCode;
+  const country = getCountry(item);
 
   const kickoff = kickoffPresentation(item, new Set());
   const locationLine = getLocationLine(item);
@@ -57,20 +62,29 @@ function Row({
     <View style={styles.wrap}>
       <GlassCard variant="glass" level="default" style={styles.card} padding={14}>
         <View style={styles.topGlow} pointerEvents="none" />
+        <View style={styles.goldGlint} pointerEvents="none" />
         <View style={styles.sideGlow} pointerEvents="none" />
 
-        <View style={styles.topRow}>
-          <View style={styles.leagueRow}>
-            {leagueLogo ? <Image source={{ uri: leagueLogo }} style={styles.leagueLogo} /> : null}
-            {countryCode ? <LeagueFlag code={countryCode} size="sm" /> : null}
-            <Text style={styles.leagueText} numberOfLines={1}>
-              {leagueName || "Competition"}
-            </Text>
+        <View style={styles.identityRow}>
+          <View style={styles.competitionWrap}>
+            <View style={styles.logoStack}>
+              {leagueLogo ? <Image source={{ uri: leagueLogo }} style={styles.leagueLogo} /> : null}
+              {countryCode ? <LeagueFlag code={countryCode} size="sm" /> : null}
+            </View>
+
+            <View style={styles.competitionTextWrap}>
+              <Text style={styles.leagueText} numberOfLines={1}>
+                {leagueName}
+              </Text>
+              <Text style={styles.countryText} numberOfLines={1}>
+                {country || "Football trip"}
+              </Text>
+            </View>
           </View>
 
-          <View style={styles.timeChip}>
+          <View style={styles.timeBadge}>
             <Ionicons name="time-outline" size={13} color={theme.colors.emeraldSoft} />
-            <Text style={styles.timeChipText} numberOfLines={1}>
+            <Text style={styles.timeBadgeText} numberOfLines={1}>
               {kickoff.time}
             </Text>
           </View>
@@ -93,7 +107,6 @@ function Row({
 
             <View style={styles.kickoffBox}>
               <Text style={styles.kickoffTime}>{kickoff.time}</Text>
-              <Text style={styles.kickoffLabel}>local</Text>
             </View>
 
             <View style={styles.vsPill}>
@@ -120,39 +133,42 @@ function Row({
           </View>
         ) : null}
 
-        <View style={styles.actionsRow}>
+        <View style={styles.primaryActionRow}>
           <Button
-            label="Match"
-            onPress={() => onPressMatch(fixtureId, routeCtx)}
+            label="Start trip"
+            onPress={() => onPressBuildTrip(fixtureId, routeCtx)}
             tone="primary"
             size="sm"
-            style={styles.actionButton}
+            glow
+            style={styles.startTripButton}
           />
+        </View>
 
+        <View style={styles.secondaryActionRow}>
           <Button
-            label="Trip"
-            onPress={() => onPressBuildTrip(fixtureId, routeCtx)}
+            label="Details"
+            onPress={() => onPressMatch(fixtureId, routeCtx)}
             tone="secondary"
             size="sm"
-            style={styles.actionButton}
+            style={styles.secondaryButton}
           />
 
           <Pressable
             onPress={onToggleFollow}
             style={({ pressed }) => [
-              styles.followPill,
-              isFollowed && styles.followPillActive,
+              styles.alertsButton,
+              isFollowed && styles.alertsButtonActive,
               pressed && styles.pressed,
             ]}
             hitSlop={8}
           >
             <Ionicons
               name={isFollowed ? "notifications" : "notifications-outline"}
-              size={14}
+              size={15}
               color={isFollowed ? theme.badge.textEmerald : theme.colors.textSecondary}
             />
-            <Text style={[styles.followText, isFollowed && styles.followTextActive]}>
-              Follow
+            <Text style={[styles.alertsText, isFollowed && styles.alertsTextActive]}>
+              {isFollowed ? "Alerts on" : "Alerts"}
             </Text>
           </Pressable>
         </View>
@@ -166,71 +182,101 @@ export default memo(Row);
 const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: theme.spacing.lg,
-    marginBottom: 12,
+    marginBottom: 14,
   },
 
   card: {
     position: "relative",
     overflow: "hidden",
-    borderRadius: 24,
+    borderRadius: 26,
     gap: 14,
     borderColor: theme.colors.borderSubtle,
-    backgroundColor: Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.android.default : theme.glass.bg.default,
   },
 
   topGlow: {
     position: "absolute",
-    left: -24,
-    right: -24,
-    top: -82,
-    height: 116,
+    left: -40,
+    right: -40,
+    top: -92,
+    height: 132,
     borderRadius: theme.borderRadius.pill,
-    backgroundColor: "rgba(255,255,255,0.028)",
+    backgroundColor: "rgba(255,255,255,0.035)",
+  },
+
+  goldGlint: {
+    position: "absolute",
+    left: 24,
+    top: 0,
+    width: 90,
+    height: 1,
+    backgroundColor: theme.colors.glowGold,
   },
 
   sideGlow: {
     position: "absolute",
-    right: -38,
-    top: 34,
+    right: -50,
+    top: 42,
     bottom: 34,
-    width: 84,
+    width: 104,
     borderRadius: theme.borderRadius.pill,
     backgroundColor: theme.colors.glowEmerald,
-    opacity: 0.35,
+    opacity: 0.38,
   },
 
-  topRow: {
+  identityRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
 
-  leagueRow: {
+  competitionWrap: {
     flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    minWidth: 0,
+    gap: 9,
+  },
+
+  logoStack: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
 
   leagueLogo: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     resizeMode: "contain",
   },
 
+  competitionTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+
   leagueText: {
-    flexShrink: 1,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
-    lineHeight: 14,
+    color: theme.colors.textPrimary,
+    fontSize: 12,
+    lineHeight: 15,
     fontWeight: theme.fontWeight.black,
   },
 
-  timeChip: {
-    minHeight: 30,
-    paddingHorizontal: 9,
+  countryText: {
+    color: theme.colors.textMuted,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: theme.fontWeight.bold,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  },
+
+  timeBadge: {
+    minHeight: 31,
+    paddingHorizontal: 10,
     borderRadius: theme.borderRadius.pill,
     flexDirection: "row",
     alignItems: "center",
@@ -240,9 +286,9 @@ const styles = StyleSheet.create({
     borderColor: theme.badge.borderEmerald,
   },
 
-  timeChipText: {
+  timeBadgeText: {
     color: theme.badge.textEmerald,
-    fontSize: theme.fontSize.tiny,
+    fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
 
@@ -255,17 +301,18 @@ const styles = StyleSheet.create({
   teamCol: {
     flex: 1,
     alignItems: "center",
-    gap: 7,
+    gap: 8,
     minWidth: 0,
   },
 
   crestShell: {
-    width: 58,
-    height: 58,
-    borderRadius: 19,
+    width: 62,
+    height: 62,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.24)" : "rgba(255,255,255,0.04)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.045)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
   },
@@ -279,7 +326,7 @@ const styles = StyleSheet.create({
   },
 
   centerCol: {
-    width: 96,
+    width: 94,
     alignItems: "center",
     gap: 7,
   },
@@ -294,37 +341,29 @@ const styles = StyleSheet.create({
   },
 
   kickoffBox: {
-    minWidth: 74,
-    paddingVertical: 7,
-    paddingHorizontal: 9,
-    borderRadius: 16,
+    minWidth: 78,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Platform.OS === "android" ? "rgba(0,0,0,0.24)" : "rgba(255,255,255,0.045)",
+    backgroundColor:
+      Platform.OS === "android" ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.05)",
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
   },
 
   kickoffTime: {
     color: theme.colors.textPrimary,
-    fontSize: 16,
-    lineHeight: 19,
+    fontSize: 18,
+    lineHeight: 21,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.1,
   },
 
-  kickoffLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 9,
-    lineHeight: 12,
-    fontWeight: theme.fontWeight.black,
-    textTransform: "uppercase",
-    letterSpacing: 0.35,
-  },
-
   vsPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: theme.borderRadius.pill,
     backgroundColor: theme.badge.bgNeutral,
     borderWidth: 1,
@@ -340,14 +379,15 @@ const styles = StyleSheet.create({
   },
 
   locationRow: {
-    minHeight: 28,
+    minHeight: 30,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingVertical: 7,
+    borderRadius: 15,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
   },
@@ -360,42 +400,51 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.bold,
   },
 
-  actionsRow: {
+  primaryActionRow: {
+    flexDirection: "row",
+  },
+
+  startTripButton: {
+    flex: 1,
+  },
+
+  secondaryActionRow: {
     flexDirection: "row",
     alignItems: "stretch",
     gap: 8,
   },
 
-  actionButton: {
+  secondaryButton: {
     flex: 1,
-    minWidth: 0,
   },
 
-  followPill: {
+  alertsButton: {
+    flex: 1,
     minHeight: 40,
     paddingHorizontal: 10,
     borderRadius: theme.borderRadius.button,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 5,
-    backgroundColor: Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
+    gap: 6,
+    backgroundColor:
+      Platform.OS === "android" ? theme.glass.android.subtle : theme.glass.bg.subtle,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
   },
 
-  followPillActive: {
+  alertsButtonActive: {
     backgroundColor: theme.badge.bgEmerald,
     borderColor: theme.badge.borderEmerald,
   },
 
-  followText: {
+  alertsText: {
     color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.tiny,
+    fontSize: 12,
     fontWeight: theme.fontWeight.black,
   },
 
-  followTextActive: {
+  alertsTextActive: {
     color: theme.badge.textEmerald,
   },
 
