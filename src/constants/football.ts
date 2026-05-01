@@ -1,66 +1,31 @@
+// src/constants/football.ts
+
 export type LeagueBrowseRegion = "featured-europe" | "central-eastern-europe" | "nordics";
 
 export type LeagueOption = {
-  /**
-   * Stable internal slug for routing / config lookups.
-   */
   slug: string;
-
-  /**
-   * Short UI label.
-   */
   label: string;
-
-  /**
-   * API-Football league id.
-   */
   leagueId: number;
-
-  /**
-   * API-Football league logo.
-   */
   logo: string;
-
-  /**
-   * API-Football season.
-   */
   season: number;
-
-  /**
-   * Display country name.
-   */
   country: string;
-
-  /**
-   * Flag code for UI.
-   * - ISO-3166-1 alpha-2 for sovereign countries (e.g. "ES", "DE")
-   * - Special regional codes supported by our flag helpers (e.g. "ENG", "SCO")
-   */
   countryCode: string;
-
-  /**
-   * Region used by country → league browse UI.
-   * Big-5 leagues are featured separately, so this can be null for them.
-   */
   browseRegion: LeagueBrowseRegion | null;
-
-  /**
-   * Whether this league should appear in the featured leagues row.
-   */
   featured: boolean;
-
-  /**
-   * Whether this league should be surfaced on Home.
-   */
   homeVisible: boolean;
+  featuredClubKeys: string[];
 
   /**
-   * Canonical team keys for country cards / featured context.
+   * Lower number = higher display priority.
+   * Used for dropdown ordering, browse ordering and fixture filter ordering.
    */
-  featuredClubKeys: string[];
+  displayPriority?: number;
 };
 
-type CountryLeagueSeed = Omit<LeagueOption, "country" | "countryCode" | "browseRegion">;
+type CountryLeagueSeed = Omit<
+  LeagueOption,
+  "country" | "countryCode" | "browseRegion" | "displayPriority"
+>;
 
 export type CountryFootballConfig = {
   country: string;
@@ -73,62 +38,31 @@ function leagueLogo(leagueId: number): string {
   return `https://media.api-sports.io/football/leagues/${leagueId}.png`;
 }
 
-/**
- * Region labels for UI.
- */
 export const LEAGUE_BROWSE_REGION_LABELS: Record<LeagueBrowseRegion, string> = {
   "featured-europe": "Featured Europe",
   "central-eastern-europe": "Central & Eastern Europe",
   nordics: "Nordics",
 };
 
-/**
- * Stable region ordering for browse UI.
- */
 export const LEAGUE_BROWSE_REGION_ORDER: LeagueBrowseRegion[] = [
   "featured-europe",
   "central-eastern-europe",
   "nordics",
 ];
 
-/**
- * European football seasons generally start in July/August.
- * API-Football uses the season "start year" (e.g. 2025 means 2025/26).
- */
 export function currentFootballSeasonStartYear(now = new Date()): number {
   const y = now.getFullYear();
-  const m = now.getMonth(); // 0=Jan
-  return m >= 6 ? y : y - 1; // July onward = new season start year
+  const m = now.getMonth();
+  return m >= 6 ? y : y - 1;
 }
 
-/**
- * Calendar-year leagues (e.g. Iceland / Norway / Sweden / Finland / Ireland)
- * use the current year as the season.
- */
 export function currentCalendarYear(now = new Date()): number {
   return now.getFullYear();
 }
 
-/**
- * Most leagues in the app use the European season-start convention.
- */
 export const DEFAULT_SEASON = currentFootballSeasonStartYear();
-
-/**
- * Nordic / calendar-year competitions use the current year.
- */
 export const DEFAULT_CALENDAR_YEAR_SEASON = currentCalendarYear();
 
-/**
- * Primary source of truth.
- *
- * Architecture locked:
- * Europe
- *   -> Country
- *     -> League
- *
- * LEAGUES is derived from this grouped structure.
- */
 export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
   europe: {
     country: "Europe",
@@ -709,17 +643,78 @@ export const FOOTBALL_BY_COUNTRY: Record<string, CountryFootballConfig> = {
   },
 };
 
-/**
- * Derived flat helpers.
- * Keep these exports because the rest of the app already consumes them.
- */
-export const LEAGUES: LeagueOption[] = Object.values(FOOTBALL_BY_COUNTRY).flatMap((countryConfig) =>
-  countryConfig.leagues.map((league) => ({
-    ...league,
-    country: countryConfig.country,
-    countryCode: countryConfig.countryCode,
-    browseRegion: countryConfig.browseRegion,
-  }))
+const LEAGUE_DISPLAY_PRIORITY: Record<number, number> = {
+  2: 1,
+  3: 2,
+  848: 3,
+
+  39: 4,
+  140: 5,
+  135: 6,
+  78: 7,
+  61: 8,
+  88: 9,
+  94: 10,
+  179: 11,
+  203: 12,
+
+  144: 20,
+  218: 21,
+  207: 22,
+  197: 23,
+  119: 24,
+  357: 25,
+
+  106: 30,
+  345: 31,
+  210: 32,
+  286: 33,
+  271: 34,
+  283: 35,
+  332: 36,
+  373: 37,
+  172: 38,
+  318: 39,
+  315: 40,
+
+  113: 50,
+  103: 51,
+  244: 52,
+  164: 53,
+};
+
+export function getLeagueDisplayPriority(
+  league: Pick<LeagueOption, "leagueId" | "label">
+): number {
+  return LEAGUE_DISPLAY_PRIORITY[league.leagueId] ?? 999;
+}
+
+export function sortLeaguesByDisplayPriority<
+  T extends Pick<LeagueOption, "leagueId" | "label" | "country">
+>(leagues: T[]): T[] {
+  return [...leagues].sort((a, b) => {
+    const pa = getLeagueDisplayPriority(a as LeagueOption);
+    const pb = getLeagueDisplayPriority(b as LeagueOption);
+
+    if (pa !== pb) return pa - pb;
+
+    return (
+      String(a.country ?? "").localeCompare(String(b.country ?? "")) ||
+      String(a.label ?? "").localeCompare(String(b.label ?? ""))
+    );
+  });
+}
+
+export const LEAGUES: LeagueOption[] = sortLeaguesByDisplayPriority(
+  Object.values(FOOTBALL_BY_COUNTRY).flatMap((countryConfig) =>
+    countryConfig.leagues.map((league) => ({
+      ...league,
+      country: countryConfig.country,
+      countryCode: countryConfig.countryCode,
+      browseRegion: countryConfig.browseRegion,
+      displayPriority: LEAGUE_DISPLAY_PRIORITY[league.leagueId] ?? 999,
+    }))
+  )
 );
 
 export const FEATURED_LEAGUES = LEAGUES.filter((l) => l.featured);
@@ -736,7 +731,7 @@ export function getLeagueBySlug(slug: string): LeagueOption | null {
 }
 
 export function getLeaguesForBrowseRegion(region: LeagueBrowseRegion): LeagueOption[] {
-  return LEAGUES.filter((l) => l.browseRegion === region);
+  return sortLeaguesByDisplayPriority(LEAGUES.filter((l) => l.browseRegion === region));
 }
 
 export function getCountryFootballConfig(countryKey: string): CountryFootballConfig | null {
@@ -744,15 +739,6 @@ export function getCountryFootballConfig(countryKey: string): CountryFootballCon
   return FOOTBALL_BY_COUNTRY[key] ?? null;
 }
 
-// --------------------
-// League slot rules (kickoff-likely heuristics)
-// --------------------
-
-/**
- * Used when a fixture kickoff is not confirmed yet.
- * This is intentionally display-first (strings) so UI can show "Likely Tue 20:00"
- * without timezone complexity.
- */
 export type LeagueSlotRule = {
   leagueId: number;
   primarySlot: string;
@@ -778,17 +764,46 @@ export const LEAGUE_SLOT_RULES: LeagueSlotRule[] = [
   {
     leagueId: 39,
     primarySlot: "Sat 15:00",
-    typicalSlots: ["Fri 20:00", "Sat 12:30", "Sat 15:00", "Sat 17:30", "Sun 14:00", "Sun 16:30", "Mon 20:00"],
+    typicalSlots: [
+      "Fri 20:00",
+      "Sat 12:30",
+      "Sat 15:00",
+      "Sat 17:30",
+      "Sun 14:00",
+      "Sun 16:30",
+      "Mon 20:00",
+    ],
   },
   {
     leagueId: 140,
     primarySlot: "Sat 18:30",
-    typicalSlots: ["Fri 21:00", "Sat 14:00", "Sat 16:15", "Sat 18:30", "Sat 21:00", "Sun 14:00", "Sun 16:15", "Sun 18:30", "Sun 21:00", "Mon 21:00"],
+    typicalSlots: [
+      "Fri 21:00",
+      "Sat 14:00",
+      "Sat 16:15",
+      "Sat 18:30",
+      "Sat 21:00",
+      "Sun 14:00",
+      "Sun 16:15",
+      "Sun 18:30",
+      "Sun 21:00",
+      "Mon 21:00",
+    ],
   },
   {
     leagueId: 135,
     primarySlot: "Sun 20:45",
-    typicalSlots: ["Fri 20:45", "Sat 15:00", "Sat 18:00", "Sat 20:45", "Sun 12:30", "Sun 15:00", "Sun 18:00", "Sun 20:45", "Mon 20:45"],
+    typicalSlots: [
+      "Fri 20:45",
+      "Sat 15:00",
+      "Sat 18:00",
+      "Sat 20:45",
+      "Sun 12:30",
+      "Sun 15:00",
+      "Sun 18:00",
+      "Sun 20:45",
+      "Mon 20:45",
+    ],
   },
   {
     leagueId: 78,
@@ -931,18 +946,6 @@ export function getLeagueSlotRule(leagueId: number): LeagueSlotRule | null {
   return LEAGUE_SLOT_RULES.find((r) => r.leagueId === leagueId) ?? null;
 }
 
-// --------------------
-// Date helpers
-// --------------------
-
-/**
- * CONTRACT (locked):
- * - from/to are ISO date-only "YYYY-MM-DD"
- * - from is clamped to TOMORROW (never includes today/past)
- * - to is INCLUSIVE
- * - days means "number of included days" (days=1 => from==to)
- */
-
 export function toIsoDate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -950,9 +953,6 @@ export function toIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/**
- * Parse "YYYY-MM-DD" as a local-midnight Date.
- */
 export function parseIsoDateOnly(iso: string): Date | null {
   if (!iso) return null;
   const d = new Date(`${iso}T00:00:00`);
@@ -968,9 +968,6 @@ export function addDaysIso(baseIso: string, days: number): string {
 
 export type RollingWindowIso = { from: string; to: string };
 
-/**
- * Local "tomorrow" at 00:00:00.
- */
 export function tomorrowLocal(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -982,9 +979,6 @@ export function tomorrowIso(): string {
   return toIsoDate(tomorrowLocal());
 }
 
-/**
- * Enforce "tomorrow onwards" (excludes past + today).
- */
 export function clampFromIsoToTomorrow(fromIso: string): string {
   const tmr = tomorrowIso();
   const fromDate = parseIsoDateOnly(fromIso);
@@ -997,9 +991,6 @@ function isIsoDateOnly(s?: string): boolean {
   return !!s && /^\d{4}-\d{2}-\d{2}$/.test(String(s).trim());
 }
 
-/**
- * Normalise a window so it is always valid and never includes past/today.
- */
 export function normalizeWindowIso(
   input: { from: string; to: string },
   daysIfInvalidTo = 90
@@ -1028,10 +1019,6 @@ export function normalizeWindowIso(
   return { from, to: toRaw };
 }
 
-/**
- * Central fixture date window (rolling).
- * Defaults to TOMORROW onwards.
- */
 export function getRollingWindowIso(opts?: { days?: number; start?: Date }): RollingWindowIso {
   const days = Math.max(1, Number(opts?.days ?? 90) || 90);
   const start = opts?.start ?? tomorrowLocal();
@@ -1042,9 +1029,6 @@ export function getRollingWindowIso(opts?: { days?: number; start?: Date }): Rol
   return normalizeWindowIso({ from, to }, days);
 }
 
-/**
- * Helper: window starting tomorrow for N inclusive days.
- */
 export function windowFromTomorrowIso(days: number): RollingWindowIso {
   const safeDays = Math.max(1, Number(days) || 1);
   const from = tomorrowIso();
@@ -1052,12 +1036,9 @@ export function windowFromTomorrowIso(days: number): RollingWindowIso {
   return normalizeWindowIso({ from, to }, safeDays);
 }
 
-/**
- * Helper: next weekend (Sat–Sun) from tomorrow onwards.
- */
 export function nextWeekendWindowIso(): RollingWindowIso {
   const d = tomorrowLocal();
-  const day = d.getDay(); // 0 Sun ... 6 Sat
+  const day = d.getDay();
   const daysUntilSat = (6 - day + 7) % 7;
 
   const sat = new Date(d);
@@ -1072,4 +1053,4 @@ export function nextWeekendWindowIso(): RollingWindowIso {
   const to = toIsoDate(sun);
 
   return normalizeWindowIso({ from, to }, 2);
-          }
+}
