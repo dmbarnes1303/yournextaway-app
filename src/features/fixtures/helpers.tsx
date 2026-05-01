@@ -1,9 +1,9 @@
+// src/features/fixtures/helpers.ts
 import React from "react";
 import { View, Text, StyleSheet, Image } from "react-native";
 
 import { theme } from "@/src/constants/theme";
 import { getFlagImageUrl } from "@/src/utils/flagImages";
-import { formatUkDateTimeMaybe } from "@/src/utils/formatters";
 import type { FixtureListRow } from "@/src/services/apiFootball";
 import tripsStore from "@/src/state/trips";
 import { getFixtureCertainty } from "@/src/utils/fixtureCertainty";
@@ -25,25 +25,69 @@ const EUROPEAN_COMPETITION_META: Record<
   2: {
     short: "UCL",
     display: "Champions League",
-    confirmedSecondary: "European night",
-    tbcSecondary: "European night • kickoff time not confirmed",
-    likelySecondary: "European night • likely placeholder kickoff",
+    confirmedSecondary: "Local kickoff",
+    tbcSecondary: "Kickoff time not confirmed",
+    likelySecondary: "Likely placeholder kickoff",
   },
   3: {
     short: "UEL",
     display: "Europa League",
-    confirmedSecondary: "European night",
-    tbcSecondary: "European night • kickoff time not confirmed",
-    likelySecondary: "European night • likely placeholder kickoff",
+    confirmedSecondary: "Local kickoff",
+    tbcSecondary: "Kickoff time not confirmed",
+    likelySecondary: "Likely placeholder kickoff",
   },
   848: {
     short: "UECL",
     display: "Conference League",
-    confirmedSecondary: "European night",
-    tbcSecondary: "European night • kickoff time not confirmed",
-    likelySecondary: "European night • likely placeholder kickoff",
+    confirmedSecondary: "Local kickoff",
+    tbcSecondary: "Kickoff time not confirmed",
+    likelySecondary: "Likely placeholder kickoff",
   },
 };
+
+function ordinal(day: number): string {
+  const suffix =
+    day % 10 === 1 && day !== 11
+      ? "st"
+      : day % 10 === 2 && day !== 12
+        ? "nd"
+        : day % 10 === 3 && day !== 13
+          ? "rd"
+          : "th";
+
+  return `${day}${suffix}`;
+}
+
+function parseFixtureDate(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+function formatShortFixtureDate(iso: string | null | undefined): string {
+  const dt = parseFixtureDate(iso);
+  if (!dt) return "Date TBC";
+
+  return dt.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+function formatFixtureLocalTime(iso: string | null | undefined): string {
+  const dt = parseFixtureDate(iso);
+  if (!dt) return "TBC";
+
+  return dt.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  });
+}
 
 export function isEuropeanCompetitionLeagueId(leagueId?: number | null) {
   if (leagueId == null) return false;
@@ -86,10 +130,8 @@ export function ticketDifficultyShortLabel(d: TicketDifficulty | "unknown") {
 }
 
 export function formatFixtureDateDisplay(iso: string | null | undefined) {
-  if (!iso) return "TBC";
-
-  const dt = new Date(iso);
-  if (Number.isNaN(dt.getTime())) return "TBC";
+  const dt = parseFixtureDate(iso);
+  if (!dt) return "TBC";
 
   const day = dt.getUTCDate();
   const month = dt.toLocaleDateString("en-GB", {
@@ -98,16 +140,7 @@ export function formatFixtureDateDisplay(iso: string | null | undefined) {
   });
   const year = dt.getUTCFullYear();
 
-  const suffix =
-    day % 10 === 1 && day !== 11
-      ? "st"
-      : day % 10 === 2 && day !== 12
-        ? "nd"
-        : day % 10 === 3 && day !== 13
-          ? "rd"
-          : "th";
-
-  return `${day}${suffix} ${month} ${year}`;
+  return `${ordinal(day)} ${month} ${year}`;
 }
 
 export function formatFixtureDateRangeDisplay(
@@ -117,33 +150,13 @@ export function formatFixtureDateRangeDisplay(
   if (!fromIso && !toIso) return "Select dates";
   if (!fromIso || !toIso) return formatFixtureDateDisplay(fromIso || toIso);
 
-  const from = new Date(fromIso);
-  const to = new Date(toIso);
+  const from = parseFixtureDate(fromIso);
+  const to = parseFixtureDate(toIso);
 
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
-    return "Select dates";
-  }
+  if (!from || !to) return "Select dates";
 
   const fromDay = from.getUTCDate();
   const toDay = to.getUTCDate();
-
-  const fromSuffix =
-    fromDay % 10 === 1 && fromDay !== 11
-      ? "st"
-      : fromDay % 10 === 2 && fromDay !== 12
-        ? "nd"
-        : fromDay % 10 === 3 && fromDay !== 13
-          ? "rd"
-          : "th";
-
-  const toSuffix =
-    toDay % 10 === 1 && toDay !== 11
-      ? "st"
-      : toDay % 10 === 2 && toDay !== 12
-        ? "nd"
-        : toDay % 10 === 3 && toDay !== 13
-          ? "rd"
-          : "th";
 
   const fromMonth = from.toLocaleDateString("en-GB", {
     month: "long",
@@ -158,18 +171,18 @@ export function formatFixtureDateRangeDisplay(
   const toYear = to.getUTCFullYear();
 
   if (fromIso === toIso) {
-    return `${fromDay}${fromSuffix} ${fromMonth} ${fromYear}`;
+    return `${ordinal(fromDay)} ${fromMonth} ${fromYear}`;
   }
 
   if (fromMonth === toMonth && fromYear === toYear) {
-    return `${fromDay}${fromSuffix} - ${toDay}${toSuffix} ${toMonth} ${toYear}`;
+    return `${ordinal(fromDay)} - ${ordinal(toDay)} ${toMonth} ${toYear}`;
   }
 
   if (fromYear === toYear) {
-    return `${fromDay}${fromSuffix} ${fromMonth} - ${toDay}${toSuffix} ${toMonth} ${toYear}`;
+    return `${ordinal(fromDay)} ${fromMonth} - ${ordinal(toDay)} ${toMonth} ${toYear}`;
   }
 
-  return `${fromDay}${fromSuffix} ${fromMonth} ${fromYear} - ${toDay}${toSuffix} ${toMonth} ${toYear}`;
+  return `${ordinal(fromDay)} ${fromMonth} ${fromYear} - ${ordinal(toDay)} ${toMonth} ${toYear}`;
 }
 
 export function norm(s: unknown) {
@@ -192,16 +205,21 @@ export function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<stri
   if (!iso) {
     return {
       primary: "TBC",
-      secondary: europeanMeta?.tbcSecondary ?? "Kickoff time not set yet",
+      date: "Date TBC",
+      time: "TBC",
+      secondary: europeanMeta?.tbcSecondary ?? "Kickoff time not confirmed",
       certainty,
     };
   }
 
-  const formatted = formatUkDateTimeMaybe(iso) || "TBC";
+  const date = formatShortFixtureDate(iso);
+  const time = formatFixtureLocalTime(iso);
 
   if (certainty === "likely_tbc") {
     return {
-      primary: formatted,
+      primary: `${date}\n${time}`,
+      date,
+      time,
       secondary: europeanMeta?.likelySecondary ?? "Likely placeholder kickoff",
       certainty,
     };
@@ -209,15 +227,19 @@ export function kickoffPresentation(r: FixtureListRow, placeholderIds?: Set<stri
 
   if (certainty === "tbc") {
     return {
-      primary: formatted,
+      primary: `${date}\n${time}`,
+      date,
+      time,
       secondary: europeanMeta?.tbcSecondary ?? "Kickoff time not confirmed",
       certainty,
     };
   }
 
   return {
-    primary: formatted,
-    secondary: europeanMeta?.confirmedSecondary ?? null,
+    primary: `${date}\n${time}`,
+    date,
+    time,
+    secondary: europeanMeta?.confirmedSecondary ?? "Local kickoff",
     certainty,
   };
 }
@@ -274,7 +296,11 @@ export function LeagueLogo({
   if (!logo) return null;
 
   const style =
-    size === "lg" ? styles.leagueLogoLg : size === "sm" ? styles.leagueLogoSm : styles.leagueLogoMd;
+    size === "lg"
+      ? styles.leagueLogoLg
+      : size === "sm"
+        ? styles.leagueLogoSm
+        : styles.leagueLogoMd;
 
   return <Image source={{ uri: logo }} style={style} resizeMode="contain" />;
 }
@@ -335,7 +361,7 @@ export function featuredClubLine(league: LeagueOption): string {
 }
 
 export function leagueScopeSubtitle(selectedLeagues: LeagueOption[]) {
-  if (selectedLeagues.length === 0) return "Featured leagues";
+  if (selectedLeagues.length === 0) return "All competitions";
 
   if (selectedLeagues.length === 1) {
     const one = selectedLeagues[0];
@@ -349,14 +375,14 @@ export function leagueScopeSubtitle(selectedLeagues: LeagueOption[]) {
   ).length;
 
   if (europeanCount === selectedLeagues.length) {
-    return `${selectedLeagues.length} European competitions selected`;
+    return `${selectedLeagues.length} European competitions`;
   }
 
   if (europeanCount > 0) {
-    return `${selectedLeagues.length} leagues selected • incl. Europe`;
+    return `${selectedLeagues.length} competitions selected`;
   }
 
-  return `${selectedLeagues.length} leagues selected`;
+  return `${selectedLeagues.length} competitions selected`;
 }
 
 const styles = StyleSheet.create({
@@ -396,7 +422,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: theme.glass.bg.default,
     borderWidth: 1,
     borderColor: theme.colors.borderSubtle,
     alignItems: "center",
