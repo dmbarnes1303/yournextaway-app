@@ -1,5 +1,5 @@
 // src/features/fixtures/FixtureRowCard.tsx
-import React, { memo, useMemo } from "react";
+import React, { memo } from "react";
 import {
   View,
   Text,
@@ -28,245 +28,14 @@ type Props = {
   onPressBuildTrip: (id: string, ctx?: FixtureRouteCtx) => void;
 };
 
-type InsightTone = "gold" | "emerald" | "neutral";
-
-type MatchInsight = {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  tone: InsightTone;
-};
-
 function clean(v: unknown) {
   return String(v ?? "").trim();
-}
-
-function norm(v: unknown) {
-  return clean(v).toLowerCase();
-}
-
-function includesAny(value: string, terms: readonly string[]) {
-  return terms.some((term) => value.includes(term));
 }
 
 function getLocationLine(item: RankedFixtureRow) {
   const city = clean(item?.fixture?.venue?.city);
   const venue = clean(item?.fixture?.venue?.name);
   return [city, venue].filter(Boolean).join(" • ");
-}
-
-function getTripContext(item: RankedFixtureRow) {
-  const city = clean(item?.fixture?.venue?.city);
-  const country = clean((item?.league as any)?.country);
-
-  if (city && country) return `${city} football break`;
-  if (city) return `${city} match trip`;
-  if (country) return `${country} football trip`;
-  return "Football trip";
-}
-
-function isWeekendFixture(item: RankedFixtureRow) {
-  const iso = clean(item?.fixture?.date);
-  if (!iso) return false;
-
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return false;
-
-  const day = date.getDay();
-  return day === 5 || day === 6 || day === 0;
-}
-
-function isEveningFixture(item: RankedFixtureRow) {
-  const iso = clean(item?.fixture?.date);
-  if (!iso) return false;
-
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return false;
-
-  return date.getHours() >= 17;
-}
-
-function hasRivalry(home: string, away: string) {
-  const pairs: Array<readonly [string, string]> = [
-    ["arsenal", "tottenham"],
-    ["barcelona", "real madrid"],
-    ["bayern", "dortmund"],
-    ["celtic", "rangers"],
-    ["everton", "liverpool"],
-    ["inter", "milan"],
-    ["lazio", "roma"],
-    ["manchester city", "manchester united"],
-    ["real madrid", "atletico"],
-    ["roma", "lazio"],
-  ];
-
-  return pairs.some(([a, b]) => {
-    return (home.includes(a) && away.includes(b)) || (home.includes(b) && away.includes(a));
-  });
-}
-
-function buildInsights(item: RankedFixtureRow): MatchInsight[] {
-  const home = norm(item?.teams?.home?.name);
-  const away = norm(item?.teams?.away?.name);
-  const city = norm(item?.fixture?.venue?.city);
-  const venue = norm(item?.fixture?.venue?.name);
-  const leagueId = item?.league?.id != null ? Number(item.league.id) : null;
-
-  const combinedTeams = `${home} ${away}`;
-  const combinedPlace = `${city} ${venue}`;
-
-  const insights: MatchInsight[] = [];
-
-  const marqueeTeams = [
-    "arsenal",
-    "aston villa",
-    "atletico",
-    "atlético",
-    "ajax",
-    "barcelona",
-    "bayern",
-    "benfica",
-    "borussia dortmund",
-    "celtic",
-    "chelsea",
-    "dortmund",
-    "fenerbahce",
-    "fenerbahçe",
-    "galatasaray",
-    "inter",
-    "juventus",
-    "lazio",
-    "liverpool",
-    "manchester city",
-    "manchester united",
-    "milan",
-    "napoli",
-    "porto",
-    "psg",
-    "real madrid",
-    "roma",
-    "rangers",
-    "sporting",
-    "tottenham",
-    "west ham",
-  ];
-
-  const destinationCities = [
-    "amsterdam",
-    "barcelona",
-    "berlin",
-    "bilbao",
-    "dortmund",
-    "florence",
-    "glasgow",
-    "istanbul",
-    "lisbon",
-    "liverpool",
-    "london",
-    "madrid",
-    "manchester",
-    "milan",
-    "munich",
-    "naples",
-    "porto",
-    "prague",
-    "rome",
-    "san sebastian",
-    "seville",
-    "turin",
-    "valencia",
-    "vienna",
-  ];
-
-  const iconicVenues = [
-    "allianz arena",
-    "anfield",
-    "bernabeu",
-    "camp nou",
-    "celtic park",
-    "emirates",
-    "estadio da luz",
-    "ibrox",
-    "johan cruijff arena",
-    "mestalla",
-    "old trafford",
-    "olimpico",
-    "olympico",
-    "san siro",
-    "signal iduna park",
-    "stamford bridge",
-    "tottenham hotspur stadium",
-    "wembley",
-  ];
-
-  if (leagueId === 2 || leagueId === 3 || leagueId === 848) {
-    insights.push({
-      label: "European night",
-      icon: "sparkles-outline",
-      tone: "gold",
-    });
-  }
-
-  if (hasRivalry(home, away)) {
-    insights.push({
-      label: "Rivalry match",
-      icon: "flame-outline",
-      tone: "gold",
-    });
-  }
-
-  const homeIsMarquee = marqueeTeams.some((team) => home.includes(team));
-  const awayIsMarquee = marqueeTeams.some((team) => away.includes(team));
-
-  if (homeIsMarquee && awayIsMarquee) {
-    insights.push({
-      label: "Big-club fixture",
-      icon: "trophy-outline",
-      tone: "gold",
-    });
-  } else if (includesAny(combinedTeams, marqueeTeams)) {
-    insights.push({
-      label: "Major club involved",
-      icon: "football-outline",
-      tone: "emerald",
-    });
-  }
-
-  if (includesAny(city, destinationCities)) {
-    insights.push({
-      label: "Strong city break",
-      icon: "airplane-outline",
-      tone: "emerald",
-    });
-  }
-
-  if (includesAny(combinedPlace, iconicVenues)) {
-    insights.push({
-      label: "Iconic stadium",
-      icon: "business-outline",
-      tone: "gold",
-    });
-  }
-
-  if (isWeekendFixture(item)) {
-    insights.push({
-      label: "Weekend friendly",
-      icon: "calendar-outline",
-      tone: "neutral",
-    });
-  } else if (isEveningFixture(item)) {
-    insights.push({
-      label: "Evening kickoff",
-      icon: "moon-outline",
-      tone: "neutral",
-    });
-  }
-
-  const seen = new Set<string>();
-  return insights.filter((insight) => {
-    if (seen.has(insight.label)) return false;
-    seen.add(insight.label);
-    return true;
-  }).slice(0, 3);
 }
 
 function Row({
@@ -288,8 +57,6 @@ function Row({
 
   const kickoff = kickoffPresentation(item, new Set());
   const locationLine = getLocationLine(item);
-  const tripContext = getTripContext(item);
-  const insights = useMemo(() => buildInsights(item), [item]);
 
   const routeCtx: FixtureRouteCtx = {
     leagueId: item?.league?.id ?? null,
@@ -326,7 +93,7 @@ function Row({
                   {leagueName}
                 </Text>
                 <Text style={styles.countryText} numberOfLines={1}>
-                  {countryName || tripContext}
+                  {countryName || "Football"}
                 </Text>
               </View>
             </View>
@@ -372,55 +139,6 @@ function Row({
               </Text>
             </View>
           </View>
-
-          <View style={styles.tripContextRow}>
-            <Ionicons name="compass-outline" size={14} color={theme.colors.goldSoft} />
-            <Text style={styles.tripContextText} numberOfLines={1}>
-              {tripContext}
-            </Text>
-          </View>
-
-          {insights.length > 0 ? (
-            <View style={styles.insightsRow}>
-              {insights.map((insight) => {
-                const isGold = insight.tone === "gold";
-                const isEmerald = insight.tone === "emerald";
-
-                return (
-                  <View
-                    key={insight.label}
-                    style={[
-                      styles.insightPill,
-                      isGold && styles.insightPillGold,
-                      isEmerald && styles.insightPillEmerald,
-                    ]}
-                  >
-                    <Ionicons
-                      name={insight.icon}
-                      size={12}
-                      color={
-                        isGold
-                          ? theme.badge.textGold
-                          : isEmerald
-                            ? theme.badge.textEmerald
-                            : theme.badge.textNeutral
-                      }
-                    />
-                    <Text
-                      style={[
-                        styles.insightText,
-                        isGold && styles.insightTextGold,
-                        isEmerald && styles.insightTextEmerald,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {insight.label}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          ) : null}
 
           {locationLine ? (
             <View style={styles.locationRow}>
@@ -684,72 +402,6 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.5,
-  },
-
-  tripContextRow: {
-    minHeight: 30,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 15,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: theme.badge.bgGold,
-    borderWidth: 1,
-    borderColor: theme.badge.borderGold,
-  },
-
-  tripContextText: {
-    color: theme.badge.textGold,
-    fontSize: 12,
-    lineHeight: 15,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  insightsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 6,
-  },
-
-  insightPill: {
-    minHeight: 27,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: theme.borderRadius.pill,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: theme.badge.bgNeutral,
-    borderWidth: 1,
-    borderColor: theme.badge.borderNeutral,
-  },
-
-  insightPillGold: {
-    backgroundColor: theme.badge.bgGold,
-    borderColor: theme.badge.borderGold,
-  },
-
-  insightPillEmerald: {
-    backgroundColor: theme.badge.bgEmerald,
-    borderColor: theme.badge.borderEmerald,
-  },
-
-  insightText: {
-    color: theme.badge.textNeutral,
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: theme.fontWeight.black,
-  },
-
-  insightTextGold: {
-    color: theme.badge.textGold,
-  },
-
-  insightTextEmerald: {
-    color: theme.badge.textEmerald,
   },
 
   locationRow: {
