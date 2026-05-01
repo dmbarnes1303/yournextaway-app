@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { View, StyleSheet, FlatList, ActivityIndicator, Text, Platform } from "react-native";
+import { View, StyleSheet, FlatList, ActivityIndicator, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
@@ -8,7 +8,7 @@ import EmptyState from "@/src/components/EmptyState";
 import GlassCard from "@/src/components/GlassCard";
 
 import { theme } from "@/src/constants/theme";
-import { getBackground } from "@/src/constants/backgrounds";
+import { getLeagueBackdropUrl } from "@/src/constants/visualAssets";
 
 import { tomorrowIsoUtc, DAYS_AHEAD, addDaysIsoUtc } from "@/src/features/fixtures/date";
 import { resolveTripForFixture } from "@/src/features/fixtures/helpers";
@@ -31,18 +31,11 @@ function getSingleParam(value: unknown): string {
 
 function getCsvParamSet(value: unknown): Set<string> {
   const raw = Array.isArray(value) ? value.join(",") : cleanString(value);
-  return new Set(
-    raw
-      .split(",")
-      .map((part) => cleanString(part))
-      .filter(Boolean)
-  );
+  return new Set(raw.split(",").map(cleanString).filter(Boolean));
 }
 
 function fixtureDateOnly(iso?: string | null): string {
-  const value = cleanString(iso);
-  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
-  return match?.[1] ?? "";
+  return cleanString(iso).match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? "";
 }
 
 function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string; to?: string } {
@@ -59,10 +52,7 @@ function inferTripWindowFromKickoff(kickoffIso?: string | null): { from?: string
     end.getDate()
   ).padStart(2, "0")}`;
 
-  return {
-    from: dateOnly,
-    to: toIso,
-  };
+  return { from: dateOnly, to: toIso };
 }
 
 function buildCanonicalTripStartParams(args: {
@@ -78,16 +68,8 @@ function buildCanonicalTripStartParams(args: {
 
   return {
     fixtureId: cleanString(args.fixtureId),
-    ...(cleanString(args.from)
-      ? { from: cleanString(args.from) }
-      : fallbackWindow.from
-        ? { from: fallbackWindow.from }
-        : {}),
-    ...(cleanString(args.to)
-      ? { to: cleanString(args.to) }
-      : fallbackWindow.to
-        ? { to: fallbackWindow.to }
-        : {}),
+    ...(cleanString(args.from) ? { from: cleanString(args.from) } : fallbackWindow.from ? { from: fallbackWindow.from } : {}),
+    ...(cleanString(args.to) ? { to: cleanString(args.to) } : fallbackWindow.to ? { to: fallbackWindow.to } : {}),
     ...(cleanString(args.leagueId) ? { leagueId: cleanString(args.leagueId) } : {}),
     ...(cleanString(args.season) ? { season: cleanString(args.season) } : {}),
     ...(cleanString(args.city) ? { city: cleanString(args.city) } : {}),
@@ -99,21 +81,17 @@ function Surface({
   tone = "neutral",
 }: {
   children: React.ReactNode;
-  tone?: "green" | "gold" | "neutral";
+  tone?: "brand" | "gold" | "neutral";
 }) {
   return (
-    <View
-      style={[
-        styles.surface,
-        tone === "green"
-          ? styles.surfaceGreen
-          : tone === "gold"
-            ? styles.surfaceGold
-            : styles.surfaceNeutral,
-      ]}
+    <GlassCard
+      variant={tone === "gold" ? "gold" : tone === "brand" ? "brand" : "glass"}
+      level="default"
+      style={styles.surface}
+      padding={12}
     >
       {children}
-    </View>
+    </GlassCard>
   );
 }
 
@@ -125,26 +103,19 @@ export default function FixturesScreen() {
     effectiveRange,
     isRange,
     stripDays,
-
     selectedDay,
     selectedLeagueIds,
     selectedLeagues,
-    activeRegion,
-    setActiveRegion,
-    leaguesByRegion,
     toggleLeague,
     selectSingleLeague,
     resetToFeatured,
-
     query,
     setQuery,
-
     followedIdSet,
     loading,
     error,
     filtered,
     onToggleFollowFromRow,
-
     calendarOpen,
     openCalendar,
     closeCalendar,
@@ -159,9 +130,7 @@ export default function FixturesScreen() {
     onCalendarTapDay,
     applyCalendar,
     clearCalendarRange,
-
     onTapStripDate,
-
     titleText,
     subtitleText,
     helperLineText,
@@ -178,26 +147,20 @@ export default function FixturesScreen() {
 
   const visibleRows = useMemo(() => {
     if (!comboMode || comboIdSet.size === 0) return filtered;
-
-    return filtered.filter((item) => {
-      const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
-      return comboIdSet.has(fixtureId);
-    });
+    return filtered.filter((item) => comboIdSet.has(String(item?.fixture?.id ?? "")));
   }, [filtered, comboMode, comboIdSet]);
 
+  const selectedLeagueBackdrop = useMemo(() => {
+    if (selectedLeagueIds.length === 1) return getLeagueBackdropUrl(selectedLeagueIds[0]);
+    return getLeagueBackdropUrl(39);
+  }, [selectedLeagueIds]);
+
   const derivedTitleText = comboMode ? comboTitle || "Multi-match trip" : titleText;
-
-  const derivedSubtitleText = comboMode
-    ? "Selected fixtures for a stacked football trip."
-    : subtitleText;
-
+  const derivedSubtitleText = comboMode ? "Selected fixtures for a stacked football trip." : subtitleText;
   const derivedHelperLineText = comboMode
     ? `${visibleRows.length} selected fixture${visibleRows.length === 1 ? "" : "s"} • open one to build the trip around it`
     : helperLineText;
-
-  const derivedHeaderDateLine = comboMode
-    ? `${headerDateLine} • combo view`
-    : headerDateLine;
+  const derivedHeaderDateLine = comboMode ? `${headerDateLine} • combo view` : headerDateLine;
 
   const goMatch = useCallback(
     (id: string, ctx?: { leagueId?: number | null; season?: number | null }) => {
@@ -219,40 +182,34 @@ export default function FixturesScreen() {
   );
 
   const goTripOrBuild = useCallback(
-    (fixtureId: string, ctx?: { leagueId?: number | null; season?: number | null; city?: string | null; kickoffIso?: string | null }) => {
+    (
+      fixtureId: string,
+      ctx?: { leagueId?: number | null; season?: number | null; city?: string | null; kickoffIso?: string | null }
+    ) => {
       const fid = cleanString(fixtureId);
       if (!fid) return;
 
       const existingTripId = resolveTripForFixture(fid);
-
       if (existingTripId) {
         router.push({ pathname: "/trip/[id]", params: { id: existingTripId } } as never);
         return;
       }
 
-      const canonicalParams = buildCanonicalTripStartParams({
-        fixtureId: fid,
-        leagueId: ctx?.leagueId ?? null,
-        season: ctx?.season ?? null,
-        city: ctx?.city ?? null,
-        kickoffIso: ctx?.kickoffIso ?? null,
-        from: effectiveRange.from,
-        to: effectiveRange.to,
-      });
-
       router.push({
         pathname: "/trip/build",
-        params: canonicalParams,
+        params: buildCanonicalTripStartParams({
+          fixtureId: fid,
+          leagueId: ctx?.leagueId ?? null,
+          season: ctx?.season ?? null,
+          city: ctx?.city ?? null,
+          kickoffIso: ctx?.kickoffIso ?? null,
+          from: effectiveRange.from,
+          to: effectiveRange.to,
+        }),
       } as never);
     },
     [router, effectiveRange.from, effectiveRange.to]
   );
-
-  const bg = useMemo(() => getBackground("fixtures"), []);
-  const bgProps =
-    typeof bg === "string"
-      ? ({ imageUrl: bg } as const)
-      : ({ imageSource: bg } as const);
 
   const hasRows = visibleRows.length > 0;
   const showInitialLoading = loading && !hasRows;
@@ -260,10 +217,10 @@ export default function FixturesScreen() {
   const showHardError = !!error && !hasRows;
   const showEmpty = !loading && !error && !hasRows;
 
-  const headerComponent = useMemo(() => {
-    return (
+  const headerComponent = useMemo(
+    () => (
       <View style={styles.headerWrap}>
-        <Surface tone={comboMode ? "gold" : "green"}>
+        <Surface tone={comboMode ? "gold" : "brand"}>
           <FixturesHeader
             query={query}
             setQuery={setQuery}
@@ -288,7 +245,7 @@ export default function FixturesScreen() {
 
         {showInlineRefresh ? (
           <View style={styles.refreshRow}>
-            <GlassCard variant="matte" level="default" style={styles.refreshCard}>
+            <GlassCard variant="glass" level="default" style={styles.refreshCard}>
               <ActivityIndicator size="small" color={theme.colors.textSecondary} />
               <Text style={styles.refreshText}>Refreshing live fixtures…</Text>
             </GlassCard>
@@ -297,14 +254,8 @@ export default function FixturesScreen() {
 
         {!showInitialLoading && !showHardError ? (
           <View style={styles.summaryRow}>
-            <GlassCard
-              variant={comboMode ? "gold" : "brand"}
-              level="default"
-              style={styles.summaryCard}
-            >
-              <Text style={styles.summaryEyebrow}>
-                {comboMode ? "Combo mode" : "Live fixture pool"}
-              </Text>
+            <GlassCard variant={comboMode ? "gold" : "brand"} level="default" style={styles.summaryCard}>
+              <Text style={styles.summaryEyebrow}>{comboMode ? "Combo mode" : "Live fixture pool"}</Text>
               <Text style={styles.summaryTitle}>
                 {visibleRows.length} fixture{visibleRows.length === 1 ? "" : "s"} in view
               </Text>
@@ -313,30 +264,31 @@ export default function FixturesScreen() {
           </View>
         ) : null}
       </View>
-    );
-  }, [
-    comboMode,
-    query,
-    setQuery,
-    stripDays,
-    isRange,
-    selectedDay,
-    onTapStripDate,
-    openCalendar,
-    selectedLeagueIds,
-    selectedLeagues,
-    toggleLeague,
-    selectSingleLeague,
-    resetToFeatured,
-    derivedTitleText,
-    derivedSubtitleText,
-    derivedHeaderDateLine,
-    derivedHelperLineText,
-    showInlineRefresh,
-    showInitialLoading,
-    showHardError,
-    visibleRows.length,
-  ]);
+    ),
+    [
+      comboMode,
+      query,
+      setQuery,
+      stripDays,
+      isRange,
+      selectedDay,
+      onTapStripDate,
+      openCalendar,
+      selectedLeagueIds,
+      selectedLeagues,
+      toggleLeague,
+      selectSingleLeague,
+      resetToFeatured,
+      derivedTitleText,
+      derivedSubtitleText,
+      derivedHeaderDateLine,
+      derivedHelperLineText,
+      showInlineRefresh,
+      showInitialLoading,
+      showHardError,
+      visibleRows.length,
+    ]
+  );
 
   const emptyComponent = useMemo(() => {
     if (showInitialLoading) {
@@ -345,7 +297,7 @@ export default function FixturesScreen() {
           <GlassCard variant="brand" level="default" style={styles.loadingCard}>
             <View style={styles.center}>
               <Text style={styles.loadingEyebrow}>Live scan</Text>
-              <ActivityIndicator color={theme.colors.accentGold} />
+              <ActivityIndicator color={theme.colors.gold} />
               <Text style={styles.loadingTitle}>Loading fixtures</Text>
               <Text style={styles.loadingText}>
                 Pulling the strongest current match options from the selected range.
@@ -360,11 +312,7 @@ export default function FixturesScreen() {
       return (
         <View style={[styles.content, styles.listWrap]}>
           <GlassCard variant="gold" level="default" style={styles.stateCard}>
-            <EmptyState
-              title="Fixtures unavailable"
-              message={error ?? "Failed to load fixtures."}
-              iconName="alert-circle"
-            />
+            <EmptyState title="Fixtures unavailable" message={error ?? "Failed to load fixtures."} iconName="alert-circle" />
           </GlassCard>
         </View>
       );
@@ -373,7 +321,7 @@ export default function FixturesScreen() {
     if (showEmpty) {
       return (
         <View style={[styles.content, styles.listWrap]}>
-          <GlassCard variant="matte" level="default" style={styles.stateCard}>
+          <GlassCard variant="glass" level="default" style={styles.stateCard}>
             <EmptyState
               title={comboMode ? "No combo fixtures found" : "No matches found"}
               message={
@@ -393,14 +341,12 @@ export default function FixturesScreen() {
 
   const renderRow = useCallback(
     ({ item, index }: { item: RankedFixtureRow; index: number }) => {
-      const fixtureId = item?.fixture?.id != null ? String(item.fixture.id) : "";
+      const fixtureId = String(item?.fixture?.id ?? "");
       const isFollowed = fixtureId ? followedIdSet.has(fixtureId) : false;
-
       const leagueId = item?.league?.id ?? null;
-      const season =
-        typeof (item?.league as { season?: unknown } | undefined)?.season === "number"
-          ? (item.league as { season: number }).season
-          : null;
+      const season = typeof (item?.league as { season?: unknown } | undefined)?.season === "number"
+        ? (item.league as { season: number }).season
+        : null;
       const city = cleanString(item?.fixture?.venue?.city);
       const kickoffIso = cleanString(item?.fixture?.date);
 
@@ -428,20 +374,16 @@ export default function FixturesScreen() {
 
   return (
     <Background
-      {...bgProps}
-      overlayOpacity={0.08}
-      topShadeOpacity={0.36}
-      bottomShadeOpacity={0.44}
-      centerShadeOpacity={0.05}
+      imageUrl={selectedLeagueBackdrop}
+      overlayOpacity={0.58}
+      topShadeOpacity={0.28}
+      bottomShadeOpacity={0.58}
+      centerShadeOpacity={0.08}
     >
       <SafeAreaView style={styles.container} edges={["top"]}>
         <FlatList
           data={showHardError || showInitialLoading || showEmpty ? [] : visibleRows}
-          keyExtractor={(item, index) => {
-            const fid = item?.fixture?.id != null ? String(item.fixture.id) : `row-${index}`;
-            const lid = item?.league?.id != null ? String(item.league.id) : "L";
-            return `${lid}-${fid}`;
-          }}
+          keyExtractor={(item, index) => `${item?.league?.id ?? "L"}-${item?.fixture?.id ?? `row-${index}`}`}
           renderItem={renderRow}
           ListHeaderComponent={headerComponent}
           ListEmptyComponent={emptyComponent}
@@ -459,9 +401,7 @@ export default function FixturesScreen() {
         <FixturesCalendarModal
           visible={calendarOpen}
           onClose={closeCalendar}
-          subtitle={
-            calIsRange ? `Range: ${calNorm.from} → ${calNorm.to}` : `Day: ${calNorm.from}`
-          }
+          subtitle={calIsRange ? `Range: ${calNorm.from} → ${calNorm.to}` : `Day: ${calNorm.from}`}
           monthText={monthLabel(calMonthYear.y, calMonthYear.m0)}
           grid={calGrid}
           minIso={minIso}
@@ -482,112 +422,65 @@ export default function FixturesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
-  flatListContent: {
-    paddingBottom: theme.spacing.xl,
-  },
-
-  headerWrap: {
-    paddingTop: 2,
-    gap: 12,
-  },
-
-  content: {
-    paddingHorizontal: theme.spacing.lg,
-  },
-
-  listWrap: {
-    gap: 12,
-  },
-
+  flatListContent: { paddingBottom: theme.spacing.xl },
+  headerWrap: { paddingTop: 2, gap: 12 },
+  content: { paddingHorizontal: theme.spacing.lg },
+  listWrap: { gap: 12 },
   surface: {
     marginHorizontal: theme.spacing.lg,
-    borderRadius: 26,
-    padding: 12,
-    borderWidth: 1,
-    overflow: "hidden",
+    borderRadius: theme.borderRadius.sheet,
   },
-
-  surfaceGreen: {
-    borderColor: theme.colors.borderGreenSoft,
-    backgroundColor: "rgba(34,197,94,0.03)",
-  },
-
-  surfaceGold: {
-    borderColor: theme.colors.borderGoldSoft,
-    backgroundColor: "rgba(250,204,21,0.04)",
-  },
-
-  surfaceNeutral: {
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: "rgba(255,255,255,0.02)",
-  },
-
   contextWrap: {
     paddingHorizontal: theme.spacing.lg,
     gap: 4,
   },
-
   pageTitle: {
-    color: theme.colors.text,
-    fontSize: 24,
-    lineHeight: 28,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.h1,
+    lineHeight: 29,
     fontWeight: theme.fontWeight.black,
   },
-
   pageSubtitle: {
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: theme.fontSize.meta,
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
-
   pageMeta: {
-    color: theme.colors.textTertiary,
-    fontSize: 11,
+    color: theme.colors.textMuted,
+    fontSize: theme.fontSize.tiny,
     lineHeight: 15,
     fontWeight: theme.fontWeight.black,
     textTransform: "uppercase",
     letterSpacing: 0.45,
   },
-
-  summaryRow: {
-    paddingHorizontal: theme.spacing.lg,
-  },
-
+  summaryRow: { paddingHorizontal: theme.spacing.lg },
   summaryCard: {
     gap: 6,
     borderRadius: 22,
     padding: 15,
   },
-
   summaryEyebrow: {
     color: theme.colors.textSecondary,
-    fontSize: 11,
+    fontSize: theme.fontSize.tiny,
     lineHeight: 14,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.35,
     textTransform: "uppercase",
   },
-
   summaryTitle: {
-    color: theme.colors.text,
-    fontSize: 16,
+    color: theme.colors.textPrimary,
+    fontSize: theme.fontSize.body,
     lineHeight: 20,
     fontWeight: theme.fontWeight.black,
   },
-
   summaryText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: theme.fontWeight.bold,
   },
-
-  refreshRow: {
-    paddingHorizontal: theme.spacing.lg,
-  },
-
+  refreshRow: { paddingHorizontal: theme.spacing.lg },
   refreshCard: {
     borderRadius: 18,
     paddingHorizontal: 12,
@@ -596,46 +489,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-
   refreshText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: theme.fontWeight.bold,
   },
-
   loadingCard: {
     borderRadius: 22,
     padding: 18,
   },
-
   stateCard: {
     borderRadius: 22,
     padding: 12,
   },
-
   center: {
     paddingVertical: 14,
     alignItems: "center",
     gap: 10,
   },
-
   loadingEyebrow: {
-    color: "#8EF2A5",
-    fontSize: 11,
+    color: theme.colors.emeraldSoft,
+    fontSize: theme.fontSize.tiny,
     lineHeight: 14,
     fontWeight: theme.fontWeight.black,
     letterSpacing: 0.65,
     textTransform: "uppercase",
   },
-
   loadingTitle: {
-    color: theme.colors.text,
+    color: theme.colors.textPrimary,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: theme.fontWeight.black,
   },
-
   loadingText: {
     color: theme.colors.textSecondary,
     fontSize: 12,
@@ -644,8 +530,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 280,
   },
-
-  footerSpace: {
-    height: 8,
-  },
+  footerSpace: { height: 8 },
 });
