@@ -25,7 +25,7 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function initials(name?: string | null) {
+function initials(name?: string | null): string {
   const value = clean(name);
   if (!value) return "?";
 
@@ -36,6 +36,7 @@ function initials(name?: string | null) {
     .filter(Boolean);
 
   if (parts.length <= 1) return value.slice(0, 3).toUpperCase();
+
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
@@ -102,14 +103,20 @@ export default function MatchHeroCard({
 
   const content = (
     <>
-      <View style={styles.flagBoost} />
-      <View style={styles.edgeShade} />
-      <View style={styles.bottomShade} />
-      <View style={styles.greenGlow} />
+      <View style={styles.imageDarken} />
+      <View style={styles.topFade} />
+      <View style={styles.bottomFade} />
 
       <View style={styles.topLine}>
         <Text style={styles.kicker}>Match trip</Text>
-        <Text style={styles.countryPill}>{clean(country) || "Football"}</Text>
+
+        {clean(country) ? (
+          <View style={styles.countryPill}>
+            <Text style={styles.countryPillText} numberOfLines={1}>
+              {clean(country)}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {hasRealMatch ? (
@@ -171,7 +178,7 @@ export default function MatchHeroCard({
 
 const styles = StyleSheet.create({
   shell: {
-    minHeight: 356,
+    minHeight: 372,
     borderRadius: 28,
     overflow: "hidden",
     backgroundColor: "rgba(7,12,12,0.96)",
@@ -185,41 +192,36 @@ const styles = StyleSheet.create({
 
   flagBackground: {
     flex: 1,
-    minHeight: 356,
+    minHeight: 372,
   },
 
   flagImage: {
     borderRadius: 28,
-    opacity: 0.94,
+    opacity: 0.96,
+    transform: [{ scale: 1.02 }],
   },
 
-  flagBoost: {
+  imageDarken: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.34)",
   },
 
-  edgeShade: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.16)",
+  topFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 118,
+    backgroundColor: "rgba(0,0,0,0.20)",
   },
 
-  bottomShade: {
+  bottomFade: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    height: 190,
+    height: 194,
     backgroundColor: "rgba(0,8,5,0.82)",
-  },
-
-  greenGlow: {
-    position: "absolute",
-    right: -56,
-    bottom: -68,
-    width: 190,
-    height: 190,
-    borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.14)",
   },
 
   topLine: {
@@ -241,17 +243,19 @@ const styles = StyleSheet.create({
   },
 
   countryPill: {
-    maxWidth: 116,
-    overflow: "hidden",
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontWeight: "900",
+    maxWidth: 118,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.28)",
+    backgroundColor: "rgba(0,0,0,0.32)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+
+  countryPillText: {
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+    fontWeight: "900",
   },
 
   crestsRow: {
@@ -343,7 +347,7 @@ const styles = StyleSheet.create({
 
   copy: {
     paddingHorizontal: 18,
-    paddingTop: 28,
+    paddingTop: 30,
     paddingBottom: 16,
     alignItems: "center",
   },
@@ -355,7 +359,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -0.75,
     textAlign: "center",
-    textShadowColor: "rgba(0,0,0,0.70)",
+    textShadowColor: "rgba(0,0,0,0.72)",
     textShadowRadius: 10,
     textShadowOffset: { width: 0, height: 4 },
   },
@@ -363,7 +367,7 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 10,
     color: theme.colors.textPrimary,
-    opacity: 0.86,
+    opacity: 0.88,
     fontSize: 12,
     lineHeight: 15,
     fontWeight: "900",
