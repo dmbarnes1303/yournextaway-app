@@ -816,4 +816,4 @@ export async function resolveSe365Candidate(input: TicketResolveInput): Promise<
   });
 
   return candidate;
-  }
+}
