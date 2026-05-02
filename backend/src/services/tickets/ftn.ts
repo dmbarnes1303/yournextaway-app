@@ -1,58 +1,94 @@
 import crypto from "node:crypto";
 
 import { env, hasFtnConfig } from "../../lib/env.js";
-import { getPreferredTeamName } from "./teamAliases.js";
+import { expandTeamAliases, getPreferredTeamName } from "./teamAliases.js";
 
-const FTN_FETCH_TIMEOUT_MS = 7000;
+const FTN_FETCH_TIMEOUT_MS = 10000;
 const FTN_BASE_PUBLIC_URL = "https://www.footballticketnet.com";
 const FTN_AFFILIATE_PARAM = "aff";
 const FTN_AFFILIATE_VALUE = "yournextaway";
 
-function clean(value) {
+function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function stripAccents(value) {
+function stripAccents(value: unknown): string {
   return clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-function normalizeName(value) {
+function normalizeName(value: unknown): string {
   return stripAccents(value)
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9\s-]/g, " ")
     .replace(/\b(fc|cf|ac|afc|sc|sk|club|the)\b/g, " ")
+    .replace(/\binter milan\b/g, "inter")
+    .replace(/\binternazionale\b/g, "inter")
+    .replace(/\bhellas verona\b/g, "verona")
+    .replace(/\bathletic bilbao\b/g, "athletic club")
+    .replace(/\bceltic vigo\b/g, "celta vigo")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function safeDate(value) {
-  const raw = clean(value);
-  if (!raw) return null;
-  const d = new Date(raw);
-  return Number.isFinite(d.getTime()) ? d : null;
+function compact(value: unknown): string {
+  return normalizeName(value).replace(/[^a-z0-9]/g, "");
 }
 
-function formatDdMmYyyy(date) {
+function getAliases(value: unknown): string[] {
+  const raw = clean(value);
+  const preferred = clean(getPreferredTeamName(raw));
+
+  return Array.from(
+    new Set([
+      raw,
+      preferred,
+      ...expandTeamAliases(raw),
+      ...expandTeamAliases(preferred),
+      normalizeName(raw),
+      normalizeName(preferred),
+      compact(raw),
+      compact(preferred),
+    ])
+  )
+    .map(normalizeName)
+    .filter(Boolean);
+}
+
+function safeDate(value: unknown): Date | null {
+  const raw = clean(value);
+  if (!raw) return null;
+
+  const date = new Date(raw);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function formatDdMmYyyy(date: Date): string {
   const dd = String(date.getUTCDate()).padStart(2, "0");
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
   const yyyy = String(date.getUTCFullYear());
   return `${dd}-${mm}-${yyyy}`;
 }
 
-function toUtcDayStart(date) {
+function toUtcDayStart(date: Date): number {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
-function absDays(a, b) {
-  return Math.floor(Math.abs(toUtcDayStart(a) - toUtcDayStart(b)) / 86400000);
+function absDays(a: Date, b: Date): number {
+  return Math.floor(Math.abs(toUtcDayStart(a) - toUtcDayStart(b)) / 86_400_000);
 }
 
-function sha256(value) {
+function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
-function buildListEventsUrl(input) {
+function buildListEventsUrl(input: {
+  homeName: string;
+  awayName: string;
+  kickoffIso: string;
+  leagueName?: string | null;
+  includeTeamFilters: boolean;
+}): string {
   const username = clean(env.ftnUsername);
   const secret = clean(env.ftnAffiliateSecret);
   const action = "list_events";
@@ -68,25 +104,27 @@ function buildListEventsUrl(input) {
   const kickoff = safeDate(input.kickoffIso);
   if (kickoff) {
     const from = new Date(kickoff);
-    from.setUTCDate(from.getUTCDate() - 3);
+    from.setUTCDate(from.getUTCDate() - 7);
 
     const to = new Date(kickoff);
-    to.setUTCDate(to.getUTCDate() + 3);
+    to.setUTCDate(to.getUTCDate() + 7);
 
     url.searchParams.set("from_date", formatDdMmYyyy(from));
     url.searchParams.set("to_date", formatDdMmYyyy(to));
   }
 
-  const homeName = clean(getPreferredTeamName(input.homeName));
-  const awayName = clean(getPreferredTeamName(input.awayName));
+  if (input.includeTeamFilters) {
+    const homeName = clean(getPreferredTeamName(input.homeName));
+    const awayName = clean(getPreferredTeamName(input.awayName));
 
-  if (homeName) url.searchParams.set("home_team_name", homeName);
-  if (awayName) url.searchParams.set("away_team_name", awayName);
+    if (homeName) url.searchParams.set("home_team_name", homeName);
+    if (awayName) url.searchParams.set("away_team_name", awayName);
+  }
 
   return url.toString();
 }
 
-async function fetchText(url) {
+async function fetchText(url: string): Promise<{ ok: boolean; status: number; body: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FTN_FETCH_TIMEOUT_MS);
 
@@ -106,13 +144,14 @@ async function fetchText(url) {
     if (error instanceof Error && error.name === "AbortError") {
       return { ok: false, status: 408, body: "" };
     }
+
     throw error;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-function parseJsonSafe(body) {
+function parseJsonSafe(body: string): any {
   try {
     return JSON.parse(body);
   } catch {
@@ -120,56 +159,90 @@ function parseJsonSafe(body) {
   }
 }
 
-function extractEvents(payload) {
+function extractEvents(payload: any): any[] {
   if (!payload) return [];
+
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload.events)) return payload.events;
   if (Array.isArray(payload.data)) return payload.data;
   if (Array.isArray(payload.items)) return payload.items;
   if (Array.isArray(payload.result)) return payload.result;
   if (Array.isArray(payload.results)) return payload.results;
+
+  if (payload.data && Array.isArray(payload.data.events)) return payload.data.events;
+  if (payload.result && Array.isArray(payload.result.events)) return payload.result.events;
+  if (payload.response && Array.isArray(payload.response.events)) return payload.response.events;
+
   return [];
 }
 
-function eventId(ev) {
+function eventId(ev: any): string {
   return clean(ev?.event_id ?? ev?.eventId ?? ev?.id);
 }
 
-function eventName(ev) {
+function eventName(ev: any): string {
   return clean(ev?.event_name ?? ev?.eventName ?? ev?.name ?? ev?.title);
 }
 
-function eventDate(ev) {
-  return clean(ev?.event_date ?? ev?.date ?? ev?.dateOfEvent ?? ev?.startDate);
+function eventDate(ev: any): string {
+  return clean(ev?.event_date ?? ev?.eventDate ?? ev?.date ?? ev?.dateOfEvent ?? ev?.startDate);
 }
 
-function eventHomeName(ev) {
-  return clean(ev?.home_team_name ?? ev?.homeTeamName ?? ev?.home_team ?? ev?.home?.name ?? ev?.home);
+function eventHomeName(ev: any): string {
+  return clean(
+    ev?.home_team_name ??
+      ev?.homeTeamName ??
+      ev?.home_team ??
+      ev?.homeTeam?.name ??
+      ev?.home?.name ??
+      ev?.home
+  );
 }
 
-function eventAwayName(ev) {
-  return clean(ev?.away_team_name ?? ev?.awayTeamName ?? ev?.away_team ?? ev?.away?.name ?? ev?.away);
+function eventAwayName(ev: any): string {
+  return clean(
+    ev?.away_team_name ??
+      ev?.awayTeamName ??
+      ev?.away_team ??
+      ev?.awayTeam?.name ??
+      ev?.away?.name ??
+      ev?.away
+  );
 }
 
-function eventLeagueName(ev) {
-  return clean(ev?.league_name ?? ev?.league ?? ev?.competition ?? ev?.category_name);
+function eventLeagueName(ev: any): string {
+  return clean(ev?.league_name ?? ev?.leagueName ?? ev?.league ?? ev?.competition ?? ev?.category_name);
 }
 
-function eventUrl(ev) {
-  return clean(ev?.event_url ?? ev?.eventUrl ?? ev?.url ?? ev?.link ?? ev?.pageUrl ?? ev?.publicUrl);
+function eventUrl(ev: any): string {
+  return clean(
+    ev?.event_url ??
+      ev?.eventUrl ??
+      ev?.url ??
+      ev?.link ??
+      ev?.pageUrl ??
+      ev?.publicUrl ??
+      ev?.event_page_url
+  );
 }
 
-function isSafeFtnUrl(value) {
+function isSafeFtnUrl(value: string): boolean {
   try {
     const url = new URL(value.startsWith("http") ? value : `${FTN_BASE_PUBLIC_URL}${value}`);
     const host = url.hostname.toLowerCase();
-    return host === "footballticketnet.com" || host === "www.footballticketnet.com";
+
+    return (
+      host === "footballticketnet.com" ||
+      host === "www.footballticketnet.com" ||
+      host === "footballticketsnet.com" ||
+      host === "www.footballticketsnet.com"
+    );
   } catch {
     return false;
   }
 }
 
-function appendAffiliate(urlValue) {
+function appendAffiliate(urlValue: unknown): string {
   const raw = clean(urlValue);
   if (!raw || !isSafeFtnUrl(raw)) return "";
 
@@ -182,53 +255,78 @@ function appendAffiliate(urlValue) {
   }
 }
 
-function scoreNameMatch(candidate, target) {
+function scoreNameMatch(candidate: unknown, targetAliases: string[]): number {
   const c = normalizeName(candidate);
-  const t = normalizeName(target);
+  const cc = compact(candidate);
 
-  if (!c || !t) return 0;
-  if (c === t) return 100;
-  if (c.includes(t) || t.includes(c)) return 82;
+  if (!c || !cc) return 0;
 
-  const cTokens = new Set(c.split(" ").filter(Boolean));
-  const tTokens = t.split(" ").filter(Boolean);
+  let best = 0;
 
-  if (!tTokens.length) return 0;
+  for (const alias of targetAliases) {
+    const a = normalizeName(alias);
+    const ac = compact(alias);
 
-  let matched = 0;
-  for (const token of tTokens) {
-    if (cTokens.has(token)) matched += 1;
+    if (!a || !ac) continue;
+
+    if (c === a || cc === ac) best = Math.max(best, 100);
+    else if (c.includes(a) || cc.includes(ac)) best = Math.max(best, 88);
+    else if (a.includes(c) || ac.includes(cc)) best = Math.max(best, 76);
+    else {
+      const cTokens = new Set(c.split(" ").filter(Boolean));
+      const aTokens = a.split(" ").filter(Boolean);
+      const matched = aTokens.filter((token) => cTokens.has(token)).length;
+
+      if (aTokens.length) {
+        best = Math.max(best, Math.round((matched / aTokens.length) * 72));
+      }
+    }
   }
 
-  return Math.round((matched / tTokens.length) * 72);
+  return best;
 }
 
-function scoreEvent(ev, input) {
+function scoreEvent(ev: any, input: { homeName: string; awayName: string; kickoffIso: string; leagueName?: string | null }): number {
   const name = eventName(ev);
   const home = eventHomeName(ev);
   const away = eventAwayName(ev);
 
-  const bestHome = Math.max(scoreNameMatch(home || name, input.homeName), scoreNameMatch(name, input.homeName));
-  const bestAway = Math.max(scoreNameMatch(away || name, input.awayName), scoreNameMatch(name, input.awayName));
+  const homeAliases = getAliases(input.homeName);
+  const awayAliases = getAliases(input.awayName);
 
-  if (bestHome < 70 || bestAway < 70) return -1000;
+  const bestHome = Math.max(
+    scoreNameMatch(home, homeAliases),
+    scoreNameMatch(name, homeAliases)
+  );
+
+  const bestAway = Math.max(
+    scoreNameMatch(away, awayAliases),
+    scoreNameMatch(name, awayAliases)
+  );
+
+  if (bestHome < 65 || bestAway < 65) return -1000;
 
   let score = bestHome + bestAway;
 
   const kickoff = safeDate(input.kickoffIso);
-  const evDt = safeDate(eventDate(ev));
+  const evDate = safeDate(eventDate(ev));
 
-  if (kickoff && evDt) {
-    const diff = absDays(kickoff, evDt);
+  if (kickoff && evDate) {
+    const diff = absDays(kickoff, evDate);
+
     if (diff === 0) score += 45;
-    else if (diff === 1) score += 25;
-    else if (diff <= 3) score += 10;
+    else if (diff === 1) score += 28;
+    else if (diff <= 3) score += 18;
+    else if (diff <= 7) score += 6;
     else return -1000;
   }
 
   const league = normalizeName(input.leagueName);
   const evLeague = normalizeName(eventLeagueName(ev));
-  if (league && evLeague && (league.includes(evLeague) || evLeague.includes(league))) score += 15;
+
+  if (league && evLeague && (league.includes(evLeague) || evLeague.includes(league))) {
+    score += 15;
+  }
 
   if (eventUrl(ev)) score += 20;
   if (eventId(ev)) score += 5;
@@ -236,48 +334,106 @@ function scoreEvent(ev, input) {
   return score;
 }
 
-function pickBestEvent(events, input) {
-  return (
-    events
-      .map((ev) => ({ ev, score: scoreEvent(ev, input) }))
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)[0] ?? null
-  );
+function pickBestEvent(events: any[], input: { homeName: string; awayName: string; kickoffIso: string; leagueName?: string | null }) {
+  const scored = events
+    .map((ev) => ({ ev, score: scoreEvent(ev, input) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  console.log("[FTN] event scoring", {
+    homeName: input.homeName,
+    awayName: input.awayName,
+    leagueName: input.leagueName ?? null,
+    eventsChecked: events.length,
+    matched: scored.length,
+    top: scored.slice(0, 8).map((x) => ({
+      score: x.score,
+      id: eventId(x.ev) || null,
+      name: eventName(x.ev) || null,
+      home: eventHomeName(x.ev) || null,
+      away: eventAwayName(x.ev) || null,
+      date: eventDate(x.ev) || null,
+      league: eventLeagueName(x.ev) || null,
+      url: eventUrl(x.ev) || null,
+    })),
+  });
+
+  return scored[0] ?? null;
 }
 
-export async function resolveFtnCandidate(input) {
+async function fetchEventsWithFallbacks(input: {
+  homeName: string;
+  awayName: string;
+  kickoffIso: string;
+  leagueName?: string | null;
+}): Promise<any[]> {
+  const urls = [
+    buildListEventsUrl({ ...input, includeTeamFilters: true }),
+    buildListEventsUrl({ ...input, includeTeamFilters: false }),
+  ];
+
+  const eventMap = new Map<string, any>();
+
+  for (const url of urls) {
+    const res = await fetchText(url);
+
+    console.log("[FTN] list_events response", {
+      ok: res.ok,
+      status: res.status,
+      usedTeamFilters: url.includes("home_team_name=") || url.includes("away_team_name="),
+      bodyPreview: res.body.slice(0, 500),
+    });
+
+    if (!res.ok) continue;
+
+    const parsed = parseJsonSafe(res.body);
+    const events = extractEvents(parsed);
+
+    for (const event of events) {
+      const key = eventId(event) || eventUrl(event) || eventName(event);
+      if (key && !eventMap.has(key)) eventMap.set(key, event);
+    }
+  }
+
+  return Array.from(eventMap.values());
+}
+
+export async function resolveFtnCandidate(input: any) {
   if (!hasFtnConfig()) {
     console.log("[FTN] skipped: missing config");
     return null;
   }
 
-  const homeName = clean(getPreferredTeamName(input.homeName));
-  const awayName = clean(getPreferredTeamName(input.awayName));
+  const homeName = clean(getPreferredTeamName(input.homeName)) || clean(input.homeName);
+  const awayName = clean(getPreferredTeamName(input.awayName)) || clean(input.awayName);
   const kickoffIso = clean(input.kickoffIso);
   const leagueName = clean(input.leagueName);
 
   if (!homeName || !awayName || !kickoffIso) {
-    console.log("[FTN] skipped: missing required input", { homeName, awayName, kickoffIso });
-    return null;
-  }
-
-  const apiUrl = buildListEventsUrl({ homeName, awayName, kickoffIso, leagueName });
-  const res = await fetchText(apiUrl);
-
-  if (!res.ok) {
-    console.log("[FTN] list_events failed; no guessed fallback returned", {
-      status: res.status,
-      body: res.body.slice(0, 500),
+    console.log("[FTN] skipped: missing required input", {
+      homeName,
+      awayName,
+      kickoffIso,
     });
     return null;
   }
 
-  const parsed = parseJsonSafe(res.body);
-  const events = extractEvents(parsed);
-  const best = pickBestEvent(events, { homeName, awayName, kickoffIso, leagueName });
+  const events = await fetchEventsWithFallbacks({
+    homeName,
+    awayName,
+    kickoffIso,
+    leagueName,
+  });
+
+  const best = pickBestEvent(events, {
+    homeName,
+    awayName,
+    kickoffIso,
+    leagueName,
+  });
 
   if (!best) {
-    console.log("[FTN] no API event match; no guessed fallback returned", {
+    console.log("[FTN] no API event match", {
       homeName,
       awayName,
       leagueName,
