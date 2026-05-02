@@ -20,6 +20,11 @@ type CacheEntry<T> = {
   value: T;
 };
 
+type CacheRead<T> = {
+  hit: boolean;
+  value: T | null;
+};
+
 type FetchResult = {
   ok: boolean;
   status: number;
@@ -32,6 +37,7 @@ type Participant = {
   name: string;
   raw: any;
   score: number;
+  source: string;
 };
 
 type EventCandidate = {
@@ -49,12 +55,11 @@ type TicketSummary = {
 };
 
 const PARTICIPANT_POOL_CACHE = new Map<string, CacheEntry<any[]>>();
-const PARTICIPANT_LOOKUP_CACHE = new Map<string, CacheEntry<Participant | null>>();
+const PARTICIPANT_LOOKUP_CACHE = new Map<string, CacheEntry<Participant[]>>();
 const EVENTS_BY_PARTICIPANT_CACHE = new Map<string, CacheEntry<EventCandidate[]>>();
 const TICKETS_CACHE = new Map<string, CacheEntry<TicketSummary | null>>();
 
 const KNOWN_SE365_PARTICIPANT_IDS: Record<string, { id: string; name: string }> = {
-  // Portugal
   sporting: { id: "1512", name: "Sporting Club Portugal (Lisbon)" },
   "sporting-cp": { id: "1512", name: "Sporting Club Portugal (Lisbon)" },
   "sporting-lisbon": { id: "1512", name: "Sporting Club Portugal (Lisbon)" },
@@ -64,19 +69,17 @@ const KNOWN_SE365_PARTICIPANT_IDS: Record<string, { id: string; name: string }> 
   porto: { id: "1500", name: "FC Porto" },
   "fc-porto": { id: "1500", name: "FC Porto" },
 
-  // Italy
   inter: { id: "1760", name: "Inter" },
   "inter-milan": { id: "1760", name: "Inter" },
   internazionale: { id: "1760", name: "Inter" },
   "hellas-verona": { id: "3899", name: "Hellas Verona" },
-  "ac-milan": { id: "1765", name: "AC Milan" },
   milan: { id: "1765", name: "AC Milan" },
+  "ac-milan": { id: "1765", name: "AC Milan" },
   juventus: { id: "1764", name: "Juventus FC" },
   roma: { id: "1757", name: "AS Roma" },
   lazio: { id: "1758", name: "SS Lazio" },
   napoli: { id: "1759", name: "SSC Napoli" },
 
-  // Spain
   "real-madrid": { id: "1385", name: "Real Madrid" },
   barcelona: { id: "1013", name: "FC Barcelona" },
   "fc-barcelona": { id: "1013", name: "FC Barcelona" },
@@ -86,7 +89,6 @@ const KNOWN_SE365_PARTICIPANT_IDS: Record<string, { id: string; name: string }> 
   "real-sociedad": { id: "1519", name: "Real Sociedad" },
   "real-betis": { id: "1527", name: "Real Betis Balompie" },
 
-  // Germany
   "bayern-munich": { id: "1182", name: "Bayern Munich" },
   "bayer-leverkusen": { id: "1187", name: "Bayer Leverkusen" },
   "borussia-dortmund": { id: "1183", name: "Borussia Dortmund" },
@@ -207,16 +209,16 @@ function scoreAgainstAliases(value: string, aliases: string[]): number {
   return best;
 }
 
-function getCache<T>(map: Map<string, CacheEntry<T>>, key: string): T | null {
+function readCache<T>(map: Map<string, CacheEntry<T>>, key: string): CacheRead<T> {
   const entry = map.get(key);
-  if (!entry) return null;
+  if (!entry) return { hit: false, value: null };
 
   if (Date.now() > entry.expires) {
     map.delete(key);
-    return null;
+    return { hit: false, value: null };
   }
 
-  return entry.value;
+  return { hit: true, value: entry.value };
 }
 
 function setCache<T>(map: Map<string, CacheEntry<T>>, key: string, value: T, ttl: number): void {
@@ -395,33 +397,66 @@ function getDateRange(kickoffIso: string): { from: string; to: string } {
   };
 }
 
+async function fetchParticipantPage(route: string, page: number): Promise<any[]> {
+  const url = makeApiUrl(route);
+  url.searchParams.set("eventTypeId", FOOTBALL_EVENT_TYPE_ID);
+  url.searchParams.set("perPage", "100");
+  url.searchParams.set("page", String(page));
+
+  const result = await fetchJson(url);
+  const participants = extractArray(result.json, ["participants", "items", "data", "results"]);
+
+  console.log("[SE365] participants page", {
+    route,
+    page,
+    status: result.status,
+    count: participants.length,
+    sample: participants.slice(0, 5).map((participant) => ({
+      id: participantId(participant),
+      name: participantName(participant),
+    })),
+  });
+
+  return participants;
+}
+
 async function fetchParticipantsForSearch(): Promise<any[]> {
-  const cacheKey = "participants:football:seed";
-  const cached = getCache(PARTICIPANT_POOL_CACHE, cacheKey);
-  if (cached) return cached;
+  const cacheKey = "participants:football:paged:v2";
+  const cached = readCache(PARTICIPANT_POOL_CACHE, cacheKey);
+  if (cached.hit) return cached.value ?? [];
 
   const routes = ["/participants", "/participants/top"];
   const all: any[] = [];
 
   for (const route of routes) {
-    const url = makeApiUrl(route);
-    url.searchParams.set("eventTypeId", FOOTBALL_EVENT_TYPE_ID);
-    url.searchParams.set("perPage", "1000");
+    const seenPageSignatures = new Set<string>();
 
-    const result = await fetchJson(url);
-    const participants = extractArray(result.json, ["participants", "items", "data", "results"]);
+    for (let page = 1; page <= 25; page += 1) {
+      const participants = await fetchParticipantPage(route, page);
 
-    console.log("[SE365] participants", {
-      route,
-      status: result.status,
-      count: participants.length,
-      sample: participants.slice(0, 8).map((participant) => ({
-        id: participantId(participant),
-        name: participantName(participant),
-      })),
-    });
+      if (participants.length === 0) break;
 
-    all.push(...participants);
+      const signature = participants
+        .slice(0, 10)
+        .map((participant) => participantId(participant))
+        .filter(Boolean)
+        .join("|");
+
+      if (signature && seenPageSignatures.has(signature)) {
+        console.log("[SE365] participants pagination stopped: repeated page", {
+          route,
+          page,
+          signature,
+        });
+        break;
+      }
+
+      if (signature) seenPageSignatures.add(signature);
+
+      all.push(...participants);
+
+      if (participants.length < 100) break;
+    }
   }
 
   const deduped = new Map<string, any>();
@@ -432,12 +467,21 @@ async function fetchParticipantsForSearch(): Promise<any[]> {
   }
 
   const value = Array.from(deduped.values());
+
+  console.log("[SE365] participant pool built", {
+    count: value.length,
+    sample: value.slice(0, 12).map((participant) => ({
+      id: participantId(participant),
+      name: participantName(participant),
+    })),
+  });
+
   setCache(PARTICIPANT_POOL_CACHE, cacheKey, value, PARTICIPANT_CACHE_TTL_MS);
 
   return value;
 }
 
-function knownParticipantForTeam(teamName: string): Participant | null {
+function knownParticipantsForTeam(teamName: string): Participant[] {
   const aliases = aliasesFor(teamName);
   const candidateKeys = new Set<string>([slug(teamName)]);
 
@@ -445,11 +489,13 @@ function knownParticipantForTeam(teamName: string): Participant | null {
     candidateKeys.add(slug(alias));
   }
 
+  const out: Participant[] = [];
+
   for (const key of candidateKeys) {
     const known = KNOWN_SE365_PARTICIPANT_IDS[key];
     if (!known?.id) continue;
 
-    return {
+    out.push({
       id: known.id,
       name: known.name,
       raw: {
@@ -458,28 +504,24 @@ function knownParticipantForTeam(teamName: string): Participant | null {
         source: "known_se365_participant_ids",
       },
       score: 100,
-    };
+      source: "known",
+    });
   }
 
-  return null;
+  const deduped = new Map<string, Participant>();
+  for (const item of out) {
+    if (!deduped.has(item.id)) deduped.set(item.id, item);
+  }
+
+  return Array.from(deduped.values());
 }
 
-async function findBestParticipant(teamName: string): Promise<Participant | null> {
-  const lookupKey = `participant:${slug(teamName)}`;
-  const cached = getCache(PARTICIPANT_LOOKUP_CACHE, lookupKey);
-  if (cached) return cached;
+async function findParticipantCandidates(teamName: string): Promise<Participant[]> {
+  const lookupKey = `participant-candidates:${slug(teamName)}:v2`;
+  const cached = readCache(PARTICIPANT_LOOKUP_CACHE, lookupKey);
+  if (cached.hit) return cached.value ?? [];
 
-  const known = knownParticipantForTeam(teamName);
-  if (known) {
-    console.log("[SE365] participant lookup known-id hit", {
-      teamName,
-      matched: { id: known.id, name: known.name, score: known.score },
-    });
-
-    setCache(PARTICIPANT_LOOKUP_CACHE, lookupKey, known, PARTICIPANT_CACHE_TTL_MS);
-    return known;
-  }
-
+  const known = knownParticipantsForTeam(teamName);
   const aliases = aliasesFor(teamName);
   const participants = await fetchParticipantsForSearch();
 
@@ -493,27 +535,37 @@ async function findBestParticipant(teamName: string): Promise<Participant | null
         name,
         raw: participant,
         score: scoreAgainstAliases(name, aliases),
+        source: "participant_pool",
       };
     })
-    .filter((entry) => entry.id && entry.name && entry.score >= 55)
-    .sort((a, b) => b.score - a.score);
+    .filter((entry) => entry.id && entry.name && entry.score >= 50)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 
-  const best = ranked[0] ?? null;
+  const merged = new Map<string, Participant>();
 
-  console.log("[SE365] participant lookup", {
+  for (const participant of [...known, ...ranked]) {
+    if (!merged.has(participant.id)) merged.set(participant.id, participant);
+  }
+
+  const value = Array.from(merged.values());
+
+  console.log("[SE365] participant candidates", {
     teamName,
     aliases,
+    known: known.map((x) => ({ id: x.id, name: x.name, score: x.score })),
     poolCount: participants.length,
-    matched: best ? { id: best.id, name: best.name, score: best.score } : null,
-    top: ranked.slice(0, 8).map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      score: entry.score,
+    selected: value.map((x) => ({
+      id: x.id,
+      name: x.name,
+      score: x.score,
+      source: x.source,
     })),
   });
 
-  setCache(PARTICIPANT_LOOKUP_CACHE, lookupKey, best, PARTICIPANT_CACHE_TTL_MS);
-  return best;
+  setCache(PARTICIPANT_LOOKUP_CACHE, lookupKey, value, PARTICIPANT_CACHE_TTL_MS);
+
+  return value;
 }
 
 async function fetchEventsByParticipant(
@@ -523,8 +575,8 @@ async function fetchEventsByParticipant(
   const { from, to } = getDateRange(kickoffIso);
   const cacheKey = `events:${participant.id}:${from}:${to}`;
 
-  const cached = getCache(EVENTS_BY_PARTICIPANT_CACHE, cacheKey);
-  if (cached) return cached;
+  const cached = readCache(EVENTS_BY_PARTICIPANT_CACHE, cacheKey);
+  if (cached.hit) return cached.value ?? [];
 
   const url = makeApiUrl(`/events/participant/${participant.id}`);
   url.searchParams.set("eventTypeId", FOOTBALL_EVENT_TYPE_ID);
@@ -541,13 +593,14 @@ async function fetchEventsByParticipant(
       name: eventName(event),
       raw: event,
       score: 0,
-      source: `participant:${participant.id}`,
+      source: `participant:${participant.id}:${participant.name}`,
     }))
     .filter((event) => event.id);
 
   console.log("[SE365] events by participant", {
     participantId: participant.id,
     participantName: participant.name,
+    participantSource: participant.source,
     status: result.status,
     from,
     to,
@@ -689,8 +742,8 @@ async function fetchTickets(eventIdValue: string): Promise<TicketSummary | null>
   if (!id) return null;
 
   const cacheKey = `tickets:${id}`;
-  const cached = getCache(TICKETS_CACHE, cacheKey);
-  if (cached) return cached;
+  const cached = readCache(TICKETS_CACHE, cacheKey);
+  if (cached.hit) return cached.value;
 
   const url = makeApiUrl(`/tickets/${id}`);
 
@@ -764,12 +817,20 @@ async function resolveEventFromParticipants(
   awayName: string,
   kickoffIso: string
 ): Promise<EventCandidate | null> {
-  const [homeParticipant, awayParticipant] = await Promise.all([
-    findBestParticipant(homeName),
-    findBestParticipant(awayName),
+  const [homeCandidates, awayCandidates] = await Promise.all([
+    findParticipantCandidates(homeName),
+    findParticipantCandidates(awayName),
   ]);
 
-  const participants = [homeParticipant, awayParticipant].filter(Boolean) as Participant[];
+  const participantMap = new Map<string, Participant>();
+
+  for (const participant of [...homeCandidates, ...awayCandidates]) {
+    if (!participantMap.has(participant.id)) {
+      participantMap.set(participant.id, participant);
+    }
+  }
+
+  const participants = Array.from(participantMap.values());
 
   if (participants.length === 0) {
     console.log("[SE365] no participant IDs found", {
@@ -796,6 +857,12 @@ async function resolveEventFromParticipants(
       homeName,
       awayName,
       participantCount: participants.length,
+      participants: participants.map((participant) => ({
+        id: participant.id,
+        name: participant.name,
+        source: participant.source,
+        score: participant.score,
+      })),
       eventCount: eventMap.size,
     });
     return null;
@@ -869,4 +936,4 @@ export async function resolveSe365Candidate(
   });
 
   return candidate;
-    }
+               }
