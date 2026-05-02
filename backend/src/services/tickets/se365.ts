@@ -301,7 +301,9 @@ function participantId(value: any): string {
 }
 
 function participantName(value: any): string {
-  return clean(value?.name ?? value?.title ?? value?.caption ?? value?.participantName ?? value?.participant_name);
+  return clean(
+    value?.name ?? value?.title ?? value?.caption ?? value?.participantName ?? value?.participant_name
+  );
 }
 
 function eventId(value: any): string {
@@ -309,15 +311,34 @@ function eventId(value: any): string {
 }
 
 function eventName(value: any): string {
-  return clean(value?.name ?? value?.title ?? value?.caption ?? value?.eventName ?? value?.event_name ?? value?.description);
+  return clean(
+    value?.name ??
+      value?.title ??
+      value?.caption ??
+      value?.eventName ??
+      value?.event_name ??
+      value?.description
+  );
 }
 
 function eventHome(value: any): string {
-  return clean(value?.homeTeam?.name ?? value?.home?.name ?? value?.homeName ?? value?.home_team_name ?? value?.home_team);
+  return clean(
+    value?.homeTeam?.name ??
+      value?.home?.name ??
+      value?.homeName ??
+      value?.home_team_name ??
+      value?.home_team
+  );
 }
 
 function eventAway(value: any): string {
-  return clean(value?.awayTeam?.name ?? value?.away?.name ?? value?.awayName ?? value?.away_team_name ?? value?.away_team);
+  return clean(
+    value?.awayTeam?.name ??
+      value?.away?.name ??
+      value?.awayName ??
+      value?.away_team_name ??
+      value?.away_team
+  );
 }
 
 function eventParticipants(value: any): string[] {
@@ -326,7 +347,10 @@ function eventParticipants(value: any): string[] {
 }
 
 function formatDate(date: Date): string {
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}/${date.getFullYear()}`;
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}/${date.getFullYear()}`;
 }
 
 function getDateRange(kickoffIso: string): { from: string; to: string } {
@@ -368,7 +392,7 @@ async function fetchParticipantPage(route: string, page: number): Promise<any[]>
 }
 
 async function fetchParticipantsForSearch(): Promise<any[]> {
-  const cacheKey = "participants:football:paged:v3";
+  const cacheKey = "participants:football:paged:v4";
   const cached = readCache(PARTICIPANT_POOL_CACHE, cacheKey);
   if (cached.hit) return cached.value ?? [];
 
@@ -437,7 +461,7 @@ function knownParticipantsForTeam(teamName: string): Participant[] {
 }
 
 async function findParticipantCandidates(teamName: string): Promise<Participant[]> {
-  const lookupKey = `participant-candidates:${slug(teamName)}:v3`;
+  const lookupKey = `participant-candidates:${slug(teamName)}:v4`;
   const cached = readCache(PARTICIPANT_LOOKUP_CACHE, lookupKey);
   if (cached.hit) return cached.value ?? [];
 
@@ -474,7 +498,26 @@ async function findParticipantCandidates(teamName: string): Promise<Participant[
   return value;
 }
 
-async function fetchEventsByParticipant(participant: Participant, kickoffIso: string): Promise<EventCandidate[]> {
+function extractPossiblePublicUrls(event: any): string[] {
+  return [
+    event?.eventUrl,
+    event?.pageUrl,
+    event?.websiteUrl,
+    event?.publicUrl,
+    event?.url,
+    event?.link,
+    event?.affiliateUrl,
+    event?.seo?.url,
+    event?.seo?.canonical,
+  ]
+    .map(clean)
+    .filter(Boolean);
+}
+
+async function fetchEventsByParticipant(
+  participant: Participant,
+  kickoffIso: string
+): Promise<EventCandidate[]> {
   const { from, to } = getDateRange(kickoffIso);
   const cacheKey = `events:${participant.id}:${from}:${to}`;
 
@@ -540,7 +583,11 @@ function scoreEvent(event: EventCandidate, homeName: string, awayName: string): 
   return score;
 }
 
-function pickBestEvent(events: EventCandidate[], homeName: string, awayName: string): EventCandidate | null {
+function pickBestEvent(
+  events: EventCandidate[],
+  homeName: string,
+  awayName: string
+): EventCandidate | null {
   const ranked = events
     .map((event) => ({ ...event, score: scoreEvent(event, homeName, awayName) }))
     .filter((event) => event.score > 0)
@@ -585,7 +632,9 @@ function priceFromTicket(ticket: any): number | null {
 }
 
 function currencyFromTicket(ticket: any): string {
-  return clean(ticket?.currency ?? ticket?.priceCurrency ?? ticket?.ticketCurrency ?? ticket?.ticket?.currency ?? "GBP").toUpperCase();
+  return clean(
+    ticket?.currency ?? ticket?.priceCurrency ?? ticket?.ticketCurrency ?? ticket?.ticket?.currency ?? "GBP"
+  ).toUpperCase();
 }
 
 function formatPrice(amount: number, currency: string): string {
@@ -649,8 +698,10 @@ async function fetchTickets(eventIdValue: string): Promise<TicketSummary | null>
   return summary;
 }
 
-function extractPossiblePublicUrls(event: any): string[] {
-  return [
+function buildPublicUrl(event: any, id: string): string {
+  const affiliateId = clean(env.se365AffiliateId);
+
+  const possibleUrls = [
     event?.eventUrl,
     event?.pageUrl,
     event?.websiteUrl,
@@ -663,46 +714,32 @@ function extractPossiblePublicUrls(event: any): string[] {
   ]
     .map(clean)
     .filter(Boolean);
-}
-
-function appendAffiliate(urlValue: string): string {
-  const affiliateId = clean(env.se365AffiliateId);
-  if (!affiliateId) return urlValue;
-
-  try {
-    const parsed = new URL(urlValue);
-    parsed.searchParams.set("a_aid", affiliateId);
-    return parsed.toString();
-  } catch {
-    return urlValue;
-  }
-}
-
-function buildPublicUrl(event: any): string | null {
-  const possibleUrls = extractPossiblePublicUrls(event);
 
   for (const value of possibleUrls) {
     try {
       const parsed = new URL(value.startsWith("http") ? value : `${PUBLIC_BASE}${value}`);
       const host = parsed.hostname.toLowerCase();
 
-      if (
-        host === "sportsevents365.com" ||
-        host === "www.sportsevents365.com" ||
-        host === "tickets-partners.com" ||
-        host === "www.tickets-partners.com"
-      ) {
-        return appendAffiliate(parsed.toString());
+      if (host.includes("sportsevents365.com")) {
+        if (affiliateId) parsed.searchParams.set("a_aid", affiliateId);
+        return parsed.toString();
       }
     } catch {
       // ignore bad URL
     }
   }
 
-  return null;
+  const url = new URL(`${PUBLIC_BASE}/event/${id}`);
+  if (affiliateId) url.searchParams.set("a_aid", affiliateId);
+
+  return url.toString();
 }
 
-async function resolveEventFromParticipants(homeName: string, awayName: string, kickoffIso: string): Promise<EventCandidate | null> {
+async function resolveEventFromParticipants(
+  homeName: string,
+  awayName: string,
+  kickoffIso: string
+): Promise<EventCandidate | null> {
   const [homeCandidates, awayCandidates] = await Promise.all([
     findParticipantCandidates(homeName),
     findParticipantCandidates(awayName),
@@ -718,7 +755,10 @@ async function resolveEventFromParticipants(homeName: string, awayName: string, 
 
   if (participants.length === 0) return null;
 
-  const eventLists = await Promise.all(participants.map((participant) => fetchEventsByParticipant(participant, kickoffIso)));
+  const eventLists = await Promise.all(
+    participants.map((participant) => fetchEventsByParticipant(participant, kickoffIso))
+  );
+
   const eventMap = new Map<string, EventCandidate>();
 
   for (const event of eventLists.flat()) {
@@ -752,17 +792,7 @@ export async function resolveSe365Candidate(input: TicketResolveInput): Promise<
   }
 
   const ticketSummary = await fetchTickets(bestEvent.id);
-  const publicUrl = buildPublicUrl(bestEvent.raw);
-
-  if (!publicUrl) {
-    console.log("[SE365] event found but no safe public URL returned; rejecting to avoid 404", {
-      eventId: bestEvent.id,
-      title: bestEvent.name,
-      source: bestEvent.source,
-      urlFields: extractPossiblePublicUrls(bestEvent.raw),
-    });
-    return null;
-  }
+  const publicUrl = buildPublicUrl(bestEvent.raw, bestEvent.id);
 
   const candidate: TicketCandidate = {
     provider: "sportsevents365",
@@ -786,4 +816,4 @@ export async function resolveSe365Candidate(input: TicketResolveInput): Promise<
   });
 
   return candidate;
-      }
+  }
